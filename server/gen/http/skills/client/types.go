@@ -123,6 +123,10 @@ type DistributeResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The distributed skill ID.
 	SkillID *string `form:"skill_id,omitempty" json:"skill_id,omitempty" xml:"skill_id,omitempty"`
+	// The canonical name of the distributed skill.
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+	// The display name of the distributed skill.
+	SkillDisplayName *string `form:"skill_display_name,omitempty" json:"skill_display_name,omitempty" xml:"skill_display_name,omitempty"`
 	// The plugin that carries the skill.
 	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
 	// The name of the plugin that carries the skill.
@@ -1851,6 +1855,10 @@ type SkillDistributionResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The distributed skill ID.
 	SkillID *string `form:"skill_id,omitempty" json:"skill_id,omitempty" xml:"skill_id,omitempty"`
+	// The canonical name of the distributed skill.
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+	// The display name of the distributed skill.
+	SkillDisplayName *string `form:"skill_display_name,omitempty" json:"skill_display_name,omitempty" xml:"skill_display_name,omitempty"`
 	// The plugin that carries the skill.
 	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
 	// The name of the plugin that carries the skill.
@@ -2873,6 +2881,8 @@ func NewDistributeSkillDistributionOK(body *DistributeResponseBody) *types.Skill
 		ID:                *body.ID,
 		ProjectID:         *body.ProjectID,
 		SkillID:           *body.SkillID,
+		SkillName:         *body.SkillName,
+		SkillDisplayName:  *body.SkillDisplayName,
 		PluginID:          *body.PluginID,
 		PluginName:        *body.PluginName,
 		PinnedVersionID:   body.PinnedVersionID,
@@ -3472,6 +3482,12 @@ func ValidateDistributeResponseBody(body *DistributeResponseBody) (err error) {
 	}
 	if body.SkillID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("skill_id", "body"))
+	}
+	if body.SkillName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_name", "body"))
+	}
+	if body.SkillDisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_display_name", "body"))
 	}
 	if body.PluginID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("plugin_id", "body"))
@@ -5833,6 +5849,12 @@ func ValidateSkillDistributionResponseBody(body *SkillDistributionResponseBody) 
 	}
 	if body.SkillID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("skill_id", "body"))
+	}
+	if body.SkillName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_name", "body"))
+	}
+	if body.SkillDisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_display_name", "body"))
 	}
 	if body.PluginID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("plugin_id", "body"))

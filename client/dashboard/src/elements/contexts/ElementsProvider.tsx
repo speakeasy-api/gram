@@ -27,8 +27,8 @@ import { Plugin } from "@/elements/types/plugins";
 import {
   AssistantRuntimeProvider,
   AssistantTool,
-  useAssistantState,
-  unstable_useRemoteThreadListRuntime as useRemoteThreadListRuntime,
+  useAuiState,
+  useRemoteThreadListRuntime,
 } from "@assistant-ui/react";
 import {
   frontendTools as convertFrontendToolsToAISDKTools,
@@ -723,7 +723,7 @@ const ThreadIdSync = ({
   remoteIdRef: React.RefObject<string | null>;
   onChatIdChange: (chatId: string | null) => void;
 }) => {
-  const remoteId = useAssistantState(
+  const remoteId = useAuiState(
     ({ threadListItem }) => threadListItem.remoteId ?? null,
   );
   useEffect(() => {

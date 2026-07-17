@@ -81,6 +81,8 @@ export function buildSkillDistributionsQuery(
 } {
   return {
     queryKey: queryKeySkillDistributions({
+      skillId: request?.skillId,
+      pluginId: request?.pluginId,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -124,6 +126,8 @@ export function buildSkillDistributionsInfiniteQuery(
 } {
   return {
     queryKey: queryKeySkillDistributionsInfinite({
+      skillId: request?.skillId,
+      pluginId: request?.pluginId,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -164,6 +168,8 @@ export function buildSkillDistributionsInfiniteQuery(
 
 export function queryKeySkillDistributions(
   parameters: {
+    skillId?: string | undefined;
+    pluginId?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
@@ -176,6 +182,8 @@ export function queryKeySkillDistributions(
 
 export function queryKeySkillDistributionsInfinite(
   parameters: {
+    skillId?: string | undefined;
+    pluginId?: string | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;

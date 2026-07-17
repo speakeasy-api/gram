@@ -1,6 +1,6 @@
 "use client";
 
-import { useAssistantState } from "@assistant-ui/react";
+import { useAuiState } from "@assistant-ui/react";
 import { type FC, useEffect, useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -178,7 +178,7 @@ function useThinkingVerb(
  * `aui-md[data-status="running"]` rules in global.css) takes over.
  */
 export const ThinkingIndicator: FC = () => {
-  const active = useAssistantState(({ message }) => {
+  const active = useAuiState(({ message }) => {
     if (message.status?.type !== "running") return false;
     const parts = message.parts;
     if (parts.length === 0) return true;

@@ -32093,6 +32093,22 @@ paths:
       operationId: listSkillDistributions
       parameters:
         - allowEmptyValue: true
+          description: Only return distributions of this skill.
+          in: query
+          name: skill_id
+          schema:
+            description: Only return distributions of this skill.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Only return distributions carried by this plugin.
+          in: query
+          name: plugin_id
+          schema:
+            description: Only return distributions carried by this plugin.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: Cursor for the next page of skill distributions.
           in: query
           name: cursor
@@ -56203,10 +56219,16 @@ components:
           type: string
           description: The version currently targeted by this distribution.
           format: uuid
+        skill_display_name:
+          type: string
+          description: The display name of the distributed skill.
         skill_id:
           type: string
           description: The distributed skill ID.
           format: uuid
+        skill_name:
+          type: string
+          description: The canonical name of the distributed skill.
         updated_at:
           type: string
           description: When the distribution configuration last changed.
@@ -56216,6 +56238,8 @@ components:
         - id
         - project_id
         - skill_id
+        - skill_name
+        - skill_display_name
         - plugin_id
         - plugin_name
         - resolved_version_id

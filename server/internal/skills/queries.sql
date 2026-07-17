@@ -245,6 +245,8 @@ FOR UPDATE OF sd;
 -- name: ListActiveSkillDistributions :many
 SELECT
   sqlc.embed(sd),
+  s.name AS skill_name,
+  s.display_name AS skill_display_name,
   pl.name AS plugin_name,
   resolved.id AS resolved_version_id
 FROM skill_distributions sd
@@ -265,6 +267,8 @@ JOIN LATERAL (
 WHERE sd.project_id = @project_id
   AND sd.channel = 'plugin'
   AND sd.revoked_at IS NULL
+  AND (sqlc.narg(skill_id)::uuid IS NULL OR sd.skill_id = sqlc.narg(skill_id)::uuid)
+  AND (sqlc.narg(plugin_id)::uuid IS NULL OR sd.plugin_id = sqlc.narg(plugin_id)::uuid)
   AND (
     sqlc.narg(cursor_created_at)::timestamptz IS NULL
     OR (sd.created_at, sd.id) > (
