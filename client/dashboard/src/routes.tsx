@@ -46,7 +46,6 @@ import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
-import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
 import Collections, { CollectionsRoot } from "./pages/collections/Collections";
 import CollectionDetail from "./pages/collections/CollectionDetail";
@@ -178,12 +177,6 @@ const ROUTE_STRUCTURE = {
     url: "/register",
     component: Register,
     unauthenticated: true,
-  },
-  onboarding: {
-    title: "Onboarding",
-    url: "onboarding",
-    component: OnboardingWizard,
-    outsideMainLayout: true, // Break out of normal page structure
   },
   home: {
     title: "Home",
