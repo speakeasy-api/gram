@@ -58,7 +58,7 @@
     "@clack/prompts": "^1.7.0",
     "@logtape/logtape": "^2.2.4",
     "@logtape/pretty": "^2.2.4",
-    "@stricli/core": "^1.2.8",
+    "@stricli/core": "^1.2.9",
     "archiver": "^7.0.1",
     "esbuild": "^0.27.7",
     "zod": "^4",
