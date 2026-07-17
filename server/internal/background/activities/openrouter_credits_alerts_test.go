@@ -105,11 +105,23 @@ func chatCreditsMetric(orgID string, used float64, limit int64) activities.OpenR
 // deleteAlertReservation simulates the dedup reservation's TTL expiring by
 // removing the key directly. The key format mirrors the activity's; orgIDs are
 // unique per test so this cannot clobber a sibling test's reservations.
-func deleteAlertReservation(t *testing.T, ctx context.Context, cacheAdapter cache.Cache, orgID string, threshold int) {
+func deleteAlertReservation(t *testing.T, ctx context.Context, cacheAdapter cache.Cache, orgID string, keyType openrouter.KeyType, threshold int) {
 	t.Helper()
-	key := fmt.Sprintf("openrouter-credits-alert:%s:%s:%d", orgID, openrouter.KeyTypeChat, threshold)
+	key := fmt.Sprintf("openrouter-credits-alert:%s:%s:%d", orgID, keyType, threshold)
 	require.NoError(t, cacheAdapter.Delete(ctx, key))
 }
+
+func internalCreditsMetric(orgID string, used float64, limit int64) activities.OpenRouterCreditsMetric {
+	m := chatCreditsMetric(orgID, used, limit)
+	m.KeyType = string(openrouter.KeyTypeInternal)
+	return m
+}
+
+// Template IDs distinguish which email family a captured send used.
+var (
+	chatCreditsTemplateID     = string(email.OpenRouterChatCreditsThreshold{}.TransactionalID())
+	internalCreditsTemplateID = string(email.OpenRouterInternalCreditsThreshold{}.TransactionalID())
+)
 
 func TestMaybeSendOpenRouterCreditsAlerts_SendsHighestCrossedThreshold(t *testing.T) {
 	t.Parallel()
@@ -148,18 +160,63 @@ func TestMaybeSendOpenRouterCreditsAlerts_ExhaustedFlagsExhaustion(t *testing.T)
 	require.Equal(t, "true", sent[0].DataVariables["exhausted"])
 }
 
-func TestMaybeSendOpenRouterCreditsAlerts_IgnoresInternalKey(t *testing.T) {
+func TestMaybeSendOpenRouterCreditsAlerts_InternalKeyUsesInternalTemplate(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
 	act, conn, captured, _ := setupOpenRouterCreditsAlertsTest(t, "openrouter_credits_alert_internal")
 	orgID, _ := createAlertOrg(t, ctx, conn, "billing@example.com", "")
 
-	internal := chatCreditsMetric(orgID, 100, 100)
-	internal.KeyType = string(openrouter.KeyTypeInternal)
-	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{internal}))
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{internalCreditsMetric(orgID, 100, 100)}))
 
-	require.Empty(t, captured.Sent(), "only the chat key drives customer-facing alerts")
+	sent := captured.Sent()
+	require.Len(t, sent, 1, "the internal key alerts with its own email family")
+	require.Equal(t, internalCreditsTemplateID, sent[0].TransactionalID)
+	require.Equal(t, "100", sent[0].DataVariables["threshold_percent"])
+	require.Equal(t, "true", sent[0].DataVariables["exhausted"])
+}
+
+func TestMaybeSendOpenRouterCreditsAlerts_KeyTypesAlertIndependently(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	act, conn, captured, _ := setupOpenRouterCreditsAlertsTest(t, "openrouter_credits_alert_both_keys")
+	orgID, _ := createAlertOrg(t, ctx, conn, "billing@example.com", "")
+
+	// Both keys cross a threshold in the same tick: one email per key, each
+	// from its own template, deduped independently.
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{
+		chatCreditsMetric(orgID, 92, 100),
+		internalCreditsMetric(orgID, 60, 100),
+	}))
+
+	sent := captured.Sent()
+	require.Len(t, sent, 2, "each key type alerts separately")
+	byTemplate := map[string]string{}
+	for _, s := range sent {
+		byTemplate[s.TransactionalID] = s.DataVariables["threshold_percent"]
+	}
+	require.Equal(t, map[string]string{
+		chatCreditsTemplateID:     "90",
+		internalCreditsTemplateID: "50",
+	}, byTemplate)
+
+	// Re-running changes nothing; the internal key climbing to a new threshold
+	// alerts again without re-alerting the chat key.
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{
+		chatCreditsMetric(orgID, 92, 100),
+		internalCreditsMetric(orgID, 60, 100),
+	}))
+	require.Len(t, captured.Sent(), 2)
+
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{
+		chatCreditsMetric(orgID, 92, 100),
+		internalCreditsMetric(orgID, 80, 100),
+	}))
+	sent = captured.Sent()
+	require.Len(t, sent, 3, "the internal key's next threshold fires independently")
+	require.Equal(t, internalCreditsTemplateID, sent[2].TransactionalID)
+	require.Equal(t, "75", sent[2].DataVariables["threshold_percent"])
 }
 
 func TestMaybeSendOpenRouterCreditsAlerts_SkipsWithoutAlertEmail(t *testing.T) {
@@ -173,15 +230,25 @@ func TestMaybeSendOpenRouterCreditsAlerts_SkipsWithoutAlertEmail(t *testing.T) {
 	require.Empty(t, captured.Sent(), "no billing alert contact means no email")
 }
 
-func TestMaybeSendOpenRouterCreditsAlerts_SkipsBYOK(t *testing.T) {
+func TestMaybeSendOpenRouterCreditsAlerts_ChatBYOKSuppressesOnlyChatAlerts(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
 	act, conn, captured, _ := setupOpenRouterCreditsAlertsTest(t, "openrouter_credits_alert_byok")
 	orgID, _ := createAlertOrg(t, ctx, conn, "billing@example.com", "default")
 
-	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{chatCreditsMetric(orgID, 95, 100)}))
-	require.Empty(t, captured.Sent(), "BYOK orgs do not depend on the platform chat key")
+	// A chat-serving customer key suppresses chat-key warnings, but internal
+	// platform-key usage is platform-billed regardless, so its alert still
+	// goes out.
+	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{
+		chatCreditsMetric(orgID, 95, 100),
+		internalCreditsMetric(orgID, 55, 100),
+	}))
+
+	sent := captured.Sent()
+	require.Len(t, sent, 1, "chat alert suppressed, internal alert delivered")
+	require.Equal(t, internalCreditsTemplateID, sent[0].TransactionalID)
+	require.Equal(t, "50", sent[0].DataVariables["threshold_percent"])
 }
 
 func TestMaybeSendOpenRouterCreditsAlerts_InternalOnlyBYOKSlotStillAlerts(t *testing.T) {
@@ -229,7 +296,7 @@ func TestMaybeSendOpenRouterCreditsAlerts_RetriesAfterSendFailureWithBackoff(t *
 	require.Empty(t, captured.Sent(), "the retry waits for the backoff reservation to expire")
 
 	// Once the reservation lapses (simulated), the next tick retries the send.
-	deleteAlertReservation(t, ctx, cacheAdapter, orgID, 90)
+	deleteAlertReservation(t, ctx, cacheAdapter, orgID, openrouter.KeyTypeChat, 90)
 	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{chatCreditsMetric(orgID, 95, 100)}))
 	sent := captured.Sent()
 	require.Len(t, sent, 1, "the alert is retried after the backoff expires")
@@ -262,7 +329,7 @@ func TestMaybeSendOpenRouterCreditsAlerts_IneligibleOrgRecheckedAfterReservation
 	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{chatCreditsMetric(orgID, 95, 100)}))
 	require.Empty(t, captured.Sent(), "held reservation defers the re-check")
 
-	deleteAlertReservation(t, ctx, cacheAdapter, orgID, 90)
+	deleteAlertReservation(t, ctx, cacheAdapter, orgID, openrouter.KeyTypeChat, 90)
 	require.NoError(t, act.Do(ctx, []activities.OpenRouterCreditsMetric{chatCreditsMetric(orgID, 95, 100)}))
 	require.Len(t, captured.Sent(), 1, "alert sent once the reservation lapses")
 }

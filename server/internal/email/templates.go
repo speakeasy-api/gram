@@ -27,13 +27,15 @@ const (
 	transactionalIDAccessRequestCreated      TransactionalID = "cmq12wqp901sl0j0ll8cpr0yj"
 	transactionalIDTumUsageThreshold         TransactionalID = "cmrdon75q00390jvq44l87erv"
 	transactionalIDTumUsageOverage           TransactionalID = "cmrdopjpd028m0jx0v8sl25wj"
-	// TODO(DNO-529): replace with the real Loops transactional ID once the
-	// "OpenRouter credits threshold" template is created in the Loops
-	// dashboard — merge variables: organization_name, threshold_percent,
-	// exhausted. Until then each crossed threshold retries its send roughly
-	// hourly (the alert activity's backoff reservation), failing fast at Loops
-	// and logging "failed to send openrouter credits alert".
-	transactionalIDOpenRouterCreditsThreshold TransactionalID = "openrouter_credits_threshold_pending_loops_id"
+	// TODO(DNO-529): replace both with the real Loops transactional IDs once
+	// the "OpenRouter chat credits threshold" and "OpenRouter internal credits
+	// threshold" templates are created in the Loops dashboard — merge
+	// variables for each: organization_name, threshold_percent, exhausted.
+	// Until then each crossed threshold retries its send roughly hourly (the
+	// alert activity's backoff reservation), failing fast at Loops and logging
+	// "failed to send openrouter credits alert".
+	transactionalIDOpenRouterChatCreditsThreshold     TransactionalID = "openrouter_chat_credits_threshold_pending_loops_id"
+	transactionalIDOpenRouterInternalCreditsThreshold TransactionalID = "openrouter_internal_credits_threshold_pending_loops_id"
 )
 
 // Template is implemented by every concrete email template. Concrete types
@@ -90,7 +92,12 @@ var RegisteredTemplates = []Template{
 		CycleStart:       "",
 		CycleEnd:         "",
 	},
-	OpenRouterCreditsThreshold{
+	OpenRouterChatCreditsThreshold{
+		OrganizationName: "",
+		ThresholdPercent: "",
+		Exhausted:        false,
+	},
+	OpenRouterInternalCreditsThreshold{
 		OrganizationName: "",
 		ThresholdPercent: "",
 		Exhausted:        false,

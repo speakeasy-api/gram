@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -54,16 +55,58 @@ func highestCrossedOpenRouterCreditsThreshold(used float64, limit int64) int {
 	return int(highestCrossedAlertThreshold(pct, false))
 }
 
+// openRouterCreditsAlertConfig describes how one OpenRouter key type is
+// alerted on. Adding threshold warnings for a new key type means adding an
+// entry to openRouterCreditsAlertConfigs (plus a registered email template);
+// candidate selection, dedup, backoff, and recipient resolution are all
+// key-type agnostic.
+type openRouterCreditsAlertConfig struct {
+	// template builds the Loops email for a crossed threshold of this key.
+	template func(orgName string, thresholdPercent string, exhausted bool) email.Template
+	// suppressedByChatBYOK marks key types whose exhaustion stops being
+	// customer-facing once the org supplies its own chat-serving model
+	// provider key. Internal-style keys keep alerting regardless: their usage
+	// is platform-billed by definition, even when judge slots are BYOK.
+	suppressedByChatBYOK bool
+}
+
+// openRouterCreditsAlertConfigs enumerates the key types that produce
+// threshold warning emails.
+var openRouterCreditsAlertConfigs = map[openrouter.KeyType]openRouterCreditsAlertConfig{
+	openrouter.KeyTypeChat: {
+		template: func(orgName string, thresholdPercent string, exhausted bool) email.Template {
+			return email.OpenRouterChatCreditsThreshold{
+				OrganizationName: orgName,
+				ThresholdPercent: thresholdPercent,
+				Exhausted:        exhausted,
+			}
+		},
+		suppressedByChatBYOK: true,
+	},
+	openrouter.KeyTypeInternal: {
+		template: func(orgName string, thresholdPercent string, exhausted bool) email.Template {
+			return email.OpenRouterInternalCreditsThreshold{
+				OrganizationName: orgName,
+				ThresholdPercent: thresholdPercent,
+				Exhausted:        exhausted,
+			}
+		},
+		suppressedByChatBYOK: false,
+	},
+}
+
 // MaybeSendOpenRouterCreditsAlerts emails an organization's billing alert
-// contact when its platform-managed OpenRouter chat key crosses a monthly
-// credit threshold (50/75/90/100%). It consumes the same per-org metrics the
-// credits workflow already collected, so no extra upstream polling happens.
+// contact when a platform-managed OpenRouter key crosses a monthly credit
+// threshold (50/75/90/100%). It consumes the same per-org metrics the credits
+// workflow already collected, so no extra upstream polling happens.
 //
-// Only the 'chat' key is alerted on: exhausting it 402s the customer's chat
-// surfaces, which is what the admin can act on, whereas the 'internal' key pays
-// for platform-initiated inference the admin has no control over. BYOK orgs
-// (excluding internal-only judge slots) and orgs without a configured billing
-// alert email are filtered out at the SQL layer.
+// Each key type carries its own email template — the 'chat' key's exhaustion
+// 402s the customer's chat surfaces, while the 'internal' key's exhaustion
+// pauses platform-side analysis (risk judges, titles, resolutions, memory) —
+// and thresholds dedup independently per (org, key type). Disabled orgs and
+// orgs without a configured billing alert email are filtered out at the SQL
+// layer; chat-BYOK suppression is applied per key type via
+// openRouterCreditsAlertConfigs.
 type MaybeSendOpenRouterCreditsAlerts struct {
 	logger       *slog.Logger
 	db           *pgxpool.Pool
@@ -125,21 +168,35 @@ func NewMaybeSendOpenRouterCreditsAlerts(
 // values (when ReconcileMonthlyCredits fails) mint duplicate alerts for one
 // unchanged usage state. The trade-off: raising the cap mid-month does not
 // re-arm already-sent thresholds until the next month.
-func openRouterCreditsAlertKey(orgID string, threshold int) string {
-	return fmt.Sprintf("openrouter-credits-alert:%s:%s:%d", orgID, openrouter.KeyTypeChat, threshold)
+func openRouterCreditsAlertKey(orgID string, keyType openrouter.KeyType, threshold int) string {
+	return fmt.Sprintf("openrouter-credits-alert:%s:%s:%d", orgID, keyType, threshold)
+}
+
+// openRouterCreditsAlertCandidate is one (org, key type) pair that crossed a
+// threshold this tick and holds a fresh dedup reservation.
+type openRouterCreditsAlertCandidate struct {
+	orgID     string
+	keyType   openrouter.KeyType
+	threshold int
 }
 
 func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []OpenRouterCreditsMetric) error {
-	// Collapse the tick's metrics down to the chat-key orgs that have crossed a
-	// threshold. Everything below the lowest threshold, every non-chat key, and
-	// every unprovisioned (zero-limit) key drops out here.
-	candidates := make(map[string]int, len(metrics))
+	// Collapse the tick's metrics down to the (org, key type) pairs that have
+	// crossed a threshold on an alertable key. Everything below the lowest
+	// threshold, every unconfigured key type, and every unprovisioned
+	// (zero-limit) key drops out here.
+	candidates := make([]openRouterCreditsAlertCandidate, 0, len(metrics))
 	for _, m := range metrics {
-		if m.KeyType != string(openrouter.KeyTypeChat) {
+		keyType := openrouter.KeyType(m.KeyType)
+		if _, ok := openRouterCreditsAlertConfigs[keyType]; !ok {
 			continue
 		}
 		if threshold := highestCrossedOpenRouterCreditsThreshold(m.CreditsUsed, m.CreditLimit); threshold != 0 {
-			candidates[m.OrganizationID] = threshold
+			candidates = append(candidates, openRouterCreditsAlertCandidate{
+				orgID:     m.OrganizationID,
+				keyType:   keyType,
+				threshold: threshold,
+			})
 		}
 	}
 	if len(candidates) == 0 {
@@ -150,32 +207,40 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 	// already alerted or backing off — all candidates drop out on this cheap
 	// Redis check and the tick does no recipient lookups at all. The short
 	// reservation is extended to month length only after a successful send.
-	pending := make([]string, 0, len(candidates))
-	for orgID, threshold := range candidates {
-		won, err := a.cache.Add(ctx, openRouterCreditsAlertKey(orgID, threshold), openRouterCreditsAlertRetryTTL)
+	pending := make([]openRouterCreditsAlertCandidate, 0, len(candidates))
+	for _, c := range candidates {
+		won, err := a.cache.Add(ctx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold), openRouterCreditsAlertRetryTTL)
 		if err != nil {
 			a.logger.ErrorContext(ctx, "failed to reserve openrouter credits alert",
-				attr.SlogOrganizationID(orgID), attr.SlogError(err))
+				attr.SlogOrganizationID(c.orgID), attr.SlogOpenRouterKeyType(string(c.keyType)), attr.SlogError(err))
 			continue
 		}
 		if won {
-			pending = append(pending, orgID)
+			pending = append(pending, c)
 		}
 	}
 	if len(pending) == 0 {
 		return nil
 	}
 
-	// Resolve recipients in one round-trip. The query excludes disabled and
-	// BYOK orgs and orgs without a billing alert email; their reservations are
-	// intentionally kept, so an ineligible org is re-checked once per
-	// reservation TTL rather than every tick.
+	// Resolve recipients in one round-trip. The query excludes disabled orgs
+	// and orgs without a billing alert email; ineligible orgs keep their
+	// reservations, so they are re-checked once per reservation TTL rather
+	// than every tick.
+	orgIDSet := make(map[string]struct{}, len(pending))
+	orgIDs := make([]string, 0, len(pending))
+	for _, c := range pending {
+		if _, ok := orgIDSet[c.orgID]; !ok {
+			orgIDSet[c.orgID] = struct{}{}
+			orgIDs = append(orgIDs, c.orgID)
+		}
+	}
 	recipients, err := a.repo.GetOpenRouterCreditsAlertRecipients(ctx, repo.GetOpenRouterCreditsAlertRecipientsParams{
-		OrganizationIds:   pending,
+		OrganizationIds:   orgIDs,
 		InternalOnlySlots: modelkeys.InternalOnlySlots(),
 	})
 	if err != nil {
-		a.recordFailure(ctx, "")
+		a.recordFailure(ctx, "", "")
 		return fmt.Errorf("get openrouter credits alert recipients: %w", err)
 	}
 
@@ -184,15 +249,23 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 	for _, r := range recipients {
 		eligible[r.OrganizationID] = r
 	}
-	for _, orgID := range pending {
-		r, ok := eligible[orgID]
+	for _, c := range pending {
+		logger := a.logger.With(
+			attr.SlogOrganizationID(c.orgID),
+			attr.SlogOpenRouterKeyType(string(c.keyType)),
+			attr.SlogValueInt(c.threshold),
+		)
+		r, ok := eligible[c.orgID]
 		if !ok {
 			// Naturally rate-limited to once per reservation TTL.
-			a.logger.InfoContext(ctx, "skipping openrouter credits alert without eligible recipient",
-				attr.SlogOrganizationID(orgID), attr.SlogValueInt(candidates[orgID]))
+			logger.InfoContext(ctx, "skipping openrouter credits alert without eligible recipient")
 			continue
 		}
-		a.sendOne(ctx, orgID, r.OrganizationName, r.AlertEmail.String, candidates[orgID], now)
+		if r.ChatByok && openRouterCreditsAlertConfigs[c.keyType].suppressedByChatBYOK {
+			logger.InfoContext(ctx, "skipping openrouter credits alert for chat-BYOK org")
+			continue
+		}
+		a.sendOne(ctx, c, r.OrganizationName, r.AlertEmail.String, now)
 	}
 
 	return nil
@@ -206,22 +279,21 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 // 5 minutes.
 func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 	ctx context.Context,
-	orgID string,
+	c openRouterCreditsAlertCandidate,
 	orgName string,
 	recipient string,
-	threshold int,
 	now time.Time,
 ) {
-	logger := a.logger.With(attr.SlogOrganizationID(orgID))
+	logger := a.logger.With(attr.SlogOrganizationID(c.orgID), attr.SlogOpenRouterKeyType(string(c.keyType)))
 
-	tmpl := email.OpenRouterCreditsThreshold{
-		OrganizationName: conv.Default(orgName, "your organization"),
-		ThresholdPercent: strconv.Itoa(threshold),
-		Exhausted:        threshold >= 100,
-	}
+	tmpl := openRouterCreditsAlertConfigs[c.keyType].template(
+		conv.Default(orgName, "your organization"),
+		strconv.Itoa(c.threshold),
+		c.threshold >= 100,
+	)
 	if err := a.emails.Send(ctx, recipient, tmpl); err != nil {
 		logger.ErrorContext(ctx, "failed to send openrouter credits alert", attr.SlogError(err))
-		a.recordFailure(ctx, orgID)
+		a.recordFailure(ctx, c.orgID, c.keyType)
 		return
 	}
 
@@ -230,29 +302,35 @@ func (a *MaybeSendOpenRouterCreditsAlerts) sendOne(
 	// of the way of next month's ladder.
 	_, cycleEnd := usage.CurrentBillingCycle(now, 1)
 	ttl := cycleEnd.Sub(now) + openRouterCreditsAlertGrace
-	if err := a.cache.Expire(ctx, openRouterCreditsAlertKey(orgID, threshold), ttl); err != nil {
+	if err := a.cache.Expire(ctx, openRouterCreditsAlertKey(c.orgID, c.keyType, c.threshold), ttl); err != nil {
 		// Worst case the short reservation lapses and the same threshold
 		// re-sends within the month — log so repeats are explicable.
 		logger.ErrorContext(ctx, "failed to extend openrouter credits alert reservation", attr.SlogError(err))
 	}
 
 	if a.alertsSent != nil {
-		a.alertsSent.Add(ctx, 1, metric.WithAttributes(attr.OrganizationID(orgID)))
+		a.alertsSent.Add(ctx, 1, metric.WithAttributes(
+			attr.OrganizationID(c.orgID),
+			attr.OpenRouterKeyType(string(c.keyType)),
+		))
 	}
-	logger.InfoContext(ctx, "sent openrouter credits alert", attr.SlogValueInt(threshold))
+	logger.InfoContext(ctx, "sent openrouter credits alert", attr.SlogValueInt(c.threshold))
 }
 
 // recordFailure bumps the failure counter that stands in for workflow-level
 // failure signal: the credits workflow deliberately swallows alert errors so
 // metrics collection never fails on account of alerting, which would otherwise
 // leave persistent alert breakage invisible to monitoring.
-func (a *MaybeSendOpenRouterCreditsAlerts) recordFailure(ctx context.Context, orgID string) {
+func (a *MaybeSendOpenRouterCreditsAlerts) recordFailure(ctx context.Context, orgID string, keyType openrouter.KeyType) {
 	if a.alertsFailed == nil {
 		return
 	}
-	opts := []metric.AddOption{}
+	attrs := []attribute.KeyValue{}
 	if orgID != "" {
-		opts = append(opts, metric.WithAttributes(attr.OrganizationID(orgID)))
+		attrs = append(attrs, attr.OrganizationID(orgID))
 	}
-	a.alertsFailed.Add(ctx, 1, opts...)
+	if keyType != "" {
+		attrs = append(attrs, attr.OpenRouterKeyType(string(keyType)))
+	}
+	a.alertsFailed.Add(ctx, 1, metric.WithAttributes(attrs...))
 }

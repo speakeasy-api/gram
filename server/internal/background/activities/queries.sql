@@ -76,33 +76,33 @@ ORDER BY om.slug;
 -- name: GetOpenRouterCreditsAlertRecipients :many
 -- Resolve the billing alert recipient for each supplied organization that
 -- should receive an OpenRouter credit threshold warning. An org qualifies only
--- if it has a billing alert email configured (the address set on the billing
--- page) and is not using BYOK for chat traffic — an enabled, non-deleted
--- customer-supplied model provider key outside the internal-only slots
--- (@internal_only_slots, the platform-initiated judge slots that never carry
--- chat completions) means the platform chat key is not what pays for the org's
--- completions, so credit exhaustion of that key is not customer-facing and no
--- warning is sent. The exclusion is deliberately org-wide beyond that: a
--- chat-serving customer key on any project marks the whole org as BYOK,
--- matching the ticket-level "no alerts for BYOK orgs" decision. Orgs without a
--- recipient or with BYOK are simply omitted.
+-- if it is not disabled and has a billing alert email configured (the address
+-- set on the billing page). chat_byok reports whether the org has an enabled,
+-- non-deleted customer-supplied model provider key outside the internal-only
+-- slots (@internal_only_slots, the platform-initiated judge slots that never
+-- carry chat completions); such a key means the platform chat key is not what
+-- pays for the org's completions, so the caller suppresses chat-key warnings —
+-- deliberately org-wide, matching the ticket-level "no alerts for BYOK orgs"
+-- decision. The flag is returned rather than filtered on because it only
+-- applies to some key types: usage on the internal key is platform-billed
+-- regardless of any customer keys.
 SELECT
     om.id AS organization_id,
     om.name AS organization_name,
-    bm.alert_email
+    bm.alert_email,
+    EXISTS (
+        SELECT 1
+        FROM model_provider_keys mpk
+        WHERE mpk.organization_id = om.id
+          AND mpk.enabled = TRUE
+          AND mpk.deleted = FALSE
+          AND mpk.slot <> ALL(@internal_only_slots::text[])
+    )::boolean AS chat_byok
 FROM organization_metadata om
 JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.id = ANY(@organization_ids::text[])
   AND om.disabled_at IS NULL
-  AND bm.alert_email IS NOT NULL
-  AND NOT EXISTS (
-      SELECT 1
-      FROM model_provider_keys mpk
-      WHERE mpk.organization_id = om.id
-        AND mpk.enabled = TRUE
-        AND mpk.deleted = FALSE
-        AND mpk.slot <> ALL(@internal_only_slots::text[])
-  );
+  AND bm.alert_email IS NOT NULL;
 
 -- name: GetUserEmailsByOrgIDs :many
 -- Get user emails for organization IDs by looking up the latest deployment for each org
