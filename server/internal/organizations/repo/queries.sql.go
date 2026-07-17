@@ -917,6 +917,7 @@ FROM organization_user_relationships our
 JOIN users u ON u.id = our.user_id
 WHERE our.organization_id = $1
   AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
 `
 
 type ListOrganizationUsersRow struct {
