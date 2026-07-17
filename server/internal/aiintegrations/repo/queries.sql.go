@@ -61,89 +61,6 @@ func (q *Queries) AdvanceUsagePollCursor(ctx context.Context, arg AdvanceUsagePo
 	return err
 }
 
-const backfillSyncSchedules = `-- name: BackfillSyncSchedules :one
-WITH updated_primary AS (
-  UPDATE ai_integration_syncs s
-  SET schedule = COALESCE(s.schedule, c.provider),
-      kind = COALESCE(
-        s.kind,
-        CASE c.provider
-          WHEN 'anthropic_compliance' THEN 'cursor'
-          ELSE 'time'
-        END
-      ),
-      updated_at = clock_timestamp()
-  FROM ai_integration_configs c
-  WHERE s.ai_integration_config_id = c.id
-    AND (s.schedule = c.provider OR s.schedule IS NULL)
-    AND (s.schedule IS NULL OR s.kind IS NULL)
-  RETURNING s.id
-),
-inserted_analytics AS (
-  INSERT INTO ai_integration_syncs (
-      ai_integration_config_id
-    , schedule
-    , kind
-    , poll_watermark_at
-    , next_poll_after
-  )
-  SELECT
-      c.id
-    , expected.schedule
-    , 'time'
-    , TIMESTAMPTZ '1970-01-01 00:00:00+00'
-    , TIMESTAMPTZ '1970-01-01 00:00:00+00'
-  FROM ai_integration_configs c
-  CROSS JOIN unnest(ARRAY[
-      'anthropic_analytics_usage'::text
-    , 'anthropic_analytics_cost'::text
-  ]) AS expected(schedule)
-  WHERE c.provider = 'anthropic_compliance'
-    AND c.deleted IS FALSE
-  ON CONFLICT (ai_integration_config_id, schedule) DO NOTHING
-  RETURNING id
-)
-SELECT
-    (SELECT count(*) FROM updated_primary)::bigint AS primary_syncs_updated
-  , (SELECT count(*) FROM inserted_analytics)::bigint AS analytics_schedules_created
-`
-
-type BackfillSyncSchedulesRow struct {
-	PrimarySyncsUpdated       int64
-	AnalyticsSchedulesCreated int64
-}
-
-// BackfillSyncSchedules is a one-off statement run manually in production.
-// It labels existing primary rows and creates the independent Anthropic
-// analytics schedules. Both operations are idempotent.
-func (q *Queries) BackfillSyncSchedules(ctx context.Context) (BackfillSyncSchedulesRow, error) {
-	row := q.db.QueryRow(ctx, backfillSyncSchedules)
-	var i BackfillSyncSchedulesRow
-	err := row.Scan(&i.PrimarySyncsUpdated, &i.AnalyticsSchedulesCreated)
-	return i, err
-}
-
-const clearSyncScheduleDiscriminatorsForTest = `-- name: ClearSyncScheduleDiscriminatorsForTest :exec
-UPDATE ai_integration_syncs s
-SET schedule = NULL,
-    kind = NULL
-FROM ai_integration_configs c
-WHERE s.ai_integration_config_id = c.id
-  AND c.id = $1
-  AND c.project_id = $2
-  AND (s.schedule = c.provider OR s.schedule IS NULL)
-`
-
-type ClearSyncScheduleDiscriminatorsForTestParams struct {
-	AiIntegrationConfigID uuid.UUID
-	ProjectID             uuid.UUID
-}
-
-func (q *Queries) ClearSyncScheduleDiscriminatorsForTest(ctx context.Context, arg ClearSyncScheduleDiscriminatorsForTestParams) error {
-	_, err := q.db.Exec(ctx, clearSyncScheduleDiscriminatorsForTest, arg.AiIntegrationConfigID, arg.ProjectID)
-	return err
-}
-
 const countConfigsByOrganization = `-- name: CountConfigsByOrganization :one
 SELECT count(*)
 FROM ai_integration_configs
@@ -198,7 +115,7 @@ type DeleteSecondarySyncSchedulesForTestParams struct {
 	PrimarySchedule       pgtype.Text
 }
 
-// Test-only fixtures for transitional sync-row behavior.
+// Test-only fixtures for sync-row behavior.
 func (q *Queries) DeleteSecondarySyncSchedulesForTest(ctx context.Context, arg DeleteSecondarySyncSchedulesForTestParams) error {
 	_, err := q.db.Exec(ctx, deleteSecondarySyncSchedulesForTest, arg.AiIntegrationConfigID, arg.ProjectID, arg.PrimarySchedule)
 	return err
@@ -295,8 +212,8 @@ type EnsurePrimarySyncRow struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
-	Kind                  pgtype.Text
+	Schedule              string
+	Kind                  string
 	PollWatermarkAt       pgtype.Timestamptz
 	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
@@ -491,34 +408,6 @@ func (q *Queries) GetFirstProjectByOrganization(ctx context.Context, organizatio
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const getPrimarySyncDiscriminatorsForTest = `-- name: GetPrimarySyncDiscriminatorsForTest :one
-SELECT s.id, s.schedule, s.kind
-FROM ai_integration_syncs s
-JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
-WHERE c.id = $1
-  AND c.project_id = $2
-  AND (s.schedule = c.provider OR s.schedule IS NULL)
-LIMIT 1
-`
-
-type GetPrimarySyncDiscriminatorsForTestParams struct {
-	AiIntegrationConfigID uuid.UUID
-	ProjectID             uuid.UUID
-}
-
-type GetPrimarySyncDiscriminatorsForTestRow struct {
-	ID       uuid.UUID
-	Schedule pgtype.Text
-	Kind     pgtype.Text
-}
-
-func (q *Queries) GetPrimarySyncDiscriminatorsForTest(ctx context.Context, arg GetPrimarySyncDiscriminatorsForTestParams) (GetPrimarySyncDiscriminatorsForTestRow, error) {
-	row := q.db.QueryRow(ctx, getPrimarySyncDiscriminatorsForTest, arg.AiIntegrationConfigID, arg.ProjectID)
-	var i GetPrimarySyncDiscriminatorsForTestRow
-	err := row.Scan(&i.ID, &i.Schedule, &i.Kind)
-	return i, err
 }
 
 const getUsagePollConfigByID = `-- name: GetUsagePollConfigByID :one

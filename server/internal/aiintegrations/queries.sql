@@ -324,56 +324,7 @@ SET poll_watermark_at = @poll_watermark_at,
 WHERE ai_integration_config_id = @ai_integration_config_id
   AND schedule = @schedule;
 
--- BackfillSyncSchedules is a one-off statement run manually in production.
--- It labels existing primary rows and creates the independent Anthropic
--- analytics schedules. Both operations are idempotent.
--- name: BackfillSyncSchedules :one
-WITH updated_primary AS (
-  UPDATE ai_integration_syncs s
-  SET schedule = COALESCE(s.schedule, c.provider),
-      kind = COALESCE(
-        s.kind,
-        CASE c.provider
-          WHEN 'anthropic_compliance' THEN 'cursor'
-          ELSE 'time'
-        END
-      ),
-      updated_at = clock_timestamp()
-  FROM ai_integration_configs c
-  WHERE s.ai_integration_config_id = c.id
-    AND (s.schedule = c.provider OR s.schedule IS NULL)
-    AND (s.schedule IS NULL OR s.kind IS NULL)
-  RETURNING s.id
-),
-inserted_analytics AS (
-  INSERT INTO ai_integration_syncs (
-      ai_integration_config_id
-    , schedule
-    , kind
-    , poll_watermark_at
-    , next_poll_after
-  )
-  SELECT
-      c.id
-    , expected.schedule
-    , 'time'
-    , TIMESTAMPTZ '1970-01-01 00:00:00+00'
-    , TIMESTAMPTZ '1970-01-01 00:00:00+00'
-  FROM ai_integration_configs c
-  CROSS JOIN unnest(ARRAY[
-      'anthropic_analytics_usage'::text
-    , 'anthropic_analytics_cost'::text
-  ]) AS expected(schedule)
-  WHERE c.provider = 'anthropic_compliance'
-    AND c.deleted IS FALSE
-  ON CONFLICT (ai_integration_config_id, schedule) DO NOTHING
-  RETURNING id
-)
-SELECT
-    (SELECT count(*) FROM updated_primary)::bigint AS primary_syncs_updated
-  , (SELECT count(*) FROM inserted_analytics)::bigint AS analytics_schedules_created;
-
--- Test-only fixtures for transitional sync-row behavior.
+-- Test-only fixtures for sync-row behavior.
 -- name: DeleteSecondarySyncSchedulesForTest :exec
 DELETE FROM ai_integration_syncs s
 USING ai_integration_configs c
@@ -382,31 +333,12 @@ WHERE s.ai_integration_config_id = c.id
   AND c.project_id = @project_id
   AND s.schedule <> @primary_schedule;
 
--- name: ClearSyncScheduleDiscriminatorsForTest :exec
-UPDATE ai_integration_syncs s
-SET schedule = NULL,
-    kind = NULL
-FROM ai_integration_configs c
-WHERE s.ai_integration_config_id = c.id
-  AND c.id = @ai_integration_config_id
-  AND c.project_id = @project_id
-  AND (s.schedule = c.provider OR s.schedule IS NULL);
-
 -- name: DeleteSyncRowsForTest :exec
 DELETE FROM ai_integration_syncs s
 USING ai_integration_configs c
 WHERE s.ai_integration_config_id = c.id
   AND c.id = @ai_integration_config_id
   AND c.project_id = @project_id;
-
--- name: GetPrimarySyncDiscriminatorsForTest :one
-SELECT s.id, s.schedule, s.kind
-FROM ai_integration_syncs s
-JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
-WHERE c.id = @ai_integration_config_id
-  AND c.project_id = @project_id
-  AND (s.schedule = c.provider OR s.schedule IS NULL)
-LIMIT 1;
 
 -- name: CountSyncRowsForTest :one
 SELECT count(*)::bigint

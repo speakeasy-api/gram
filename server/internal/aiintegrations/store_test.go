@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestUpsertWithTxCreatesConfigGeneration(t *testing.T) {
@@ -91,33 +90,6 @@ func TestUpsertWithTxStartsSingleCursorSchedule(t *testing.T) {
 		ScheduleCursor: SyncKindTime,
 	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
 }
-
-func TestUpsertWithTxFillsExistingPrimarySyncDiscriminators(t *testing.T) {
-	t.Parallel()
-
-	ctx, conn, store, orgID := newStoreTestDB(t)
-
-	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
-	original := getPrimarySyncDiscriminators(t, ctx, conn, created.Config)
-	require.NoError(t, repo.New(conn).ClearSyncScheduleDiscriminatorsForTest(ctx, repo.ClearSyncScheduleDiscriminatorsForTestParams{
-		AiIntegrationConfigID: created.Config.ID,
-		ProjectID:             created.Config.ProjectID,
-	}))
-
-	loaded, _, err := store.loadForOrgAndProviderRow(ctx, orgID, ProviderCursor)
-	require.NoError(t, err)
-	require.Equal(t, created.Config.ID, loaded.ID)
-
-	updated := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "", false, false, nil, nil)
-	require.Equal(t, created.Config.ID, updated.Config.ID)
-
-	syncRow := getPrimarySyncDiscriminators(t, ctx, conn, updated.Config)
-	require.Equal(t, original.ID, syncRow.ID)
-	require.Equal(t, ProviderCursor, syncRow.Schedule.String)
-	require.Equal(t, SyncKindTime, syncRow.Kind.String)
-	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, updated.Config))
-}
-
 func TestEnsurePrimarySyncHandlesConcurrentFirstWriters(t *testing.T) {
 	t.Parallel()
 
@@ -185,41 +157,6 @@ func TestListUsagePollCandidatesReturnsEveryDueSchedule(t *testing.T) {
 		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
 	}, schedules)
 }
-
-func TestBackfillSyncSchedulesIsIdempotent(t *testing.T) {
-	t.Parallel()
-
-	ctx, conn, store, orgID := newStoreTestDB(t)
-
-	extOrgID := "org_ext_backfill"
-	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
-	queries := repo.New(conn)
-	require.NoError(t, queries.DeleteSecondarySyncSchedulesForTest(ctx, repo.DeleteSecondarySyncSchedulesForTestParams{
-		AiIntegrationConfigID: created.Config.ID,
-		ProjectID:             created.Config.ProjectID,
-		PrimarySchedule:       conv.ToPGText(ScheduleAnthropicCompliance),
-	}))
-	require.NoError(t, queries.ClearSyncScheduleDiscriminatorsForTest(ctx, repo.ClearSyncScheduleDiscriminatorsForTestParams{
-		AiIntegrationConfigID: created.Config.ID,
-		ProjectID:             created.Config.ProjectID,
-	}))
-
-	result, err := queries.BackfillSyncSchedules(ctx)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), result.PrimarySyncsUpdated)
-	require.Equal(t, int64(2), result.AnalyticsSchedulesCreated)
-	require.Equal(t, map[string]string{
-		ScheduleAnthropicCompliance:     SyncKindCursor,
-		ScheduleAnthropicAnalyticsUsage: SyncKindTime,
-		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
-	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
-
-	rerun, err := queries.BackfillSyncSchedules(ctx)
-	require.NoError(t, err)
-	require.Equal(t, int64(0), rerun.PrimarySyncsUpdated)
-	require.Equal(t, int64(0), rerun.AnalyticsSchedulesCreated)
-}
-
 func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
 	t.Parallel()
 
@@ -283,17 +220,6 @@ func countAIIntegrationConfigs(t *testing.T, ctx context.Context, conn *pgxpool.
 	})
 	require.NoError(t, err)
 	return count
-}
-
-func getPrimarySyncDiscriminators(t *testing.T, ctx context.Context, conn *pgxpool.Pool, cfg Config) repo.GetPrimarySyncDiscriminatorsForTestRow {
-	t.Helper()
-
-	row, err := repo.New(conn).GetPrimarySyncDiscriminatorsForTest(ctx, repo.GetPrimarySyncDiscriminatorsForTestParams{
-		AiIntegrationConfigID: cfg.ID,
-		ProjectID:             cfg.ProjectID,
-	})
-	require.NoError(t, err)
-	return row
 }
 
 func countSyncRows(t *testing.T, ctx context.Context, conn *pgxpool.Pool, cfg Config) int64 {
