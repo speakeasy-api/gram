@@ -2916,9 +2916,6 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_key
-  ON ai_integration_syncs (ai_integration_config_id);
-
 CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_schedule_key
   ON ai_integration_syncs (ai_integration_config_id, schedule);
 
