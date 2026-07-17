@@ -1,0 +1,3 @@
+ALTER TABLE `risk_findings` ADD COLUMN `inserted_at` DateTime64(9) DEFAULT now64(9) COMMENT 'Server-side ingestion time, stamped on insert. Used for ingestion-lag diagnostics and to tie-break redelivered rows sharing the same id.' CODEC(DoubleDelta, ZSTD(1));
+ALTER TABLE `risk_findings` ADD COLUMN `excluded_at` Nullable(DateTime64(9)) COMMENT 'Time the finding was suppressed by an exclusion. Null when the finding is not excluded.' CODEC(DoubleDelta, ZSTD(1));
+ALTER TABLE `risk_findings` ADD COLUMN `exclusion_id` Nullable(UUID) COMMENT 'Id of the risk_exclusions row that suppressed the finding. Null when the finding is not excluded.' CODEC(ZSTD(1));
