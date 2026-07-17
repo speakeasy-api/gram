@@ -512,8 +512,8 @@ importers:
         specifier: 'catalog:'
         version: 1.29.0(zod@4.4.3)
       '@stricli/core':
-        specifier: ^1.2.8
-        version: 1.2.8
+        specifier: ^1.2.9
+        version: 1.2.9
       archiver:
         specifier: ^7.0.1
         version: 7.0.1
@@ -3306,8 +3306,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@stricli/core@1.2.8':
-    resolution: {integrity: sha512-zqEZu9x+UAAZrzQlfD/iDXIyb6Y3560MzfvFpNfWXJdZuJ0SSxGOGse+0P/5kwlufsSXQF8Wn5jK1NZF4vcqnw==}
+  '@stricli/core@1.2.9':
+    resolution: {integrity: sha512-vKniyS+0GtarIaUpMRMQ5+Ck9mXeaBqdN/7otznkBTWU0EXfkMJAHt2QdOCmOudR9eciQZQf09DmYm14yfPWzw==}
 
   '@stripe/react-stripe-js@3.9.1':
     resolution: {integrity: sha512-t5KZiu7jkUTHOx0adGSlSj4xPpFSvW6BsgIRQHNXqhHeYBH0mpddVUZsO33WM1m6Vyd1Wl96JoBhwEsw8jMHTQ==}
@@ -9949,7 +9949,7 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@stricli/core@1.2.8': {}
+  '@stricli/core@1.2.9': {}
 
   '@stripe/react-stripe-js@3.9.1(@stripe/stripe-js@7.8.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
