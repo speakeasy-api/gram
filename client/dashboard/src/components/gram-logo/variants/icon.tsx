@@ -1,6 +1,16 @@
 export const GramIcon = (): JSX.Element => {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 100 97">
+    // Explicit width/height + h-auto: Safari collapses an unsized svg in an
+    // auto-height flex parent to 0px tall instead of deriving the aspect
+    // ratio from the viewBox alone.
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 100 97"
+      width="100"
+      height="97"
+      className="h-auto w-full"
+    >
       <path
         d="M70.9355 91.3402L5.05057 81.9787L0 86.3592L70.9355 96.4351L100 71.2201L94.9557 70.5059L70.9355 91.3402Z"
         fill="#232323"

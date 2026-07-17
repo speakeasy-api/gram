@@ -1,6 +1,16 @@
 export const GramLogoHorizontal = (): JSX.Element => {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 1000 160">
+    // Explicit width/height + h-auto: Safari collapses an unsized svg in an
+    // auto-height flex parent to 0px tall instead of deriving the aspect
+    // ratio from the viewBox alone.
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 1000 160"
+      width="1000"
+      height="160"
+      className="h-auto w-full"
+    >
       <path
         d="M983.132 33.08L958.201 101.302L932.453 33.08H915.584L949.69 120.736L945.46 130.657C944.264 133.599 943.222 135.684 942.395 136.828L942.323 136.93C941.649 138.095 940.76 138.892 939.605 139.362C938.389 139.873 936.479 140.128 933.924 140.128H920.601V154.821H938.144C942.231 154.821 945.562 154.157 948.065 152.849C950.579 151.531 952.704 149.477 954.359 146.739C955.953 144.113 957.802 140.149 959.836 134.948L1000 33.0698H983.121L983.132 33.08Z"
         fill="#232323"
