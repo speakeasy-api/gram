@@ -37,6 +37,7 @@ export function PluginCard({
   const client = useSdkClient();
   const detailHref = routes.plugins.detail.href(plugin.id);
   const serverCount = plugin.serverCount ?? 0;
+  const skillCount = plugin.skillCount ?? 0;
   const isDefault = plugin.isDefault ?? false;
   const description =
     plugin.description ?? (isDefault ? DEFAULT_PLUGIN_DESCRIPTION : undefined);
@@ -151,14 +152,26 @@ export function PluginCard({
                 {plugin.slug}
               </Type>
             </div>
-            <Badge variant="neutral" className="shrink-0">
-              <Badge.LeftIcon>
-                <Server className="h-3 w-3" />
-              </Badge.LeftIcon>
-              <Badge.Text>
-                {serverCount} {serverCount === 1 ? "server" : "servers"}
-              </Badge.Text>
-            </Badge>
+            <div className="flex shrink-0 items-center gap-2">
+              <Badge variant="neutral">
+                <Badge.LeftIcon>
+                  <Server className="h-3 w-3" />
+                </Badge.LeftIcon>
+                <Badge.Text>
+                  {serverCount} {serverCount === 1 ? "server" : "servers"}
+                </Badge.Text>
+              </Badge>
+              {skillCount > 0 && (
+                <Badge variant="neutral">
+                  <Badge.LeftIcon>
+                    <Icon name="terminal" className="h-3 w-3" />
+                  </Badge.LeftIcon>
+                  <Badge.Text>
+                    {skillCount} {skillCount === 1 ? "skill" : "skills"}
+                  </Badge.Text>
+                </Badge>
+              )}
+            </div>
           </div>
 
           {description && (

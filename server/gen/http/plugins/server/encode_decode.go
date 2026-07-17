@@ -3506,6 +3506,7 @@ func marshalPluginsPluginToPluginResponseBody(v *plugins.Plugin) *PluginResponse
 		Description:     v.Description,
 		IsDefault:       v.IsDefault,
 		ServerCount:     v.ServerCount,
+		SkillCount:      v.SkillCount,
 		AssignmentCount: v.AssignmentCount,
 		CreatedAt:       v.CreatedAt,
 		UpdatedAt:       v.UpdatedAt,

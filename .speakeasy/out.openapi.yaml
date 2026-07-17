@@ -51199,6 +51199,10 @@ components:
           items:
             $ref: '#/components/schemas/PluginServer'
           description: Servers included in this plugin.
+        skill_count:
+          type: integer
+          description: Number of active skills in this plugin.
+          format: int64
         slug:
           type: string
           description: URL-safe identifier, unique per org.

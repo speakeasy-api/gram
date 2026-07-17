@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.91.1
+
+### Patch Changes
+
+- 50289f1: Show the number of active skills carried by each plugin on the Plugins page.
+
 ## 0.91.0
 
 ### Minor Changes

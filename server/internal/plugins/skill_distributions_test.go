@@ -166,4 +166,16 @@ func TestListPluginSkillsForProjectResolvesContent(t *testing.T) {
 	require.Equal(t, "tracked-v2", rows[1].SkillContent)
 	require.Equal(t, pluginID, rows[0].PluginID)
 	require.Equal(t, plugin.Slug, rows[0].PluginSlug)
+
+	listed, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
+	require.NoError(t, err)
+	var skillCount *int64
+	for _, listedPlugin := range listed.Plugins {
+		if listedPlugin.ID == plugin.ID {
+			skillCount = listedPlugin.SkillCount
+			break
+		}
+	}
+	require.NotNil(t, skillCount)
+	require.EqualValues(t, 2, *skillCount)
 }
