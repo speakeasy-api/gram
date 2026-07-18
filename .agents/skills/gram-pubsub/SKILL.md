@@ -3,17 +3,7 @@ name: gram-pubsub
 description: |
   Gram's declarative GCP Pub/Sub system — topics and subscriptions are declared as protobuf message options, generated into `infra/gen/kcc.yaml`, and used at runtime via a type-safe publisher/subscriber library and the `gram streams` process. Activate for any Pub/Sub work in Gram: adding or changing a topic/subscription, declaring `(gcp.pubsub.v1.topic)`/`(gcp.pubsub.v1.subscription)` options, publishing or consuming messages, implementing a stream handler, dead-letter queues, or the local emulator — including phrasings like "add an outbox topic", "wire up a consumer", or "why isn't my topic created in GCP" even when Pub/Sub isn't named.
 metadata:
-  relevant_files:
-    - "infra/proto/**/*.proto"
-    - "infra/internal/gcp/*.go"
-    - "infra/pkg/gcp/*.go"
-    - "infra/cmd/infra/*.go"
-    - "server/cmd/gram/streams.go"
-    - "server/internal/streams/*.go"
-    - "server/internal/ping/*.go"
-    - "buf.yaml"
-    - "buf.gen.yaml"
-    - ".mise-tasks/gen/infra.sh"
+  relevant_files: "infra/proto/**/*.proto, infra/internal/gcp/*.go, infra/pkg/gcp/*.go, infra/cmd/infra/*.go, server/cmd/gram/streams.go, server/internal/streams/*.go, server/internal/ping/*.go, buf.yaml, buf.gen.yaml, .mise-tasks/gen/infra.sh"
 ---
 
 # Gram Pub/Sub

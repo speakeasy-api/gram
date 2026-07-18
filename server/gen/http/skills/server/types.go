@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	skills "github.com/speakeasy-api/gram/server/gen/skills"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -19,6 +21,13 @@ type CreateRequestBody struct {
 	// The complete uploaded SKILL.md content. Handlers enforce a maximum size of
 	// 65,536 UTF-8 bytes.
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+}
+
+// FetchFromGitHubRequestBody is the type of the "skills" service
+// "fetchFromGitHub" endpoint HTTP request body.
+type FetchFromGitHubRequestBody struct {
+	// The public GitHub repository URL.
+	RepoURL *string `form:"repo_url,omitempty" json:"repo_url,omitempty" xml:"repo_url,omitempty"`
 }
 
 // AddVersionRequestBody is the type of the "skills" service "addVersion"
@@ -71,6 +80,17 @@ type CreateResponseBody struct {
 	// Whether this request created a new immutable version rather than resolving
 	// to an existing canonical version.
 	CreatedVersion bool `form:"created_version" json:"created_version" xml:"created_version"`
+}
+
+// FetchFromGitHubResponseBody is the type of the "skills" service
+// "fetchFromGitHub" endpoint HTTP response body.
+type FetchFromGitHubResponseBody struct {
+	// The repository snapshot that was scanned.
+	Repository *FetchedGitHubRepositoryResponseBody `form:"repository" json:"repository" xml:"repository"`
+	// Structurally valid manifests discovered in the repository.
+	Skills []*FetchedGitHubSkillResponseBody `form:"skills" json:"skills" xml:"skills"`
+	// Candidates excluded because they could not be parsed or exceeded limits.
+	Issues []*GitHubSkillIssueResponseBody `form:"issues" json:"issues" xml:"issues"`
 }
 
 // AddVersionResponseBody is the type of the "skills" service "addVersion"
@@ -319,6 +339,188 @@ type CreateUnexpectedResponseBody struct {
 // CreateGatewayErrorResponseBody is the type of the "skills" service "create"
 // endpoint HTTP response body for the "gateway_error" error.
 type CreateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchFromGitHubUnauthorizedResponseBody is the type of the "skills" service
+// "fetchFromGitHub" endpoint HTTP response body for the "unauthorized" error.
+type FetchFromGitHubUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchFromGitHubForbiddenResponseBody is the type of the "skills" service
+// "fetchFromGitHub" endpoint HTTP response body for the "forbidden" error.
+type FetchFromGitHubForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchFromGitHubBadRequestResponseBody is the type of the "skills" service
+// "fetchFromGitHub" endpoint HTTP response body for the "bad_request" error.
+type FetchFromGitHubBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchFromGitHubNotFoundResponseBody is the type of the "skills" service
+// "fetchFromGitHub" endpoint HTTP response body for the "not_found" error.
+type FetchFromGitHubNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchFromGitHubConflictResponseBody is the type of the "skills" service
+// "fetchFromGitHub" endpoint HTTP response body for the "conflict" error.
+type FetchFromGitHubConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchFromGitHubUnsupportedMediaResponseBody is the type of the "skills"
+// service "fetchFromGitHub" endpoint HTTP response body for the
+// "unsupported_media" error.
+type FetchFromGitHubUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchFromGitHubInvalidResponseBody is the type of the "skills" service
+// "fetchFromGitHub" endpoint HTTP response body for the "invalid" error.
+type FetchFromGitHubInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchFromGitHubInvariantViolationResponseBody is the type of the "skills"
+// service "fetchFromGitHub" endpoint HTTP response body for the
+// "invariant_violation" error.
+type FetchFromGitHubInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchFromGitHubUnexpectedResponseBody is the type of the "skills" service
+// "fetchFromGitHub" endpoint HTTP response body for the "unexpected" error.
+type FetchFromGitHubUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchFromGitHubGatewayErrorResponseBody is the type of the "skills" service
+// "fetchFromGitHub" endpoint HTTP response body for the "gateway_error" error.
+type FetchFromGitHubGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1846,6 +2048,48 @@ type SkillValidationErrorResponseBody struct {
 	Message string `form:"message" json:"message" xml:"message"`
 }
 
+// FetchedGitHubRepositoryResponseBody is used to define fields on response
+// body types.
+type FetchedGitHubRepositoryResponseBody struct {
+	// The canonical GitHub repository URL.
+	URL string `form:"url" json:"url" xml:"url"`
+	// The repository in owner/name form.
+	FullName string `form:"full_name" json:"full_name" xml:"full_name"`
+	// The repository default branch.
+	DefaultBranch string `form:"default_branch" json:"default_branch" xml:"default_branch"`
+	// The immutable commit scanned for skills.
+	CommitSha string `form:"commit_sha" json:"commit_sha" xml:"commit_sha"`
+	// The GitHub repository visibility.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+}
+
+// FetchedGitHubSkillResponseBody is used to define fields on response body
+// types.
+type FetchedGitHubSkillResponseBody struct {
+	// The repository-relative SKILL.md path.
+	Path string `form:"path" json:"path" xml:"path"`
+	// The exact SKILL.md content fetched from GitHub.
+	Content string `form:"content" json:"content" xml:"content"`
+	// The normalized skill name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The skill name as written in frontmatter.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// The optional skill description.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether the manifest conforms to the Agent Skills specification.
+	SpecValid bool `form:"spec_valid" json:"spec_valid" xml:"spec_valid"`
+	// Specification validation problems.
+	ValidationErrors []*SkillValidationErrorResponseBody `form:"validation_errors" json:"validation_errors" xml:"validation_errors"`
+}
+
+// GitHubSkillIssueResponseBody is used to define fields on response body types.
+type GitHubSkillIssueResponseBody struct {
+	// The repository-relative candidate path.
+	Path string `form:"path" json:"path" xml:"path"`
+	// A safe explanation of why the manifest was excluded.
+	Message string `form:"message" json:"message" xml:"message"`
+}
+
 // SkillDistributionResponseBody is used to define fields on response body
 // types.
 type SkillDistributionResponseBody struct {
@@ -1889,6 +2133,40 @@ func NewCreateResponseBody(res *skills.RecordSkillResult) *CreateResponseBody {
 	}
 	if res.Version != nil {
 		body.Version = marshalTypesSkillVersionToSkillVersionResponseBody(res.Version)
+	}
+	return body
+}
+
+// NewFetchFromGitHubResponseBody builds the HTTP response body from the result
+// of the "fetchFromGitHub" endpoint of the "skills" service.
+func NewFetchFromGitHubResponseBody(res *skills.FetchSkillsFromGitHubResult) *FetchFromGitHubResponseBody {
+	body := &FetchFromGitHubResponseBody{}
+	if res.Repository != nil {
+		body.Repository = marshalSkillsFetchedGitHubRepositoryToFetchedGitHubRepositoryResponseBody(res.Repository)
+	}
+	if res.Skills != nil {
+		body.Skills = make([]*FetchedGitHubSkillResponseBody, len(res.Skills))
+		for i, val := range res.Skills {
+			if val == nil {
+				body.Skills[i] = nil
+				continue
+			}
+			body.Skills[i] = marshalSkillsFetchedGitHubSkillToFetchedGitHubSkillResponseBody(val)
+		}
+	} else {
+		body.Skills = []*FetchedGitHubSkillResponseBody{}
+	}
+	if res.Issues != nil {
+		body.Issues = make([]*GitHubSkillIssueResponseBody, len(res.Issues))
+		for i, val := range res.Issues {
+			if val == nil {
+				body.Issues[i] = nil
+				continue
+			}
+			body.Issues[i] = marshalSkillsGitHubSkillIssueToGitHubSkillIssueResponseBody(val)
+		}
+	} else {
+		body.Issues = []*GitHubSkillIssueResponseBody{}
 	}
 	return body
 }
@@ -2136,6 +2414,147 @@ func NewCreateUnexpectedResponseBody(res *goa.ServiceError) *CreateUnexpectedRes
 // result of the "create" endpoint of the "skills" service.
 func NewCreateGatewayErrorResponseBody(res *goa.ServiceError) *CreateGatewayErrorResponseBody {
 	body := &CreateGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchFromGitHubUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "fetchFromGitHub" endpoint of the "skills" service.
+func NewFetchFromGitHubUnauthorizedResponseBody(res *goa.ServiceError) *FetchFromGitHubUnauthorizedResponseBody {
+	body := &FetchFromGitHubUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchFromGitHubForbiddenResponseBody builds the HTTP response body from
+// the result of the "fetchFromGitHub" endpoint of the "skills" service.
+func NewFetchFromGitHubForbiddenResponseBody(res *goa.ServiceError) *FetchFromGitHubForbiddenResponseBody {
+	body := &FetchFromGitHubForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchFromGitHubBadRequestResponseBody builds the HTTP response body from
+// the result of the "fetchFromGitHub" endpoint of the "skills" service.
+func NewFetchFromGitHubBadRequestResponseBody(res *goa.ServiceError) *FetchFromGitHubBadRequestResponseBody {
+	body := &FetchFromGitHubBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchFromGitHubNotFoundResponseBody builds the HTTP response body from
+// the result of the "fetchFromGitHub" endpoint of the "skills" service.
+func NewFetchFromGitHubNotFoundResponseBody(res *goa.ServiceError) *FetchFromGitHubNotFoundResponseBody {
+	body := &FetchFromGitHubNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchFromGitHubConflictResponseBody builds the HTTP response body from
+// the result of the "fetchFromGitHub" endpoint of the "skills" service.
+func NewFetchFromGitHubConflictResponseBody(res *goa.ServiceError) *FetchFromGitHubConflictResponseBody {
+	body := &FetchFromGitHubConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchFromGitHubUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "fetchFromGitHub" endpoint of the "skills" service.
+func NewFetchFromGitHubUnsupportedMediaResponseBody(res *goa.ServiceError) *FetchFromGitHubUnsupportedMediaResponseBody {
+	body := &FetchFromGitHubUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchFromGitHubInvalidResponseBody builds the HTTP response body from the
+// result of the "fetchFromGitHub" endpoint of the "skills" service.
+func NewFetchFromGitHubInvalidResponseBody(res *goa.ServiceError) *FetchFromGitHubInvalidResponseBody {
+	body := &FetchFromGitHubInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchFromGitHubInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "fetchFromGitHub" endpoint of the "skills"
+// service.
+func NewFetchFromGitHubInvariantViolationResponseBody(res *goa.ServiceError) *FetchFromGitHubInvariantViolationResponseBody {
+	body := &FetchFromGitHubInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchFromGitHubUnexpectedResponseBody builds the HTTP response body from
+// the result of the "fetchFromGitHub" endpoint of the "skills" service.
+func NewFetchFromGitHubUnexpectedResponseBody(res *goa.ServiceError) *FetchFromGitHubUnexpectedResponseBody {
+	body := &FetchFromGitHubUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchFromGitHubGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "fetchFromGitHub" endpoint of the "skills" service.
+func NewFetchFromGitHubGatewayErrorResponseBody(res *goa.ServiceError) *FetchFromGitHubGatewayErrorResponseBody {
+	body := &FetchFromGitHubGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3280,6 +3699,19 @@ func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken
 	return v
 }
 
+// NewFetchFromGitHubPayload builds a skills service fetchFromGitHub endpoint
+// payload.
+func NewFetchFromGitHubPayload(body *FetchFromGitHubRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.FetchFromGitHubPayload {
+	v := &skills.FetchFromGitHubPayload{
+		RepoURL: *body.RepoURL,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewAddVersionPayload builds a skills service addVersion endpoint payload.
 func NewAddVersionPayload(body *AddVersionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.AddVersionPayload {
 	v := &skills.AddVersionPayload{
@@ -3387,6 +3819,23 @@ func NewListDistributionsPayload(skillID *string, pluginID *string, cursor *stri
 func ValidateCreateRequestBody(body *CreateRequestBody) (err error) {
 	if body.Content == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
+	}
+	return
+}
+
+// ValidateFetchFromGitHubRequestBody runs the validations defined on
+// FetchFromGitHubRequestBody
+func ValidateFetchFromGitHubRequestBody(body *FetchFromGitHubRequestBody) (err error) {
+	if body.RepoURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repo_url", "body"))
+	}
+	if body.RepoURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.repo_url", *body.RepoURL, goa.FormatURI))
+	}
+	if body.RepoURL != nil {
+		if utf8.RuneCountInString(*body.RepoURL) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.repo_url", *body.RepoURL, utf8.RuneCountInString(*body.RepoURL), 500, false))
+		}
 	}
 	return
 }

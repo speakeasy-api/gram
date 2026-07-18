@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts            []*MountPoint
 	Create            http.Handler
+	FetchFromGitHub   http.Handler
 	AddVersion        http.Handler
 	List              http.Handler
 	Get               http.Handler
@@ -58,6 +59,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"Create", "POST", "/rpc/skills.create"},
+			{"FetchFromGitHub", "POST", "/rpc/skills.fetchFromGitHub"},
 			{"AddVersion", "POST", "/rpc/skills.addVersion"},
 			{"List", "GET", "/rpc/skills.list"},
 			{"Get", "GET", "/rpc/skills.get"},
@@ -68,6 +70,7 @@ func New(
 			{"ListDistributions", "GET", "/rpc/skills.listDistributions"},
 		},
 		Create:            NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
+		FetchFromGitHub:   NewFetchFromGitHubHandler(e.FetchFromGitHub, mux, decoder, encoder, errhandler, formatter),
 		AddVersion:        NewAddVersionHandler(e.AddVersion, mux, decoder, encoder, errhandler, formatter),
 		List:              NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
 		Get:               NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
@@ -85,6 +88,7 @@ func (s *Server) Service() string { return "skills" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Create = m(s.Create)
+	s.FetchFromGitHub = m(s.FetchFromGitHub)
 	s.AddVersion = m(s.AddVersion)
 	s.List = m(s.List)
 	s.Get = m(s.Get)
@@ -101,6 +105,7 @@ func (s *Server) MethodNames() []string { return skills.MethodNames[:] }
 // Mount configures the mux to serve the skills endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateHandler(mux, h.Create)
+	MountFetchFromGitHubHandler(mux, h.FetchFromGitHub)
 	MountAddVersionHandler(mux, h.AddVersion)
 	MountListHandler(mux, h.List)
 	MountGetHandler(mux, h.Get)
@@ -146,6 +151,59 @@ func NewCreateHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "create")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountFetchFromGitHubHandler configures the mux to serve the "skills" service
+// "fetchFromGitHub" endpoint.
+func MountFetchFromGitHubHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.fetchFromGitHub", f)
+}
+
+// NewFetchFromGitHubHandler creates a HTTP handler which loads the HTTP
+// request and calls the "skills" service "fetchFromGitHub" endpoint.
+func NewFetchFromGitHubHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeFetchFromGitHubRequest(mux, decoder)
+		encodeResponse = EncodeFetchFromGitHubResponse(encoder)
+		encodeError    = EncodeFetchFromGitHubError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "fetchFromGitHub")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -2,8 +2,7 @@
 name: glint
 description: Conventions for authoring or editing analyzers in the `glint/` Go static-analysis package — Gram's custom golangci-lint plugin built on `go/analysis`. Activate this skill whenever the task involves adding, modifying, or testing a `glint` analyzer (new rule key, new diagnostic, settings struct, fixture under `glint/testdata/`, wiring in `BuildAnalyzers`), even if the user does not say "glint" explicitly — phrases like "add a lint rule", "write a custom analyzer", "go/analysis", or "enforce X via golangci-lint" should trigger it.
 metadata:
-  relevant_files:
-    - "glint/**/*.go"
+  relevant_files: "glint/**/*.go"
 ---
 
 `glint` is Gram's package of custom `go/analysis` analyzers, and `gcl` is the golangci-lint custom-build configuration that loads `glint` as a plugin. Together they automate enforcement of project coding conventions and bug-prevention rules so the same feedback isn't re-litigated in PR review.

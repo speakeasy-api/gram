@@ -127,7 +127,7 @@ func UsageCommands() []string {
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
-		"skills (create|add-version|list|get|list-versions|archive|distribute|undistribute|list-distributions)",
+		"skills (create|fetch-from-git-hub|add-version|list|get|list-versions|archive|distribute|undistribute|list-distributions)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -2003,6 +2003,12 @@ func ParseEndpoint(
 		skillsCreateApikeyTokenFlag      = skillsCreateFlags.String("apikey-token", "", "")
 		skillsCreateProjectSlugInputFlag = skillsCreateFlags.String("project-slug-input", "", "")
 
+		skillsFetchFromGitHubFlags                = flag.NewFlagSet("fetch-from-git-hub", flag.ExitOnError)
+		skillsFetchFromGitHubBodyFlag             = skillsFetchFromGitHubFlags.String("body", "REQUIRED", "")
+		skillsFetchFromGitHubSessionTokenFlag     = skillsFetchFromGitHubFlags.String("session-token", "", "")
+		skillsFetchFromGitHubApikeyTokenFlag      = skillsFetchFromGitHubFlags.String("apikey-token", "", "")
+		skillsFetchFromGitHubProjectSlugInputFlag = skillsFetchFromGitHubFlags.String("project-slug-input", "", "")
+
 		skillsAddVersionFlags                = flag.NewFlagSet("add-version", flag.ExitOnError)
 		skillsAddVersionBodyFlag             = skillsAddVersionFlags.String("body", "REQUIRED", "")
 		skillsAddVersionSessionTokenFlag     = skillsAddVersionFlags.String("session-token", "", "")
@@ -2987,6 +2993,7 @@ func ParseEndpoint(
 
 	skillsFlags.Usage = skillsUsage
 	skillsCreateFlags.Usage = skillsCreateUsage
+	skillsFetchFromGitHubFlags.Usage = skillsFetchFromGitHubUsage
 	skillsAddVersionFlags.Usage = skillsAddVersionUsage
 	skillsListFlags.Usage = skillsListUsage
 	skillsGetFlags.Usage = skillsGetUsage
@@ -4410,6 +4417,9 @@ func ParseEndpoint(
 			switch epn {
 			case "create":
 				epf = skillsCreateFlags
+
+			case "fetch-from-git-hub":
+				epf = skillsFetchFromGitHubFlags
 
 			case "add-version":
 				epf = skillsAddVersionFlags
@@ -5933,6 +5943,9 @@ func ParseEndpoint(
 			case "create":
 				endpoint = c.Create()
 				data, err = skillsc.BuildCreatePayload(*skillsCreateBodyFlag, *skillsCreateSessionTokenFlag, *skillsCreateApikeyTokenFlag, *skillsCreateProjectSlugInputFlag)
+			case "fetch-from-git-hub":
+				endpoint = c.FetchFromGitHub()
+				data, err = skillsc.BuildFetchFromGitHubPayload(*skillsFetchFromGitHubBodyFlag, *skillsFetchFromGitHubSessionTokenFlag, *skillsFetchFromGitHubApikeyTokenFlag, *skillsFetchFromGitHubProjectSlugInputFlag)
 			case "add-version":
 				endpoint = c.AddVersion()
 				data, err = skillsc.BuildAddVersionPayload(*skillsAddVersionBodyFlag, *skillsAddVersionSessionTokenFlag, *skillsAddVersionApikeyTokenFlag, *skillsAddVersionProjectSlugInputFlag)
@@ -14397,6 +14410,7 @@ func skillsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] skills COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Record an uploaded SKILL.md. The implementation requires the skills product feature and skill write scope, and may create a skill, add a version to an existing skill, or return an existing canonical version as a no-op.`)
+	fmt.Fprintln(os.Stderr, `    fetch-from-git-hub: Fetch every SKILL.md from a public GitHub repository, parse each manifest, and return the results without persisting them.`)
 	fmt.Fprintln(os.Stderr, `    add-version: Record an uploaded SKILL.md as a version of an existing skill. The implementation requires the skills product feature and skill write scope, and returns the existing canonical version as a no-op when appropriate.`)
 	fmt.Fprintln(os.Stderr, `    list: List active skills in the project. The implementation requires the skills product feature and skill read scope.`)
 	fmt.Fprintln(os.Stderr, `    get: Get an active skill and its latest version. The implementation requires the skills product feature and skill read scope.`)
@@ -14431,6 +14445,30 @@ func skillsCreateUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills create --body '{\n      \"content\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsFetchFromGitHubUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills fetch-from-git-hub", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Fetch every SKILL.md from a public GitHub repository, parse each manifest, and return the results without persisting them.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills fetch-from-git-hub --body '{\n      \"repo_url\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsAddVersionUsage() {

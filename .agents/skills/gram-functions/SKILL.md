@@ -2,11 +2,7 @@
 name: gram-functions
 description: A walkthrough of the Gram Functions feature in this codebase
 metadata:
-  relevant_files:
-    - "server/internal/functions/**/*.go"
-    - "server/internal/background/activities/deploy_function_runners.go"
-    - "server/internal/background/activities/reap_functions.go"
-    - "functions/**/*"
+  relevant_files: "server/internal/functions/**/*.go, server/internal/background/activities/deploy_function_runners.go, server/internal/background/activities/reap_functions.go, functions/**/*"
 ---
 
 # Gram Functions

@@ -258,6 +258,243 @@ func EncodeCreateError(encoder func(context.Context, http.ResponseWriter) goahtt
 	}
 }
 
+// EncodeFetchFromGitHubResponse returns an encoder for responses returned by
+// the skills fetchFromGitHub endpoint.
+func EncodeFetchFromGitHubResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*skills.FetchSkillsFromGitHubResult)
+		enc := encoder(ctx, w)
+		body := NewFetchFromGitHubResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeFetchFromGitHubRequest returns a decoder for requests sent to the
+// skills fetchFromGitHub endpoint.
+func DecodeFetchFromGitHubRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*skills.FetchFromGitHubPayload, error) {
+	return func(r *http.Request) (*skills.FetchFromGitHubPayload, error) {
+		var payload *skills.FetchFromGitHubPayload
+		var (
+			body FetchFromGitHubRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateFetchFromGitHubRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewFetchFromGitHubPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeFetchFromGitHubError returns an encoder for errors returned by the
+// fetchFromGitHub skills endpoint.
+func EncodeFetchFromGitHubError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFetchFromGitHubUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFetchFromGitHubForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFetchFromGitHubBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFetchFromGitHubNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFetchFromGitHubConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFetchFromGitHubUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFetchFromGitHubInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFetchFromGitHubInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFetchFromGitHubUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewFetchFromGitHubGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeAddVersionResponse returns an encoder for responses returned by the
 // skills addVersion endpoint.
 func EncodeAddVersionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -2260,6 +2497,61 @@ func marshalTypesSkillValidationErrorToSkillValidationErrorResponseBody(v *types
 	res := &SkillValidationErrorResponseBody{
 		Code:    v.Code,
 		Field:   v.Field,
+		Message: v.Message,
+	}
+
+	return res
+}
+
+// marshalSkillsFetchedGitHubRepositoryToFetchedGitHubRepositoryResponseBody
+// builds a value of type *FetchedGitHubRepositoryResponseBody from a value of
+// type *skills.FetchedGitHubRepository.
+func marshalSkillsFetchedGitHubRepositoryToFetchedGitHubRepositoryResponseBody(v *skills.FetchedGitHubRepository) *FetchedGitHubRepositoryResponseBody {
+	res := &FetchedGitHubRepositoryResponseBody{
+		URL:           v.URL,
+		FullName:      v.FullName,
+		DefaultBranch: v.DefaultBranch,
+		CommitSha:     v.CommitSha,
+		Visibility:    v.Visibility,
+	}
+
+	return res
+}
+
+// marshalSkillsFetchedGitHubSkillToFetchedGitHubSkillResponseBody builds a
+// value of type *FetchedGitHubSkillResponseBody from a value of type
+// *skills.FetchedGitHubSkill.
+func marshalSkillsFetchedGitHubSkillToFetchedGitHubSkillResponseBody(v *skills.FetchedGitHubSkill) *FetchedGitHubSkillResponseBody {
+	res := &FetchedGitHubSkillResponseBody{
+		Path:        v.Path,
+		Content:     v.Content,
+		Name:        v.Name,
+		DisplayName: v.DisplayName,
+		Description: v.Description,
+		SpecValid:   v.SpecValid,
+	}
+	if v.ValidationErrors != nil {
+		res.ValidationErrors = make([]*SkillValidationErrorResponseBody, len(v.ValidationErrors))
+		for i, val := range v.ValidationErrors {
+			if val == nil {
+				res.ValidationErrors[i] = nil
+				continue
+			}
+			res.ValidationErrors[i] = marshalTypesSkillValidationErrorToSkillValidationErrorResponseBody(val)
+		}
+	} else {
+		res.ValidationErrors = []*SkillValidationErrorResponseBody{}
+	}
+
+	return res
+}
+
+// marshalSkillsGitHubSkillIssueToGitHubSkillIssueResponseBody builds a value
+// of type *GitHubSkillIssueResponseBody from a value of type
+// *skills.GitHubSkillIssue.
+func marshalSkillsGitHubSkillIssueToGitHubSkillIssueResponseBody(v *skills.GitHubSkillIssue) *GitHubSkillIssueResponseBody {
+	res := &GitHubSkillIssueResponseBody{
+		Path:    v.Path,
 		Message: v.Message,
 	}
 

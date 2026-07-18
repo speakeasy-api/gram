@@ -42,6 +42,36 @@ var _ = Service("skills", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateSkill"}`)
 	})
 
+	Method("fetchFromGitHub", func() {
+		Description("Fetch every SKILL.md from a public GitHub repository, parse each manifest, and return the results without persisting them.")
+
+		Payload(func() {
+			Attribute("repo_url", String, "The public GitHub repository URL.", func() {
+				Format(FormatURI)
+				MaxLength(500)
+			})
+			Required("repo_url")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(FetchSkillsFromGitHubResult)
+
+		HTTP(func() {
+			POST("/rpc/skills.fetchFromGitHub")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(FetchSkillsFromGitHubRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "fetchSkillsFromGitHub")
+		Meta("openapi:extension:x-speakeasy-name-override", "fetchFromGitHub")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FetchSkillsFromGitHub"}`)
+	})
+
 	Method("addVersion", func() {
 		Description("Record an uploaded SKILL.md as a version of an existing skill. The implementation requires the skills product feature and skill write scope, and returns the existing canonical version as a no-op when appropriate.")
 
@@ -299,6 +329,16 @@ var CreateSkillRequestBody = Type("CreateSkillRequestBody", func() {
 	Required("content")
 })
 
+var FetchSkillsFromGitHubRequestBody = Type("FetchSkillsFromGitHubRequestBody", func() {
+	Meta("openapi:typename", "FetchSkillsFromGitHubRequestBody")
+
+	Attribute("repo_url", String, "The public GitHub repository URL.", func() {
+		Format(FormatURI)
+		MaxLength(500)
+	})
+	Required("repo_url")
+})
+
 var AddSkillVersionRequestBody = Type("AddSkillVersionRequestBody", func() {
 	Meta("openapi:typename", "AddSkillVersionRequestBody")
 
@@ -343,6 +383,47 @@ var SkillValidationError = Type("SkillValidationError", func() {
 	Attribute("field", String, "The manifest field associated with the problem.")
 	Attribute("message", String, "A human-readable explanation of the problem.")
 	Required("code", "field", "message")
+})
+
+var FetchedGitHubRepository = Type("FetchedGitHubRepository", func() {
+	Description("The public GitHub repository snapshot used to discover skills.")
+
+	Attribute("url", String, "The canonical GitHub repository URL.", func() { Format(FormatURI) })
+	Attribute("full_name", String, "The repository in owner/name form.")
+	Attribute("default_branch", String, "The repository default branch.")
+	Attribute("commit_sha", String, "The immutable commit scanned for skills.")
+	Attribute("visibility", String, "The GitHub repository visibility.", func() { Enum("public") })
+	Required("url", "full_name", "default_branch", "commit_sha", "visibility")
+})
+
+var FetchedGitHubSkill = Type("FetchedGitHubSkill", func() {
+	Description("A parsed SKILL.md fetched from a public GitHub repository.")
+
+	Attribute("path", String, "The repository-relative SKILL.md path.")
+	Attribute("content", String, "The exact SKILL.md content fetched from GitHub.")
+	Attribute("name", String, "The normalized skill name.")
+	Attribute("display_name", String, "The skill name as written in frontmatter.")
+	Attribute("description", String, "The optional skill description.")
+	Attribute("spec_valid", Boolean, "Whether the manifest conforms to the Agent Skills specification.")
+	Attribute("validation_errors", ArrayOf(SkillValidationError), "Specification validation problems.")
+	Required("path", "content", "name", "display_name", "spec_valid", "validation_errors")
+})
+
+var GitHubSkillIssue = Type("GitHubSkillIssue", func() {
+	Description("A SKILL.md candidate that was excluded from the results.")
+
+	Attribute("path", String, "The repository-relative candidate path.")
+	Attribute("message", String, "A safe explanation of why the manifest was excluded.")
+	Required("path", "message")
+})
+
+var FetchSkillsFromGitHubResult = Type("FetchSkillsFromGitHubResult", func() {
+	Description("Parsed skills and excluded candidates from a public GitHub repository snapshot.")
+
+	Attribute("repository", FetchedGitHubRepository, "The repository snapshot that was scanned.")
+	Attribute("skills", ArrayOf(FetchedGitHubSkill), "Structurally valid manifests discovered in the repository.")
+	Attribute("issues", ArrayOf(GitHubSkillIssue), "Candidates excluded because they could not be parsed or exceeded limits.")
+	Required("repository", "skills", "issues")
 })
 
 var Skill = Type("Skill", func() {

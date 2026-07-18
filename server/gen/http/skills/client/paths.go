@@ -12,6 +12,11 @@ func CreateSkillsPath() string {
 	return "/rpc/skills.create"
 }
 
+// FetchFromGitHubSkillsPath returns the URL path to the skills service fetchFromGitHub HTTP endpoint.
+func FetchFromGitHubSkillsPath() string {
+	return "/rpc/skills.fetchFromGitHub"
+}
+
 // AddVersionSkillsPath returns the URL path to the skills service addVersion HTTP endpoint.
 func AddVersionSkillsPath() string {
 	return "/rpc/skills.addVersion"

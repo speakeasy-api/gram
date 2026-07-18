@@ -3,16 +3,7 @@ name: gram-pubsub-python
 description: |
   How to build and run GCP Pub/Sub stream subscribers in Python under `pystreams/` — the `multi` command (start at `pystreams/src/pystreams/cmd/multi.py`), the `gram_infra.pubsub` publisher/subscriber library, and the anyio runtime mirroring the Go `gram streams` process. Activate for ANY Python Pub/Sub work in Gram: adding or changing a `pystreams` subscriber/handler, NLP/ML scanning consumers (Presidio PII detection, prompt-injection classifiers, spaCy/transformer models over streams), registering a receiver, the local emulator for pystreams, or deciding whether a new consumer belongs in Go `streams` or Python `pystreams` — including phrasings like "add a Presidio scanner", "consume this topic in Python", "wire up an ML handler", or "why do we have Python in this monorepo" even when "pystreams" isn't named. Topic/subscription DECLARATION (proto options, `kcc.yaml`) lives in the `gram-pubsub` skill; use THIS skill for the Python runtime that consumes them.
 metadata:
-  relevant_files:
-    - "pystreams/src/pystreams/**/*.py"
-    - "pystreams/tests/**/*.py"
-    - "pystreams/pyproject.toml"
-    - "pystreams/Dockerfile.pystreams"
-    - "infra/gram_infra/pubsub/*.py"
-    - "infra/proto/**/*.proto"
-    - ".mise-tasks/start/pystreams-multi.sh"
-    - ".mise-tasks/test/pystreams.sh"
-    - ".mise-tasks/lint/pystreams.sh"
+  relevant_files: "pystreams/src/pystreams/**/*.py, pystreams/tests/**/*.py, pystreams/pyproject.toml, pystreams/Dockerfile.pystreams, infra/gram_infra/pubsub/*.py, infra/proto/**/*.proto, .mise-tasks/start/pystreams-multi.sh, .mise-tasks/test/pystreams.sh, .mise-tasks/lint/pystreams.sh"
 ---
 
 # Gram Pub/Sub in Python (`pystreams`)

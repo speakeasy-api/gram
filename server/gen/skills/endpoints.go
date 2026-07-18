@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "skills" service endpoints.
 type Endpoints struct {
 	Create            goa.Endpoint
+	FetchFromGitHub   goa.Endpoint
 	AddVersion        goa.Endpoint
 	List              goa.Endpoint
 	Get               goa.Endpoint
@@ -33,6 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		Create:            NewCreateEndpoint(s, a.APIKeyAuth),
+		FetchFromGitHub:   NewFetchFromGitHubEndpoint(s, a.APIKeyAuth),
 		AddVersion:        NewAddVersionEndpoint(s, a.APIKeyAuth),
 		List:              NewListEndpoint(s, a.APIKeyAuth),
 		Get:               NewGetEndpoint(s, a.APIKeyAuth),
@@ -47,6 +49,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "skills" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Create = m(e.Create)
+	e.FetchFromGitHub = m(e.FetchFromGitHub)
 	e.AddVersion = m(e.AddVersion)
 	e.List = m(e.List)
 	e.Get = m(e.Get)
@@ -113,6 +116,65 @@ func NewCreateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return s.Create(ctx, p)
+	}
+}
+
+// NewFetchFromGitHubEndpoint returns an endpoint function that calls the
+// method "fetchFromGitHub" of service "skills".
+func NewFetchFromGitHubEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*FetchFromGitHubPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.FetchFromGitHub(ctx, p)
 	}
 }
 

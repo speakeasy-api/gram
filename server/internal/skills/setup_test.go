@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
@@ -29,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -50,13 +52,24 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *skills.Service
-	conn           *pgxpool.Pool
-	repo           *repo.Queries
-	features       *productfeatures.Client
-	sessionManager *sessions.Manager
-	authContext    *contextvalues.AuthContext
-	projectID      uuid.UUID
+	service          *skills.Service
+	conn             *pgxpool.Pool
+	repo             *repo.Queries
+	features         *productfeatures.Client
+	sessionManager   *sessions.Manager
+	authContext      *contextvalues.AuthContext
+	projectID        uuid.UUID
+	repositoryReader *mockRepositoryReader
+}
+
+type mockRepositoryReader struct {
+	mock.Mock
+}
+
+func (m *mockRepositoryReader) FetchSkillFiles(ctx context.Context, repositoryURL string) (*ghclient.PublicRepositorySnapshot, error) {
+	args := m.Called(ctx, repositoryURL)
+	result, _ := args.Get(0).(*ghclient.PublicRepositorySnapshot)
+	return result, args.Error(1)
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -103,16 +116,18 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
-	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger())
+	repositoryReader := &mockRepositoryReader{}
+	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), repositoryReader)
 
 	ti := &testInstance{
-		service:        service,
-		conn:           conn,
-		repo:           repo.New(conn),
-		features:       features,
-		sessionManager: sessionManager,
-		authContext:    authContext,
-		projectID:      *authContext.ProjectID,
+		service:          service,
+		conn:             conn,
+		repo:             repo.New(conn),
+		features:         features,
+		sessionManager:   sessionManager,
+		authContext:      authContext,
+		projectID:        *authContext.ProjectID,
+		repositoryReader: repositoryReader,
 	}
 	enableSkills(t, ctx, ti)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String()))

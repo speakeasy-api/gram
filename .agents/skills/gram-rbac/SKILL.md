@@ -2,13 +2,7 @@
 name: gram-rbac
 description: Concepts, external interfaces, and conventions for Gram's role-based access control (RBAC) subsystem — scopes, grants, principals, system roles, and the `authz.Engine.Require` enforcement path used inside handlers. Activate whenever the task involves authorization (adding or modifying a scope or resource type, declaring a new role or grant, gating a handler, changing scope inheritance, exposing RBAC state through the dashboard).
 metadata:
-  relevant_files:
-    - "server/internal/authz/**/*.go"
-    - "server/internal/authztest/**/*.go"
-    - "server/internal/access/**/*.go"
-    - "server/internal/access/**/*.sql"
-    - "server/design/access/**"
-    - "client/dashboard/src/pages/access/**"
+  relevant_files: "server/internal/authz/**/*.go, server/internal/authztest/**/*.go, server/internal/access/**/*.go, server/internal/access/**/*.sql, server/design/access/**, client/dashboard/src/pages/access/**"
 ---
 
 Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of **scopes** grouped into **system roles** (admin, member). A **grant** binds a scope to a **selector** (a Kubernetes-style `map[string]string` of `resource_kind`, `resource_id`, plus optional narrowing dimensions like `tool` or `disposition`) for a given **principal** (user or custom role). Handlers enforce scopes by calling `authz.Engine.Require(ctx, authz.Check{...})`; the dashboard renders the same scope vocabulary through a matching TypeScript union that is hand-maintained in lockstep with the server.
