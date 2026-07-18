@@ -1655,6 +1655,30 @@ type SkillDistribution struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type SkillObservation struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	IdempotencyKey pgtype.Text
+	Provider       string
+	UserID         pgtype.Text
+	UserEmail      pgtype.Text
+	Hostname       pgtype.Text
+	SessionID      pgtype.Text
+	SkillName      string
+	SourceLevel    pgtype.Text
+	SourcePath     pgtype.Text
+	RawSha256      pgtype.Text
+	SeenAt         pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+}
+
+type SkillRawHash struct {
+	ProjectID       uuid.UUID
+	RawSha256       string
+	CanonicalSha256 string
+	CreatedAt       pgtype.Timestamptz
+}
+
 type SkillSyncReceipt struct {
 	ProjectID      uuid.UUID
 	SkillID        uuid.UUID
