@@ -17,7 +17,7 @@ import {
   GitBranch,
   Loader2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invalidateSkillQueries } from "./invalidate-skill-queries";
 import { SkillValidationErrors } from "./SkillValidationErrors";
 
@@ -47,9 +47,11 @@ function primaryLabel(
 export function GitHubSkillImport({
   onBack,
   onCancel,
+  onPendingChange,
 }: {
   onBack: () => void;
   onCancel: () => void;
+  onPendingChange: (pending: boolean) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const fetchMutation = useFetchSkillsFromGitHubMutation();
@@ -66,6 +68,11 @@ export function GitHubSkillImport({
   const someSelected = selected.size > 0 && !allSelected;
   const isPending = fetchMutation.isPending || createMutation.isPending;
   const error = fetchMutation.error ?? importError;
+
+  useEffect(() => {
+    onPendingChange(isPending);
+    return () => onPendingChange(false);
+  }, [isPending, onPendingChange]);
 
   const scan = async (): Promise<void> => {
     setImportError(null);

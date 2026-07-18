@@ -74,7 +74,9 @@ export function SkillManifestDialog({
   const fileReadSeq = useRef(0);
   const createMutation = useCreateSkillMutation();
   const addVersionMutation = useAddSkillVersionMutation();
-  const isPending = createMutation.isPending || addVersionMutation.isPending;
+  const [importPending, setImportPending] = useState(false);
+  const isPending =
+    createMutation.isPending || addVersionMutation.isPending || importPending;
   const savedInvalid = savedResult?.version.specValid === false;
   const noChanges = savedResult?.createdVersion === false;
   const unchangedNoOp = noOpContent === content;
@@ -90,6 +92,7 @@ export function SkillManifestDialog({
     setNoOpContent(null);
     fileReadSeq.current += 1;
     setReadingFile(false);
+    setImportPending(false);
     setCreateSource(mode === "create" ? null : "manual");
     createMutation.reset();
     addVersionMutation.reset();
@@ -232,6 +235,7 @@ export function SkillManifestDialog({
           <GitHubSkillImport
             onBack={() => setCreateSource(null)}
             onCancel={() => handleOpenChange(false)}
+            onPendingChange={setImportPending}
           />
         )}
         {createSource !== null && createSource !== "github" && (

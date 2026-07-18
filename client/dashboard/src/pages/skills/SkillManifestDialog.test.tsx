@@ -287,6 +287,18 @@ describe("SkillManifestDialog", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
+  it("does not close while a GitHub scan or import is in flight", () => {
+    const onOpenChange = vi.fn((_open: boolean): void => {});
+    testState.fetchRepository.isPending = true;
+    render(
+      <SkillManifestDialog mode="create" open onOpenChange={onOpenChange} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /GitHub repository/i }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
   it("fetches, selects, and imports real repository scan results", async () => {
     const onOpenChange = vi.fn((_open: boolean): void => {});
     const repositoryManifest =
