@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1069,7 +1070,8 @@ func TestServiceCoreProcessThreadEventsCompletesEvent(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
 	runTurnMCP := &atomic.Pointer[[]runtimeMCPServer]{}
-	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil, runTurnMCPServers: runTurnMCP}
+	runTurnPrompt := &atomic.Pointer[string]{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil, runTurnMCPServers: runTurnMCP, runTurnPrompt: runTurnPrompt}
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
@@ -1100,6 +1102,179 @@ func TestServiceCoreProcessThreadEventsCompletesEvent(t *testing.T) {
 	require.NotNil(t, captured, "RunTurn must receive mcp_servers")
 	require.NotEmpty(t, *captured)
 	require.Equal(t, "_p-"+platformtools.AssistantsPlatformToolsetSlug, (*captured)[0].ID)
+	require.NotContains(t, *runTurnPrompt.Load(), "<assistant-environment-change>", "a NULL baseline establishes itself without a notice")
+
+	persisted, err := assistantsrepo.New(conn).InitThreadSkillSnapshot(t.Context(), assistantsrepo.InitThreadSkillSnapshotParams{
+		Candidate: []byte(`{"version":1,"skills":[{"skill_id":"00000000-0000-0000-0000-000000000001","name":"unexpected","description":"","resolved_version_id":"00000000-0000-0000-0000-000000000002"}]}`),
+		ThreadID:  threadID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"version":1,"skills":[]}`, string(persisted))
+}
+
+func TestAssistantEventSkillSnapshotClaimCompletionAndCASMiss(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_skill_snapshot_cas")
+	require.NoError(t, err)
+	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	queries := assistantsrepo.New(conn)
+
+	baseline, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot([]assistantSkillRow{{SkillID: uuid.New(), Name: "baseline", ResolvedVersionID: uuid.New(), Description: "old"}}))
+	require.NoError(t, err)
+	current, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot([]assistantSkillRow{{SkillID: uuid.New(), Name: "current", ResolvedVersionID: uuid.New(), Description: "current"}}))
+	require.NoError(t, err)
+	newer, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot([]assistantSkillRow{{SkillID: uuid.New(), Name: "newer", ResolvedVersionID: uuid.New(), Description: "newer"}}))
+	require.NoError(t, err)
+	_, err = queries.InitThreadSkillSnapshot(t.Context(), assistantsrepo.InitThreadSkillSnapshotParams{Candidate: baseline, ThreadID: threadID, ProjectID: projectID})
+	require.NoError(t, err)
+
+	first, err := queries.ClaimNextPendingEvent(t.Context(), assistantsrepo.ClaimNextPendingEventParams{
+		ProcessingStatus: eventStatusProcessing, ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, string(baseline), string(first.SkillSetSnapshot))
+
+	secondID := uuid.New()
+	_, err = queries.InsertAssistantThreadEvent(t.Context(), assistantsrepo.InsertAssistantThreadEventParams{
+		AssistantThreadID: threadID, AssistantID: assistantID, ProjectID: projectID, TriggerInstanceID: uuid.NullUUID{},
+		EventID: secondID.String(), CorrelationID: "corr-1", Status: eventStatusPending,
+		NormalizedPayloadJson: []byte(`{"text":"second"}`), SourcePayloadJson: []byte(`{}`),
+	})
+	require.NoError(t, err)
+	second, err := queries.ClaimNextPendingEvent(t.Context(), assistantsrepo.ClaimNextPendingEventParams{
+		ProcessingStatus: eventStatusProcessing, ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, string(baseline), string(second.SkillSetSnapshot))
+
+	err = queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+		CurrentSnapshot: current, ProjectID: projectID, ClaimedSnapshot: first.SkillSetSnapshot, AllowAdvance: true, CompletedStatus: eventStatusCompleted, EventID: first.ID,
+	})
+	require.NoError(t, err)
+	err = queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+		CurrentSnapshot: newer, ProjectID: projectID, ClaimedSnapshot: second.SkillSetSnapshot, AllowAdvance: true, CompletedStatus: eventStatusCompleted, EventID: second.ID,
+	})
+	require.NoError(t, err)
+
+	secondEvent, err := queries.GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, eventStatusCompleted, secondEvent.Status, "CAS miss must still complete the event")
+	persisted, err := queries.InitThreadSkillSnapshot(t.Context(), assistantsrepo.InitThreadSkillSnapshotParams{Candidate: baseline, ThreadID: threadID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.JSONEq(t, string(current), string(persisted), "CAS miss must preserve the newer snapshot")
+}
+
+func TestAssistantEventSkillSnapshotRetryCompletesWithoutAdvancingBaseline(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_skill_snapshot_retry")
+	require.NoError(t, err)
+	projectID, _, _, threadID := insertAssistantFixture(t, conn)
+	queries := assistantsrepo.New(conn)
+	baseline, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot([]assistantSkillRow{{SkillID: uuid.New(), Name: "baseline", ResolvedVersionID: uuid.New(), Description: "old"}}))
+	require.NoError(t, err)
+	current, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot([]assistantSkillRow{{SkillID: uuid.New(), Name: "changed", ResolvedVersionID: uuid.New(), Description: "new"}}))
+	require.NoError(t, err)
+	_, err = queries.InitThreadSkillSnapshot(t.Context(), assistantsrepo.InitThreadSkillSnapshotParams{Candidate: baseline, ThreadID: threadID, ProjectID: projectID})
+	require.NoError(t, err)
+
+	first, err := queries.ClaimNextPendingEvent(t.Context(), assistantsrepo.ClaimNextPendingEventParams{
+		ProcessingStatus: eventStatusProcessing, ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, first.Attempts)
+	_, err = queries.RequeueStaleAssistantEvents(t.Context(), assistantsrepo.RequeueStaleAssistantEventsParams{
+		PendingStatus: eventStatusPending, ProcessingStatus: eventStatusProcessing,
+		UpdatedBefore: pgtype.Timestamptz{Time: time.Now().UTC().Add(time.Hour), Valid: true},
+	})
+	require.NoError(t, err)
+	retry, err := queries.ClaimNextPendingEvent(t.Context(), assistantsrepo.ClaimNextPendingEventParams{
+		ProcessingStatus: eventStatusProcessing, ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, retry.Attempts)
+	require.JSONEq(t, string(baseline), string(retry.SkillSetSnapshot))
+
+	err = queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+		CurrentSnapshot: current, ProjectID: projectID, ClaimedSnapshot: retry.SkillSetSnapshot, AllowAdvance: false,
+		CompletedStatus: eventStatusCompleted, EventID: retry.ID,
+	})
+	require.NoError(t, err)
+	event, err := queries.GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, eventStatusCompleted, event.Status)
+	persisted, err := queries.InitThreadSkillSnapshot(t.Context(), assistantsrepo.InitThreadSkillSnapshotParams{Candidate: current, ThreadID: threadID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.JSONEq(t, string(baseline), string(persisted))
+}
+
+func TestAssistantEventSkillSnapshotNullBaselineInitializesWhenAdvanceDisallowed(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_skill_snapshot_null_retry")
+	require.NoError(t, err)
+	projectID, _, _, threadID := insertAssistantFixture(t, conn)
+	queries := assistantsrepo.New(conn)
+	current, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot(nil))
+	require.NoError(t, err)
+	claimed, err := queries.ClaimNextPendingEvent(t.Context(), assistantsrepo.ClaimNextPendingEventParams{
+		ProcessingStatus: eventStatusProcessing, ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending,
+	})
+	require.NoError(t, err)
+	require.Nil(t, claimed.SkillSetSnapshot)
+	err = queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+		CurrentSnapshot: current, ProjectID: projectID, ClaimedSnapshot: nil, AllowAdvance: false,
+		CompletedStatus: eventStatusCompleted, EventID: claimed.ID,
+	})
+	require.NoError(t, err)
+	persisted, err := queries.InitThreadSkillSnapshot(t.Context(), assistantsrepo.InitThreadSkillSnapshotParams{Candidate: []byte(`{"version":1,"skills":[]}`), ThreadID: threadID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.JSONEq(t, string(current), string(persisted))
+}
+
+func TestProcessEventTurnNestsSkillNoticeForRegularAndMCPAuthPrompts(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_skill_snapshot_prompts")
+	require.NoError(t, err)
+	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	logger := testenv.NewLogger(t)
+	prompt := &atomic.Pointer[string]{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnPrompt: prompt}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, assistanttokens.New("test-jwt-secret", conn, nil), nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
+	assistant, err := core.GetAssistant(t.Context(), projectID, assistantID)
+	require.NoError(t, err)
+	thread := assistantThreadRecord{ID: threadID, AssistantID: assistantID, ProjectID: projectID, CorrelationID: "corr-1", SourceKind: sourceKindSlack}
+	runtime := assistantRuntimeRecord{ID: uuid.New(), AssistantID: assistantID, ProjectID: projectID, Backend: runtimeBackendFlyIO}
+	baseline, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot([]assistantSkillRow{{SkillID: uuid.New(), Name: "removed", ResolvedVersionID: uuid.New(), Description: "old"}}))
+	require.NoError(t, err)
+
+	regular := assistantThreadEventRecord{ID: uuid.New(), EventID: "regular", NormalizedPayloadJSON: []byte(`{"event_type":"message","text":"hello"}`), SkillSetSnapshot: baseline}
+	current, err := core.processEventTurn(t.Context(), thread, assistant, runtime, regular)
+	require.NoError(t, err)
+	require.NotNil(t, current)
+	require.Contains(t, *prompt.Load(), "<assistant-environment-change>")
+	require.Less(t, strings.Index(*prompt.Load(), "<assistant-environment-change>"), strings.Index(*prompt.Load(), "</message-context>"))
+
+	mcpAuth := assistantThreadEventRecord{ID: uuid.New(), EventID: "mcp-auth", NormalizedPayloadJSON: []byte(`{"gram_event_kind":"assistant_mcp_auth","status":"success"}`), SkillSetSnapshot: baseline}
+	_, err = core.processEventTurn(t.Context(), thread, assistant, runtime, mcpAuth)
+	require.NoError(t, err)
+	require.Contains(t, *prompt.Load(), "<assistant-environment-change>")
+	require.Less(t, strings.Index(*prompt.Load(), "<assistant-environment-change>"), strings.Index(*prompt.Load(), "</message-context>"))
+
+	regular.SkillSetSnapshot = current
+	want, err := slackAdapter{}.DecodeTurn(regular)
+	require.NoError(t, err)
+	_, err = core.processEventTurn(t.Context(), thread, assistant, runtime, regular)
+	require.NoError(t, err)
+	require.Equal(t, want, *prompt.Load(), "no delta must leave the adapter prompt byte-identical")
+
+	regular.SkillSetSnapshot = nil
+	_, err = core.processEventTurn(t.Context(), thread, assistant, runtime, regular)
+	require.NoError(t, err)
+	require.Equal(t, want, *prompt.Load(), "a NULL baseline must not emit a notice")
 }
 
 func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
@@ -1109,6 +1284,10 @@ func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	baseline, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot([]assistantSkillRow{{SkillID: uuid.New(), Name: "baseline", ResolvedVersionID: uuid.New(), Description: "old"}}))
+	require.NoError(t, err)
+	_, err = assistantsrepo.New(conn).InitThreadSkillSnapshot(t.Context(), assistantsrepo.InitThreadSkillSnapshotParams{Candidate: baseline, ThreadID: threadID, ProjectID: projectID})
+	require.NoError(t, err)
 
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
@@ -1131,6 +1310,11 @@ func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
 	require.EqualValues(t, 1, event.Attempts)
 	require.True(t, event.LastError.Valid)
 	require.Contains(t, event.LastError.String, "runtime RunTurn blew up")
+	persisted, err := assistantsrepo.New(conn).InitThreadSkillSnapshot(t.Context(), assistantsrepo.InitThreadSkillSnapshotParams{
+		Candidate: []byte(`{"version":1,"skills":[]}`), ThreadID: threadID, ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, string(baseline), string(persisted), "reset events must not advance the snapshot")
 }
 
 func TestServiceCoreProcessThreadEventsMarksRuntimeFailedOnUnhealthyTurn(t *testing.T) {
@@ -2124,6 +2308,7 @@ type testRuntimeBackend struct {
 	ensureErr         error
 	runTurnErr        error
 	runTurnMCPServers *atomic.Pointer[[]runtimeMCPServer]
+	runTurnPrompt     *atomic.Pointer[string]
 	statusResult      RuntimeBackendStatus
 	statusErr         error
 	stopErr           error
@@ -2184,10 +2369,13 @@ func (t testRuntimeBackend) RecycleImage(ctx context.Context, record assistantRu
 	return t.recycleResult, nil
 }
 
-func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, _ string, _ string, mcpServers []runtimeMCPServer) error {
+func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, _ string, prompt string, mcpServers []runtimeMCPServer) error {
 	if t.runTurnMCPServers != nil {
 		captured := append([]runtimeMCPServer(nil), mcpServers...)
 		t.runTurnMCPServers.Store(&captured)
+	}
+	if t.runTurnPrompt != nil {
+		t.runTurnPrompt.Store(&prompt)
 	}
 	return t.runTurnErr
 }
