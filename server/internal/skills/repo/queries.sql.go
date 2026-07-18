@@ -179,7 +179,7 @@ WHERE s.project_id = $9
   AND s.archived_at IS NULL
 ON CONFLICT (skill_id, canonical_sha256)
 DO NOTHING
-RETURNING id, skill_id, content, canonical_sha256, raw_sha256, description, origin, metadata, spec_valid, validation_errors, created_at, created_by_user_id
+RETURNING id, skill_id, content, canonical_sha256, raw_sha256, description, metadata, spec_valid, validation_errors, created_at, created_by_user_id
 `
 
 type CreateSkillVersionParams struct {
@@ -216,7 +216,6 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 		&i.CanonicalSha256,
 		&i.RawSha256,
 		&i.Description,
-		&i.Origin,
 		&i.Metadata,
 		&i.SpecValid,
 		&i.ValidationErrors,
@@ -396,7 +395,7 @@ func (q *Queries) GetSkillByNameForUpdate(ctx context.Context, arg GetSkillByNam
 const getSkillDetails = `-- name: GetSkillDetails :one
 SELECT
   s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.archived_at, s.created_at, s.updated_at,
-  latest.id, latest.skill_id, latest.content, latest.canonical_sha256, latest.raw_sha256, latest.description, latest.origin, latest.metadata, latest.spec_valid, latest.validation_errors, latest.created_at, latest.created_by_user_id,
+  latest.id, latest.skill_id, latest.content, latest.canonical_sha256, latest.raw_sha256, latest.description, latest.metadata, latest.spec_valid, latest.validation_errors, latest.created_at, latest.created_by_user_id,
   state.version_count
 FROM skills s
 JOIN LATERAL (
@@ -447,7 +446,6 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 		&i.SkillVersion.CanonicalSha256,
 		&i.SkillVersion.RawSha256,
 		&i.SkillVersion.Description,
-		&i.SkillVersion.Origin,
 		&i.SkillVersion.Metadata,
 		&i.SkillVersion.SpecValid,
 		&i.SkillVersion.ValidationErrors,
@@ -547,7 +545,7 @@ func (q *Queries) GetSkillState(ctx context.Context, arg GetSkillStateParams) (G
 }
 
 const getSkillVersionByHash = `-- name: GetSkillVersionByHash :one
-SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.origin, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
+SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -572,7 +570,6 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 		&i.CanonicalSha256,
 		&i.RawSha256,
 		&i.Description,
-		&i.Origin,
 		&i.Metadata,
 		&i.SpecValid,
 		&i.ValidationErrors,
@@ -704,7 +701,7 @@ func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActi
 }
 
 const listSkillVersions = `-- name: ListSkillVersions :many
-SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.origin, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
+SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -751,7 +748,6 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 			&i.CanonicalSha256,
 			&i.RawSha256,
 			&i.Description,
-			&i.Origin,
 			&i.Metadata,
 			&i.SpecValid,
 			&i.ValidationErrors,
