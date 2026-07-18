@@ -65,8 +65,7 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
         Create an assistant to wire a model up to your MCP servers.
       </Type>
       <RequireScope
-        scope={["project:write", "mcp:write"]}
-        all
+        scope="project:write"
         level="component"
         reason="You don't have permission to create assistants."
       >
@@ -126,8 +125,7 @@ export default function AssistantsIndex(): JSX.Element {
         </Page.Section.Description>
         <Page.Section.CTA>
           <RequireScope
-            scope={["project:write", "mcp:write"]}
-            all
+            scope="project:write"
             level="component"
             reason="You don't have permission to create assistants."
           >
