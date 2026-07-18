@@ -1149,16 +1149,18 @@ func TestAssistantEventSkillSnapshotClaimCompletionAndCASMiss(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, string(baseline), string(second.SkillSetSnapshot))
 
-	err = queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+	completed, err := queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
 		CurrentSnapshot: current, ProjectID: projectID, ClaimedSnapshot: first.SkillSetSnapshot, ClaimedAttempt: first.Attempts, AllowAdvance: true,
 		CompletedStatus: eventStatusCompleted, ProcessingStatus: eventStatusProcessing, EventID: first.ID,
 	})
 	require.NoError(t, err)
-	err = queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+	require.True(t, completed)
+	completed, err = queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
 		CurrentSnapshot: newer, ProjectID: projectID, ClaimedSnapshot: second.SkillSetSnapshot, ClaimedAttempt: second.Attempts, AllowAdvance: true,
 		CompletedStatus: eventStatusCompleted, ProcessingStatus: eventStatusProcessing, EventID: second.ID,
 	})
 	require.NoError(t, err)
+	require.True(t, completed)
 
 	secondEvent, err := queries.GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
 	require.NoError(t, err)
@@ -1199,20 +1201,22 @@ func TestAssistantEventSkillSnapshotRetryCompletesWithoutAdvancingBaseline(t *te
 	require.EqualValues(t, 2, retry.Attempts)
 	require.JSONEq(t, string(baseline), string(retry.SkillSetSnapshot))
 
-	err = queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+	completed, err := queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
 		CurrentSnapshot: current, ProjectID: projectID, ClaimedSnapshot: first.SkillSetSnapshot, ClaimedAttempt: first.Attempts, AllowAdvance: true,
 		CompletedStatus: eventStatusCompleted, ProcessingStatus: eventStatusProcessing, EventID: first.ID,
 	})
 	require.NoError(t, err)
+	require.False(t, completed)
 	event, err := queries.GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, eventStatusProcessing, event.Status, "a stale worker must not complete a reclaimed attempt")
 
-	err = queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+	completed, err = queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
 		CurrentSnapshot: current, ProjectID: projectID, ClaimedSnapshot: retry.SkillSetSnapshot, ClaimedAttempt: retry.Attempts, AllowAdvance: false,
 		CompletedStatus: eventStatusCompleted, ProcessingStatus: eventStatusProcessing, EventID: retry.ID,
 	})
 	require.NoError(t, err)
+	require.True(t, completed)
 	event, err = queries.GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, eventStatusCompleted, event.Status)
@@ -1235,11 +1239,12 @@ func TestAssistantEventSkillSnapshotNullBaselineInitializesWhenAdvanceDisallowed
 	})
 	require.NoError(t, err)
 	require.Nil(t, claimed.SkillSetSnapshot)
-	err = queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+	completed, err := queries.CompleteAssistantThreadEventAndAdvanceSkillSnapshot(t.Context(), assistantsrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
 		CurrentSnapshot: current, ProjectID: projectID, ClaimedSnapshot: nil, ClaimedAttempt: claimed.Attempts, AllowAdvance: false,
 		CompletedStatus: eventStatusCompleted, ProcessingStatus: eventStatusProcessing, EventID: claimed.ID,
 	})
 	require.NoError(t, err)
+	require.True(t, completed)
 	persisted, err := queries.InitThreadSkillSnapshot(t.Context(), assistantsrepo.InitThreadSkillSnapshotParams{Candidate: []byte(`{"version":1,"skills":[]}`), ThreadID: threadID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.JSONEq(t, string(current), string(persisted))

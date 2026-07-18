@@ -277,57 +277,62 @@ func (q *Queries) ClearAssistantToolsets(ctx context.Context, arg ClearAssistant
 	return err
 }
 
-const completeAssistantThreadEventAndAdvanceSkillSnapshot = `-- name: CompleteAssistantThreadEventAndAdvanceSkillSnapshot :exec
+const completeAssistantThreadEventAndAdvanceSkillSnapshot = `-- name: CompleteAssistantThreadEventAndAdvanceSkillSnapshot :one
 WITH completed_event AS (
   UPDATE assistant_thread_events event
   SET
-    status = $5,
+    status = $1,
     processed_at = clock_timestamp(),
     last_error = NULL,
     updated_at = clock_timestamp()
-  WHERE event.id = $6
-    AND event.project_id = $2
-    AND event.status = $7
-    AND event.attempts = $8
+  WHERE event.id = $2
+    AND event.project_id = $3
+    AND event.status = $4
+    AND event.attempts = $5
   RETURNING event.assistant_thread_id
+), advanced_snapshot AS (
+  UPDATE assistant_threads t
+  SET skill_set_snapshot = $6::jsonb
+  FROM completed_event e
+  WHERE t.id = e.assistant_thread_id
+    AND t.project_id = $3
+    AND t.deleted IS FALSE
+    AND t.skill_set_snapshot IS NOT DISTINCT FROM $7::jsonb
+    AND (t.skill_set_snapshot IS NULL OR $8::boolean)
+    AND (
+      $7::jsonb IS NULL
+      OR $6::jsonb IS DISTINCT FROM $7::jsonb
+    )
+  RETURNING t.id
 )
-UPDATE assistant_threads t
-SET skill_set_snapshot = $1::jsonb
-FROM completed_event e
-WHERE t.id = e.assistant_thread_id
-  AND t.project_id = $2
-  AND t.deleted IS FALSE
-  AND t.skill_set_snapshot IS NOT DISTINCT FROM $3::jsonb
-  AND (t.skill_set_snapshot IS NULL OR $4::boolean)
-  AND (
-    $3::jsonb IS NULL
-    OR $1::jsonb IS DISTINCT FROM $3::jsonb
-  )
+SELECT EXISTS(SELECT 1 FROM completed_event) AS completed
 `
 
 type CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams struct {
-	CurrentSnapshot  []byte
-	ProjectID        uuid.UUID
-	ClaimedSnapshot  []byte
-	AllowAdvance     bool
 	CompletedStatus  string
 	EventID          uuid.UUID
+	ProjectID        uuid.UUID
 	ProcessingStatus string
 	ClaimedAttempt   int64
+	CurrentSnapshot  []byte
+	ClaimedSnapshot  []byte
+	AllowAdvance     bool
 }
 
-func (q *Queries) CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx context.Context, arg CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams) error {
-	_, err := q.db.Exec(ctx, completeAssistantThreadEventAndAdvanceSkillSnapshot,
-		arg.CurrentSnapshot,
-		arg.ProjectID,
-		arg.ClaimedSnapshot,
-		arg.AllowAdvance,
+func (q *Queries) CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx context.Context, arg CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams) (bool, error) {
+	row := q.db.QueryRow(ctx, completeAssistantThreadEventAndAdvanceSkillSnapshot,
 		arg.CompletedStatus,
 		arg.EventID,
+		arg.ProjectID,
 		arg.ProcessingStatus,
 		arg.ClaimedAttempt,
+		arg.CurrentSnapshot,
+		arg.ClaimedSnapshot,
+		arg.AllowAdvance,
 	)
-	return err
+	var completed bool
+	err := row.Scan(&completed)
+	return completed, err
 }
 
 const countActiveAssistantRuntimes = `-- name: CountActiveAssistantRuntimes :one

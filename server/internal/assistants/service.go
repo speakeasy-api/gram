@@ -2636,8 +2636,20 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			}, nil
 		}
 
-		if err := s.completeEvent(ctx, thread.ProjectID, event.ID, event.Attempts, event.SkillSetSnapshot, currentSkillSnapshot, event.Attempts == 1); err != nil {
+		completed, err := s.completeEvent(ctx, thread.ProjectID, event.ID, event.Attempts, event.SkillSetSnapshot, currentSkillSnapshot, event.Attempts == 1)
+		if err != nil {
 			return ProcessThreadEventsResult{}, err
+		}
+		if !completed {
+			return ProcessThreadEventsResult{
+				AssistantID:         assistant.ID,
+				WarmUntil:           runtimeRecord.WarmUntil.Time,
+				WarmTTLSeconds:      assistant.WarmTTLSeconds,
+				RuntimeActive:       true,
+				RetryAdmission:      true,
+				ProcessedAnyEvent:   processedAny,
+				BootstrappedRuntime: bootstrappedRuntime,
+			}, nil
 		}
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_completed", "assistant event completed", "INFO", nil)
 		processedAny = true
@@ -3484,8 +3496,8 @@ func (s *ServiceCore) claimNextPendingEvent(ctx context.Context, projectID, thre
 	}
 }
 
-func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid.UUID, claimedAttempt int, claimedSnapshot, currentSnapshot []byte, allowAdvance bool) error {
-	err := assistantrepo.New(s.db).CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx, assistantrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid.UUID, claimedAttempt int, claimedSnapshot, currentSnapshot []byte, allowAdvance bool) (bool, error) {
+	completed, err := assistantrepo.New(s.db).CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx, assistantrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
 		AllowAdvance:     allowAdvance,
 		ClaimedAttempt:   int64(claimedAttempt),
 		CompletedStatus:  eventStatusCompleted,
@@ -3496,9 +3508,9 @@ func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid
 		ClaimedSnapshot:  claimedSnapshot,
 	})
 	if err != nil {
-		return fmt.Errorf("complete assistant thread event: %w", err)
+		return false, fmt.Errorf("complete assistant thread event: %w", err)
 	}
-	return nil
+	return completed, nil
 }
 
 // recordTurnClassification counts a failed turn by its classifyTurnError

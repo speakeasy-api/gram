@@ -866,7 +866,7 @@ WHERE e.id = next_event.id
   AND e.project_id = @project_id
 RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at, next_event.skill_set_snapshot;
 
--- name: CompleteAssistantThreadEventAndAdvanceSkillSnapshot :exec
+-- name: CompleteAssistantThreadEventAndAdvanceSkillSnapshot :one
 WITH completed_event AS (
   UPDATE assistant_thread_events event
   SET
@@ -879,19 +879,22 @@ WITH completed_event AS (
     AND event.status = @processing_status
     AND event.attempts = @claimed_attempt
   RETURNING event.assistant_thread_id
+), advanced_snapshot AS (
+  UPDATE assistant_threads t
+  SET skill_set_snapshot = sqlc.narg('current_snapshot')::jsonb
+  FROM completed_event e
+  WHERE t.id = e.assistant_thread_id
+    AND t.project_id = @project_id
+    AND t.deleted IS FALSE
+    AND t.skill_set_snapshot IS NOT DISTINCT FROM sqlc.narg('claimed_snapshot')::jsonb
+    AND (t.skill_set_snapshot IS NULL OR @allow_advance::boolean)
+    AND (
+      sqlc.narg('claimed_snapshot')::jsonb IS NULL
+      OR sqlc.narg('current_snapshot')::jsonb IS DISTINCT FROM sqlc.narg('claimed_snapshot')::jsonb
+    )
+  RETURNING t.id
 )
-UPDATE assistant_threads t
-SET skill_set_snapshot = sqlc.narg('current_snapshot')::jsonb
-FROM completed_event e
-WHERE t.id = e.assistant_thread_id
-  AND t.project_id = @project_id
-  AND t.deleted IS FALSE
-  AND t.skill_set_snapshot IS NOT DISTINCT FROM sqlc.narg('claimed_snapshot')::jsonb
-  AND (t.skill_set_snapshot IS NULL OR @allow_advance::boolean)
-  AND (
-    sqlc.narg('claimed_snapshot')::jsonb IS NULL
-    OR sqlc.narg('current_snapshot')::jsonb IS DISTINCT FROM sqlc.narg('claimed_snapshot')::jsonb
-  );
+SELECT EXISTS(SELECT 1 FROM completed_event) AS completed;
 
 -- name: FailAssistantThreadEvent :exec
 UPDATE assistant_thread_events
