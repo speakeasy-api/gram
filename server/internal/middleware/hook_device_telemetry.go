@@ -44,7 +44,10 @@ func HookDeviceTelemetry(next http.Handler) http.Handler {
 					}
 				}
 				if v := r.Header.Get(wire.HeaderDeviceElapsedMS); v != "" {
-					if ms, err := strconv.ParseInt(v, 10, 64); err == nil && ms >= 0 {
+					// A day bounds any plausible producer — hook processes live
+					// seconds, drain runs minutes — so absurd values from a
+					// hostile or broken sender are dropped, not recorded.
+					if ms, err := strconv.ParseInt(v, 10, 64); err == nil && ms >= 0 && ms <= 24*60*60*1000 {
 						attrs = append(attrs, attr.HookDeviceElapsedMsKey.Int64(ms))
 					}
 				}

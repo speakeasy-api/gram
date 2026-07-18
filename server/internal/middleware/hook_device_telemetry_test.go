@@ -97,6 +97,22 @@ func TestHookDeviceTelemetrySanitizesUntrustedValues(t *testing.T) {
 	require.False(t, found, "negative elapsed should be dropped")
 }
 
+func TestHookDeviceTelemetryDropsImplausibleElapsed(t *testing.T) {
+	t.Parallel()
+
+	handler, exporter := newDeviceTelemetryHandler(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc/hooks.ingest", nil)
+	req.Header.Set("X-Gram-Device-Elapsed-Ms", "9223372036854775807")
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	attrs := spanAttrs(t, exporter)
+	_, found := attrs[attr.HookDeviceElapsedMsKey]
+	require.False(t, found, "elapsed beyond any plausible producer should be dropped")
+}
+
 func TestHookDeviceTelemetryIgnoresNonHookRoutes(t *testing.T) {
 	t.Parallel()
 
