@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -128,6 +129,64 @@ func TestSkillDistributionMultiPluginEdges(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, listed.Distributions, 1)
 	require.Equal(t, pinnedEdge.ID, listed.Distributions[0].ID)
+}
+
+func TestSkillDistributionQueriesRejectMalformedTargets(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "malformed-target-guard", "Valid.")
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "malformed-target-plugin")
+	assistant := createAssistant(t, ctx, ti, ti.projectID, "Malformed target assistant")
+	valid, err := ti.service.Distribute(ctx, &gen.DistributePayload{
+		ID: created.Skill.ID, PluginID: new(plugin.ID.String()), PinnedVersionID: nil,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	skillID := uuid.MustParse(created.Skill.ID)
+	versionID := uuid.MustParse(created.Version.ID)
+
+	malformedTargets := []struct {
+		pluginID    uuid.NullUUID
+		assistantID uuid.NullUUID
+	}{
+		{pluginID: uuid.NullUUID{}, assistantID: uuid.NullUUID{}},
+		{pluginID: uuid.NullUUID{UUID: plugin.ID, Valid: true}, assistantID: uuid.NullUUID{UUID: assistant.ID, Valid: true}},
+	}
+	for _, target := range malformedTargets {
+		_, err = ti.repo.CreateSkillDistribution(ctx, repo.CreateSkillDistributionParams{
+			PluginID: target.pluginID, AssistantID: target.assistantID, PinnedVersionID: uuid.NullUUID{},
+			Channel: "plugin", CreatedByUserID: ti.authContext.UserID, ProjectID: ti.projectID, SkillID: skillID,
+		})
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+
+		_, err = ti.repo.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
+			ProjectID: ti.projectID, SkillID: skillID,
+			PluginID: target.pluginID, AssistantID: target.assistantID, Channel: "plugin",
+		})
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+
+		_, err = ti.repo.UpdateSkillDistribution(ctx, repo.UpdateSkillDistributionParams{
+			PinnedVersionID: uuid.NullUUID{UUID: versionID, Valid: true},
+			ProjectID:       ti.projectID, SkillID: skillID,
+			PluginID: target.pluginID, AssistantID: target.assistantID, Channel: "plugin",
+		})
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+
+		_, err = ti.repo.RevokeActiveSkillDistribution(ctx, repo.RevokeActiveSkillDistributionParams{
+			ProjectID: ti.projectID, SkillID: skillID,
+			PluginID: target.pluginID, AssistantID: target.assistantID, Channel: "plugin",
+		})
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+	}
+
+	active, err := ti.repo.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
+		ProjectID: ti.projectID, SkillID: skillID,
+		PluginID: uuid.NullUUID{UUID: plugin.ID, Valid: true}, AssistantID: uuid.NullUUID{}, Channel: "plugin",
+	})
+	require.NoError(t, err)
+	require.Equal(t, valid.ID, active.SkillDistribution.ID.String())
+	require.False(t, active.SkillDistribution.PinnedVersionID.Valid)
 }
 
 func TestSkillDistributionVersionValidation(t *testing.T) {

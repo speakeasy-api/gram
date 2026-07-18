@@ -263,6 +263,10 @@ WHERE sd.project_id = @project_id
   AND sd.plugin_id IS NOT DISTINCT FROM sqlc.narg(plugin_id)::uuid
   AND sd.assistant_id IS NOT DISTINCT FROM sqlc.narg(assistant_id)::uuid
   AND sd.channel = @channel
+  AND (
+    (@channel = 'plugin' AND sqlc.narg(plugin_id)::uuid IS NOT NULL AND sqlc.narg(assistant_id)::uuid IS NULL)
+    OR (@channel = 'assistant' AND sqlc.narg(assistant_id)::uuid IS NOT NULL AND sqlc.narg(plugin_id)::uuid IS NULL)
+  )
   AND sd.revoked_at IS NULL
 FOR UPDATE OF sd;
 
@@ -330,6 +334,10 @@ FROM skills s
 WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL
+  AND (
+    (@channel = 'plugin' AND sqlc.narg(plugin_id)::uuid IS NOT NULL AND sqlc.narg(assistant_id)::uuid IS NULL)
+    OR (@channel = 'assistant' AND sqlc.narg(assistant_id)::uuid IS NOT NULL AND sqlc.narg(plugin_id)::uuid IS NULL)
+  )
 RETURNING *;
 
 -- name: UpdateSkillDistribution :one
@@ -341,6 +349,10 @@ WHERE project_id = @project_id
   AND plugin_id IS NOT DISTINCT FROM sqlc.narg(plugin_id)::uuid
   AND assistant_id IS NOT DISTINCT FROM sqlc.narg(assistant_id)::uuid
   AND channel = @channel
+  AND (
+    (@channel = 'plugin' AND sqlc.narg(plugin_id)::uuid IS NOT NULL AND sqlc.narg(assistant_id)::uuid IS NULL)
+    OR (@channel = 'assistant' AND sqlc.narg(assistant_id)::uuid IS NOT NULL AND sqlc.narg(plugin_id)::uuid IS NULL)
+  )
   AND revoked_at IS NULL
 RETURNING *;
 
@@ -353,6 +365,10 @@ WHERE project_id = @project_id
   AND plugin_id IS NOT DISTINCT FROM sqlc.narg(plugin_id)::uuid
   AND assistant_id IS NOT DISTINCT FROM sqlc.narg(assistant_id)::uuid
   AND channel = @channel
+  AND (
+    (@channel = 'plugin' AND sqlc.narg(plugin_id)::uuid IS NOT NULL AND sqlc.narg(assistant_id)::uuid IS NULL)
+    OR (@channel = 'assistant' AND sqlc.narg(assistant_id)::uuid IS NOT NULL AND sqlc.narg(plugin_id)::uuid IS NULL)
+  )
   AND revoked_at IS NULL
 RETURNING *;
 

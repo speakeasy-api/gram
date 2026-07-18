@@ -118,6 +118,10 @@ FROM skills s
 WHERE s.project_id = $6
   AND s.id = $7
   AND s.archived_at IS NULL
+  AND (
+    ($4 = 'plugin' AND $1::uuid IS NOT NULL AND $2::uuid IS NULL)
+    OR ($4 = 'assistant' AND $2::uuid IS NOT NULL AND $1::uuid IS NULL)
+  )
 RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, assistant_id, channel, created_by_user_id, revoked_at, created_at, updated_at
 `
 
@@ -251,6 +255,10 @@ WHERE sd.project_id = $1
   AND sd.plugin_id IS NOT DISTINCT FROM $3::uuid
   AND sd.assistant_id IS NOT DISTINCT FROM $4::uuid
   AND sd.channel = $5
+  AND (
+    ($5 = 'plugin' AND $3::uuid IS NOT NULL AND $4::uuid IS NULL)
+    OR ($5 = 'assistant' AND $4::uuid IS NOT NULL AND $3::uuid IS NULL)
+  )
   AND sd.revoked_at IS NULL
 FOR UPDATE OF sd
 `
@@ -923,6 +931,10 @@ WHERE project_id = $1
   AND plugin_id IS NOT DISTINCT FROM $3::uuid
   AND assistant_id IS NOT DISTINCT FROM $4::uuid
   AND channel = $5
+  AND (
+    ($5 = 'plugin' AND $3::uuid IS NOT NULL AND $4::uuid IS NULL)
+    OR ($5 = 'assistant' AND $4::uuid IS NOT NULL AND $3::uuid IS NULL)
+  )
   AND revoked_at IS NULL
 RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, assistant_id, channel, created_by_user_id, revoked_at, created_at, updated_at
 `
@@ -1077,6 +1089,10 @@ WHERE project_id = $2
   AND plugin_id IS NOT DISTINCT FROM $4::uuid
   AND assistant_id IS NOT DISTINCT FROM $5::uuid
   AND channel = $6
+  AND (
+    ($6 = 'plugin' AND $4::uuid IS NOT NULL AND $5::uuid IS NULL)
+    OR ($6 = 'assistant' AND $5::uuid IS NOT NULL AND $4::uuid IS NULL)
+  )
   AND revoked_at IS NULL
 RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, assistant_id, channel, created_by_user_id, revoked_at, created_at, updated_at
 `

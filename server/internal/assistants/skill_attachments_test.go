@@ -158,7 +158,7 @@ func TestDisableManagedAssistantRevokesAndAuditsSkillAttachments(t *testing.T) {
 	core := newProvisioningCore(t, conn)
 	record, err := core.EnableManagedAssistant(t.Context(), "org-test", projectID, "user-test")
 	require.NoError(t, err)
-	createSkillAttachmentFixture(t, conn, projectID, record.ID, "managed-delete-skill", "user-test")
+	skill, _ := createSkillAttachmentFixture(t, conn, projectID, record.ID, "managed-delete-skill", "user-test")
 
 	before, err := audittest.AuditLogCountByAction(t.Context(), conn, audit.ActionSkillUndistribute)
 	require.NoError(t, err)
@@ -166,4 +166,19 @@ func TestDisableManagedAssistantRevokesAndAuditsSkillAttachments(t *testing.T) {
 	after, err := audittest.AuditLogCountByAction(t.Context(), conn, audit.ActionSkillUndistribute)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
+
+	_, err = skillsrepo.New(conn).GetActiveSkillDistributionRecord(t.Context(), skillsrepo.GetActiveSkillDistributionRecordParams{
+		ProjectID: projectID, SkillID: skill.ID, PluginID: uuid.NullUUID{},
+		AssistantID: uuid.NullUUID{UUID: record.ID, Valid: true}, Channel: "assistant",
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	details, err := skillsrepo.New(conn).GetSkillDetails(t.Context(), skillsrepo.GetSkillDetailsParams{ProjectID: projectID, SkillID: skill.ID})
+	require.NoError(t, err)
+	require.Zero(t, details.AssistantCount)
+
+	entry, err := audittest.LatestAuditLogByAction(t.Context(), conn, audit.ActionSkillUndistribute)
+	require.NoError(t, err)
+	snapshot, err := audittest.DecodeAuditData(entry.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, record.ID.String(), snapshot["AssistantID"])
 }
