@@ -1706,6 +1706,14 @@ type SkillVersion struct {
 	CreatedByUserID  string
 }
 
+type SkillVersionOrigin struct {
+	SkillVersionID uuid.UUID
+	SkillID        uuid.UUID
+	ProjectID      uuid.UUID
+	Origin         string
+	CreatedAt      pgtype.Timestamptz
+}
+
 type SlackApp struct {
 	CreatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz

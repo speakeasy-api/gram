@@ -309,6 +309,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key O
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versions (skill_id, id);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
 
+CREATE TABLE IF NOT EXISTS skill_version_origins (
+  skill_version_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  origin TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_version_origins_pkey PRIMARY KEY (skill_version_id),
+  CONSTRAINT skill_version_origins_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_version_origins_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skill_version_origins_project_id_skill_id_idx
+ON skill_version_origins (project_id, skill_id);
+
 CREATE TABLE IF NOT EXISTS skill_observations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
