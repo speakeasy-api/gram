@@ -293,6 +293,7 @@ CREATE TABLE IF NOT EXISTS skill_versions (
   canonical_sha256 TEXT NOT NULL,
   raw_sha256 TEXT NOT NULL,
   description TEXT,
+  origin TEXT NOT NULL DEFAULT 'manual',
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   spec_valid boolean NOT NULL,
   validation_errors JSONB NOT NULL DEFAULT '[]'::jsonb,

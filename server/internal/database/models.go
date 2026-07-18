@@ -1699,6 +1699,7 @@ type SkillVersion struct {
 	CanonicalSha256  string
 	RawSha256        string
 	Description      pgtype.Text
+	Origin           string
 	Metadata         []byte
 	SpecValid        bool
 	ValidationErrors []byte
