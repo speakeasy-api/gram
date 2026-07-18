@@ -163,6 +163,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 
 	payload := buildEnvelope(typed, hostname())
 	base := agenthooks.EventOf(typed)
+	ctx = withHarnessInfo(ctx, base)
 	if base.Provider == agenthooks.ProviderClaudeCode &&
 		(base.Kind == agenthooks.KindSessionStart || base.NativeName == "ConfigChange") {
 		attachMCPInventory(&payload, collectClaudeMCPInventory(ctx, base.Session.CWD))

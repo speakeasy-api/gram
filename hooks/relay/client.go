@@ -89,7 +89,10 @@ func newClient(serverURL string) *client {
 		budget: sendBudget,
 		sdk: sdk.New(
 			sdk.WithServerURL(strings.TrimRight(serverURL, "/")),
-			sdk.WithClient(&http.Client{Timeout: perAttemptTime}),
+			sdk.WithClient(&http.Client{
+				Timeout:   perAttemptTime,
+				Transport: &deviceTransport{base: http.DefaultTransport},
+			}),
 			// Retries cover connection errors and 429/5xx; the SDK rewinds the
 			// request body per attempt, so the Idempotency-Key header minted in
 			// send is reused across redeliveries. The elapsed cap keeps the
