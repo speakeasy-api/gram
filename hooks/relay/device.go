@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,13 +57,31 @@ func withHarnessInfo(ctx context.Context, base *agenthooks.Event) context.Contex
 	version := ""
 	// Cursor is the only provider that exposes its version to hook processes.
 	if base.Provider == agenthooks.ProviderCursor {
-		version = os.Getenv("CURSOR_VERSION")
+		version = sanitizeHeaderValue(os.Getenv("CURSOR_VERSION"))
 	}
 	return context.WithValue(ctx, harnessInfoKey{}, harnessInfo{
 		name:    adapterSlug(base.Provider),
 		variant: string(base.Variant),
 		version: version,
 	})
+}
+
+// sanitizeHeaderValue bounds an environment-supplied value before it becomes
+// an HTTP header: net/http rejects invalid header bytes at send time, which
+// would turn every ingest attempt into a transport failure and could fail a
+// gating hook closed over a cosmetic value. Truncated to the server's 64-char
+// attribute cap; anything beyond printable ASCII drops the value entirely.
+func sanitizeHeaderValue(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) > 64 {
+		v = v[:64]
+	}
+	for _, r := range v {
+		if r < 0x20 || r > 0x7e {
+			return ""
+		}
+	}
+	return v
 }
 
 // deviceTransport stamps every request with the on-device trace context and

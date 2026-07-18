@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -40,6 +41,13 @@ func TestIngestCarriesDeviceTelemetryHeaders(t *testing.T) {
 	elapsed, err := strconv.ParseInt(h.Get("X-Gram-Device-Elapsed-Ms"), 10, 64)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, elapsed, int64(0))
+}
+
+func TestSanitizeHeaderValueRejectsUnsafeEnvValues(t *testing.T) {
+	require.Equal(t, "1.2.3", sanitizeHeaderValue(" 1.2.3 "))
+	require.Empty(t, sanitizeHeaderValue("1.2\n3"), "control characters would make net/http reject the request at send time")
+	require.Empty(t, sanitizeHeaderValue("v–1"), "non-ASCII drops the value")
+	require.Len(t, sanitizeHeaderValue(strings.Repeat("9", 100)), 64)
 }
 
 func TestDeviceTraceParentStableWithinProcess(t *testing.T) {
