@@ -166,12 +166,12 @@ func renderAssistantSkillSetChange(previous, current assistantSkillSetSnapshot) 
 	if len(updated) > 0 {
 		b.WriteString("Updated skills:\n")
 		for _, skill := range updated {
-			name, _ := safeSkillMetadata(skill)
+			name, description := safeSkillMetadata(skill)
 			oldName, _ := safeSkillMetadata(previousByID[skill.SkillID])
 			if oldName != name {
-				fmt.Fprintf(&b, "- Name: %s (previously %s). This skill changed; call skills_load with name %s before relying on it.\n", strconv.Quote(name), strconv.Quote(oldName), strconv.Quote(name))
+				fmt.Fprintf(&b, "- Name: %s (previously %s); description: %s. This skill changed; call skills_load with name %s before relying on it.\n", strconv.Quote(name), strconv.Quote(oldName), strconv.Quote(description), strconv.Quote(name))
 			} else {
-				fmt.Fprintf(&b, "- Name: %s. This skill changed; call skills_load with name %s before relying on it.\n", strconv.Quote(name), strconv.Quote(name))
+				fmt.Fprintf(&b, "- Name: %s; description: %s. This skill changed; call skills_load with name %s before relying on it.\n", strconv.Quote(name), strconv.Quote(description), strconv.Quote(name))
 			}
 		}
 	}

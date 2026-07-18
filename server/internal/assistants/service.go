@@ -2636,7 +2636,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			}, nil
 		}
 
-		if err := s.completeEvent(ctx, thread.ProjectID, event.ID, event.SkillSetSnapshot, currentSkillSnapshot, event.Attempts == 1); err != nil {
+		if err := s.completeEvent(ctx, thread.ProjectID, event.ID, event.Attempts, event.SkillSetSnapshot, currentSkillSnapshot, event.Attempts == 1); err != nil {
 			return ProcessThreadEventsResult{}, err
 		}
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_completed", "assistant event completed", "INFO", nil)
@@ -3484,14 +3484,16 @@ func (s *ServiceCore) claimNextPendingEvent(ctx context.Context, projectID, thre
 	}
 }
 
-func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid.UUID, claimedSnapshot, currentSnapshot []byte, allowAdvance bool) error {
+func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid.UUID, claimedAttempt int, claimedSnapshot, currentSnapshot []byte, allowAdvance bool) error {
 	err := assistantrepo.New(s.db).CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx, assistantrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
-		AllowAdvance:    allowAdvance,
-		CompletedStatus: eventStatusCompleted,
-		EventID:         eventID,
-		ProjectID:       projectID,
-		CurrentSnapshot: currentSnapshot,
-		ClaimedSnapshot: claimedSnapshot,
+		AllowAdvance:     allowAdvance,
+		ClaimedAttempt:   int64(claimedAttempt),
+		CompletedStatus:  eventStatusCompleted,
+		EventID:          eventID,
+		ProcessingStatus: eventStatusProcessing,
+		ProjectID:        projectID,
+		CurrentSnapshot:  currentSnapshot,
+		ClaimedSnapshot:  claimedSnapshot,
 	})
 	if err != nil {
 		return fmt.Errorf("complete assistant thread event: %w", err)

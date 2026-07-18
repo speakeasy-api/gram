@@ -287,6 +287,8 @@ WITH completed_event AS (
     updated_at = clock_timestamp()
   WHERE event.id = $6
     AND event.project_id = $2
+    AND event.status = $7
+    AND event.attempts = $8
   RETURNING event.assistant_thread_id
 )
 UPDATE assistant_threads t
@@ -304,12 +306,14 @@ WHERE t.id = e.assistant_thread_id
 `
 
 type CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams struct {
-	CurrentSnapshot []byte
-	ProjectID       uuid.UUID
-	ClaimedSnapshot []byte
-	AllowAdvance    bool
-	CompletedStatus string
-	EventID         uuid.UUID
+	CurrentSnapshot  []byte
+	ProjectID        uuid.UUID
+	ClaimedSnapshot  []byte
+	AllowAdvance     bool
+	CompletedStatus  string
+	EventID          uuid.UUID
+	ProcessingStatus string
+	ClaimedAttempt   int64
 }
 
 func (q *Queries) CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx context.Context, arg CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams) error {
@@ -320,6 +324,8 @@ func (q *Queries) CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx contex
 		arg.AllowAdvance,
 		arg.CompletedStatus,
 		arg.EventID,
+		arg.ProcessingStatus,
+		arg.ClaimedAttempt,
 	)
 	return err
 }

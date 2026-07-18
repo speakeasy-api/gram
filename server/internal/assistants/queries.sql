@@ -876,6 +876,8 @@ WITH completed_event AS (
     updated_at = clock_timestamp()
   WHERE event.id = @event_id
     AND event.project_id = @project_id
+    AND event.status = @processing_status
+    AND event.attempts = @claimed_attempt
   RETURNING event.assistant_thread_id
 )
 UPDATE assistant_threads t
