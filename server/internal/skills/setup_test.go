@@ -117,6 +117,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	repositoryReader := &mockRepositoryReader{}
+	t.Cleanup(func() { repositoryReader.AssertExpectations(t) })
 	service := skills.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), repositoryReader)
 
 	ti := &testInstance{

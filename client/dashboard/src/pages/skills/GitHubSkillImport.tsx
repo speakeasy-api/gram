@@ -62,11 +62,12 @@ export function GitHubSkillImport({
   );
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [importError, setImportError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const skillCount = result?.skills.length ?? 0;
   const allSelected = skillCount > 0 && selected.size === skillCount;
   const someSelected = selected.size > 0 && !allSelected;
-  const isPending = fetchMutation.isPending || createMutation.isPending;
+  const isPending = fetchMutation.isPending || importing;
   const error = fetchMutation.error ?? importError;
 
   useEffect(() => {
@@ -101,19 +102,32 @@ export function GitHubSkillImport({
   const importSkills = async (): Promise<void> => {
     if (!result) return;
     setImportError(null);
+    setImporting(true);
+    const imported = new Set<string>();
     try {
       for (const skill of result.skills) {
         if (!selected.has(skill.path)) continue;
         await createMutation.mutateAsync({
           request: { createSkillRequestBody: { content: skill.content } },
         });
+        imported.add(skill.path);
       }
       await invalidateSkillQueries(queryClient);
       onCancel();
     } catch (caught) {
+      if (imported.size > 0) {
+        setSelected((current) => {
+          const next = new Set(current);
+          for (const path of imported) next.delete(path);
+          return next;
+        });
+        await invalidateSkillQueries(queryClient);
+      }
       setImportError(
         caught instanceof Error ? caught.message : "Unable to import skills.",
       );
+    } finally {
+      setImporting(false);
     }
   };
 

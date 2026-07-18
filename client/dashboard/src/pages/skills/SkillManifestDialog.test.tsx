@@ -287,6 +287,63 @@ describe("SkillManifestDialog", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
+  it("invalidates caches and prunes imported skills when an import partially fails", async () => {
+    const onOpenChange = vi.fn((_open: boolean): void => {});
+    const repositoryManifest =
+      "---\nname: repository-skill\ndescription: Imported.\n---\n# Imported";
+    testState.fetchRepository.mutateAsync.mockResolvedValue({
+      repository: {
+        url: "https://github.com/example/repository",
+        fullName: "example/repository",
+        defaultBranch: "main",
+        commitSha: "abcdef123456",
+        visibility: "public",
+      },
+      skills: [
+        {
+          path: "skills/repository-skill/SKILL.md",
+          content: repositoryManifest,
+          name: "repository-skill",
+          displayName: "repository-skill",
+          description: "Imported.",
+          specValid: true,
+          validationErrors: [],
+        },
+        {
+          path: "skills/second/SKILL.md",
+          content: "---\nname: second\ndescription: Second.\n---\n",
+          name: "second",
+          displayName: "second",
+          description: "Second.",
+          specValid: true,
+          validationErrors: [],
+        },
+      ],
+      issues: [],
+    });
+    testState.create.mutateAsync
+      .mockResolvedValueOnce(validResult)
+      .mockRejectedValueOnce(new Error("second manifest rejected"));
+    render(
+      <SkillManifestDialog mode="create" open onOpenChange={onOpenChange} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /GitHub repository/i }));
+    fireEvent.change(screen.getByLabelText("Public GitHub repository"), {
+      target: { value: "example/repository" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Scan repository" }));
+    expect(await screen.findByText("Skills found")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import 2 skills" }));
+    expect(await screen.findByText(/second manifest rejected/)).toBeTruthy();
+    expect(testState.invalidateSkills).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Import 1 skill" })).toBeTruthy();
+  });
+
   it("does not close while a GitHub scan or import is in flight", () => {
     const onOpenChange = vi.fn((_open: boolean): void => {});
     testState.fetchRepository.isPending = true;

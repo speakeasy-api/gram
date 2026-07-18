@@ -37,8 +37,13 @@ func TestFetchFromGitHubParsesSkillsAndReportsIssues(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "example/repository", result.Repository.FullName)
-	require.Equal(t, "abc123", result.Repository.CommitSha)
+	require.Equal(t, &gen.FetchedGitHubRepository{
+		URL:           repositoryURL,
+		FullName:      "example/repository",
+		DefaultBranch: "main",
+		CommitSha:     "abc123",
+		Visibility:    "public",
+	}, result.Repository)
 	require.Len(t, result.Skills, 2)
 	require.Equal(t, "valid-skill", result.Skills[0].Name)
 	require.True(t, result.Skills[0].SpecValid)
@@ -83,6 +88,38 @@ func TestFetchFromGitHubReportsOversizedSkillsAsIssues(t *testing.T) {
 	require.Equal(t, "skills/huge/SKILL.md", result.Issues[0].Path)
 	require.Contains(t, result.Issues[0].Message, "exceeds the 65536 byte limit")
 	ti.repositoryReader.AssertExpectations(t)
+}
+
+func TestFetchFromGitHubMapsInvalidURLToInvalid(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	repositoryURL := "https://example.com/not/github"
+	ti.repositoryReader.On("FetchSkillFiles", mock.Anything, repositoryURL).Return(nil, ghclient.ErrInvalidRepositoryURL).Once()
+
+	_, err := ti.service.FetchFromGitHub(ctx, &gen.FetchFromGitHubPayload{
+		RepoURL:          repositoryURL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestFetchFromGitHubMapsMissingRepositoryToNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	repositoryURL := "https://github.com/example/missing"
+	ti.repositoryReader.On("FetchSkillFiles", mock.Anything, repositoryURL).Return(nil, ghclient.ErrPublicRepoNotFound).Once()
+
+	_, err := ti.service.FetchFromGitHub(ctx, &gen.FetchFromGitHubPayload{
+		RepoURL:          repositoryURL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 func TestFetchFromGitHubMapsEmptyRepositoryToInvalid(t *testing.T) {

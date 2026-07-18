@@ -210,7 +210,7 @@ export function SkillManifestDialog({
 
         {mode === "create" && createSource === null && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid min-h-0 gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
               <SourceOption
                 title="Manual upload"
                 description="Paste a SKILL.md manifest or upload a Markdown file."
