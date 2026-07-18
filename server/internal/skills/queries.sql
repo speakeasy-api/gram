@@ -97,7 +97,21 @@ WHERE project_id = @project_id
 SELECT
   sqlc.embed(s),
   sqlc.embed(latest),
-  state.version_count
+  state.version_count,
+  (
+    SELECT COUNT(*)::bigint
+    FROM skill_distributions sd
+    JOIN assistants a
+      ON a.id = sd.assistant_id
+      AND a.project_id = sd.project_id
+      AND a.deleted IS FALSE
+    WHERE sd.project_id = s.project_id
+      AND sd.skill_id = s.id
+      AND sd.channel = 'assistant'
+      AND sd.plugin_id IS NULL
+      AND sd.assistant_id IS NOT NULL
+      AND sd.revoked_at IS NULL
+  ) AS assistant_count
 FROM skills s
 JOIN LATERAL (
   SELECT
@@ -221,6 +235,15 @@ WHERE id = @plugin_id
   AND deleted IS FALSE
 FOR SHARE;
 
+-- name: GetAssistantForDistribution :one
+-- The share lock serializes distribution creation against assistant deletion.
+SELECT id, name
+FROM assistants
+WHERE id = @assistant_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR SHARE;
+
 -- name: GetActiveSkillDistributionRecord :one
 SELECT
   sqlc.embed(sd),
@@ -237,8 +260,9 @@ JOIN LATERAL (
 ) resolved ON TRUE
 WHERE sd.project_id = @project_id
   AND sd.skill_id = @skill_id
-  AND sd.plugin_id = @plugin_id
-  AND sd.channel = 'plugin'
+  AND sd.plugin_id IS NOT DISTINCT FROM sqlc.narg(plugin_id)::uuid
+  AND sd.assistant_id IS NOT DISTINCT FROM sqlc.narg(assistant_id)::uuid
+  AND sd.channel = @channel
   AND sd.revoked_at IS NULL
 FOR UPDATE OF sd;
 
@@ -250,7 +274,10 @@ SELECT
   pl.name AS plugin_name,
   resolved.id AS resolved_version_id
 FROM skill_distributions sd
-JOIN plugins pl ON pl.id = sd.plugin_id
+JOIN plugins pl
+  ON pl.id = sd.plugin_id
+  AND pl.project_id = sd.project_id
+  AND pl.deleted IS FALSE
 JOIN skills s
   ON s.project_id = sd.project_id
   AND s.id = sd.skill_id
@@ -266,6 +293,8 @@ JOIN LATERAL (
 ) resolved ON TRUE
 WHERE sd.project_id = @project_id
   AND sd.channel = 'plugin'
+  AND sd.plugin_id IS NOT NULL
+  AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
   AND (sqlc.narg(skill_id)::uuid IS NULL OR sd.skill_id = sqlc.narg(skill_id)::uuid)
   AND (sqlc.narg(plugin_id)::uuid IS NULL OR sd.plugin_id = sqlc.narg(plugin_id)::uuid)
@@ -284,6 +313,7 @@ INSERT INTO skill_distributions (
   project_id,
   skill_id,
   plugin_id,
+  assistant_id,
   pinned_version_id,
   channel,
   created_by_user_id
@@ -291,9 +321,10 @@ INSERT INTO skill_distributions (
 SELECT
   s.project_id,
   s.id,
-  @plugin_id::uuid,
+  sqlc.narg(plugin_id)::uuid,
+  sqlc.narg(assistant_id)::uuid,
   sqlc.narg(pinned_version_id)::uuid,
-  'plugin',
+  @channel,
   @created_by_user_id
 FROM skills s
 WHERE s.project_id = @project_id
@@ -307,8 +338,9 @@ SET pinned_version_id = sqlc.narg(pinned_version_id)::uuid,
     updated_at = clock_timestamp()
 WHERE project_id = @project_id
   AND skill_id = @skill_id
-  AND plugin_id = @plugin_id
-  AND channel = 'plugin'
+  AND plugin_id IS NOT DISTINCT FROM sqlc.narg(plugin_id)::uuid
+  AND assistant_id IS NOT DISTINCT FROM sqlc.narg(assistant_id)::uuid
+  AND channel = @channel
   AND revoked_at IS NULL
 RETURNING *;
 
@@ -318,8 +350,9 @@ SET revoked_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE project_id = @project_id
   AND skill_id = @skill_id
-  AND plugin_id = @plugin_id
-  AND channel = 'plugin'
+  AND plugin_id IS NOT DISTINCT FROM sqlc.narg(plugin_id)::uuid
+  AND assistant_id IS NOT DISTINCT FROM sqlc.narg(assistant_id)::uuid
+  AND channel = @channel
   AND revoked_at IS NULL
 RETURNING *;
 

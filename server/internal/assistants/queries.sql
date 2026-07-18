@@ -126,6 +126,38 @@ WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
   AND at.project_id = @project_id
 ORDER BY at.created_at;
 
+-- name: LoadAssistantSkills :many
+SELECT
+  sd.assistant_id,
+  sd.skill_id,
+  sd.pinned_version_id,
+  resolved.id AS resolved_version_id
+FROM skill_distributions sd
+JOIN assistants a
+  ON a.id = sd.assistant_id
+  AND a.project_id = sd.project_id
+  AND a.deleted IS FALSE
+JOIN skills s
+  ON s.id = sd.skill_id
+  AND s.project_id = sd.project_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.assistant_id = ANY(@assistant_ids::uuid[])
+  AND sd.project_id = @project_id
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.assistant_id IS NOT NULL
+  AND sd.revoked_at IS NULL
+ORDER BY s.name ASC, s.id ASC;
+
 -- name: ClearAssistantToolsets :exec
 DELETE FROM assistant_toolsets
 WHERE assistant_id = @assistant_id
@@ -327,6 +359,32 @@ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = @assistant_id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: RevokeSkillDistributionsByAssistant :many
+-- Returns pre-revocation state and skill identity for per-edge audit events.
+UPDATE skill_distributions sd
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM skill_distributions prev
+JOIN skills s ON s.id = prev.skill_id AND s.project_id = prev.project_id
+JOIN assistants a ON a.id = prev.assistant_id AND a.project_id = prev.project_id
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = prev.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE prev.id = sd.id
+  AND sd.project_id = @project_id
+  AND sd.assistant_id = @assistant_id
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.revoked_at IS NULL
+RETURNING sd.*, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id,
+  s.name AS skill_name, s.display_name AS skill_display_name, a.organization_id;
 
 -- name: UpsertAssistantChat :exec
 -- user_id is the conversation owner — stamped on first insert so reads can
