@@ -171,9 +171,6 @@ func skillManifest(name, description, body string) string {
 	return fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s\n", name, description, body)
 }
 
-//go:fix inline
-func stringPtr(value string) *string { return new(value) }
-
 func createSkill(t *testing.T, ctx context.Context, ti *testInstance, name, description string) *gen.RecordSkillResult {
 	t.Helper()
 
