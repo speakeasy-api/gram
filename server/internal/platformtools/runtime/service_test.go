@@ -116,6 +116,14 @@ func TestManagedAssistantSkillsToolsExposesCatalog(t *testing.T) {
 	}
 }
 
+func TestAssistantSkillToolsExposesCatalog(t *testing.T) {
+	t.Parallel()
+
+	tools := AssistantSkillTools(nil)
+	require.Equal(t, []string{platformtools.ToolNameSkillsLoad}, toolNames(tools))
+	require.Empty(t, tools[0].RequiredFeature)
+}
+
 func toolNames(tools []platformtools.ExternalTool) []string {
 	out := make([]string, 0, len(tools))
 	for _, tool := range tools {

@@ -126,12 +126,16 @@ WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
   AND at.project_id = @project_id
 ORDER BY at.created_at;
 
+-- The active/resolvable predicates in LoadAssistantSkills and
+-- LoadAttachedAssistantSkill must stay identical.
 -- name: LoadAssistantSkills :many
 SELECT
   sd.assistant_id,
   sd.skill_id,
   sd.pinned_version_id,
-  resolved.id AS resolved_version_id
+  s.name,
+  resolved.id AS resolved_version_id,
+  resolved.description
 FROM skill_distributions sd
 JOIN assistants a
   ON a.id = sd.assistant_id
@@ -142,7 +146,7 @@ JOIN skills s
   AND s.project_id = sd.project_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.id
+  SELECT sv.id, sv.description
   FROM skill_versions sv
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
@@ -157,6 +161,34 @@ WHERE sd.assistant_id = ANY(@assistant_ids::uuid[])
   AND sd.assistant_id IS NOT NULL
   AND sd.revoked_at IS NULL
 ORDER BY s.name ASC, s.id ASC;
+
+-- name: LoadAttachedAssistantSkill :one
+SELECT resolved.content
+FROM skill_distributions sd
+JOIN assistants a
+  ON a.id = sd.assistant_id
+  AND a.project_id = sd.project_id
+  AND a.deleted IS FALSE
+JOIN skills s
+  ON s.id = sd.skill_id
+  AND s.project_id = sd.project_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id, sv.content
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.assistant_id = @assistant_id
+  AND sd.project_id = @project_id
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.assistant_id IS NOT NULL
+  AND sd.revoked_at IS NULL
+  AND s.name = @name;
 
 -- name: ClearAssistantToolsets :exec
 DELETE FROM assistant_toolsets

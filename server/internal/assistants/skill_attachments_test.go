@@ -1,6 +1,7 @@
 package assistants
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/google/uuid"
@@ -8,10 +9,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -63,7 +69,9 @@ func TestAssistantSkillHydrationTracksLatestAndPin(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got.Skills, 1)
 	require.Equal(t, skill.ID, got.Skills[0].SkillID)
+	require.Equal(t, skill.Name, got.Skills[0].Name)
 	require.Equal(t, first.ID, got.Skills[0].ResolvedVersionID)
+	require.Equal(t, "first", got.Skills[0].Description)
 
 	view, err := toHTTPAssistant(got)
 	require.NoError(t, err)
@@ -114,6 +122,172 @@ func TestAssistantSkillHydrationTracksLatestAndPin(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first.ID, got.Skills[0].ResolvedVersionID)
 	require.Equal(t, first.ID, got.Skills[0].PinnedVersionID.UUID)
+}
+
+func TestAssistantSkillQueriesResolveLatestPinArchiveAndRevoke(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistant_skill_query_resolution")
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Query skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	require.NoError(t, err)
+	skill, first := createSkillAttachmentFixture(t, conn, projectID, record.ID, "query-skill", "user-test")
+	queries := assistantrepo.New(conn)
+	loadParams := assistantrepo.LoadAttachedAssistantSkillParams{
+		AssistantID: uuid.NullUUID{UUID: record.ID, Valid: true},
+		ProjectID:   projectID,
+		Name:        skill.Name,
+	}
+	listParams := assistantrepo.LoadAssistantSkillsParams{
+		AssistantIds: []uuid.UUID{record.ID},
+		ProjectID:    projectID,
+	}
+
+	content, err := queries.LoadAttachedAssistantSkill(ctx, loadParams)
+	require.NoError(t, err)
+	require.Contains(t, content, "description: first")
+
+	second, err := skillsrepo.New(conn).CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content:          "---\nname: query-skill\ndescription: second\n---\n\nsecond body\n",
+		CanonicalSha256:  uuid.NewString(),
+		RawSha256:        uuid.NewString(),
+		Description:      pgtype.Text{String: "second", Valid: true},
+		Metadata:         []byte(`{}`),
+		SpecValid:        true,
+		ValidationErrors: []byte(`[]`),
+		CreatedByUserID:  "user-test",
+		ProjectID:        projectID,
+		SkillID:          skill.ID,
+	})
+	require.NoError(t, err)
+	content, err = queries.LoadAttachedAssistantSkill(ctx, loadParams)
+	require.NoError(t, err)
+	require.Equal(t, second.Content, content)
+
+	invalid, err := skillsrepo.New(conn).CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content:          "invalid",
+		CanonicalSha256:  uuid.NewString(),
+		RawSha256:        uuid.NewString(),
+		Description:      pgtype.Text{String: "invalid", Valid: true},
+		Metadata:         []byte(`{}`),
+		SpecValid:        false,
+		ValidationErrors: []byte(`[]`),
+		CreatedByUserID:  "user-test",
+		ProjectID:        projectID,
+		SkillID:          skill.ID,
+	})
+	require.NoError(t, err)
+	_, err = skillsrepo.New(conn).UpdateSkillDistribution(ctx, skillsrepo.UpdateSkillDistributionParams{
+		PinnedVersionID: uuid.NullUUID{UUID: invalid.ID, Valid: true},
+		ProjectID:       projectID,
+		SkillID:         skill.ID,
+		PluginID:        uuid.NullUUID{},
+		AssistantID:     uuid.NullUUID{UUID: record.ID, Valid: true},
+		Channel:         "assistant",
+	})
+	require.NoError(t, err)
+	_, err = queries.LoadAttachedAssistantSkill(ctx, loadParams)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	attached, err := queries.LoadAssistantSkills(ctx, listParams)
+	require.NoError(t, err)
+	require.Empty(t, attached)
+
+	_, err = skillsrepo.New(conn).UpdateSkillDistribution(ctx, skillsrepo.UpdateSkillDistributionParams{
+		PinnedVersionID: uuid.NullUUID{UUID: first.ID, Valid: true},
+		ProjectID:       projectID,
+		SkillID:         skill.ID,
+		PluginID:        uuid.NullUUID{},
+		AssistantID:     uuid.NullUUID{UUID: record.ID, Valid: true},
+		Channel:         "assistant",
+	})
+	require.NoError(t, err)
+	content, err = queries.LoadAttachedAssistantSkill(ctx, loadParams)
+	require.NoError(t, err)
+	require.Equal(t, first.Content, content)
+	_, err = skillsrepo.New(conn).ArchiveSkill(ctx, skillsrepo.ArchiveSkillParams{ProjectID: projectID, ID: skill.ID})
+	require.NoError(t, err)
+	_, err = queries.LoadAttachedAssistantSkill(ctx, loadParams)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	revokedSkill, _ := createSkillAttachmentFixture(t, conn, projectID, record.ID, "revoked-skill", "user-test")
+	_, err = skillsrepo.New(conn).RevokeActiveSkillDistribution(ctx, skillsrepo.RevokeActiveSkillDistributionParams{
+		ProjectID:   projectID,
+		SkillID:     revokedSkill.ID,
+		PluginID:    uuid.NullUUID{},
+		AssistantID: uuid.NullUUID{UUID: record.ID, Valid: true},
+		Channel:     "assistant",
+	})
+	require.NoError(t, err)
+	_, err = queries.LoadAttachedAssistantSkill(ctx, assistantrepo.LoadAttachedAssistantSkillParams{
+		AssistantID: uuid.NullUUID{UUID: record.ID, Valid: true},
+		ProjectID:   projectID,
+		Name:        revokedSkill.Name,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	attached, err = queries.LoadAssistantSkills(ctx, listParams)
+	require.NoError(t, err)
+	require.Empty(t, attached)
+}
+
+func TestSkillsLoadRequiresAssistantPrincipal(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	err := platformskills.NewLoadTool(nil).Call(t.Context(), skillToolCallEnv(), bytes.NewBufferString(`{"name":"skill"}`), &out)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	require.ErrorContains(t, err, "assistant principal")
+}
+
+func TestSkillsLoadReturnsAttachedContent(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "skills_load_content")
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Load skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	require.NoError(t, err)
+	_, version := createSkillAttachmentFixture(t, conn, projectID, record.ID, "loaded-skill", "user-test")
+	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: record.ID, ThreadID: uuid.New()})
+
+	var out bytes.Buffer
+	err = platformskills.NewLoadTool(conn).Call(ctx, skillToolCallEnv(), bytes.NewBufferString(`{"name":"loaded-skill"}`), &out)
+	require.NoError(t, err)
+	require.Equal(t, version.Content, out.String())
+}
+
+func TestSkillsLoadReportsNoAttachedSkills(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "skills_load_empty")
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Empty skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	require.NoError(t, err)
+	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: record.ID, ThreadID: uuid.New()})
+
+	var out bytes.Buffer
+	err = platformskills.NewLoadTool(conn).Call(ctx, skillToolCallEnv(), bytes.NewBufferString(`{"name":"missing"}`), &out)
+	require.NoError(t, err)
+	require.Equal(t, "no skills attached", out.String())
+}
+
+func TestSkillsLoadHidesUnattachedSkillWhenAnotherIsAttached(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "skills_load_not_attached")
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Missing skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	require.NoError(t, err)
+	createSkillAttachmentFixture(t, conn, projectID, record.ID, "attached-skill", "user-test")
+	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: record.ID, ThreadID: uuid.New()})
+
+	var out bytes.Buffer
+	err = platformskills.NewLoadTool(conn).Call(ctx, skillToolCallEnv(), bytes.NewBufferString(`{"name":"missing"}`), &out)
+	requireOopsCode(t, err, oops.CodeNotFound)
+	require.EqualError(t, err, "skill is not attached to this assistant")
+}
+
+func skillToolCallEnv() toolconfig.ToolCallEnv {
+	return toolconfig.ToolCallEnv{
+		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
+		OAuthToken: "",
+		GramEmail:  "",
+	}
 }
 
 func TestDeleteAssistantRevokesAndAuditsSkillAttachments(t *testing.T) {
