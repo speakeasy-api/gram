@@ -2919,7 +2919,7 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_schedule_key
-  ON ai_integration_syncs (ai_integration_config_id, schedule);
+  ON ai_integration_syncs (ai_integration_config_id, schedule) NULLS NOT DISTINCT;
 
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
