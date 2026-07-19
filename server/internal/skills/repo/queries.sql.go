@@ -138,6 +138,14 @@ WITH completed AS (
         )
       )
   )
+), own_distributed_skill AS (
+  SELECT EXISTS (
+    SELECT 1
+    FROM skill_distributions sd
+    WHERE sd.project_id = $1
+      AND sd.skill_id = $2
+      AND sd.channel = 'plugin'
+  ) AS distributed
 ), evidence_rows AS (
   SELECT
     completed.seen_at,
@@ -148,7 +156,8 @@ WITH completed AS (
         'built-in', 'builtin', 'bundled', 'system', 'vendor'
       )
     )
-    AND own_distributed_hashes.raw_sha256 IS NULL AS built_in
+    AND own_distributed_hashes.raw_sha256 IS NULL
+    AND NOT (SELECT distributed FROM own_distributed_skill) AS built_in
   FROM completed
   LEFT JOIN own_distributed_hashes USING (raw_sha256)
 ), evidence AS (
@@ -1098,7 +1107,7 @@ func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActi
 const listProjectsWithPendingSkillObservations = `-- name: ListProjectsWithPendingSkillObservations :many
 WITH RECURSIVE pending_projects AS (
   (
-    SELECT so.project_id
+    SELECT so.project_id, 1 AS sequence
     FROM skill_observations so
     WHERE so.reconciled_at IS NULL
       AND so.project_id > $2
@@ -1106,7 +1115,7 @@ WITH RECURSIVE pending_projects AS (
     LIMIT 1
   )
   UNION ALL
-  SELECT next_project.project_id
+  SELECT next_project.project_id, current_project.sequence + 1
   FROM pending_projects current_project
   CROSS JOIN LATERAL (
     SELECT so.project_id
@@ -1116,9 +1125,11 @@ WITH RECURSIVE pending_projects AS (
     ORDER BY so.project_id
     LIMIT 1
   ) next_project
+  WHERE current_project.sequence < $1
 )
 SELECT project_id
 FROM pending_projects
+ORDER BY sequence
 LIMIT $1
 `
 

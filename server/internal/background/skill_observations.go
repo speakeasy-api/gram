@@ -24,6 +24,7 @@ const (
 	skillObservationScheduleID         = "v1:skill-observation-reconciliation-schedule"
 	skillObservationWorkflowID         = skillObservationScheduleID + "/scheduled"
 	skillObservationInterval           = time.Minute
+	skillObservationRunTimeout         = 35 * time.Minute
 )
 
 type ReconcileSkillObservationsParams struct {
@@ -95,7 +96,7 @@ func SkillObservationReconciliationSweepWorkflow(ctx workflow.Context, params Sk
 			childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 				WorkflowID:            reconcileSkillObservationsWorkflowID(childParams),
 				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-				WorkflowRunTimeout:    10 * time.Minute,
+				WorkflowRunTimeout:    skillObservationRunTimeout,
 				ParentClosePolicy:     enums.PARENT_CLOSE_POLICY_ABANDON,
 			})
 			if err := workflow.ExecuteChildWorkflow(childCtx, ReconcileSkillObservationsWorkflow, childParams).
@@ -128,7 +129,7 @@ func AddSkillObservationReconciliationSchedule(ctx context.Context, temporalEnv 
 			AfterProjectID: uuid.Nil,
 		}},
 		TaskQueue:          string(temporalEnv.Queue()),
-		WorkflowRunTimeout: 5 * time.Minute,
+		WorkflowRunTimeout: skillObservationRunTimeout,
 	}
 
 	_, err := scheduleClient.Create(ctx, client.ScheduleOptions{

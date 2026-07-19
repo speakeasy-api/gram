@@ -169,6 +169,27 @@ func TestReconcileSkillObservations_DistributedPluginRemainsCustom(t *testing.T)
 	require.Equal(t, "custom", skill.Classification)
 }
 
+func TestReconcileSkillObservations_HashlessDistributedPluginRemainsCustom(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	content := capturedManifest("hashless-distributed", "Distributed.", "body")
+	captured, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "hashless-plugin")
+	_, err = ti.service.Distribute(ctx, &gen.DistributePayload{
+		ID: captured.SkillID.String(), PluginID: plugin.ID.String(), PinnedVersionID: nil,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	insertSkillObservation(t, ti, "hashless-plugin:hashless-distributed", "marketplace", "plugin", "", time.Now().UTC())
+
+	_, err = skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	skill, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: captured.SkillID})
+	require.NoError(t, err)
+	require.Equal(t, "custom", skill.Classification)
+}
+
 func TestReconcileSkillObservations_LaggingDistributedPluginVersionRemainsCustom(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
