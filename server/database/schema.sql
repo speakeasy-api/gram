@@ -300,21 +300,30 @@ CREATE TABLE IF NOT EXISTS skill_versions (
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   spec_valid boolean NOT NULL,
   validation_errors JSONB NOT NULL DEFAULT '[]'::jsonb,
-  derived_from_version_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   created_by_user_id TEXT NOT NULL,
 
   CONSTRAINT skill_versions_pkey PRIMARY KEY (id),
   CONSTRAINT skill_versions_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills (id) ON DELETE CASCADE,
-  CONSTRAINT skill_versions_derived_from_version_id_fkey FOREIGN KEY (derived_from_version_id) REFERENCES skill_versions (id) ON DELETE SET NULL,
   CONSTRAINT skill_versions_content_size_check CHECK (octet_length(content) <= 65536)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key ON skill_versions (skill_id, canonical_sha256);
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versions (skill_id, id);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
-CREATE INDEX IF NOT EXISTS skill_versions_derived_from_version_id_idx ON skill_versions (derived_from_version_id) WHERE derived_from_version_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS skill_version_lineages (
+  skill_version_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  derived_from_version_id uuid NOT NULL,
+
+  CONSTRAINT skill_version_lineages_pkey PRIMARY KEY (skill_version_id),
+  CONSTRAINT skill_version_lineages_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_version_lineages_skill_id_derived_from_version_id_fkey FOREIGN KEY (skill_id, derived_from_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION
+);
+
+CREATE INDEX IF NOT EXISTS skill_version_lineages_skill_id_derived_from_version_id_idx ON skill_version_lineages (skill_id, derived_from_version_id);
 
 CREATE TABLE IF NOT EXISTS skill_version_origins (
   skill_version_id uuid NOT NULL,
