@@ -88,11 +88,12 @@ func TestDrainReplaysOldestFirstWithStoredKeys(t *testing.T) {
 	}
 }
 
-func TestDrainReplaysEnrichedSkillMetadataWithoutUploadingContent(t *testing.T) {
+func TestDrainReplaysEnrichedSkillMetadataAndUploadsContent(t *testing.T) {
 	drainEnv(t)
 	content := []byte("# Offline skill\n")
 	rawSHA256 := sha256Hex(content)
-	path := filepath.Join(t.TempDir(), ".claude", "skills", "offline", "SKILL.md")
+	root := filepath.Join(t.TempDir(), ".claude", "skills")
+	path := filepath.Join(root, "offline", "SKILL.md")
 	capturedTasks := captureSkillUploadTasks(t)
 	fs := newFakeServer(t, nil)
 	fs.effects = requestedSkillCaptureEffects(true)
@@ -107,6 +108,7 @@ func TestDrainReplaysEnrichedSkillMetadataWithoutUploadingContent(t *testing.T) 
 	entry.Envelope.Data.Skill.SourceLevel = new("project")
 	entry.Envelope.Data.Skill.SourcePath = new(path)
 	entry.Envelope.Data.Skill.RawSha256 = new(rawSHA256)
+	entry.SkillSourceRoot = root
 	data, err = json.Marshal(entry)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(spoolPath, data, 0o600))
@@ -114,7 +116,10 @@ func TestDrainReplaysEnrichedSkillMetadataWithoutUploadingContent(t *testing.T) 
 	summary := Drain(t.Context())
 
 	require.Equal(t, 1, summary.Replayed)
-	require.Empty(t, capturedTasks())
+	require.Equal(t, []skillUploadTask{{
+		ServerURL: fs.URL, Project: "default", APIKey: "drain-key", RawSHA256: rawSHA256,
+		SourcePath: path, SourceRoot: root,
+	}}, capturedTasks())
 	replayed := fs.last().Data.Skill
 	require.Equal(t, "offline", replayed.Name)
 	require.Equal(t, "project", *replayed.SourceLevel)
