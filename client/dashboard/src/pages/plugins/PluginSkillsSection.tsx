@@ -68,7 +68,10 @@ export function PluginSkillsSection({
     const distributedSkillIds = new Set(distributions.map((d) => d.skillId));
     return (
       skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
-    ).filter((skill) => !distributedSkillIds.has(skill.id));
+    ).filter(
+      (skill) =>
+        skill.latestVersionId != null && !distributedSkillIds.has(skill.id),
+    );
   }, [distributions, skillsQuery.data?.pages]);
 
   const distribute = useDistributeSkillMutation();
