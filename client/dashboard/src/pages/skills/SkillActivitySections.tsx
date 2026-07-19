@@ -101,12 +101,17 @@ export function SkillActivitySections({
         </SettingsSection.Header>
         <SettingsSection.Panel>
           <SettingsSection.Body>
-            <Table
-              columns={timelineColumns}
-              data={sightingTimeline}
-              rowKey={(point) => point.bucketStart.toISOString()}
-              noResultsMessage="No activations captured in the last 30 days."
-            />
+            {sightingTimeline.length === 0 ? (
+              <Type small muted>
+                No activations captured in the last 30 days.
+              </Type>
+            ) : (
+              <Table
+                columns={timelineColumns}
+                data={sightingTimeline}
+                rowKey={(point) => point.bucketStart.toISOString()}
+              />
+            )}
           </SettingsSection.Body>
         </SettingsSection.Panel>
       </SettingsSection>
