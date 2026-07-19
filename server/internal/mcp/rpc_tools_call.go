@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	rediscache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -79,6 +81,8 @@ func handleToolsCall(
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
+	productMetrics *posthog.Posthog,
+	instructionGateCache *cache.TypedCacheObject[instructionSessionGate],
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -145,6 +149,38 @@ func handleToolsCall(
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
+	}
+
+	// Synthetic instruction tool: intercept its call and enforce the
+	// read-before-use session gate. Skipped entirely when the toolset
+	// materializes a real tool with the same name — Gram never shadows a
+	// customer tool. search_tools/describe_tools returned above and are
+	// deliberately ungated: they explore, they don't act.
+	if !toolsetExposesInstructionsTool(toolset.Tools) {
+		itCfg := fetchInstructionToolConfig(ctx, logger, mcpMetadataRepo, toolsetID)
+		if params.Name == instructionsToolName {
+			if itCfg.Mode == instructionToolModeDisabled {
+				return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").LogError(ctx, logger)
+			}
+			return handleInstructionsToolCall(ctx, logger, req.ID, payload, toolsetID, itCfg, instructionGateCache)
+		}
+		if itCfg.Mode == instructionToolModeRequired && itCfg.Instructions != "" && payload.sessionProvided {
+			_, gateErr := instructionGateCache.Get(ctx, instructionGateCacheKey(toolsetID.String(), payload.sessionID))
+			switch {
+			case gateErr == nil:
+				// Session already read the instructions; refresh the TTL so
+				// active sessions don't expire mid-use.
+				markInstructionsRead(ctx, logger, instructionGateCache, toolsetID, payload)
+			case errors.Is(gateErr, rediscache.ErrCacheMiss):
+				captureInstructionGateEvent(ctx, logger, productMetrics, payload, string(toolset.Slug), toolset.ID, params.Name)
+				// The gate response carries the full instructions, so this
+				// counts as the read: open the gate for the retry.
+				markInstructionsRead(ctx, logger, instructionGateCache, toolsetID, payload)
+				return buildInstructionGateResponse(ctx, logger, req.ID, itCfg.Instructions, params.Name)
+			default:
+				logger.WarnContext(ctx, "instruction gate lookup failed; failing open", attr.SlogError(gateErr))
+			}
+		}
 	}
 
 	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)

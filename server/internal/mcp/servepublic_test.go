@@ -871,3 +871,104 @@ func TestServePublic_ToolsCall_FilteredOutTool_NotFound(t *testing.T) {
 	require.NotNil(t, resp.Error, "expected a JSON-RPC error, body: %s", w.Body.String())
 	require.Contains(t, resp.Error.Message, "not found")
 }
+
+// callTool posts a tools/call for toolName with an optional Mcp-Session-Id
+// header and returns the raw response body.
+func callTool(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, toolName, sessionID string) string {
+	t.Helper()
+
+	headers := map[string]string{}
+	if sessionID != "" {
+		headers["Mcp-Session-Id"] = sessionID
+	}
+	w, _ := servePublicHTTP(t, ctx, ti, mcpSlug, makeToolsCallBody(toolName), "", headers)
+	return w.Body.String()
+}
+
+func TestServePublic_InstructionsToolCallReturnsText(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	instructions := "Always verify the customer record changed after each write."
+	mcpSlug := createInstructionToolset(t, ctx, ti, "instr-call-text", instructions, "required")
+
+	body := callTool(t, ctx, ti, mcpSlug, "instructions", "")
+	require.Contains(t, body, instructions)
+	require.NotContains(t, body, `"isError":true`)
+}
+
+func TestServePublic_InstructionsToolCallEmptyState(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := createInstructionToolset(t, ctx, ti, "instr-call-empty", "", "required")
+
+	body := callTool(t, ctx, ti, mcpSlug, "instructions", "")
+	require.Contains(t, body, "No instructions have been configured for this server.")
+}
+
+func TestServePublic_InstructionGateBlocksFirstCall(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	instructions := "Check the customer was changed before reporting success."
+	mcpSlug := createInstructionToolset(t, ctx, ti, "instr-gate-blocks", instructions, "required")
+
+	// First call in the session is not the instructions tool: Gram must NOT
+	// execute it, and must return the instructions with a retry note.
+	first := callTool(t, ctx, ti, mcpSlug, "some_other_tool", "gate-session-1")
+	require.Contains(t, first, instructions)
+	require.Contains(t, first, "retry your original call")
+
+	// The gate response itself delivered the instructions, so the session is
+	// now marked as read: the retry proceeds to normal resolution (here:
+	// tool not found, since the toolset has no real tools).
+	second := callTool(t, ctx, ti, mcpSlug, "some_other_tool", "gate-session-1")
+	require.NotContains(t, second, "retry your original call")
+}
+
+func TestServePublic_InstructionGateSkippedWithoutSessionHeader(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := createInstructionToolset(t, ctx, ti, "instr-gate-nosession", "Some instructions.", "required")
+
+	// Clients that never send Mcp-Session-Id get a fresh ID per request and
+	// could never pass a session-keyed gate — the gate must fail open.
+	body := callTool(t, ctx, ti, mcpSlug, "some_other_tool", "")
+	require.NotContains(t, body, "retry your original call")
+}
+
+func TestServePublic_InstructionGateSkippedInOptionalMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := createInstructionToolset(t, ctx, ti, "instr-gate-optional", "Some instructions.", "optional")
+
+	body := callTool(t, ctx, ti, mcpSlug, "some_other_tool", "opt-session-1")
+	require.NotContains(t, body, "retry your original call")
+}
+
+func TestServePublic_InstructionGateSkippedWhenInstructionsEmpty(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := createInstructionToolset(t, ctx, ti, "instr-gate-empty", "", "required")
+
+	body := callTool(t, ctx, ti, mcpSlug, "some_other_tool", "empty-session-1")
+	require.NotContains(t, body, "retry your original call")
+}
+
+func TestServePublic_InstructionsCallOpensGate(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	instructions := "Read me first."
+	mcpSlug := createInstructionToolset(t, ctx, ti, "instr-gate-read-first", instructions, "required")
+
+	first := callTool(t, ctx, ti, mcpSlug, "instructions", "polite-session-1")
+	require.Contains(t, first, instructions)
+
+	second := callTool(t, ctx, ti, mcpSlug, "some_other_tool", "polite-session-1")
+	require.NotContains(t, second, "retry your original call")
+}

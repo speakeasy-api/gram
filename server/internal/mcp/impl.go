@@ -123,6 +123,7 @@ type Service struct {
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
+	instructionGateCache   cache.TypedCacheObject[instructionSessionGate]
 	// userSessionSigner mints the SessionClaims JWT issued at /token.
 	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
 	// uses, intentionally separate signer code so each path is removable
@@ -209,11 +210,15 @@ type mcpInputs struct {
 	oauthTokenInputs []oauthTokenInputs
 	authenticated    bool
 	sessionID        string
-	chatID           string
-	mode             ToolMode
-	userID           string
-	externalUserID   string
-	apiKeyID         string
+	// sessionProvided is true when the client sent an Mcp-Session-Id header
+	// (vs Gram minting a throwaway ID for this request). Session-keyed
+	// features must no-op when false.
+	sessionProvided bool
+	chatID          string
+	mode            ToolMode
+	userID          string
+	externalUserID  string
+	apiKeyID        string
 	// toolVariationsGroupID is the effective variation group resolved per
 	// request (mcp_servers, then toolsets, then nil for the project default).
 	toolVariationsGroupID *uuid.UUID
@@ -331,6 +336,11 @@ func NewService(
 		),
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
 			logger.With(attr.SlogCacheNamespace("user_session_grant")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		instructionGateCache: cache.NewTypedObjectCache[instructionSessionGate](
+			logger.With(attr.SlogCacheNamespace("mcp_instruction_gate")),
 			cacheImpl,
 			cache.SuffixNone,
 		),
@@ -800,7 +810,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").LogError(ctx, s.logger)
 	}
 
-	sessionID := parseMcpSessionID(r.Header)
+	sessionID, sessionProvided := parseMcpSessionID(r.Header)
 	if req.Method == "initialize" {
 		w.Header().Set("Mcp-Session-Id", sessionID)
 	}
@@ -824,6 +834,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		authenticated:         authenticated,
 		oauthTokenInputs:      tokenInputs,
 		sessionID:             sessionID,
+		sessionProvided:       sessionProvided,
 		chatID:                r.Header.Get("Gram-Chat-ID"),
 		mode:                  resolveToolMode(r, *toolset),
 		userID:                userID,
@@ -1114,7 +1125,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras, s.mcpMetadataRepo)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.posthog, &s.instructionGateCache)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "prompts/get":
@@ -1128,12 +1139,16 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	}
 }
 
-func parseMcpSessionID(headers http.Header) string {
+// parseMcpSessionID returns the MCP session ID and whether the client
+// actually sent one. When absent, a fresh UUID is minted per request — such
+// requests have no cross-request continuity, so session-keyed features (the
+// instruction gate) must treat provided=false as "no session".
+func parseMcpSessionID(headers http.Header) (string, bool) {
 	session := headers.Get("Mcp-Session-Id")
 	if session == "" {
-		session = uuid.New().String()
+		return uuid.New().String(), false
 	}
-	return session
+	return session, true
 }
 
 // parseTagsFilter parses the ?tags= query value into a deduplicated set of tag
@@ -1439,6 +1454,8 @@ func (s *Service) HandleToolsCall(
 		s.mcpMetadataRepo,
 		s.auditLogger,
 		s.platformExtras,
+		s.posthog,
+		&s.instructionGateCache,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tool call: %w", err)

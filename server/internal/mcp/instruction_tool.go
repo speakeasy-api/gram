@@ -15,7 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 // The synthetic instruction tool surfaces mcp_metadata.instructions as a
@@ -162,3 +165,92 @@ func (g instructionSessionGate) AdditionalCacheKeys() []string { return []string
 
 // TTL implements cache.CacheableObject.
 func (g instructionSessionGate) TTL() time.Duration { return 60 * time.Minute }
+
+// handleInstructionsToolCall serves a call to the synthetic instructions
+// tool: returns the configured instructions (or the not-configured message)
+// and marks the session as having read them.
+func handleInstructionsToolCall(
+	ctx context.Context,
+	logger *slog.Logger,
+	reqID mcpjsonrpc.ID,
+	payload *mcpInputs,
+	toolsetID uuid.UUID,
+	cfg instructionToolConfig,
+	gateCache *cache.TypedCacheObject[instructionSessionGate],
+) (json.RawMessage, error) {
+	markInstructionsRead(ctx, logger, gateCache, toolsetID, payload)
+
+	text := cfg.Instructions
+	if text == "" {
+		text = instructionsNotConfiguredMessage
+	}
+	return buildInstructionsTextResult(ctx, logger, reqID, text)
+}
+
+// buildInstructionGateResponse answers a gated tools/call: the blocked tool
+// is NOT executed; the agent receives the instructions plus a retry note as
+// a successful result (agents handle content responses more predictably
+// than JSON-RPC errors, and the round trip cost stays at exactly one).
+func buildInstructionGateResponse(
+	ctx context.Context,
+	logger *slog.Logger,
+	reqID mcpjsonrpc.ID,
+	instructions string,
+	blockedTool string,
+) (json.RawMessage, error) {
+	text := instructions + "\n\n---\nThis MCP server requires reading the server instructions (above) before other tools run. Your call to \"" + blockedTool + "\" was not executed. Please retry your original call now."
+	return buildInstructionsTextResult(ctx, logger, reqID, text)
+}
+
+func buildInstructionsTextResult(ctx context.Context, logger *slog.Logger, reqID mcpjsonrpc.ID, text string) (json.RawMessage, error) {
+	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{
+		Type:     "text",
+		Text:     text,
+		MimeType: nil,
+		Data:     nil,
+		Meta:     nil,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize instructions chunk").LogError(ctx, logger)
+	}
+
+	response, err := json.Marshal(result[toolCallResult]{
+		ID: reqID,
+		Result: toolCallResult{
+			Content:           []json.RawMessage{chunk},
+			StructuredContent: nil,
+			IsError:           false,
+		},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize instructions response").LogError(ctx, logger)
+	}
+	return response, nil
+}
+
+// markInstructionsRead stores (or refreshes) the session gate flag. Redis
+// failures are logged and ignored — the gate fails open, never breaking a
+// tool call.
+func markInstructionsRead(ctx context.Context, logger *slog.Logger, gateCache *cache.TypedCacheObject[instructionSessionGate], toolsetID uuid.UUID, payload *mcpInputs) {
+	if !payload.sessionProvided {
+		return
+	}
+	if err := gateCache.Store(ctx, instructionSessionGate{ToolsetID: toolsetID.String(), SessionID: payload.sessionID}); err != nil {
+		logger.WarnContext(ctx, "failed to store instruction gate flag", attr.SlogError(err))
+	}
+}
+
+// captureInstructionGateEvent emits the product metric for a gate trigger —
+// the measure of how often agents would have skipped reading instructions.
+func captureInstructionGateEvent(ctx context.Context, logger *slog.Logger, productMetrics *posthog.Posthog, payload *mcpInputs, toolsetSlug, toolsetID, blockedTool string) {
+	if err := productMetrics.CaptureEvent(ctx, "mcp_instructions_gate_triggered", payload.sessionID, map[string]any{
+		"project_id":           payload.projectID.String(),
+		"toolset_slug":         toolsetSlug,
+		"toolset_id":           toolsetID,
+		"blocked_tool":         blockedTool,
+		"mcp_session_id":       payload.sessionID,
+		"disable_notification": true,
+	}); err != nil {
+		logger.ErrorContext(ctx, "failed to capture mcp_instructions_gate_triggered event", attr.SlogError(err))
+	}
+}

@@ -90,11 +90,15 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		oauthTokenInputs: oauthInputs,
 		authenticated:    m.Authenticated,
 		sessionID:        m.SessionID,
-		chatID:           m.ChatID,
-		mode:             m.Mode,
-		userID:           m.UserID,
-		externalUserID:   m.ExternalUserID,
-		apiKeyID:         m.APIKeyID,
+		// Internal (agent-workflow) callers synthesize their own session
+		// IDs with no client round trip behind them, so the instruction
+		// gate must stay off for them.
+		sessionProvided: false,
+		chatID:          m.ChatID,
+		mode:            m.Mode,
+		userID:          m.UserID,
+		externalUserID:  m.ExternalUserID,
+		apiKeyID:        m.APIKeyID,
 		// Internal clients (agent workflows) always use the project-default
 		// variation group, never filter by tag, and have no fronting
 		// mcp_servers row to record.
