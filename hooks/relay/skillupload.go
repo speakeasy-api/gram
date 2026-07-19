@@ -1,91 +1,77 @@
 package relay
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
-	"time"
-	"unicode/utf8"
 )
 
-const (
-	skillUploadTaskVersion  = 1
-	maxSkillUploadTaskBytes = 512 << 10
-)
+const maxSkillUploadAPIKeyBytes = 256
 
-var skillUploadPipeTimeout = 2 * time.Second
-
-// skillUploadTask is the complete, private handoff from the latency-sensitive
-// hook process to the detached uploader.
+// skillUploadTask identifies content the detached worker must reopen. Only the
+// credential is private; content never crosses the process boundary.
 type skillUploadTask struct {
-	Version   int    `json:"version"`
-	ServerURL string `json:"server_url"`
-	Project   string `json:"project"`
-	APIKey    string `json:"api_key"`
-	RawSHA256 string `json:"raw_sha256"`
-	Content   string `json:"content"`
+	ServerURL  string
+	Project    string
+	APIKey     string
+	RawSHA256  string
+	SourcePath string
+	SourceRoot string
 }
 
-var newSkillUploadCommand = func() (*exec.Cmd, error) {
+var newSkillUploadCommand = func(task skillUploadTask) (*exec.Cmd, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("resolve executable: %w", err)
 	}
-	return exec.Command(exe, "upload-skill"), nil
+	cmd := exec.Command(exe, "upload-skill",
+		"--server-url="+task.ServerURL,
+		"--project="+task.Project,
+		"--raw-sha256="+task.RawSHA256,
+		"--source-path="+task.SourcePath,
+		"--source-root="+task.SourceRoot,
+	)
+	cmd.Env = envWithoutCredential(os.Environ(), task.APIKey)
+	return cmd, nil
 }
 
-// startSkillUploadProcess passes the private task directly to a detached child
-// so credentials and skill content never appear in argv or on disk.
-var startSkillUploadProcess = func(task []byte) error {
-	if len(task) == 0 || len(task) > maxSkillUploadTaskBytes {
-		return fmt.Errorf("invalid skill upload task size")
-	}
-	cmd, err := newSkillUploadCommand()
+// startSkillUploadProcess starts a detached child without copying content. The
+// child reopens and verifies the manifest, leaving only process creation on the
+// gating path. agenthooks.Main calls os.Exit as soon as the handler returns, so
+// cmd.Start cannot safely move to a goroutine. The bounded credential is
+// prefilled into an anonymous pipe so it remains available after this process
+// exits without appearing in argv, the environment, or a file.
+var startSkillUploadProcess = func(task skillUploadTask) error {
+	cmd, err := newSkillUploadCommand(task)
 	if err != nil {
 		return err
 	}
-	cmd.SysProcAttr = drainSysProcAttr()
-	stdin, err := cmd.StdinPipe()
+	credential, err := prefilledSkillUploadCredential(task.APIKey)
 	if err != nil {
-		return fmt.Errorf("open skill upload stdin: %w", err)
+		return err
 	}
+	cmd.Stdin = credential
+	cmd.SysProcAttr = drainSysProcAttr()
 	if err := cmd.Start(); err != nil {
-		_ = stdin.Close()
+		_ = credential.Close()
 		return fmt.Errorf("start skill upload: %w", err)
 	}
-
-	written := make(chan error, 1)
-	go func() {
-		_, copyErr := io.Copy(stdin, bytes.NewReader(task))
-		written <- errors.Join(copyErr, stdin.Close())
-	}()
-
-	timer := time.NewTimer(skillUploadPipeTimeout)
-	defer timer.Stop()
-	select {
-	case err := <-written:
-		if err != nil {
-			_ = cmd.Process.Kill()
-			_ = cmd.Process.Release()
-			return fmt.Errorf("write skill upload task: %w", err)
-		}
-		return cmd.Process.Release()
-	case <-timer.C:
-		_ = stdin.Close()
-		_ = cmd.Process.Kill()
-		<-written
-		_ = cmd.Process.Release()
-		return fmt.Errorf("write skill upload task: timed out")
+	closeErr := credential.Close()
+	releaseErr := cmd.Process.Release()
+	if closeErr != nil {
+		return fmt.Errorf("close skill upload credential pipe: %w", closeErr)
 	}
+	if releaseErr != nil {
+		return fmt.Errorf("release skill upload process: %w", releaseErr)
+	}
+	return nil
 }
 
 // startSkillContentUpload hands an upload to a detached process only when the
@@ -96,56 +82,110 @@ func startSkillContentUpload(c creds, res ingestResult, skill *resolvedSkill) er
 		return nil
 	}
 	task := skillUploadTask{
-		Version:   skillUploadTaskVersion,
-		ServerURL: c.ServerURL,
-		Project:   c.Project,
-		APIKey:    c.APIKey,
-		RawSHA256: skill.rawSHA256,
-		Content:   skill.content,
+		ServerURL:  c.ServerURL,
+		Project:    c.Project,
+		APIKey:     c.APIKey,
+		RawSHA256:  skill.rawSHA256,
+		SourcePath: skill.sourcePath,
+		SourceRoot: skill.root,
 	}
 	if !validSkillUploadTask(task) {
 		return fmt.Errorf("invalid skill upload task")
 	}
-	body, err := json.Marshal(task)
-	if err != nil {
-		return fmt.Errorf("marshal skill upload task: %w", err)
-	}
-	if len(body) > maxSkillUploadTaskBytes {
-		return fmt.Errorf("marshaled skill upload task exceeds %d bytes", maxSkillUploadTaskBytes)
-	}
-	return startSkillUploadProcess(body)
+	return startSkillUploadProcess(task)
 }
 
-// RunSkillUpload consumes one bounded detached task from stdin.
-func RunSkillUpload(ctx context.Context, input io.Reader) int {
-	body, err := io.ReadAll(io.LimitReader(input, maxSkillUploadTaskBytes+1))
-	if err != nil || len(body) == 0 || len(body) > maxSkillUploadTaskBytes {
+// RunSkillUpload reads one bounded credential, reopens one manifest from a
+// trusted parent-supplied root, and uploads it only if its full raw hash still
+// matches the accepted activation.
+func RunSkillUpload(ctx context.Context, args []string, credential io.Reader) int {
+	fs := flag.NewFlagSet("upload-skill", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	task := skillUploadTask{}
+	fs.StringVar(&task.ServerURL, "server-url", "", "")
+	fs.StringVar(&task.Project, "project", "", "")
+	fs.StringVar(&task.RawSHA256, "raw-sha256", "", "")
+	fs.StringVar(&task.SourcePath, "source-path", "", "")
+	fs.StringVar(&task.SourceRoot, "source-root", "", "")
+	if fs.Parse(args) != nil || fs.NArg() != 0 {
 		return 1
 	}
-
-	var task skillUploadTask
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&task) != nil || decoder.Decode(&struct{}{}) != io.EOF || !validSkillUploadTask(task) {
+	key, ok := readSkillUploadCredential(credential)
+	if !ok {
 		return 1
 	}
-
+	task.APIKey = key
+	if !validSkillUploadTask(task) {
+		return 1
+	}
+	skill := captureResolvedSkill(&resolvedSkill{}, skillLocation{path: task.SourcePath, level: "", root: task.SourceRoot})
+	if !skill.captureReady || skill.rawSHA256 != task.RawSHA256 {
+		return 1
+	}
 	c := creds{ServerURL: task.ServerURL, APIKey: task.APIKey, Project: task.Project, Email: "", Org: "", Source: credEnv}
-	if err := newClient(task.ServerURL).uploadSkillContent(ctx, c, task.RawSHA256, task.Content); err != nil {
+	if err := newClient(task.ServerURL).uploadSkillContent(ctx, c, task.RawSHA256, skill.content); err != nil {
 		return 1
 	}
 	return 0
 }
 
 func validSkillUploadTask(task skillUploadTask) bool {
-	if task.Version != skillUploadTaskVersion || task.APIKey == "" ||
-		strings.ContainsAny(task.APIKey+task.Project, "\r\n") || len(task.Content) > maxSkillContentBytes || !utf8.ValidString(task.Content) {
+	if task.APIKey == "" || len(task.APIKey) > maxSkillUploadAPIKeyBytes || strings.ContainsAny(task.APIKey+task.Project, "\r\n") ||
+		len(task.RawSHA256) != 64 || !filepath.IsAbs(task.SourcePath) || !filepath.IsAbs(task.SourceRoot) {
+		return false
+	}
+	for _, arg := range []string{task.ServerURL, task.Project, task.RawSHA256, task.SourcePath, task.SourceRoot} {
+		if strings.Contains(arg, task.APIKey) {
+			return false
+		}
+	}
+	if _, err := hex.DecodeString(task.RawSHA256); err != nil || task.RawSHA256 != strings.ToLower(task.RawSHA256) {
 		return false
 	}
 	u, err := url.Parse(task.ServerURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || insecureServerURL(task.ServerURL) {
 		return false
 	}
-	digest := sha256.Sum256([]byte(task.Content))
-	return task.RawSHA256 == hex.EncodeToString(digest[:])
+	return true
+}
+
+func prefilledSkillUploadCredential(key string) (*os.File, error) {
+	if key == "" || len(key) > maxSkillUploadAPIKeyBytes || strings.ContainsAny(key, "\r\n") {
+		return nil, fmt.Errorf("invalid skill upload credential")
+	}
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("open skill upload credential pipe: %w", err)
+	}
+	if _, err := io.WriteString(writer, key); err != nil {
+		_ = reader.Close()
+		_ = writer.Close()
+		return nil, fmt.Errorf("prefill skill upload credential pipe: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		_ = reader.Close()
+		return nil, fmt.Errorf("close skill upload credential writer: %w", err)
+	}
+	return reader, nil
+}
+
+func readSkillUploadCredential(input io.Reader) (string, bool) {
+	if input == nil {
+		return "", false
+	}
+	key, err := io.ReadAll(io.LimitReader(input, maxSkillUploadAPIKeyBytes+1))
+	if err != nil || len(key) == 0 || len(key) > maxSkillUploadAPIKeyBytes || strings.ContainsAny(string(key), "\r\n") {
+		return "", false
+	}
+	return string(key), true
+}
+
+func envWithoutCredential(env []string, credential string) []string {
+	result := make([]string, 0, len(env))
+	for _, value := range env {
+		if credential == "" || !strings.Contains(value, credential) {
+			result = append(result, value)
+		}
+	}
+	return result
 }

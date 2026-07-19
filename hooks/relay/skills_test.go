@@ -62,34 +62,36 @@ func TestResolveActivatedSkillAcceptsMaximumManifestSize(t *testing.T) {
 	require.Equal(t, sha256Hex(content), resolved.rawSHA256)
 }
 
-func TestResolveActivatedSkillRejectsOversizedManifestButKeepsLocation(t *testing.T) {
+func TestResolveActivatedSkillHashesEntireOversizedManifestButDoesNotCaptureContent(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	workspace := t.TempDir()
-	path := writeSkillManifest(t, filepath.Join(workspace, ".cursor", "skills", "oversized"), []byte(strings.Repeat("a", maxSkillContentBytes+1)))
+	content := []byte(strings.Repeat("a", maxSkillContentBytes+8192) + "full-file-tail")
+	path := writeSkillManifest(t, filepath.Join(workspace, ".cursor", "skills", "oversized"), content)
 	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
 
 	resolved := resolveActivatedSkill(event, activatedSkillPayload("oversized"))
 
 	require.Equal(t, "project", resolved.sourceLevel)
 	require.Equal(t, path, resolved.sourcePath)
-	require.Empty(t, resolved.rawSHA256)
+	require.Equal(t, sha256Hex(content), resolved.rawSHA256)
 	require.Empty(t, resolved.content)
 	require.False(t, resolved.captureReady)
 }
 
-func TestResolveActivatedSkillRejectsInvalidUTF8ButKeepsLocation(t *testing.T) {
+func TestResolveActivatedSkillHashesInvalidUTF8ButDoesNotCaptureContent(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	workspace := t.TempDir()
-	path := writeSkillManifest(t, filepath.Join(workspace, ".cursor", "skills", "invalid"), []byte{0xff, 0xfe})
+	content := []byte{0xff, 0xfe, 0x00, 0x61}
+	path := writeSkillManifest(t, filepath.Join(workspace, ".cursor", "skills", "invalid"), content)
 	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
 
 	resolved := resolveActivatedSkill(event, activatedSkillPayload("invalid"))
 
 	require.Equal(t, "project", resolved.sourceLevel)
 	require.Equal(t, path, resolved.sourcePath)
-	require.Empty(t, resolved.rawSHA256)
+	require.Equal(t, sha256Hex(content), resolved.rawSHA256)
 	require.Empty(t, resolved.content)
 	require.False(t, resolved.captureReady)
 }
@@ -293,6 +295,40 @@ func TestResolveActivatedSkillRejectsSymlinkedManifestParent(t *testing.T) {
 	require.FileExists(t, externalPath)
 }
 
+func TestResolveActivatedSkillRejectsExternalManifestSymlink(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workspace := t.TempDir()
+	external := filepath.Join(t.TempDir(), "passwd")
+	require.NoError(t, os.WriteFile(external, []byte("sensitive"), 0o600))
+	path := filepath.Join(workspace, ".cursor", "skills", "linked", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.Symlink(external, path))
+	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
+
+	resolved := resolveActivatedSkill(event, activatedSkillPayload("linked"))
+
+	require.Equal(t, "linked", resolved.name)
+	require.Empty(t, resolved.sourceLevel)
+	require.Empty(t, resolved.sourcePath)
+	require.Empty(t, resolved.rawSHA256)
+	require.Empty(t, resolved.content)
+	require.False(t, resolved.captureReady)
+}
+
+func TestResolveActivatedSkillRejectsNonregularManifest(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workspace := t.TempDir()
+	path := filepath.Join(workspace, ".cursor", "skills", "directory", "SKILL.md")
+	require.NoError(t, os.MkdirAll(path, 0o755))
+	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
+
+	resolved := resolveActivatedSkill(event, activatedSkillPayload("directory"))
+
+	require.Equal(t, "directory", resolved.name)
+	require.Empty(t, resolved.sourcePath)
+	require.False(t, resolved.captureReady)
+}
+
 func TestResolveActivatedSkillCursorPluginLegacyKey(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -321,6 +357,14 @@ func TestResolveActivatedSkillCursorPluginInsideWorkspace(t *testing.T) {
 
 	require.Equal(t, "plugin", resolved.sourceLevel)
 	require.Equal(t, path, resolved.sourcePath)
+}
+
+func TestContainingWorkspaceRootChoosesLongestNestedRoot(t *testing.T) {
+	outer := t.TempDir()
+	inner := filepath.Join(outer, "nested", "workspace")
+	path := filepath.Join(inner, ".cursor", "skills", "nested", "SKILL.md")
+
+	require.Equal(t, inner, containingWorkspaceRoot(path, []string{outer, inner}))
 }
 
 func TestResolveActivatedSkillCursorDocsSkillsIsNameOnly(t *testing.T) {

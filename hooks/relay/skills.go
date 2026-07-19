@@ -34,6 +34,7 @@ type resolvedSkill struct {
 	rawSHA256    string
 	content      string
 	captureReady bool
+	root         string
 }
 
 type skillLocation struct {
@@ -79,20 +80,16 @@ func resolveActivatedSkill(typed any, payload *components.IngestRequestBody) *re
 }
 
 func captureResolvedSkill(result *resolvedSkill, location skillLocation) *resolvedSkill {
-	path, ok := canonicalSkillPath(location.path, location.root)
+	file, ok := openValidatedSkill(location.path, location.root)
 	if !ok {
 		return result
 	}
-	file, err := os.Open(path)
-	if err != nil {
-		return result
+	hasher := sha256.New()
+	content, readErr := io.ReadAll(io.LimitReader(io.TeeReader(file, hasher), maxSkillContentBytes+1))
+	if readErr == nil {
+		// Capture stays bounded, but metadata requires the exact full-file hash.
+		_, readErr = io.Copy(io.Discard, io.TeeReader(file, hasher))
 	}
-	openedInfo, statErr := file.Stat()
-	if statErr != nil || !openedInfo.Mode().IsRegular() {
-		_ = file.Close()
-		return result
-	}
-	content, readErr := io.ReadAll(io.LimitReader(file, maxSkillContentBytes+1))
 	closeErr := file.Close()
 	if readErr != nil || closeErr != nil {
 		return result
@@ -100,29 +97,14 @@ func captureResolvedSkill(result *resolvedSkill, location skillLocation) *resolv
 
 	result.sourceLevel = location.level
 	result.sourcePath = filepath.Clean(location.path)
+	result.rawSHA256 = hex.EncodeToString(hasher.Sum(nil))
+	result.root = filepath.Clean(location.root)
 	if len(content) > maxSkillContentBytes || !utf8.Valid(content) {
 		return result
 	}
 
-	sum := sha256.Sum256(content)
-	result.rawSHA256 = hex.EncodeToString(sum[:])
 	result.content = string(content)
 	result.captureReady = true
-	return result
-}
-
-func resolveSpooledSkill(payload *components.IngestRequestBody) *resolvedSkill {
-	if payload == nil || payload.Data == nil || payload.Data.Skill == nil ||
-		payload.Data.Skill.SourceLevel == nil || payload.Data.Skill.SourcePath == nil || payload.Data.Skill.RawSha256 == nil {
-		return nil
-	}
-	result := captureResolvedSkill(
-		&resolvedSkill{name: payload.Data.Skill.Name},
-		skillLocation{path: *payload.Data.Skill.SourcePath, level: *payload.Data.Skill.SourceLevel, root: filepath.Dir(*payload.Data.Skill.SourcePath)},
-	)
-	if !result.captureReady || result.rawSHA256 != *payload.Data.Skill.RawSha256 {
-		return nil
-	}
 	return result
 }
 
@@ -575,23 +557,37 @@ func readableRegularFile(path string) bool {
 	return statErr == nil && openedInfo.Mode().IsRegular() && closeErr == nil
 }
 
-func canonicalSkillPath(path, root string) (string, bool) {
+func openValidatedSkill(path, root string) (*os.File, bool) {
 	if !filepath.IsAbs(path) || !filepath.IsAbs(root) {
-		return "", false
+		return nil, false
 	}
-	realRoot, err := filepath.EvalSymlinks(root)
+	rel, err := filepath.Rel(root, path)
+	if err != nil || !filepath.IsLocal(rel) {
+		return nil, false
+	}
+	rootDir, err := os.OpenRoot(root)
 	if err != nil {
-		return "", false
+		return nil, false
 	}
-	realPath, err := filepath.EvalSymlinks(path)
-	if err != nil || !pathWithin(realPath, realRoot) {
-		return "", false
-	}
-	info, err := os.Stat(realPath)
+	info, err := rootDir.Stat(rel)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", false
+		_ = rootDir.Close()
+		return nil, false
 	}
-	return realPath, true
+	file, err := rootDir.Open(rel)
+	closeRootErr := rootDir.Close()
+	if err != nil || closeRootErr != nil {
+		if file != nil {
+			_ = file.Close()
+		}
+		return nil, false
+	}
+	openedInfo, err := file.Stat()
+	if err != nil || !openedInfo.Mode().IsRegular() {
+		_ = file.Close()
+		return nil, false
+	}
+	return file, true
 }
 
 func absoluteSessionPath(path, cwd string) string {
@@ -621,7 +617,7 @@ func containingWorkspaceRoot(path string, workspaceRoots []string) string {
 	var result string
 	for _, root := range workspaceRoots {
 		rootAbs, err := filepath.Abs(root)
-		if err == nil && pathWithin(path, rootAbs) && (result == "" || len(rootAbs) < len(result)) {
+		if err == nil && pathWithin(path, rootAbs) && (result == "" || len(rootAbs) > len(result)) {
 			result = rootAbs
 		}
 	}

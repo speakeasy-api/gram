@@ -1,13 +1,14 @@
 package relay
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,29 +17,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMaybeUploadSkillContentHandsOffExactTask(t *testing.T) {
-	content := "# Exact skill\n\nKeep trailing newline.\n"
-	rawSHA256 := sha256Hex([]byte(content))
-	credential := creds{ServerURL: "https://example.com", APIKey: "secret-key", Project: "project", Email: "", Org: "", Source: credCache}
+func TestMaybeUploadSkillContentHandsOffExactLocation(t *testing.T) {
+	task := skillUploadTaskForTest(t, "https://example.com", "project", "secret-key", "# Exact skill\n")
 	capturedTasks := captureSkillUploadTasks(t)
+	skill := &resolvedSkill{
+		name:         "skill",
+		sourceLevel:  "project",
+		sourcePath:   task.SourcePath,
+		rawSHA256:    task.RawSHA256,
+		content:      "# Exact skill\n",
+		captureReady: true,
+		root:         task.SourceRoot,
+	}
 
-	result := acceptedSkillUploadResult(rawSHA256, true)
-	require.NoError(t, startSkillContentUpload(credential, result, &resolvedSkill{name: "skill", sourceLevel: "", sourcePath: "", rawSHA256: rawSHA256, content: content, captureReady: false}))
-	require.Empty(t, capturedTasks())
-	require.NoError(t, startSkillContentUpload(credential, result, &resolvedSkill{name: "skill", sourceLevel: "", sourcePath: "", rawSHA256: rawSHA256, content: content, captureReady: true}))
-	require.Equal(t, []skillUploadTask{{
-		Version:   skillUploadTaskVersion,
-		ServerURL: credential.ServerURL,
-		Project:   credential.Project,
-		APIKey:    credential.APIKey,
-		RawSHA256: rawSHA256,
-		Content:   content,
-	}}, capturedTasks())
+	require.NoError(t, startSkillContentUpload(creds{ServerURL: task.ServerURL, APIKey: task.APIKey, Project: task.Project, Email: "", Org: "", Source: credCache}, acceptedSkillUploadResult(task.RawSHA256, true), skill))
+	require.Equal(t, []skillUploadTask{task}, capturedTasks())
+
+	skill.captureReady = false
+	require.NoError(t, startSkillContentUpload(creds{ServerURL: task.ServerURL, APIKey: task.APIKey, Project: task.Project, Email: "", Org: "", Source: credCache}, acceptedSkillUploadResult(task.RawSHA256, true), skill))
+	require.Len(t, capturedTasks(), 1)
 }
 
-func TestRunSkillUploadUploadsExactContent(t *testing.T) {
+func TestRunSkillUploadReopensAndUploadsExactContent(t *testing.T) {
 	content := "# Skill\n\nExact content.\n"
-	rawSHA256 := sha256Hex([]byte(content))
 	type observedRequest struct {
 		Method   string
 		Path     string
@@ -50,57 +51,50 @@ func TestRunSkillUploadUploadsExactContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var body map[string]any
 		_ = json.NewDecoder(req.Body).Decode(&body)
-		observed <- observedRequest{
-			Method:   req.Method,
-			Path:     req.URL.Path,
-			GramKeys: req.Header.Values("Gram-Key"),
-			Projects: req.Header.Values("Gram-Project"),
-			Body:     body,
-		}
+		observed <- observedRequest{Method: req.Method, Path: req.URL.Path, GramKeys: req.Header.Values("Gram-Key"), Projects: req.Header.Values("Gram-Project"), Body: body}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
+	task := skillUploadTaskForTest(t, server.URL, "project", "key", content)
 
-	require.Equal(t, 0, RunSkillUpload(t.Context(), bytes.NewReader(marshalSkillUploadTask(t, skillUploadTask{
-		Version:   skillUploadTaskVersion,
-		ServerURL: server.URL,
-		Project:   "project",
-		APIKey:    "key",
-		RawSHA256: rawSHA256,
-		Content:   content,
-	}))))
+	require.Equal(t, 0, runSkillUploadTask(t, task))
 	request := <-observed
 	require.Equal(t, http.MethodPost, request.Method)
 	require.Equal(t, "/rpc/hooks.uploadSkillContent", request.Path)
 	require.Equal(t, []string{"key"}, request.GramKeys)
 	require.Equal(t, []string{"project"}, request.Projects)
-	require.Equal(t, map[string]any{
-		"content":        content,
-		"raw_sha256":     rawSHA256,
-		"schema_version": "hook.skill-content.v1",
-	}, request.Body)
+	require.Equal(t, map[string]any{"content": content, "raw_sha256": task.RawSHA256, "schema_version": "hook.skill-content.v1"}, request.Body)
 }
 
-func TestRunSkillUploadRejectsInvalidInputWithoutNetwork(t *testing.T) {
+func TestRunSkillUploadRejectsChangedManifestWithoutNetwork(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
-	valid := marshalSkillUploadTask(t, skillUploadTask{
-		Version:   skillUploadTaskVersion,
-		ServerURL: server.URL,
-		Project:   "project",
-		APIKey:    "key",
-		RawSHA256: sha256Hex([]byte("content")),
-		Content:   "content",
-	})
+	task := skillUploadTaskForTest(t, server.URL, "project", "key", "original")
+	require.NoError(t, os.WriteFile(task.SourcePath, []byte("changed"), 0o600))
 
-	require.NotZero(t, RunSkillUpload(t.Context(), strings.NewReader(`{"version":1,"server_url":"`+server.URL+`"`)))
-	require.NotZero(t, RunSkillUpload(t.Context(), bytes.NewReader(valid[:len(valid)-1])))
-	require.NotZero(t, RunSkillUpload(t.Context(), bytes.NewReader(append(valid, []byte(" garbage")...))))
-	require.NotZero(t, RunSkillUpload(t.Context(), bytes.NewReader(append(valid, bytes.Repeat([]byte(" "), maxSkillUploadTaskBytes+1-len(valid))...))))
+	require.NotZero(t, runSkillUploadTask(t, task))
+	require.Zero(t, requests.Load())
+}
+
+func TestRunSkillUploadRejectsInvalidArgumentsWithoutNetwork(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+	task := skillUploadTaskForTest(t, server.URL, "project", "key", "content")
+
+	require.NotZero(t, RunSkillUpload(t.Context(), nil, strings.NewReader(task.APIKey)))
+	require.NotZero(t, RunSkillUpload(t.Context(), append(skillUploadArgs(task), "extra"), strings.NewReader(task.APIKey)))
+	badHash := task
+	badHash.RawSHA256 = strings.Repeat("A", 64)
+	require.NotZero(t, RunSkillUpload(t.Context(), skillUploadArgs(badHash), strings.NewReader(task.APIKey)))
+	require.NotZero(t, RunSkillUpload(t.Context(), skillUploadArgs(task), strings.NewReader(strings.Repeat("x", maxSkillUploadAPIKeyBytes+1))))
 	require.Zero(t, requests.Load())
 }
 
@@ -112,24 +106,16 @@ func TestRunSkillUploadOmitsEmptyProjectHeader(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
-	content := "content"
+	task := skillUploadTaskForTest(t, server.URL, "", "key", "content")
 
-	require.Equal(t, 0, RunSkillUpload(t.Context(), bytes.NewReader(marshalSkillUploadTask(t, skillUploadTask{
-		Version:   skillUploadTaskVersion,
-		ServerURL: server.URL,
-		Project:   "",
-		APIKey:    "key",
-		RawSHA256: sha256Hex([]byte(content)),
-		Content:   content,
-	}))))
+	require.Equal(t, 0, runSkillUploadTask(t, task))
 	require.Equal(t, []string{"key"}, keys)
 	require.Empty(t, projects)
 }
 
 func TestRunSkillUploadDoesNotFollowRedirect(t *testing.T) {
 	var targetRequests atomic.Int32
-	var targetKey atomic.Value
-	var sourceKey atomic.Value
+	var targetKey, sourceKey atomic.Value
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		targetRequests.Add(1)
 		targetKey.Store(req.Header.Get("Gram-Key"))
@@ -142,27 +128,26 @@ func TestRunSkillUploadDoesNotFollowRedirect(t *testing.T) {
 		w.WriteHeader(http.StatusFound)
 	}))
 	t.Cleanup(redirect.Close)
-	content := "content"
+	task := skillUploadTaskForTest(t, redirect.URL, "project", "secret", "content")
 
-	code := RunSkillUpload(t.Context(), bytes.NewReader(marshalSkillUploadTask(t, skillUploadTask{
-		Version:   skillUploadTaskVersion,
-		ServerURL: redirect.URL,
-		Project:   "project",
-		APIKey:    "secret",
-		RawSHA256: sha256Hex([]byte(content)),
-		Content:   content,
-	})))
-
-	require.NotZero(t, code)
+	require.NotZero(t, runSkillUploadTask(t, task))
 	require.Equal(t, "secret", sourceKey.Load())
 	require.Zero(t, targetRequests.Load())
 	require.Nil(t, targetKey.Load())
 }
 
-func TestNewSkillUploadCommandUsesOnlySubcommandArg(t *testing.T) {
-	cmd, err := newSkillUploadCommand()
+func TestNewSkillUploadCommandKeepsCredentialOutOfArgsAndEnvironment(t *testing.T) {
+	task := skillUploadTaskForTest(t, "https://example.com", "project", "exact-secret-key-for-child-handoff", "private content")
+	t.Setenv("GRAM_HOOKS_API_KEY", task.APIKey)
+	t.Setenv("GRAM_HOOKS_ORG_KEY", task.APIKey)
+	cmd, err := newSkillUploadCommand(task)
 	require.NoError(t, err)
-	require.Equal(t, []string{cmd.Args[0], "upload-skill"}, cmd.Args)
+
+	args := strings.Join(cmd.Args, "\x00")
+	require.NotContains(t, args, task.APIKey)
+	require.NotContains(t, args, "private content")
+	require.Contains(t, args, task.SourcePath)
+	require.NotContains(t, strings.Join(cmd.Env, "\x00"), task.APIKey)
 }
 
 func TestRunSkillUploadRetriesTransientServerError(t *testing.T) {
@@ -178,18 +163,8 @@ func TestRunSkillUploadRetriesTransientServerError(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
-	content := "retry content"
 
-	code := RunSkillUpload(t.Context(), bytes.NewReader(marshalSkillUploadTask(t, skillUploadTask{
-		Version:   skillUploadTaskVersion,
-		ServerURL: server.URL,
-		Project:   "project",
-		APIKey:    "key",
-		RawSHA256: sha256Hex([]byte(content)),
-		Content:   content,
-	})))
-
-	require.Zero(t, code)
+	require.Zero(t, runSkillUploadTask(t, skillUploadTaskForTest(t, server.URL, "project", "key", "retry content")))
 	require.Equal(t, int32(2), requests.Load())
 }
 
@@ -210,18 +185,8 @@ func TestRunSkillUploadRetriesDroppedConnection(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
-	content := "retry-safe content"
 
-	code := RunSkillUpload(t.Context(), bytes.NewReader(marshalSkillUploadTask(t, skillUploadTask{
-		Version:   skillUploadTaskVersion,
-		ServerURL: server.URL,
-		Project:   "project",
-		APIKey:    "key",
-		RawSHA256: sha256Hex([]byte(content)),
-		Content:   content,
-	})))
-
-	require.Zero(t, code)
+	require.Zero(t, runSkillUploadTask(t, skillUploadTaskForTest(t, server.URL, "project", "key", "retry-safe content")))
 	require.Equal(t, int32(2), requests.Load())
 	require.Equal(t, "key", successfulKey)
 	require.Equal(t, "project", successfulProject)
@@ -234,105 +199,102 @@ func TestRunSkillUploadDoesNotRetryDefinitiveClientError(t *testing.T) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 	}))
 	t.Cleanup(server.Close)
-	content := "content"
 
-	code := RunSkillUpload(t.Context(), bytes.NewReader(marshalSkillUploadTask(t, skillUploadTask{
-		Version:   skillUploadTaskVersion,
-		ServerURL: server.URL,
-		Project:   "project",
-		APIKey:    "key",
-		RawSHA256: sha256Hex([]byte(content)),
-		Content:   content,
-	})))
-
-	require.NotZero(t, code)
+	require.NotZero(t, runSkillUploadTask(t, skillUploadTaskForTest(t, server.URL, "project", "key", "content")))
 	require.Equal(t, int32(1), requests.Load())
 }
 
-func TestStartSkillUploadProcessRoundTripsLargeControlContent(t *testing.T) {
+func TestStartSkillUploadProcessHandsOffExactCredentialAndMaximumContent(t *testing.T) {
 	originalCommand := newSkillUploadCommand
 	t.Cleanup(func() { newSkillUploadCommand = originalCommand })
-	newSkillUploadCommand = skillUploadHelperCommand("upload")
+	newSkillUploadCommand = skillUploadHelperCommand
 
-	content := strings.Repeat("\x00", maxSkillContentBytes)
-	observed := make(chan string, 1)
+	content := strings.Repeat("x", maxSkillContentBytes)
+	type upload struct {
+		key     string
+		content string
+	}
+	observed := make(chan upload, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var body struct {
 			Content string `json:"content"`
 		}
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
-		observed <- body.Content
+		observed <- upload{key: req.Header.Get("Gram-Key"), content: body.Content}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
-	task := marshalSkillUploadTask(t, skillUploadTask{
-		Version:   skillUploadTaskVersion,
-		ServerURL: server.URL,
-		Project:   "project",
-		APIKey:    "key",
-		RawSHA256: sha256Hex([]byte(content)),
-		Content:   content,
-	})
-	require.GreaterOrEqual(t, len(task), 64<<10)
-	require.LessOrEqual(t, len(task), maxSkillUploadTaskBytes)
+	task := skillUploadTaskForTest(t, server.URL, "project", "exact-pipe-key_123", content)
 
 	require.NoError(t, startSkillUploadProcess(task))
 	select {
 	case got := <-observed:
-		require.Equal(t, content, got)
+		require.Equal(t, task.APIKey, got.key)
+		require.Equal(t, content, got.content)
 	case <-time.After(5 * time.Second):
 		t.Fatal("detached upload did not arrive")
 	}
 }
 
-func TestStartSkillUploadProcessWatchdogStopsNonReader(t *testing.T) {
+func TestStartSkillUploadProcessReturnsWithoutWaitingForWorker(t *testing.T) {
 	originalCommand := newSkillUploadCommand
-	originalTimeout := skillUploadPipeTimeout
-	t.Cleanup(func() {
-		newSkillUploadCommand = originalCommand
-		skillUploadPipeTimeout = originalTimeout
-	})
-	newSkillUploadCommand = skillUploadHelperCommand("no-read")
-	skillUploadPipeTimeout = 50 * time.Millisecond
-	content := strings.Repeat("\x00", maxSkillContentBytes)
-	task := marshalSkillUploadTask(t, skillUploadTask{
-		Version:   skillUploadTaskVersion,
-		ServerURL: "https://example.com",
-		Project:   "project",
-		APIKey:    "key",
-		RawSHA256: sha256Hex([]byte(content)),
-		Content:   content,
-	})
+	t.Cleanup(func() { newSkillUploadCommand = originalCommand })
+	newSkillUploadCommand = func(task skillUploadTask) (*exec.Cmd, error) {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestSkillUploadHelperProcess$")
+		cmd.Env = append(envWithoutCredential(os.Environ(), task.APIKey), "GO_SKILL_UPLOAD_HELPER=delay")
+		return cmd, nil
+	}
+	task := skillUploadTaskForTest(t, "https://example.com", "project", "key", "content")
 
 	started := time.Now()
-	err := startSkillUploadProcess(task)
+	require.NoError(t, startSkillUploadProcess(task))
 
-	require.ErrorContains(t, err, "timed out")
-	require.Less(t, time.Since(started), 2*time.Second)
+	require.Less(t, time.Since(started), time.Second)
 }
 
 func TestSkillUploadHelperProcess(t *testing.T) {
 	switch os.Getenv("GO_SKILL_UPLOAD_HELPER") {
-	case "upload":
-		os.Exit(RunSkillUpload(context.Background(), os.Stdin))
-	case "no-read":
-		<-time.After(time.Hour)
+	case "delay":
+		<-time.After(2 * time.Second)
+		os.Exit(0)
+	case "1":
+	default:
+		return
 	}
+	separator := slices.Index(os.Args, "--")
+	if separator < 0 {
+		os.Exit(2)
+	}
+	os.Exit(RunSkillUpload(context.Background(), os.Args[separator+1:], os.Stdin))
 }
 
-func skillUploadHelperCommand(mode string) func() (*exec.Cmd, error) {
-	return func() (*exec.Cmd, error) {
-		cmd := exec.Command(os.Args[0], "-test.run=^TestSkillUploadHelperProcess$")
-		cmd.Env = append(os.Environ(), "GO_SKILL_UPLOAD_HELPER="+mode)
-		return cmd, nil
-	}
+func skillUploadHelperCommand(task skillUploadTask) (*exec.Cmd, error) {
+	args := append([]string{"-test.run=^TestSkillUploadHelperProcess$", "--"}, skillUploadArgs(task)...)
+	cmd := exec.Command(os.Args[0], args...)
+	cmd.Env = append(envWithoutCredential(os.Environ(), task.APIKey), "GO_SKILL_UPLOAD_HELPER=1")
+	return cmd, nil
 }
 
-func marshalSkillUploadTask(t *testing.T, task skillUploadTask) []byte {
+func skillUploadTaskForTest(t *testing.T, serverURL, project, key, content string) skillUploadTask {
 	t.Helper()
-	body, err := json.Marshal(task)
-	require.NoError(t, err)
-	return body
+	root := filepath.Join(t.TempDir(), "skills")
+	path := writeSkillManifest(t, filepath.Join(root, "test"), []byte(content))
+	return skillUploadTask{ServerURL: serverURL, Project: project, APIKey: key, RawSHA256: sha256Hex([]byte(content)), SourcePath: path, SourceRoot: root}
+}
+
+func runSkillUploadTask(t *testing.T, task skillUploadTask) int {
+	t.Helper()
+	return RunSkillUpload(t.Context(), skillUploadArgs(task), strings.NewReader(task.APIKey))
+}
+
+func skillUploadArgs(task skillUploadTask) []string {
+	return []string{
+		"--server-url=" + task.ServerURL,
+		"--project=" + task.Project,
+		"--raw-sha256=" + task.RawSHA256,
+		"--source-path=" + task.SourcePath,
+		"--source-root=" + task.SourceRoot,
+	}
 }
 
 func acceptedSkillUploadResult(rawSHA256 string, contentRequired bool) ingestResult {

@@ -47,10 +47,7 @@ func main() {
 			// detector sees the control plane recover.
 			os.Exit(relay.RunDrain(context.Background(), os.Stdout))
 		case "upload-skill":
-			if len(os.Args) != 2 {
-				os.Exit(2)
-			}
-			os.Exit(relay.RunSkillUpload(context.Background(), os.Stdin))
+			os.Exit(relay.RunSkillUpload(context.Background(), os.Args[2:], os.Stdin))
 		}
 	}
 

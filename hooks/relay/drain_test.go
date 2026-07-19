@@ -88,11 +88,11 @@ func TestDrainReplaysOldestFirstWithStoredKeys(t *testing.T) {
 	}
 }
 
-func TestDrainUploadsRequestedSpooledSkillContent(t *testing.T) {
+func TestDrainReplaysEnrichedSkillMetadataWithoutUploadingContent(t *testing.T) {
 	drainEnv(t)
 	content := []byte("# Offline skill\n")
 	rawSHA256 := sha256Hex(content)
-	path := writeSkillManifest(t, filepath.Join(t.TempDir(), ".claude", "skills", "offline"), content)
+	path := filepath.Join(t.TempDir(), ".claude", "skills", "offline", "SKILL.md")
 	capturedTasks := captureSkillUploadTasks(t)
 	fs := newFakeServer(t, nil)
 	fs.effects = requestedSkillCaptureEffects(true)
@@ -114,14 +114,12 @@ func TestDrainUploadsRequestedSpooledSkillContent(t *testing.T) {
 	summary := Drain(t.Context())
 
 	require.Equal(t, 1, summary.Replayed)
-	require.Equal(t, []skillUploadTask{{
-		Version:   skillUploadTaskVersion,
-		ServerURL: fs.URL,
-		Project:   "default",
-		APIKey:    "drain-key",
-		RawSHA256: rawSHA256,
-		Content:   string(content),
-	}}, capturedTasks())
+	require.Empty(t, capturedTasks())
+	replayed := fs.last().Data.Skill
+	require.Equal(t, "offline", replayed.Name)
+	require.Equal(t, "project", *replayed.SourceLevel)
+	require.Equal(t, path, *replayed.SourcePath)
+	require.Equal(t, rawSHA256, *replayed.RawSha256)
 }
 
 // TestDrainAbortsWhenServerStillDown pins backpressure: the first unsent

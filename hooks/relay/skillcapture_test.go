@@ -1,7 +1,6 @@
 package relay
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -63,12 +62,12 @@ func TestRelayEnrichesSkillAndCreatesRequestedUploadTask(t *testing.T) {
 	require.Equal(t, delivery.rawSHA256, *delivery.payload.Data.Skill.RawSha256)
 	require.Nil(t, delivery.payload.Data.Skill.Source)
 	require.Equal(t, []skillUploadTask{{
-		Version:   skillUploadTaskVersion,
-		ServerURL: delivery.serverURL,
-		Project:   "default",
-		APIKey:    "test-hooks-key",
-		RawSHA256: delivery.rawSHA256,
-		Content:   "# Captured skill\n",
+		ServerURL:  delivery.serverURL,
+		Project:    "default",
+		APIKey:     "test-hooks-key",
+		RawSHA256:  delivery.rawSHA256,
+		SourcePath: delivery.path,
+		SourceRoot: filepath.Dir(filepath.Dir(delivery.path)),
 	}}, delivery.tasks)
 }
 
@@ -259,9 +258,7 @@ func captureSkillUploadTasks(t *testing.T) func() []skillUploadTask {
 	original := startSkillUploadProcess
 	t.Cleanup(func() { startSkillUploadProcess = original })
 	var tasks []skillUploadTask
-	startSkillUploadProcess = func(body []byte) error {
-		var task skillUploadTask
-		require.NoError(t, json.Unmarshal(body, &task))
+	startSkillUploadProcess = func(task skillUploadTask) error {
 		tasks = append(tasks, task)
 		return nil
 	}

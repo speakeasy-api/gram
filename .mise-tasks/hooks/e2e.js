@@ -196,7 +196,7 @@ async function provisionHooksAuth(serverURL, session, projectSlug, rootDir) {
     ].join("\n"),
     { mode: 0o600 },
   );
-  return authFile;
+  return { authFile, key: keyRes.value.key };
 }
 function psqlArgs(sql) {
   const databaseURL = process.env.GRAM_DATABASE_URL;
@@ -282,60 +282,77 @@ async function runProcess(command, args, opts = {}) {
 // session_capture gates hook ingest; logs gates telemetry_logs writes; skills
 // enables content capture. Keep metadata-only disabled so the E2E exercises
 // the upload path.
-async function enableSessionCapture(organizationId) {
+async function setProductFeature(serverURL, sessionId, featureName, enabled) {
+  const res = await fetchOrFail(
+    `${serverURL}/rpc/productFeatures.set`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Gram-Session": sessionId,
+      },
+      body: JSON.stringify({ feature_name: featureName, enabled }),
+    },
+    `set ${featureName}=${enabled}`,
+  );
+  if (!res.ok) {
+    fail(
+      `failed to set ${featureName}=${enabled}: ${res.status} ${await res.text()}`,
+    );
+  }
+}
+async function enableSessionCapture(serverURL, session) {
   const sql = `
-    WITH previous AS MATERIALIZED (
-      SELECT feature_name
-      FROM organization_features
-      WHERE organization_id = '${sqlString(organizationId)}'
-        AND feature_name IN ('session_capture', 'logs', 'skills', 'skill_capture_metadata_only')
-        AND deleted IS FALSE
-    ), disabled AS (
-    UPDATE organization_features
-    SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-    WHERE organization_id = '${sqlString(organizationId)}'
-      AND feature_name = 'skill_capture_metadata_only'
+    SELECT feature_name
+    FROM organization_features
+    WHERE organization_id = '${sqlString(session.organizationId)}'
+      AND feature_name IN ('session_capture', 'logs', 'skills', 'skill_capture_metadata_only')
       AND deleted IS FALSE
-    ), enabled AS (
-      INSERT INTO organization_features (organization_id, feature_name)
-      VALUES
-        ('${sqlString(organizationId)}', 'session_capture'),
-        ('${sqlString(organizationId)}', 'logs'),
-        ('${sqlString(organizationId)}', 'skills')
-      ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
-      RETURNING feature_name
-    )
-    SELECT feature_name FROM previous ORDER BY feature_name;
+    ORDER BY feature_name;
   `;
   const res = await runProcess("psql", psqlArgs(sql));
   if (res.exitCode !== 0) {
     fail(`failed to enable session_capture:\n${res.stderr || res.stdout}`);
   }
-  return res.stdout.trim().split("\n").filter(Boolean);
+  const previous = res.stdout.trim().split("\n").filter(Boolean);
+  try {
+    await setProductFeature(
+      serverURL,
+      session.sessionId,
+      "skill_capture_metadata_only",
+      false,
+    );
+    for (const feature of ["session_capture", "logs", "skills"]) {
+      await setProductFeature(serverURL, session.sessionId, feature, true);
+    }
+  } catch (err) {
+    await restoreSessionCapture(serverURL, session, previous);
+    throw err;
+  }
+  return previous;
 }
-async function restoreSessionCapture(organizationId, previousFeatures) {
-  const values = previousFeatures
-    .map(
-      (feature) => `('${sqlString(organizationId)}', '${sqlString(feature)}')`,
-    )
-    .join(",\n        ");
-  const restore = values
-    ? `
-    INSERT INTO organization_features (organization_id, feature_name)
-    VALUES ${values}
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;`
-    : "";
-  const sql = `
-    UPDATE organization_features
-    SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-    WHERE organization_id = '${sqlString(organizationId)}'
-      AND feature_name IN ('session_capture', 'logs', 'skills', 'skill_capture_metadata_only')
-      AND deleted IS FALSE;
-    ${restore}
-  `;
-  const res = await runProcess("psql", psqlArgs(sql));
-  if (res.exitCode !== 0) {
-    fail(`failed to restore capture features:\n${res.stderr || res.stdout}`);
+async function restoreSessionCapture(serverURL, session, previousFeatures) {
+  const previous = new Set(previousFeatures);
+  const errors = [];
+  for (const feature of [
+    "session_capture",
+    "logs",
+    "skills",
+    "skill_capture_metadata_only",
+  ]) {
+    try {
+      await setProductFeature(
+        serverURL,
+        session.sessionId,
+        feature,
+        previous.has(feature),
+      );
+    } catch (err) {
+      errors.push(err);
+    }
+  }
+  if (errors.length > 0) {
+    throw new AggregateError(errors, "failed to restore capture features");
   }
 }
 function sqlString(value) {
@@ -1331,6 +1348,19 @@ async function getSkillCaptureEvidence(projectId, skillName, expectedProvider) {
     hasCapturedVersion: hasCapturedVersion === "t",
   };
 }
+async function countSkillObservations(projectId, skillName) {
+  const sql = `
+    SELECT COUNT(*)
+    FROM skill_observations
+    WHERE project_id = '${sqlString(projectId)}'
+      AND skill_name = '${sqlString(skillName)}';
+  `;
+  const res = await runProcess("psql", psqlArgs(sql));
+  if (res.exitCode !== 0) {
+    fail(`skill observation count query failed:\n${res.stderr || res.stdout}`);
+  }
+  return Number(res.stdout.trim() || "0");
+}
 function skillCaptureCheck(provider, fixture, evidence) {
   const expectedRawSHA256 = crypto
     .createHash("sha256")
@@ -1957,6 +1987,115 @@ async function prepareSkillFixture(skillsRoot, runId, provider) {
     content,
   };
 }
+async function startHookRequestProbe(targetServerURL) {
+  let uploadRequests = 0;
+  const server = http.createServer(async (req, res) => {
+    try {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      if (req.url?.startsWith("/rpc/hooks.uploadSkillContent")) {
+        uploadRequests++;
+      }
+      const headers = { ...req.headers };
+      for (const name of [
+        "host",
+        "connection",
+        "content-length",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+      ]) {
+        delete headers[name];
+      }
+      const upstream = await fetch(new URL(req.url ?? "/", targetServerURL), {
+        method: req.method,
+        headers,
+        body: chunks.length > 0 ? Buffer.concat(chunks) : undefined,
+        redirect: "manual",
+      });
+      const responseHeaders = Object.fromEntries(upstream.headers);
+      // fetch transparently decodes compressed responses, so forwarding the
+      // original encoding or length would corrupt the downstream response.
+      for (const name of [
+        "connection",
+        "content-encoding",
+        "content-length",
+        "transfer-encoding",
+      ]) {
+        delete responseHeaders[name];
+      }
+      res.writeHead(upstream.status, responseHeaders);
+      res.end(Buffer.from(await upstream.arrayBuffer()));
+    } catch (err) {
+      res.writeHead(502);
+      res.end(String(err));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    fail("hook request probe did not bind a TCP port");
+  }
+  return {
+    serverURL: `http://127.0.0.1:${address.port}`,
+    uploadRequests: () => uploadRequests,
+    close: async () =>
+      await new Promise((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      ),
+  };
+}
+async function uploadCountRemains(probe, expected) {
+  // Unit tests cover the no-worker branch deterministically. Since cmd.Start
+  // finishes before the hook returns, this short window only covers child scheduling.
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  return probe.uploadRequests() === expected;
+}
+async function runSyntheticClaudeSkillActivation(args) {
+  const configDir = path.join(args.rootDir, "synthetic-skill-hook");
+  const configPath = path.join(configDir, "speakeasy.json");
+  await fs.mkdir(configDir, { recursive: true });
+  await fs.writeFile(
+    configPath,
+    JSON.stringify({
+      server_url: args.serverURL,
+      project: args.projectSlug,
+      org: args.organizationId,
+    }),
+  );
+  const payload = JSON.stringify({
+    session_id: crypto.randomUUID(),
+    cwd: args.workdir,
+    hook_event_name: "PreToolUse",
+    permission_mode: "default",
+    tool_name: "Skill",
+    tool_input: { skill: args.skillName },
+    tool_use_id: crypto.randomUUID(),
+  });
+  return await runProcess(
+    args.binary,
+    [`--config=${configPath}`, "agenthooks", "run", "--provider=claude-code"],
+    {
+      cwd: args.workdir,
+      input: payload,
+      env: {
+        GRAM_HOOKS_API_KEY: args.hookKey,
+        GRAM_HOOKS_DISABLE_LOCAL_AUTH: "1",
+      },
+      timeoutMs: args.timeoutMs,
+    },
+  );
+}
 // Codex has no Skill tool: the sender infers activation from a $name prompt
 // mention (validated against the skill roots on disk) or from a reader tool
 // touching .../skills/<name>/SKILL.md. The prompt covers both arms.
@@ -2113,6 +2252,162 @@ async function runRatchetSuite(args) {
         ? "no hook telemetry for the unauthenticated run"
         : `${leaked.length} events reached Gram without credentials`,
   });
+  return { checks, commandResults };
+}
+
+async function runSkillUploadControlSuite(args) {
+  const checks = [];
+  const commandResults = [];
+  if (!args.providers.includes("claude")) {
+    return { checks, commandResults };
+  }
+  const binary = await buildHookBinary(args.artifactsDir);
+  const probe = await startHookRequestProbe(args.serverURL);
+  let metadataOnlyEnabled = false;
+  try {
+    const fixture = await prepareSkillFixture(
+      path.join(args.workdir, ".claude", "skills"),
+      `${args.runId}-known-hash`,
+      "control",
+    );
+    const run = async (skillFixture, label) => {
+      const result = await runSyntheticClaudeSkillActivation({
+        binary,
+        rootDir: args.rootDir,
+        workdir: args.workdir,
+        serverURL: probe.serverURL,
+        projectSlug: args.projectSlug,
+        organizationId: args.session.organizationId,
+        hookKey: args.hookKey,
+        skillName: skillFixture.skillName,
+        timeoutMs: args.timeoutSeconds * 1000,
+      });
+      result.provider = "claude";
+      commandResults.push(result);
+      await writeCommandArtifacts(args.artifactsDir, "claude", label, result);
+      if (result.exitCode !== 0 || result.timedOut) {
+        fail(
+          `synthetic ${label} activation failed:\n${result.stderr || result.stdout}`,
+        );
+      }
+    };
+
+    await run(fixture, "capture-skill-unknown-hash");
+    const initial = await poll(
+      Date.now() + args.pollSeconds * 1000,
+      async () =>
+        skillCaptureCheck(
+          "claude",
+          fixture,
+          await getSkillCaptureEvidence(
+            args.session.projectId,
+            fixture.skillName,
+            "claude",
+          ),
+        ),
+      (check) => check.status === "PASS",
+    );
+    checks.push(initial);
+    const baselineUploads = probe.uploadRequests();
+    const observationsBefore = await countSkillObservations(
+      args.session.projectId,
+      fixture.skillName,
+    );
+
+    await run(fixture, "capture-skill-known-hash");
+    const observationsAfter = await poll(
+      Date.now() + args.pollSeconds * 1000,
+      () => countSkillObservations(args.session.projectId, fixture.skillName),
+      (count) => count > observationsBefore,
+    );
+    const knownHashUploadCountStable = await uploadCountRemains(
+      probe,
+      baselineUploads,
+    );
+    checks.push({
+      provider: "claude",
+      feature: "skill.known_hash_metadata_only",
+      status:
+        baselineUploads > 0 &&
+        observationsAfter > observationsBefore &&
+        knownHashUploadCountStable
+          ? "PASS"
+          : "FAIL",
+      detail: `observations=${observationsBefore}->${observationsAfter} uploads=${baselineUploads}->${probe.uploadRequests()}`,
+    });
+
+    await setProductFeature(
+      args.serverURL,
+      args.session.sessionId,
+      "skill_capture_metadata_only",
+      true,
+    );
+    metadataOnlyEnabled = true;
+    const metadataFixture = await prepareSkillFixture(
+      path.join(args.workdir, ".claude", "skills"),
+      `${args.runId}-metadata-only`,
+      "privacy",
+    );
+    const uploadsBeforeMetadata = probe.uploadRequests();
+    await run(metadataFixture, "capture-skill-metadata-only");
+    const metadataEvidence = await poll(
+      Date.now() + args.pollSeconds * 1000,
+      () =>
+        getSkillCaptureEvidence(
+          args.session.projectId,
+          metadataFixture.skillName,
+          "claude",
+        ),
+      (evidence) => evidence !== null,
+    );
+    const expectedMetadataHash = crypto
+      .createHash("sha256")
+      .update(metadataFixture.content)
+      .digest("hex");
+    const metadataUploadCountStable = await uploadCountRemains(
+      probe,
+      uploadsBeforeMetadata,
+    );
+    checks.push({
+      provider: "claude",
+      feature: "skill.metadata_only_org_does_not_upload",
+      status:
+        metadataEvidence !== null &&
+        SOURCE_ALIASES.claude.includes(metadataEvidence.provider) &&
+        metadataEvidence.rawSHA256 === expectedMetadataHash &&
+        metadataEvidence.sourcePath === metadataFixture.manifestPath &&
+        metadataEvidence.sourceLevel === "project" &&
+        !metadataEvidence.hasRawHashMapping &&
+        !metadataEvidence.hasCapturedVersion &&
+        metadataUploadCountStable
+          ? "PASS"
+          : "FAIL",
+      detail: metadataEvidence
+        ? `raw_sha256=${metadataEvidence.rawSHA256} mapped=${metadataEvidence.hasRawHashMapping} captured-origin=${metadataEvidence.hasCapturedVersion} uploads=${uploadsBeforeMetadata}->${probe.uploadRequests()}`
+        : `no skill_observations row found for ${metadataFixture.skillName}`,
+    });
+  } finally {
+    const cleanups = [probe.close()];
+    if (metadataOnlyEnabled) {
+      cleanups.push(
+        setProductFeature(
+          args.serverURL,
+          args.session.sessionId,
+          "skill_capture_metadata_only",
+          false,
+        ),
+      );
+    }
+    const failed = (await Promise.allSettled(cleanups)).filter(
+      (result) => result.status === "rejected",
+    );
+    if (failed.length > 0) {
+      throw new AggregateError(
+        failed.map((result) => result.reason),
+        "failed to clean up skill upload controls",
+      );
+    }
+  }
   return { checks, commandResults };
 }
 
@@ -2286,6 +2581,9 @@ async function runCaptureSuite(args) {
       checks.push(captureCheck);
     }
   }
+  const uploadControls = await runSkillUploadControlSuite(args);
+  checks.push(...uploadControls.checks);
+  commandResults.push(...uploadControls.commandResults);
   return { checks, commandResults };
 }
 async function runShadowMCPSuite(args) {
@@ -2599,19 +2897,19 @@ async function main() {
   intro(`Gram hooks E2E ${runId}`);
   let success = false;
   let organizationId = null;
+  let sessionId = null;
   let previousCaptureFeatures = null;
   let cleanupError = null;
   try {
     const session = await getSessionInfo(serverURL, args.project);
     organizationId = session.organizationId;
+    sessionId = session.sessionId;
     log.info(
       `Authenticated as ${session.userEmail}; org=${session.organizationId} project=${args.project}`,
     );
-    previousCaptureFeatures = await enableSessionCapture(
-      session.organizationId,
-    );
+    previousCaptureFeatures = await enableSessionCapture(serverURL, session);
     log.info("Enabled session_capture, logs, and skills for the active org");
-    const hooksAuthFile = await provisionHooksAuth(
+    const hooksAuth = await provisionHooksAuth(
       serverURL,
       session,
       args.project,
@@ -2619,10 +2917,10 @@ async function main() {
     );
     // Make the provisioned cache authoritative for every provider spawn:
     // scrub ambient key env vars that would otherwise short-circuit it.
-    process.env.GRAM_HOOKS_AUTH_FILE = hooksAuthFile;
+    process.env.GRAM_HOOKS_AUTH_FILE = hooksAuth.authFile;
     delete process.env.GRAM_HOOKS_API_KEY;
     delete process.env.GRAM_API_KEY;
-    log.info(`Provisioned hooks auth cache at ${hooksAuthFile}`);
+    log.info(`Provisioned hooks auth cache at ${hooksAuth.authFile}`);
     if (args.providers.includes("codex")) {
       codexEnv = await prepareCodexEnv(rootDir);
       log.info(`Prepared isolated Codex home at ${codexEnv.HOME}`);
@@ -2666,6 +2964,7 @@ async function main() {
       serverURL,
       session,
       projectSlug: args.project,
+      hookKey: hooksAuth.key,
       startedUnixNano,
     };
     if (args.suites.includes("capture")) {
@@ -2697,9 +2996,13 @@ async function main() {
     }
     success = true;
   } finally {
-    if (organizationId && previousCaptureFeatures) {
+    if (organizationId && sessionId && previousCaptureFeatures) {
       try {
-        await restoreSessionCapture(organizationId, previousCaptureFeatures);
+        await restoreSessionCapture(
+          serverURL,
+          { organizationId, sessionId },
+          previousCaptureFeatures,
+        );
         log.info("Restored capture feature settings for the active org");
       } catch (err) {
         cleanupError = err;

@@ -137,7 +137,6 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			clients[entry.ServerURL] = cl
 		}
 		res := cl.send(ctx, a.c, entry.Envelope, entry.IdempotencyKey)
-		uploadCreds := a.c
 		if res.authRejected {
 			// A rejected credential is machine state, not event state — the
 			// backlog would deliver fine after a re-login or key rotation.
@@ -148,7 +147,6 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 				org := creds{ServerURL: entry.ServerURL, APIKey: a.orgKey, Project: entry.ProjectSlug, Email: "", Org: entry.OrgID, Source: credOrg}
 				res = cl.send(ctx, org, entry.Envelope, entry.IdempotencyKey)
 				if !res.authRejected {
-					uploadCreds = org
 					auths[key] = drainAuth{c: org, ok: true, orgKey: a.orgKey}
 				}
 			}
@@ -160,7 +158,6 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 		}
 		switch {
 		case res.accepted():
-			_ = startSkillContentUpload(uploadCreds, res, resolveSpooledSkill(&entry.Envelope))
 			if removeSpoolEntry(path) {
 				s.Replayed++
 			} else {
