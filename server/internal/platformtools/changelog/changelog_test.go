@@ -1,0 +1,201 @@
+package changelog
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+)
+
+// fixtureFeed mirrors the shape of speakeasy.com/changelog/data/gram.json:
+// an array of posts with raw markdown content (leading "### " title, prose
+// summary paragraph, "#### " itemized sections) and version/date/product
+// metadata.
+const fixtureFeed = `[
+  {
+    "slug": "v0-99-0",
+    "content": "### Assistants learn about the changelog\n\nThe managed assistant can now read release notes.\n\n#### Features\n\n- **Changelog tool** [#1](https://github.com/example/pull/1) - Adds a platform tool.\n- **Second item** - Another feature.\n\n#### Bug Fixes\n\n- **Fixed a thing** - It works now.",
+    "metadata": {
+      "version": "0.99.0",
+      "date": "2026-07-17T00:00:00.000Z",
+      "product": "platform",
+      "author": {"name": "Someone"},
+      "github_url": "https://github.com/example/releases/tag/server%400.99.0"
+    }
+  },
+  {
+    "slug": "v1-50-0",
+    "content": "### Dashboard release\n\nDashboard summary text.",
+    "metadata": {
+      "version": "1.50.0",
+      "date": "2026-07-15T00:00:00.000Z",
+      "product": "dashboard",
+      "author": {"name": "Someone"},
+      "github_url": "https://github.com/example/releases/tag/%40gram-ai%2Felements%401.50.0"
+    }
+  }
+]`
+
+func TestClientEntriesParsesFeed(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(fixtureFeed))
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(server.Client(), server.URL)
+
+	entries, err := client.Entries(t.Context())
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+
+	first := entries[0]
+	require.Equal(t, "v0.99.0", first.Version)
+	require.Equal(t, "platform", first.Product)
+	require.Equal(t, "2026-07-17", first.Date)
+	require.Equal(t, "Assistants learn about the changelog", first.Title)
+	require.Equal(t, "The managed assistant can now read release notes.", first.Summary)
+	require.Equal(t, "https://www.speakeasy.com/changelog/release/0.99.0?product=mcp-platform", first.URL)
+	require.Contains(t, first.Details, "#### Features")
+	require.Contains(t, first.Details, "- **Changelog tool** [#1](https://github.com/example/pull/1) - Adds a platform tool.")
+	require.Contains(t, first.Details, "#### Bug Fixes")
+	require.NotContains(t, first.Details, "### Assistants learn about the changelog")
+
+	second := entries[1]
+	require.Equal(t, "v1.50.0", second.Version)
+	require.Equal(t, "dashboard", second.Product)
+	require.Equal(t, "2026-07-15", second.Date)
+	require.Equal(t, "Dashboard release", second.Title)
+	require.Equal(t, "Dashboard summary text.", second.Summary)
+	require.Empty(t, second.Details)
+}
+
+func TestGetChangelogToolCallDefaults(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(fixtureFeed))
+	}))
+	t.Cleanup(server.Close)
+
+	tool := NewGetChangelogToolWithURL(server.Client(), server.URL)
+
+	var out bytes.Buffer
+	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{}, strings.NewReader(`{}`), &out)
+	require.NoError(t, err)
+
+	var result struct {
+		Entries   []Entry `json:"entries"`
+		SourceURL string  `json:"source_url"`
+	}
+	require.NoError(t, json.Unmarshal(out.Bytes(), &result))
+	require.Equal(t, server.URL, result.SourceURL)
+	require.Len(t, result.Entries, 2)
+	require.Equal(t, "v0.99.0", result.Entries[0].Version)
+	// Details are opt-in to keep default responses small.
+	require.Empty(t, result.Entries[0].Details)
+	require.NotEmpty(t, result.Entries[0].Summary)
+}
+
+func TestGetChangelogToolCallProductFilterAndDetails(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(fixtureFeed))
+	}))
+	t.Cleanup(server.Close)
+
+	tool := NewGetChangelogToolWithURL(server.Client(), server.URL)
+
+	var out bytes.Buffer
+	payload := `{"product": "platform", "include_details": true, "limit": 1}`
+	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{}, strings.NewReader(payload), &out)
+	require.NoError(t, err)
+
+	var result struct {
+		Entries []Entry `json:"entries"`
+	}
+	require.NoError(t, json.Unmarshal(out.Bytes(), &result))
+	require.Len(t, result.Entries, 1)
+	require.Equal(t, "v0.99.0", result.Entries[0].Version)
+	require.Equal(t, "platform", result.Entries[0].Product)
+	require.Contains(t, result.Entries[0].Details, "#### Features")
+}
+
+func TestClientServesStaleEntriesOnFetchError(t *testing.T) {
+	t.Parallel()
+
+	var failing atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if failing.Load() {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(fixtureFeed))
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(server.Client(), server.URL)
+
+	entries, err := client.Entries(t.Context())
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+
+	// Expire the cache and make the origin fail: stale entries should be
+	// served instead of surfacing the fetch error.
+	failing.Store(true)
+	client.mu.Lock()
+	client.fetchedAt = time.Now().Add(-time.Hour)
+	client.mu.Unlock()
+
+	entries, err = client.Entries(t.Context())
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+}
+
+func TestClientErrorsWhenNoCacheAndFetchFails(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(server.Client(), server.URL)
+
+	_, err := client.Entries(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unexpected status 500")
+}
+
+func TestGetChangelogDescriptor(t *testing.T) {
+	t.Parallel()
+
+	tool := NewGetChangelogTool(&http.Client{})
+	descriptor := tool.Descriptor()
+
+	require.Equal(t, "platform_get_changelog", descriptor.Name)
+	require.Equal(t, "changelog", descriptor.SourceSlug)
+	require.Equal(t, "get_changelog", descriptor.HandlerName)
+	require.NotEmpty(t, descriptor.Description)
+
+	var schema map[string]any
+	require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
+	properties, ok := schema["properties"].(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, properties, "limit")
+	require.Contains(t, properties, "product")
+	require.Contains(t, properties, "include_details")
+	require.NotNil(t, descriptor.Annotations)
+	require.NotNil(t, descriptor.Annotations.ReadOnlyHint)
+	require.True(t, *descriptor.Annotations.ReadOnlyHint)
+}

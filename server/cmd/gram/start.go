@@ -1205,6 +1205,9 @@ func newStartCommand() *cli.Command {
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantRiskTools(riskService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDeploymentsTools(deploymentsService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantSkillsTools(skillsService)...)
+			// One-off fetches on a cold cache; a pooled client would only hold
+			// idle connections to the marketing site.
+			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChangelogTools(guardianPolicy.Client())...)
 			maps.Copy(platformToolsets, platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 				AssistantMemoryTools:          memoryTools,
 				AssistantTriggerTools:         triggerTools,
