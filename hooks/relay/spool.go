@@ -63,14 +63,15 @@ var (
 // came from. The envelope itself already contains the event's occurred_at,
 // so replay preserves original timestamps.
 type spoolEntry struct {
-	V              int                          `json:"v"`
-	IdempotencyKey string                       `json:"idempotency_key"`
-	ServerURL      string                       `json:"server_url"`
-	OrgID          string                       `json:"org_id,omitempty"`
-	ProjectSlug    string                       `json:"project_slug,omitempty"`
-	ConfigPath     string                       `json:"config_path,omitempty"`
-	SpooledAt      time.Time                    `json:"spooled_at"`
-	Envelope       components.IngestRequestBody `json:"envelope"`
+	V               int                          `json:"v"`
+	IdempotencyKey  string                       `json:"idempotency_key"`
+	ServerURL       string                       `json:"server_url"`
+	OrgID           string                       `json:"org_id,omitempty"`
+	ProjectSlug     string                       `json:"project_slug,omitempty"`
+	ConfigPath      string                       `json:"config_path,omitempty"`
+	SkillSourceRoot string                       `json:"skill_source_root,omitempty"`
+	SpooledAt       time.Time                    `json:"spooled_at"`
+	Envelope        components.IngestRequestBody `json:"envelope"`
 }
 
 // maxSpoolEntryBytes caps one entry on disk. A single entry must never
@@ -84,7 +85,7 @@ const maxSpoolEntryBytes = 8 << 20
 // control plane. Best-effort by design: a spool failure only logs — the
 // event's gating outcome was already decided, and buffering must never
 // affect the user's session.
-func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody) {
+func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody, skill *resolvedSkill) {
 	dir := spoolDir()
 	if dir == "" {
 		r.debugf("spool: no writable state dir; entry dropped")
@@ -99,6 +100,9 @@ func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody
 		ConfigPath:     r.cfg.ConfigPath,
 		SpooledAt:      time.Now().UTC(),
 		Envelope:       payload,
+	}
+	if skill != nil && skill.captureReady {
+		entry.SkillSourceRoot = skill.root
 	}
 	data, err := json.Marshal(entry)
 	if err != nil {
