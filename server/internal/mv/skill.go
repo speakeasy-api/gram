@@ -30,7 +30,7 @@ func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount in
 		VersionCount:    versionCount,
 		FirstSeenAt:     conv.PtrEmpty(conv.FromPGTimestamptz(skill.FirstSeenAt)),
 		LastSeenAt:      conv.PtrEmpty(conv.FromPGTimestamptz(skill.LastSeenAt)),
-		SeenCount:       skill.SeenCount.Int64,
+		SeenCount:       skill.SeenCount,
 		CreatedAt:       conv.FromPGTimestamptz(skill.CreatedAt),
 		UpdatedAt:       conv.FromPGTimestamptz(skill.UpdatedAt),
 	}

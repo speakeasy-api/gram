@@ -402,9 +402,9 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve skill by manifest name").LogError(ctx, logger)
 	}
 	if !createdSkill && skill.SourceKind == "captured" {
-		_, _, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		_, versionCount, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 		switch {
-		case errors.Is(stateErr, pgx.ErrNoRows):
+		case stateErr == nil && versionCount == 0, errors.Is(stateErr, pgx.ErrNoRows):
 			skill, err = queries.PromoteObservedSkillToManual(ctx, repo.PromoteObservedSkillToManualParams{
 				ProjectID: *authCtx.ProjectID,
 				ID:        skill.ID,
