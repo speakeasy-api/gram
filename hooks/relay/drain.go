@@ -160,7 +160,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 		}
 		switch {
 		case res.accepted():
-			if err := startSkillContentUpload(replayCreds, res, replayedSkill(entry)); err != nil {
+			if err := uploadSkillContent(ctx, replayCreds, res, replayedSkill(entry)); err != nil {
 				s.Skipped++
 				continue
 			}
