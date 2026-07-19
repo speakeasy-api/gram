@@ -12,7 +12,7 @@ import { useChatDeleteMutation } from "@gram/client/react-query/chatDelete.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { resolveScopeBillingMode } from "@/components/estimated-cost-utils";
@@ -139,6 +139,10 @@ export function CostsExplorer(): JSX.Element {
   // Which session's detail overlay is open (ephemeral UI, not drill state — so
   // it lives in component state rather than the URL).
   const [openChatId, setOpenChatId] = useState<string | null>(null);
+  // Free-text filter over the visible table rows (ephemeral view state, like
+  // openChatId). Client-side only: the table already holds the server-ranked
+  // top-N slice, so search narrows what's shown without touching the queries.
+  const [breakdownSearch, setBreakdownSearch] = useState("");
 
   // Drill state is the URL. The filter `path` is encoded as pathname segments
   // (so the breadcrumb tracks it and the view is shareable/refresh-safe); the
@@ -525,6 +529,20 @@ export function CostsExplorer(): JSX.Element {
     ? rows.filter((r) => r.groupValue !== "")
     : rows;
 
+  // Search narrows the table only — headline stats, widgets, and CSV-adjacent
+  // aggregates stay slice totals. Rows match on both the raw group value and
+  // its display name (a user's email matches their prettified name too).
+  const normalizedSearch = breakdownSearch.trim().toLowerCase();
+  const searchedRows = normalizedSearch
+    ? visibleRows.filter(
+        (r) =>
+          r.groupValue.toLowerCase().includes(normalizedSearch) ||
+          displayName(groupBy, r.groupValue)
+            .toLowerCase()
+            .includes(normalizedSearch),
+      )
+    : visibleRows;
+
   // At the root, an attribution breakdown is presented as a "collection" (e.g.
   // "MCP Servers") rather than the project — and its headline stats then sum
   // only the attributed rows, so the hero reconciles with the residual-hidden
@@ -905,6 +923,23 @@ export function CostsExplorer(): JSX.Element {
       : []),
   ];
   const axisValue: string = sessionsMode ? SESSIONS_AXIS : groupBy;
+
+  // A search typed against one cut is meaningless against another — clear it
+  // when the drill path or the breakdown axis changes.
+  useEffect(() => {
+    setBreakdownSearch("");
+  }, [location.pathname, axisValue]);
+
+  // The session list matches on everything its rows display: title, chat id,
+  // user, agent, and model.
+  const allSessions = sessionsData?.sessions ?? [];
+  const searchedSessions = normalizedSearch
+    ? allSessions.filter((s) =>
+        [s.title, s.gramChatId, s.userEmail, s.hookSource, s.model].some(
+          (field) => field?.toLowerCase().includes(normalizedSearch),
+        ),
+      )
+    : allSessions;
   const onViewSessions =
     sessionsMode || !sliceScoped
       ? undefined
@@ -1085,28 +1120,33 @@ export function CostsExplorer(): JSX.Element {
         axisOptions={axisOptions}
         axisHint={axisHint}
         onAxisChange={(value) => changeGroupBy(value as Axis)}
-        rows={visibleRows}
+        searchValue={breakdownSearch}
+        onSearchChange={setBreakdownSearch}
+        rows={searchedRows}
         billingMode={viewBillingMode}
         onDrill={drillInto}
         tableOverride={
           sessionsMode ? (
             <SessionTable
-              sessions={sessionsData?.sessions ?? []}
+              sessions={searchedSessions}
               isLoading={sessionsFetching && !sessionsData}
               isError={sessionsError}
               onOpen={setOpenChatId}
               hiddenColumns={hiddenSessionColumns}
               billingMode={viewBillingMode}
+              emptyMessage={
+                normalizedSearch ? "No matches for your search." : undefined
+              }
             />
           ) : undefined
         }
         overrideCsv={
           sessionsMode
             ? {
-                rowCount: sessionsData?.sessions.length ?? 0,
+                rowCount: searchedSessions.length,
                 build: () =>
                   buildSessionCsv(
-                    sessionsData?.sessions ?? [],
+                    searchedSessions,
                     hiddenSessionColumns,
                     viewBillingMode,
                   ),

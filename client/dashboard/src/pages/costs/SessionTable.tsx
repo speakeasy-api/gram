@@ -234,6 +234,9 @@ export type SessionTableProps = {
   // The view's resolved billing mode; "metered" shows real cost ("Cost") rather
   // than the API-rate estimate ("Est. cost") on the cost column.
   billingMode?: string;
+  // Zero-row copy override — e.g. an active search should read "no matches",
+  // not "no sessions".
+  emptyMessage?: string;
 };
 
 /**
@@ -253,6 +256,7 @@ export function SessionTable({
   onOpen,
   hiddenColumns,
   billingMode,
+  emptyMessage,
 }: SessionTableProps): JSX.Element {
   // Server already ranks by cost; mirror that as the default header indicator.
   const [sort, setSort] = useState<Sort>({ key: "cost", dir: "desc" });
@@ -348,7 +352,7 @@ export function SessionTable({
           style={{ gridColumn: "1 / -1" }}
         >
           <Type className="text-muted-foreground">
-            No sessions in this slice.
+            {emptyMessage ?? "No sessions in this slice."}
           </Type>
         </div>
       ) : (
