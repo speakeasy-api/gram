@@ -61,6 +61,14 @@ type poller[T any] struct {
 	// granularity truncates window bounds, e.g. to whole minutes for
 	// bucketed reports; zero leaves bounds untouched.
 	granularity time.Duration
+	// resumeOffset shifts a fetch's start past its window start when that
+	// start is a completed watermark — the inclusive end of already-ingested
+	// data — so the boundary event is not fetched twice. Sources with
+	// inclusive-end windows (Cursor, millisecond timestamps) set the smallest
+	// representable step; exclusive-end bucketed sources (Admin Analytics)
+	// leave it zero. The initial-lookback boundary was never fetched, so it
+	// is exempt from the offset.
+	resumeOffset time.Duration
 }
 
 func (p *poller[T]) sync(ctx context.Context, cfg Config, watermarkAt time.Time, src source[T], endTime time.Time) error {
@@ -71,7 +79,12 @@ func (p *poller[T]) sync(ctx context.Context, cfg Config, watermarkAt time.Time,
 	}
 
 	windowStart := watermarkAt.UTC()
-	if windowStart.IsZero() {
+	// A non-zero watermark is the inclusive end of already-ingested data and
+	// must be skipped by resumeOffset; the synthetic initial-lookback
+	// boundary was never fetched and must not be, or the event exactly on it
+	// would be permanently missed.
+	resumed := !windowStart.IsZero()
+	if !resumed {
 		windowStart = endTime.Add(-p.initialLookback)
 	}
 	windowStart = windowStart.Truncate(p.granularity)
@@ -83,7 +96,11 @@ func (p *poller[T]) sync(ctx context.Context, cfg Config, watermarkAt time.Time,
 			windowEnd = windowStart.Add(p.maxWindow)
 		}
 
-		if err := p.fetchAndProcessWindow(ctx, src, windowStart, windowEnd); err != nil {
+		fetchStart := windowStart
+		if resumed {
+			fetchStart = fetchStart.Add(p.resumeOffset)
+		}
+		if err := p.fetchAndProcessWindow(ctx, src, fetchStart, windowEnd); err != nil {
 			return err
 		}
 
@@ -91,6 +108,9 @@ func (p *poller[T]) sync(ctx context.Context, cfg Config, watermarkAt time.Time,
 			return fmt.Errorf("advance %s watermark: %w", p.schedule, err)
 		}
 		windowStart = windowEnd
+		// Later windows start at the previous window's fetched end, which is
+		// a completed boundary like a stored watermark.
+		resumed = true
 	}
 	return nil
 }

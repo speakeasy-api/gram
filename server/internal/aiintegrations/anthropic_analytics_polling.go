@@ -148,6 +148,9 @@ func (p *AnthropicAnalyticsPoller) Sync(ctx context.Context, cfg Config, endTime
 		initialLookback: anthropicAnalyticsInitialLookback,
 		maxWindow:       anthropicAnalyticsMaxWindow,
 		granularity:     time.Minute,
+		// Report buckets are exclusive-end, so resumed windows re-use the
+		// watermark as their inclusive starting_at with no skip.
+		resumeOffset: 0,
 	}
 	if err := runner.sync(ctx, cfg, cfg.PollWatermarkAt, p.newSource(client, cfg), endTime); err != nil {
 		return classifyAnthropicAnalyticsErr(err)

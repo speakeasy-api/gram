@@ -59,6 +59,9 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 		initialLookback: initialUsagePollLookback,
 		maxWindow:       0,
 		granularity:     0,
+		// Cursor windows are end-inclusive at millisecond resolution, so
+		// resumed fetches start one millisecond past the stored watermark.
+		resumeOffset: time.Millisecond,
 	}
 	src := &cursorUsageSource{
 		client: cursorapi.New(s.guardianPolicy, cursorapi.WithAPIKey(cfg.APIKey)),
@@ -69,8 +72,8 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 }
 
 // cursorUsageSource adapts one Cursor usage-events response page to the
-// time-window poller. The stored watermark is the completed inclusive end of
-// the previous window, so fetches start one millisecond past the window start.
+// time-window poller. Fetch bounds arrive ready to use: the poller's
+// resumeOffset already skips resumed fetches past the stored watermark.
 type cursorUsageSource struct {
 	client *cursorapi.Client
 	svc    *UsagePollService
@@ -92,7 +95,7 @@ func (src *cursorUsageSource) FetchPage(ctx context.Context, start, end time.Tim
 	}
 
 	res, err := src.client.FetchUsageEventsPage(ctx, cursorapi.FetchUsageEventsPageParams{
-		Start: start.Add(time.Millisecond),
+		Start: start,
 		End:   end,
 		Page:  pageNum,
 	})
