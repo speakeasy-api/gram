@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,8 +20,8 @@ import (
 // classification on top instead.
 
 var (
-	codexSkillPathRE  = regexp.MustCompile(`skills/(?:\.system/)?([A-Za-z0-9][A-Za-z0-9._-]*)/SKILL\.md`)
-	codexSkillTokenRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	codexSkillPathRE = regexp.MustCompile(`skills/(?:\.system/)?([A-Za-z0-9][A-Za-z0-9._-]*)/SKILL\.md`)
+	skillTokenRE     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 )
 
 // codexToolSkillName infers an implicit activation from a reader tool opening
@@ -39,6 +40,33 @@ func codexToolSkillName(tool *agenthooks.ToolCall) string {
 	// The bash senders' greedy sed match resolved the last occurrence; keep
 	// that so both channels report the same skill for one command.
 	return matches[len(matches)-1][1]
+}
+
+func cursorToolSkillName(tool *agenthooks.ToolCall) string {
+	// Cursor also emits beforeReadFile as ReadFile for the same activation.
+	if tool.Name != "Read" {
+		return ""
+	}
+	var input struct {
+		FilePath string `json:"file_path"`
+		Path     string `json:"path"`
+	}
+	if json.Unmarshal(tool.Input, &input) != nil {
+		return ""
+	}
+	path := input.FilePath
+	if path == "" {
+		path = input.Path
+	}
+	manifestDir := filepath.Dir(path)
+	if filepath.Base(path) != "SKILL.md" || filepath.Base(filepath.Dir(manifestDir)) != "skills" {
+		return ""
+	}
+	name := filepath.Base(manifestDir)
+	if !skillTokenRE.MatchString(name) {
+		return ""
+	}
+	return name
 }
 
 // codexPromptSkillName infers an explicit activation from a $skill-name
@@ -64,7 +92,7 @@ func codexPromptSkillName(prompt, cwd string) string {
 	names := []string{}
 	for _, f := range fields {
 		name, ok := strings.CutPrefix(f, "$")
-		if !ok || !codexSkillTokenRE.MatchString(name) {
+		if !ok || !skillTokenRE.MatchString(name) {
 			continue
 		}
 		// Sentence-final punctuation survives tokenization ("use $foo.").

@@ -1563,7 +1563,7 @@ function featureChecks(provider, evidence, chats, opts = {}) {
         ? "provider rows load in one chat generation"
         : `chat rows split across generations: ${splitGenerationChats.join("; ")}`,
   });
-  if (provider === "claude" || provider === "codex") {
+  if (["claude", "cursor", "codex"].includes(provider)) {
     const skillName = opts.skillName;
     const skillActivated = evidence.some(
       (r) =>
@@ -1825,6 +1825,13 @@ function skillPrompt(runId, skillName, provider, skillDir) {
       `Then reply with exactly: GRAM_HOOKS_E2E_OK ${runId} codex skill`,
     ].join(" ");
   }
+  if (provider === "cursor") {
+    return [
+      `Gram hooks E2E skill run ${runId} for cursor.`,
+      `Use the ${skillName} skill and follow its instructions.`,
+      `Then reply with exactly: GRAM_HOOKS_E2E_OK ${runId} cursor skill`,
+    ].join(" ");
+  }
   return [
     `Gram hooks E2E skill run ${runId} for claude.`,
     `Run the Gram hooks E2E skill probe by invoking the Skill tool with skill "${skillName}".`,
@@ -1854,6 +1861,29 @@ async function runSkillScenario(args) {
       { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
     );
     res.provider = "codex";
+    return res;
+  }
+  if (args.provider === "cursor") {
+    await prepareCursorProjectHooks(args.pluginDir, args.workdir);
+    const res = await runProcess(
+      "cursor",
+      [
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--trust",
+        "--force",
+        "--approve-mcps",
+        "--plugin-dir",
+        args.pluginDir,
+        "--workspace",
+        args.workdir,
+        prompt,
+      ],
+      { cwd: args.workdir, timeoutMs: args.timeoutMs },
+    );
+    res.provider = "cursor";
     return res;
   }
   const sessionId = crypto.randomUUID();
@@ -2002,14 +2032,18 @@ async function runCaptureSuite(args) {
         }
       }
     }
-    if (provider === "claude" || provider === "codex") {
+    if (["claude", "cursor", "codex"].includes(provider)) {
       // Codex validates $name mentions against the skill roots on disk;
       // CODEX_HOME/skills is the only root the isolated env controls
       // regardless of the hook process cwd.
       const skillsRoot =
         provider === "codex"
           ? path.join(args.codexEnv.CODEX_HOME, "skills")
-          : path.join(args.workdir, ".claude", "skills");
+          : path.join(
+              args.workdir,
+              provider === "cursor" ? ".cursor" : ".claude",
+              "skills",
+            );
       const skill = await prepareSkillFixture(skillsRoot, args.runId, provider);
       skillNamesByProvider.set(provider, skill.skillName);
       log.info(`${provider}: running capture skill-activation scenario`);
