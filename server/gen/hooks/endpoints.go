@@ -16,12 +16,13 @@ import (
 
 // Endpoints wraps the "hooks" service endpoints.
 type Endpoints struct {
-	Claude  goa.Endpoint
-	Cursor  goa.Endpoint
-	Codex   goa.Endpoint
-	Ingest  goa.Endpoint
-	Logs    goa.Endpoint
-	Metrics goa.Endpoint
+	Claude             goa.Endpoint
+	Cursor             goa.Endpoint
+	Codex              goa.Endpoint
+	Ingest             goa.Endpoint
+	UploadSkillContent goa.Endpoint
+	Logs               goa.Endpoint
+	Metrics            goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "hooks" service with endpoints.
@@ -29,12 +30,13 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Claude:  NewClaudeEndpoint(s),
-		Cursor:  NewCursorEndpoint(s, a.APIKeyAuth),
-		Codex:   NewCodexEndpoint(s, a.APIKeyAuth),
-		Ingest:  NewIngestEndpoint(s),
-		Logs:    NewLogsEndpoint(s, a.APIKeyAuth),
-		Metrics: NewMetricsEndpoint(s, a.APIKeyAuth),
+		Claude:             NewClaudeEndpoint(s),
+		Cursor:             NewCursorEndpoint(s, a.APIKeyAuth),
+		Codex:              NewCodexEndpoint(s, a.APIKeyAuth),
+		Ingest:             NewIngestEndpoint(s),
+		UploadSkillContent: NewUploadSkillContentEndpoint(s, a.APIKeyAuth),
+		Logs:               NewLogsEndpoint(s, a.APIKeyAuth),
+		Metrics:            NewMetricsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -44,6 +46,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Cursor = m(e.Cursor)
 	e.Codex = m(e.Codex)
 	e.Ingest = m(e.Ingest)
+	e.UploadSkillContent = m(e.UploadSkillContent)
 	e.Logs = m(e.Logs)
 	e.Metrics = m(e.Metrics)
 }
@@ -133,6 +136,41 @@ func NewIngestEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*IngestPayload)
 		return s.Ingest(ctx, p)
+	}
+}
+
+// NewUploadSkillContentEndpoint returns an endpoint function that calls the
+// method "uploadSkillContent" of service "hooks".
+func NewUploadSkillContentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UploadSkillContentPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"hooks"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.UploadSkillContent(ctx, p)
 	}
 }
 

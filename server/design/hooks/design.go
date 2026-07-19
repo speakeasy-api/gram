@@ -217,8 +217,25 @@ var HookMessageData = Type("HookMessageData", func() {
 var HookSkillData = Type("HookSkillData", func() {
 	Description("Skill activation payload.")
 	Required("name")
-	Attribute("name", String, "Activated skill name.")
-	Attribute("source", String, "Skill source or namespace, if available.")
+	Attribute("name", String, "Activated skill name.", func() { MaxLength(256) })
+	Attribute("source", String, "Skill source or namespace, if available.", func() { MaxLength(256) })
+	Attribute("source_level", String, "Scope where the skill was resolved, if available.", func() { MaxLength(64) })
+	Attribute("source_path", String, "Local path where the skill was resolved, if available.", func() { MaxLength(4096) })
+	Attribute("raw_sha256", String, "SHA-256 of the raw skill manifest, if available.", func() { MaxLength(128) })
+})
+
+var UploadSkillContentPayload = Type("UploadSkillContentPayload", func() {
+	Description("Content for a skill manifest requested by a prior hook ingest response.")
+	Required("schema_version", "raw_sha256", "content")
+	Attribute("schema_version", String, "Contract version.", func() {
+		Enum("hook.skill-content.v1")
+	})
+	Attribute("raw_sha256", String, "Lowercase SHA-256 of the raw content.", func() {
+		Pattern("^[0-9a-f]{64}$")
+	})
+	Attribute("content", String, "Raw UTF-8 skill manifest content.", func() {
+		MaxLength(65536)
+	})
 })
 
 var HookNotificationData = Type("HookNotificationData", func() {
@@ -394,6 +411,32 @@ var _ = Service("hooks", func() {
 		Meta("openapi:operationId", "ingestHookEvent")
 		Meta("openapi:extension:x-speakeasy-name-override", "ingest")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"IngestHookEvent"}`)
+	})
+
+	Method("uploadSkillContent", func() {
+		Description("Uploads skill manifest content requested by the unified hook ingest endpoint.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(UploadSkillContentPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(Empty)
+
+		HTTP(func() {
+			POST("/rpc/hooks.uploadSkillContent")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "uploadSkillContent")
+		Meta("openapi:extension:x-speakeasy-name-override", "uploadSkillContent")
 	})
 
 	Method("logs", func() {

@@ -15,6 +15,73 @@ RETURNING *;
 DELETE FROM hooks_server_name_overrides
 WHERE id = $1 AND project_id = $2;
 
+-- name: InsertSkillObservation :exec
+INSERT INTO skill_observations (
+    project_id
+  , idempotency_key
+  , provider
+  , user_id
+  , user_email
+  , hostname
+  , session_id
+  , skill_name
+  , source_level
+  , source_path
+  , raw_sha256
+  , seen_at
+) VALUES (
+    @project_id
+  , sqlc.narg(idempotency_key)
+  , @provider
+  , sqlc.narg(user_id)
+  , sqlc.narg(user_email)
+  , sqlc.narg(hostname)
+  , sqlc.narg(session_id)
+  , @skill_name
+  , sqlc.narg(source_level)
+  , sqlc.narg(source_path)
+  , sqlc.narg(raw_sha256)
+  , @seen_at
+)
+ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+DO NOTHING;
+
+-- name: RememberKnownSkillRawHash :one
+WITH inserted AS (
+  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
+  SELECT s.project_id, @raw_sha256, sv.canonical_sha256
+  FROM skill_versions sv
+  JOIN skills s ON s.id = sv.skill_id
+  WHERE s.project_id = @project_id
+    AND sv.raw_sha256 = @raw_sha256
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+  ON CONFLICT (project_id, raw_sha256) DO NOTHING
+  RETURNING 1
+)
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM skill_raw_hashes srh
+    WHERE srh.project_id = @project_id
+      AND srh.raw_sha256 = @raw_sha256
+  ) OR EXISTS (SELECT 1 FROM inserted)
+)::boolean AS known;
+
+-- name: HasSkillObservationRawHash :one
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_observations so
+  WHERE so.project_id = @project_id
+    AND so.raw_sha256 = @raw_sha256
+)::boolean;
+
+-- name: ListSkillObservations :many
+SELECT *
+FROM skill_observations
+WHERE project_id = @project_id
+ORDER BY seen_at ASC, id ASC;
+
 -- name: UpsertClaudeCodeSession :one
 INSERT INTO chats (
     id

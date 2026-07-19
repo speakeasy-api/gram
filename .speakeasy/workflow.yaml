@@ -23,7 +23,7 @@ sources:
             - location: overlays/goa.yaml
         transformations:
             - filterOperations:
-                operations: ingestHookEvent
+                operations: ingestHookEvent,uploadSkillContent
             - removeUnused: true
         output: .speakeasy/openapi-hooks.yaml
 targets:
