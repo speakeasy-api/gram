@@ -312,6 +312,17 @@ WHERE project_id = @project_id
   AND archived_at IS NULL
 RETURNING *;
 
+-- name: PromoteObservedSkillToManual :one
+UPDATE skills
+SET source_kind = 'manual',
+    classification = 'custom',
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = @id
+  AND source_kind = 'captured'
+  AND archived_at IS NULL
+RETURNING *;
+
 -- name: GetSkill :one
 SELECT *
 FROM skills

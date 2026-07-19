@@ -388,6 +388,21 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve skill by manifest name").LogError(ctx, logger)
 	}
+	if !createdSkill && skill.SourceKind == "captured" {
+		_, _, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		switch {
+		case errors.Is(stateErr, pgx.ErrNoRows):
+			skill, err = queries.PromoteObservedSkillToManual(ctx, repo.PromoteObservedSkillToManualParams{
+				ProjectID: *authCtx.ProjectID,
+				ID:        skill.ID,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "promote observed skill to manual").LogError(ctx, logger)
+			}
+		case stateErr != nil:
+			return nil, oops.E(oops.CodeUnexpected, stateErr, "load observed skill state").LogError(ctx, logger)
+		}
+	}
 
 	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, createdSkill)
 	if err != nil {
