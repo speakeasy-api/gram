@@ -46,6 +46,11 @@ func main() {
 			// successful send, and by the device agent when its downtime
 			// detector sees the control plane recover.
 			os.Exit(relay.RunDrain(context.Background(), os.Stdout))
+		case "upload-skill":
+			if len(os.Args) != 2 {
+				os.Exit(2)
+			}
+			os.Exit(relay.RunSkillUpload(context.Background(), os.Stdin))
 		}
 	}
 

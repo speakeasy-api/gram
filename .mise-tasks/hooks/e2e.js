@@ -279,19 +279,63 @@ async function runProcess(command, args, opts = {}) {
     child.stdin.end();
   });
 }
-// session_capture gates hook ingest; logs gates telemetry_logs writes — the
-// evidence checks read both, so provision both.
+// session_capture gates hook ingest; logs gates telemetry_logs writes; skills
+// enables content capture. Keep metadata-only disabled so the E2E exercises
+// the upload path.
 async function enableSessionCapture(organizationId) {
   const sql = `
-    INSERT INTO organization_features (organization_id, feature_name)
-    VALUES
-      ('${sqlString(organizationId)}', 'session_capture'),
-      ('${sqlString(organizationId)}', 'logs')
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+    WITH previous AS MATERIALIZED (
+      SELECT feature_name
+      FROM organization_features
+      WHERE organization_id = '${sqlString(organizationId)}'
+        AND feature_name IN ('session_capture', 'logs', 'skills', 'skill_capture_metadata_only')
+        AND deleted IS FALSE
+    ), disabled AS (
+    UPDATE organization_features
+    SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+    WHERE organization_id = '${sqlString(organizationId)}'
+      AND feature_name = 'skill_capture_metadata_only'
+      AND deleted IS FALSE
+    ), enabled AS (
+      INSERT INTO organization_features (organization_id, feature_name)
+      VALUES
+        ('${sqlString(organizationId)}', 'session_capture'),
+        ('${sqlString(organizationId)}', 'logs'),
+        ('${sqlString(organizationId)}', 'skills')
+      ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+      RETURNING feature_name
+    )
+    SELECT feature_name FROM previous ORDER BY feature_name;
   `;
   const res = await runProcess("psql", psqlArgs(sql));
   if (res.exitCode !== 0) {
     fail(`failed to enable session_capture:\n${res.stderr || res.stdout}`);
+  }
+  return res.stdout.trim().split("\n").filter(Boolean);
+}
+async function restoreSessionCapture(organizationId, previousFeatures) {
+  const values = previousFeatures
+    .map(
+      (feature) => `('${sqlString(organizationId)}', '${sqlString(feature)}')`,
+    )
+    .join(",\n        ");
+  const restore = values
+    ? `
+    INSERT INTO organization_features (organization_id, feature_name)
+    VALUES ${values}
+    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;`
+    : "";
+  const sql = `
+    UPDATE organization_features
+    SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+    WHERE organization_id = '${sqlString(organizationId)}'
+      AND feature_name IN ('session_capture', 'logs', 'skills', 'skill_capture_metadata_only')
+      AND deleted IS FALSE;
+    ${restore}
+  `;
+  const res = await runProcess("psql", psqlArgs(sql));
+  if (res.exitCode !== 0) {
+    fail(`failed to restore capture features:\n${res.stderr || res.stdout}`);
   }
 }
 function sqlString(value) {
@@ -892,8 +936,6 @@ async function runProviderScenario(args) {
         "--trust",
         "--force",
         "--approve-mcps",
-        "--plugin-dir",
-        args.pluginDir,
         "--workspace",
         args.workdir,
         prompt,
@@ -968,8 +1010,6 @@ async function runProviderShadowMCPScenario(args) {
         "--trust",
         "--force",
         "--approve-mcps",
-        "--plugin-dir",
-        args.pluginDir,
         "--workspace",
         args.workdir,
         prompt,
@@ -1001,6 +1041,8 @@ async function prepareCursorProjectHooks(pluginDir, workdir) {
   const targetDir = path.join(workdir, ".cursor");
   const targetPath = path.join(targetDir, "hooks.json");
   const hooks = JSON.parse(await fs.readFile(sourcePath, "utf8"));
+  // Project hooks are the single registration path for headless runs. Passing
+  // the same directory through --plugin-dir races two identical hook commands.
   const escapedPluginDir = pluginDir.replace(/(["\\$`])/g, "\\$1");
   for (const entries of Object.values(hooks.hooks ?? {})) {
     if (!Array.isArray(entries)) {
@@ -1214,6 +1256,102 @@ async function listChatMessages(projectId, runId) {
         toolCallID,
       };
     });
+}
+async function getSkillCaptureEvidence(projectId, skillName, expectedProvider) {
+  const providerAliases = SOURCE_ALIASES[expectedProvider]
+    .map((alias) => `'${sqlString(alias)}'`)
+    .join(", ");
+  const sql = `
+    WITH latest AS (
+      SELECT
+        provider,
+        COALESCE(source_level, '') AS source_level,
+        COALESCE(source_path, '') AS source_path,
+        COALESCE(raw_sha256, '') AS raw_sha256
+      FROM skill_observations
+      WHERE project_id = '${sqlString(projectId)}'
+        AND skill_name = '${sqlString(skillName)}'
+        AND provider IN (${providerAliases})
+      ORDER BY seen_at DESC, id DESC
+      LIMIT 1
+    ), mapped AS (
+      SELECT
+        latest.*,
+        skill_raw_hashes.canonical_sha256
+      FROM latest
+      LEFT JOIN skill_raw_hashes
+        ON skill_raw_hashes.project_id = '${sqlString(projectId)}'
+        AND skill_raw_hashes.raw_sha256 = latest.raw_sha256
+    )
+    SELECT
+      provider,
+      source_level,
+      source_path,
+      raw_sha256,
+      canonical_sha256 IS NOT NULL,
+      EXISTS (
+        SELECT 1
+        FROM skills
+        JOIN skill_versions
+          ON skill_versions.skill_id = skills.id
+          AND skill_versions.canonical_sha256 = mapped.canonical_sha256
+        JOIN skill_version_origins
+          ON skill_version_origins.skill_version_id = skill_versions.id
+          AND skill_version_origins.skill_id = skills.id
+          AND skill_version_origins.project_id = skills.project_id
+          AND skill_version_origins.origin = 'captured'
+        WHERE skills.project_id = '${sqlString(projectId)}'
+          AND skills.name = '${sqlString(skillName)}'
+          AND skills.archived_at IS NULL
+      )
+    FROM mapped;
+  `;
+  const res = await runProcess("psql", psqlArgs(sql));
+  if (res.exitCode !== 0) {
+    fail(`skill capture query failed:\n${res.stderr || res.stdout}`);
+  }
+  const line = res.stdout.trim();
+  if (!line) {
+    return null;
+  }
+  const [
+    provider = "",
+    sourceLevel = "",
+    sourcePath = "",
+    rawSHA256 = "",
+    hasRawHashMapping = "f",
+    hasCapturedVersion = "f",
+  ] = line.split("\x1f");
+  return {
+    provider,
+    sourceLevel,
+    sourcePath,
+    rawSHA256,
+    hasRawHashMapping: hasRawHashMapping === "t",
+    hasCapturedVersion: hasCapturedVersion === "t",
+  };
+}
+function skillCaptureCheck(provider, fixture, evidence) {
+  const expectedRawSHA256 = crypto
+    .createHash("sha256")
+    .update(fixture.content)
+    .digest("hex");
+  const matches =
+    evidence !== null &&
+    SOURCE_ALIASES[provider].includes(evidence.provider) &&
+    evidence.sourceLevel === (provider === "codex" ? "personal" : "project") &&
+    evidence.sourcePath === fixture.manifestPath &&
+    evidence.rawSHA256 === expectedRawSHA256 &&
+    evidence.hasRawHashMapping &&
+    evidence.hasCapturedVersion;
+  return {
+    provider,
+    feature: "skill.content_captured",
+    status: matches ? "PASS" : "FAIL",
+    detail: evidence
+      ? `provider=${evidence.provider} level=${evidence.sourceLevel} path=${evidence.sourcePath} raw_sha256=${evidence.rawSHA256} mapped=${evidence.hasRawHashMapping} captured-origin=${evidence.hasCapturedVersion}`
+      : `no skill_observations row found for ${fixture.skillName}`,
+  };
 }
 async function verifyOnboarding(args) {
   const url = new URL(
@@ -1795,24 +1933,29 @@ function shadowMCPChecks(provider, phase, res, evidence, blocks, extra = {}) {
   return checks;
 }
 async function prepareSkillFixture(skillsRoot, runId, provider) {
-  const skillName = `gram-hooks-e2e-skill-${runId.split("-").pop()}`;
+  const skillName = `gram-hooks-e2e-skill-${provider}-${runId.split("-").pop()}`;
   const skillDir = path.join(skillsRoot, skillName);
+  const manifestPath = path.join(skillDir, "SKILL.md");
+  const content = [
+    "---",
+    `name: ${skillName}`,
+    `description: Gram hooks E2E skill-activation probe for run ${runId}. Activate this skill whenever the user asks to run the Gram hooks E2E skill probe.`,
+    "---",
+    "",
+    "# Gram hooks E2E skill probe",
+    "",
+    `Once activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} ${provider} skill`,
+    "",
+  ].join("\n");
   await fs.mkdir(skillDir, { recursive: true });
-  await fs.writeFile(
-    path.join(skillDir, "SKILL.md"),
-    [
-      "---",
-      `name: ${skillName}`,
-      `description: Gram hooks E2E skill-activation probe for run ${runId}. Activate this skill whenever the user asks to run the Gram hooks E2E skill probe.`,
-      "---",
-      "",
-      "# Gram hooks E2E skill probe",
-      "",
-      `Once activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} ${provider} skill`,
-      "",
-    ].join("\n"),
-  );
-  return { skillName, skillDir };
+  await fs.writeFile(manifestPath, content);
+  const realManifestPath = await fs.realpath(manifestPath);
+  return {
+    skillName,
+    skillDir: path.dirname(realManifestPath),
+    manifestPath: realManifestPath,
+    content,
+  };
 }
 // Codex has no Skill tool: the sender infers activation from a $name prompt
 // mention (validated against the skill roots on disk) or from a reader tool
@@ -1875,8 +2018,6 @@ async function runSkillScenario(args) {
         "--trust",
         "--force",
         "--approve-mcps",
-        "--plugin-dir",
-        args.pluginDir,
         "--workspace",
         args.workdir,
         prompt,
@@ -1977,7 +2118,7 @@ async function runRatchetSuite(args) {
 
 async function runCaptureSuite(args) {
   const commandResults = [];
-  const skillNamesByProvider = new Map();
+  const skillFixturesByProvider = new Map();
   for (const provider of args.providers) {
     for (const scenario of ["success", "failure"]) {
       log.info(`${provider}: running capture ${scenario} scenario`);
@@ -2045,7 +2186,7 @@ async function runCaptureSuite(args) {
               "skills",
             );
       const skill = await prepareSkillFixture(skillsRoot, args.runId, provider);
-      skillNamesByProvider.set(provider, skill.skillName);
+      skillFixturesByProvider.set(provider, skill);
       log.info(`${provider}: running capture skill-activation scenario`);
       const skillRes = await runSkillScenario({
         provider,
@@ -2083,7 +2224,8 @@ async function runCaptureSuite(args) {
   });
   const checks = [];
   for (const provider of args.providers) {
-    const skillName = skillNamesByProvider.get(provider) ?? null;
+    const skillFixture = skillFixturesByProvider.get(provider) ?? null;
+    const skillName = skillFixture?.skillName ?? null;
     // Cursor Agent headless does not reliably emit afterAgentResponse
     // (featureChecks marks it SKIP), so don't burn the whole poll window
     // waiting for it.
@@ -2126,6 +2268,23 @@ async function runCaptureSuite(args) {
         rows.some((r) => r.role === "assistant"),
     );
     checks.push(...featureChecks(provider, evidence, chats, { skillName }));
+    if (skillFixture) {
+      const captureCheck = await poll(
+        Date.now() + args.pollSeconds * 1000,
+        async () =>
+          skillCaptureCheck(
+            provider,
+            skillFixture,
+            await getSkillCaptureEvidence(
+              args.session.projectId,
+              skillFixture.skillName,
+              provider,
+            ),
+          ),
+        (check) => check.status === "PASS",
+      );
+      checks.push(captureCheck);
+    }
   }
   return { checks, commandResults };
 }
@@ -2425,7 +2584,9 @@ async function main() {
   const serverURL = requireEnv("GRAM_SERVER_URL");
   const runId = `gram-hooks-e2e-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
   const startedUnixNano = BigInt(Date.now()) * 1000000n;
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), `${runId}-`));
+  const rootDir = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), `${runId}-`)),
+  );
   const artifactsDir = path.join(rootDir, "artifacts");
   const workdir = path.join(rootDir, "workspace");
   let codexEnv = null;
@@ -2437,13 +2598,19 @@ async function main() {
   );
   intro(`Gram hooks E2E ${runId}`);
   let success = false;
+  let organizationId = null;
+  let previousCaptureFeatures = null;
+  let cleanupError = null;
   try {
     const session = await getSessionInfo(serverURL, args.project);
+    organizationId = session.organizationId;
     log.info(
       `Authenticated as ${session.userEmail}; org=${session.organizationId} project=${args.project}`,
     );
-    await enableSessionCapture(session.organizationId);
-    log.info("Enabled session_capture for the active org");
+    previousCaptureFeatures = await enableSessionCapture(
+      session.organizationId,
+    );
+    log.info("Enabled session_capture, logs, and skills for the active org");
     const hooksAuthFile = await provisionHooksAuth(
       serverURL,
       session,
@@ -2530,12 +2697,25 @@ async function main() {
     }
     success = true;
   } finally {
+    if (organizationId && previousCaptureFeatures) {
+      try {
+        await restoreSessionCapture(organizationId, previousCaptureFeatures);
+        log.info("Restored capture feature settings for the active org");
+      } catch (err) {
+        cleanupError = err;
+        success = false;
+        console.error(`failed to restore capture feature settings: ${err}`);
+      }
+    }
     if (args.keepArtifacts || !success) {
       log.info(`Artifacts kept at ${rootDir}`);
     } else {
       await fs.rm(rootDir, { recursive: true, force: true });
     }
     outro(success ? "hooks:e2e passed" : "hooks:e2e failed");
+  }
+  if (cleanupError) {
+    throw cleanupError;
   }
 }
 try {
