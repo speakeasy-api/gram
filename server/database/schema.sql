@@ -309,6 +309,62 @@ CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key O
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versions (skill_id, id);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
 
+CREATE TABLE IF NOT EXISTS skill_version_origins (
+  skill_version_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  origin TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_version_origins_pkey PRIMARY KEY (skill_version_id),
+  CONSTRAINT skill_version_origins_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_version_origins_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skill_version_origins_project_id_skill_id_idx
+ON skill_version_origins (project_id, skill_id);
+
+CREATE TABLE IF NOT EXISTS skill_observations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  idempotency_key TEXT,
+  provider TEXT NOT NULL,
+  user_id TEXT,
+  user_email TEXT,
+  hostname TEXT,
+  session_id TEXT,
+  skill_name TEXT NOT NULL,
+  source_level TEXT,
+  source_path TEXT,
+  raw_sha256 TEXT,
+  seen_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_observations_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_observations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_observations_project_id_idempotency_key_key
+ON skill_observations (project_id, idempotency_key)
+WHERE idempotency_key IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_name_seen_at_id_idx
+ON skill_observations (project_id, skill_name, seen_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_raw_sha256_idx
+ON skill_observations (project_id, raw_sha256)
+WHERE raw_sha256 IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS skill_raw_hashes (
+  project_id uuid NOT NULL,
+  raw_sha256 TEXT NOT NULL,
+  canonical_sha256 TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_raw_hashes_pkey PRIMARY KEY (project_id, raw_sha256),
+  CONSTRAINT skill_raw_hashes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
 -- Admins create plugins and assign them to roles for distribution.
 CREATE TABLE IF NOT EXISTS plugins (

@@ -45,6 +45,57 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 	return i, err
 }
 
+const createCapturedSkill = `-- name: CreateCapturedSkill :one
+INSERT INTO skills (
+  project_id,
+  name,
+  display_name,
+  summary,
+  source_kind,
+  classification
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4::text,
+  'captured',
+  'custom'
+)
+ON CONFLICT (project_id, name) WHERE archived_at IS NULL
+DO NOTHING
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+`
+
+type CreateCapturedSkillParams struct {
+	ProjectID   uuid.UUID
+	Name        string
+	DisplayName string
+	Summary     pgtype.Text
+}
+
+func (q *Queries) CreateCapturedSkill(ctx context.Context, arg CreateCapturedSkillParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, createCapturedSkill,
+		arg.ProjectID,
+		arg.Name,
+		arg.DisplayName,
+		arg.Summary,
+	)
+	var i Skill
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Summary,
+		&i.SourceKind,
+		&i.Classification,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createSkill = `-- name: CreateSkill :one
 INSERT INTO skills (
   project_id,
@@ -225,6 +276,24 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 	return i, err
 }
 
+const deleteSkillVersionOrigin = `-- name: DeleteSkillVersionOrigin :exec
+DELETE FROM skill_version_origins
+WHERE project_id = $1
+  AND skill_id = $2
+  AND skill_version_id = $3
+`
+
+type DeleteSkillVersionOriginParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+func (q *Queries) DeleteSkillVersionOrigin(ctx context.Context, arg DeleteSkillVersionOriginParams) error {
+	_, err := q.db.Exec(ctx, deleteSkillVersionOrigin, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
+	return err
+}
+
 const getActiveSkillDistributionRecord = `-- name: GetActiveSkillDistributionRecord :one
 SELECT
   sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
@@ -233,10 +302,14 @@ FROM skill_distributions sd
 JOIN LATERAL (
   SELECT sv.id
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = $1
@@ -281,11 +354,15 @@ const getLatestValidSkillVersion = `-- name: GetLatestValidSkillVersion :one
 SELECT sv.id
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN skill_version_origins svo
+  ON svo.project_id = s.project_id
+  AND svo.skill_id = sv.skill_id
+  AND svo.skill_version_id = sv.id
 WHERE s.project_id = $1
   AND s.id = $2
   AND s.archived_at IS NULL
   AND sv.spec_valid IS TRUE
-ORDER BY sv.created_at DESC, sv.id DESC
+ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
 LIMIT 1
 `
 
@@ -508,6 +585,30 @@ func (q *Queries) GetSkillName(ctx context.Context, arg GetSkillNameParams) (str
 	return name, err
 }
 
+const getSkillRawHash = `-- name: GetSkillRawHash :one
+SELECT project_id, raw_sha256, canonical_sha256, created_at
+FROM skill_raw_hashes
+WHERE project_id = $1
+  AND raw_sha256 = $2
+`
+
+type GetSkillRawHashParams struct {
+	ProjectID uuid.UUID
+	RawSha256 string
+}
+
+func (q *Queries) GetSkillRawHash(ctx context.Context, arg GetSkillRawHashParams) (SkillRawHash, error) {
+	row := q.db.QueryRow(ctx, getSkillRawHash, arg.ProjectID, arg.RawSha256)
+	var i SkillRawHash
+	err := row.Scan(
+		&i.ProjectID,
+		&i.RawSha256,
+		&i.CanonicalSha256,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSkillState = `-- name: GetSkillState :one
 SELECT
   state.latest_version_id,
@@ -579,6 +680,33 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 	return i, err
 }
 
+const getSkillVersionOrigin = `-- name: GetSkillVersionOrigin :one
+SELECT skill_version_id, skill_id, project_id, origin, created_at
+FROM skill_version_origins
+WHERE project_id = $1
+  AND skill_id = $2
+  AND skill_version_id = $3
+`
+
+type GetSkillVersionOriginParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+func (q *Queries) GetSkillVersionOrigin(ctx context.Context, arg GetSkillVersionOriginParams) (SkillVersionOrigin, error) {
+	row := q.db.QueryRow(ctx, getSkillVersionOrigin, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
+	var i SkillVersionOrigin
+	err := row.Scan(
+		&i.SkillVersionID,
+		&i.SkillID,
+		&i.ProjectID,
+		&i.Origin,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getValidSkillVersion = `-- name: GetValidSkillVersion :one
 SELECT sv.id
 FROM skill_versions sv
@@ -603,6 +731,28 @@ func (q *Queries) GetValidSkillVersion(ctx context.Context, arg GetValidSkillVer
 	return id, err
 }
 
+const insertCapturedSkillVersionOrigin = `-- name: InsertCapturedSkillVersionOrigin :exec
+INSERT INTO skill_version_origins (skill_version_id, skill_id, project_id, origin)
+SELECT sv.id, sv.skill_id, s.project_id, 'captured'
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND s.id = $2
+  AND sv.id = $3
+ON CONFLICT (skill_version_id) DO NOTHING
+`
+
+type InsertCapturedSkillVersionOriginParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+func (q *Queries) InsertCapturedSkillVersionOrigin(ctx context.Context, arg InsertCapturedSkillVersionOriginParams) error {
+	_, err := q.db.Exec(ctx, insertCapturedSkillVersionOrigin, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
+	return err
+}
+
 const listActiveSkillDistributions = `-- name: ListActiveSkillDistributions :many
 SELECT
   sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
@@ -619,10 +769,14 @@ JOIN skills s
 JOIN LATERAL (
   SELECT sv.id
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = $1
@@ -892,10 +1046,14 @@ FROM skill_distributions prev
 JOIN LATERAL (
   SELECT sv.id
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = prev.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = prev.skill_id
     AND sv.spec_valid IS TRUE
     AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE prev.id = sd.id
@@ -948,6 +1106,50 @@ func (q *Queries) RevokeAllSkillDistributionsBySkill(ctx context.Context, arg Re
 		return nil, err
 	}
 	return items, nil
+}
+
+const storeSkillRawHashAlias = `-- name: StoreSkillRawHashAlias :one
+WITH inserted AS (
+  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
+  SELECT s.project_id, $1, sv.canonical_sha256
+  FROM skill_versions sv
+  JOIN skills s ON s.id = sv.skill_id
+  WHERE s.project_id = $2
+    AND s.id = $3
+    AND sv.id = $4
+    AND sv.canonical_sha256 = $5
+  ON CONFLICT (project_id, raw_sha256) DO NOTHING
+  RETURNING 1
+)
+SELECT TRUE AS matches
+FROM inserted
+UNION ALL
+SELECT srh.canonical_sha256 = $5 AS matches
+FROM skill_raw_hashes srh
+WHERE srh.project_id = $2
+  AND srh.raw_sha256 = $1
+LIMIT 1
+`
+
+type StoreSkillRawHashAliasParams struct {
+	RawSha256       string
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	SkillVersionID  uuid.UUID
+	CanonicalSha256 string
+}
+
+func (q *Queries) StoreSkillRawHashAlias(ctx context.Context, arg StoreSkillRawHashAliasParams) (bool, error) {
+	row := q.db.QueryRow(ctx, storeSkillRawHashAlias,
+		arg.RawSha256,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.SkillVersionID,
+		arg.CanonicalSha256,
+	)
+	var matches bool
+	err := row.Scan(&matches)
+	return matches, err
 }
 
 const updateSkill = `-- name: UpdateSkill :one
