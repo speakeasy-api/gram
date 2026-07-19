@@ -3248,6 +3248,7 @@ CREATE TABLE IF NOT EXISTS mcp_metadata (
   external_documentation_text TEXT,
   logo_id UUID,
   instructions TEXT,
+  instruction_tool_mode TEXT NOT NULL DEFAULT 'required', -- Synthetic instructions tool behavior: 'disabled' | 'optional' | 'required'. Validated in application code.
   header_display_names JSONB NOT NULL DEFAULT '{}'::JSONB, -- DEPRECATED: use mcp_environment_configs table instead
   default_environment_id UUID, -- Informs mcp_environment_configs which environment to load from by default
   installation_override_url TEXT, -- URL to redirect to instead of the default installation page

@@ -917,6 +917,7 @@ type McpMetadatum struct {
 	ExternalDocumentationText pgtype.Text
 	LogoID                    uuid.NullUUID
 	Instructions              pgtype.Text
+	InstructionToolMode       string
 	HeaderDisplayNames        []byte
 	DefaultEnvironmentID      uuid.NullUUID
 	InstallationOverrideUrl   pgtype.Text

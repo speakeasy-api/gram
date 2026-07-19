@@ -110,6 +110,7 @@ SELECT id,
        external_documentation_text,
        logo_id,
        instructions,
+       instruction_tool_mode,
        header_display_names,
        default_environment_id,
        installation_override_url,
@@ -133,6 +134,7 @@ func (q *Queries) GetMetadataByMcpServerID(ctx context.Context, mcpServerID uuid
 		&i.ExternalDocumentationText,
 		&i.LogoID,
 		&i.Instructions,
+		&i.InstructionToolMode,
 		&i.HeaderDisplayNames,
 		&i.DefaultEnvironmentID,
 		&i.InstallationOverrideUrl,
@@ -151,6 +153,7 @@ SELECT id,
        external_documentation_text,
        logo_id,
        instructions,
+       instruction_tool_mode,
        header_display_names,
        default_environment_id,
        installation_override_url,
@@ -174,6 +177,7 @@ func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.Null
 		&i.ExternalDocumentationText,
 		&i.LogoID,
 		&i.Instructions,
+		&i.InstructionToolMode,
 		&i.HeaderDisplayNames,
 		&i.DefaultEnvironmentID,
 		&i.InstallationOverrideUrl,
@@ -286,15 +290,17 @@ INSERT INTO mcp_metadata (
     external_documentation_text,
     logo_id,
     instructions,
+    instruction_tool_mode,
     default_environment_id,
     installation_override_url
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (toolset_id) WHERE toolset_id IS NOT NULL
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
               external_documentation_text = EXCLUDED.external_documentation_text,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
+              instruction_tool_mode = EXCLUDED.instruction_tool_mode,
               default_environment_id = EXCLUDED.default_environment_id,
               installation_override_url = EXCLUDED.installation_override_url,
               updated_at = clock_timestamp()
@@ -306,6 +312,7 @@ RETURNING id,
           external_documentation_text,
           logo_id,
           instructions,
+          instruction_tool_mode,
           header_display_names,
           default_environment_id,
           installation_override_url,
@@ -320,6 +327,7 @@ type UpsertMetadataParams struct {
 	ExternalDocumentationText pgtype.Text
 	LogoID                    uuid.NullUUID
 	Instructions              pgtype.Text
+	InstructionToolMode       string
 	DefaultEnvironmentID      uuid.NullUUID
 	InstallationOverrideUrl   pgtype.Text
 }
@@ -332,6 +340,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		arg.ExternalDocumentationText,
 		arg.LogoID,
 		arg.Instructions,
+		arg.InstructionToolMode,
 		arg.DefaultEnvironmentID,
 		arg.InstallationOverrideUrl,
 	)
@@ -345,6 +354,7 @@ func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) 
 		&i.ExternalDocumentationText,
 		&i.LogoID,
 		&i.Instructions,
+		&i.InstructionToolMode,
 		&i.HeaderDisplayNames,
 		&i.DefaultEnvironmentID,
 		&i.InstallationOverrideUrl,
@@ -362,15 +372,17 @@ INSERT INTO mcp_metadata (
     external_documentation_text,
     logo_id,
     instructions,
+    instruction_tool_mode,
     default_environment_id,
     installation_override_url
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (mcp_server_id) WHERE mcp_server_id IS NOT NULL
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
               external_documentation_text = EXCLUDED.external_documentation_text,
               logo_id = EXCLUDED.logo_id,
               instructions = EXCLUDED.instructions,
+              instruction_tool_mode = EXCLUDED.instruction_tool_mode,
               default_environment_id = EXCLUDED.default_environment_id,
               installation_override_url = EXCLUDED.installation_override_url,
               updated_at = clock_timestamp()
@@ -382,6 +394,7 @@ RETURNING id,
           external_documentation_text,
           logo_id,
           instructions,
+          instruction_tool_mode,
           header_display_names,
           default_environment_id,
           installation_override_url,
@@ -396,6 +409,7 @@ type UpsertMetadataByMcpServerIDParams struct {
 	ExternalDocumentationText pgtype.Text
 	LogoID                    uuid.NullUUID
 	Instructions              pgtype.Text
+	InstructionToolMode       string
 	DefaultEnvironmentID      uuid.NullUUID
 	InstallationOverrideUrl   pgtype.Text
 }
@@ -408,6 +422,7 @@ func (q *Queries) UpsertMetadataByMcpServerID(ctx context.Context, arg UpsertMet
 		arg.ExternalDocumentationText,
 		arg.LogoID,
 		arg.Instructions,
+		arg.InstructionToolMode,
 		arg.DefaultEnvironmentID,
 		arg.InstallationOverrideUrl,
 	)
@@ -421,6 +436,7 @@ func (q *Queries) UpsertMetadataByMcpServerID(ctx context.Context, arg UpsertMet
 		&i.ExternalDocumentationText,
 		&i.LogoID,
 		&i.Instructions,
+		&i.InstructionToolMode,
 		&i.HeaderDisplayNames,
 		&i.DefaultEnvironmentID,
 		&i.InstallationOverrideUrl,
