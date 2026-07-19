@@ -92,9 +92,15 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
     ...(hasFrontmatter
       ? [sectionItem(SKILL_FRONTMATTER_SECTION_ID, "Frontmatter", Braces)]
       : []),
-    sectionItem(SKILL_DISTRIBUTIONS_SECTION_ID, "Plugin distributions", Puzzle),
     ...(latestVersion
-      ? [sectionItem(SKILL_VERSIONS_SECTION_ID, "Version history", History)]
+      ? [
+          sectionItem(
+            SKILL_DISTRIBUTIONS_SECTION_ID,
+            "Plugin distributions",
+            Puzzle,
+          ),
+          sectionItem(SKILL_VERSIONS_SECTION_ID, "Version history", History),
+        ]
       : []),
   ];
 

@@ -168,7 +168,7 @@ function SkillDetailSections({
 
   return (
     <>
-      <SkillPluginBanner skillId={skillId} />
+      {latestVersion && <SkillPluginBanner skillId={skillId} />}
 
       <SkillActivitySections data={skillQueryData} />
 
@@ -250,16 +250,18 @@ function SkillDetailSections({
         </SettingsSection>
       )}
 
-      <SettingsSection id={SKILL_DISTRIBUTIONS_SECTION_ID}>
-        <SettingsSection.Header>
-          <SettingsSection.Title>Plugin distributions</SettingsSection.Title>
-          <SettingsSection.Description>
-            The plugins carrying this skill. Distributed skills ship inside the
-            plugin package and reach everyone who installs the plugin.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-        <SkillDistributionsSection skillId={skillId} />
-      </SettingsSection>
+      {latestVersion && (
+        <SettingsSection id={SKILL_DISTRIBUTIONS_SECTION_ID}>
+          <SettingsSection.Header>
+            <SettingsSection.Title>Plugin distributions</SettingsSection.Title>
+            <SettingsSection.Description>
+              The plugins carrying this skill. Distributed skills ship inside
+              the plugin package and reach everyone who installs the plugin.
+            </SettingsSection.Description>
+          </SettingsSection.Header>
+          <SkillDistributionsSection skillId={skillId} />
+        </SettingsSection>
+      )}
 
       {latestVersion && (
         <SettingsSection id={SKILL_VERSIONS_SECTION_ID}>

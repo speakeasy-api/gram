@@ -62,10 +62,10 @@ vi.mock("@/routes", () => ({
   }),
 }));
 vi.mock("./SkillPluginBanner", () => ({
-  SkillPluginBanner: () => null,
+  SkillPluginBanner: () => <div>Distribution banner</div>,
 }));
 vi.mock("./SkillDistributionsSection", () => ({
-  SkillDistributionsSection: () => null,
+  SkillDistributionsSection: () => <div>Distribution controls</div>,
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => testState.queryClient,
@@ -260,6 +260,8 @@ describe("SkillDetail", () => {
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Edit skill" })).toBeNull();
     expect(screen.queryByText("Version history")).toBeNull();
+    expect(screen.queryByText("Distribution banner")).toBeNull();
+    expect(screen.queryByText("Distribution controls")).toBeNull();
   });
 
   it("keeps loaded versions visible and retries a next-page failure explicitly", () => {

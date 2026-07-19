@@ -14,6 +14,7 @@ const testState = vi.hoisted(() => ({
   isFetchNextPageError: false,
   error: null as Error | null,
   skills: [] as Array<Record<string, unknown>>,
+  unknownEnabled: false,
 }));
 
 vi.mock("@/components/filters", () => ({
@@ -57,15 +58,23 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
-  useUnknownSkillActivationsInfinite: () => ({
-    data: { pages: [{ result: { activations: [] } }] },
-    isPending: false,
-    isFetchingNextPage: false,
-    isFetchNextPageError: false,
-    hasNextPage: false,
-    error: null,
-    fetchNextPage: vi.fn(),
-  }),
+  useUnknownSkillActivationsInfinite: (
+    _request: unknown,
+    _security: unknown,
+    options?: { enabled?: boolean },
+  ) => {
+    testState.unknownEnabled = options?.enabled ?? true;
+    return {
+      data: { pages: [{ result: { activations: [] } }] },
+      isPending: false,
+      isFetchingNextPage: false,
+      isFetchNextPageError: false,
+      hasNextPage: false,
+      error: null,
+      fetchNextPage: vi.fn(),
+      refetch: vi.fn(),
+    };
+  },
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -143,6 +152,7 @@ beforeEach(() => {
   testState.isFetchNextPageError = false;
   testState.error = null;
   testState.skills = makeSkills(250);
+  testState.unknownEnabled = false;
 });
 
 afterEach(cleanup);
@@ -180,5 +190,15 @@ describe("SkillsList pagination surfaces", () => {
       screen.getByText("Search incomplete. Retry to check remaining skills."),
     ).toBeTruthy();
     expect(screen.queryByText("No matching skills.")).toBeNull();
+  });
+
+  it("loads unknown activations only when requested", () => {
+    render(<SkillsList />);
+
+    expect(testState.unknownEnabled).toBe(false);
+    fireEvent.click(
+      screen.getByRole("button", { name: "View unknown activations" }),
+    );
+    expect(testState.unknownEnabled).toBe(true);
   });
 });
