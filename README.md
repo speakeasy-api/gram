@@ -99,8 +99,6 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and detailed cont
 
 ## Contributors
 
-Thanks to everyone who has contributed to Gram!
-
 <a href="https://github.com/speakeasy-api/gram/graphs/contributors">
   <img alt="Gram contributors" src="https://contrib.rocks/image?repo=speakeasy-api/gram" />
 </a>
