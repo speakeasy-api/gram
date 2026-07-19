@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -327,11 +328,23 @@ func codexSkillLocations(name, cwd string) []skillLocation {
 }
 
 func resolveClaudeSkill(name, cwd string) skillLocation {
-	if plugin, skill, ok := strings.Cut(name, ":"); ok {
-		if !skillTokenRE.MatchString(plugin) || !skillTokenRE.MatchString(skill) || strings.Contains(skill, ":") {
+	if qualifier, skill, ok := strings.Cut(name, ":"); ok {
+		if !skillTokenRE.MatchString(skill) || strings.Contains(skill, ":") {
 			return skillLocation{}
 		}
-		return resolveClaudePluginSkill(plugin, skill, cwd)
+		if projectRoot := claudeProjectRoot(cwd); projectRoot != "" && qualifier != "." && fs.ValidPath(qualifier) && !strings.Contains(qualifier, `\`) {
+			root := filepath.Join(projectRoot, filepath.FromSlash(qualifier), ".claude", "skills")
+			if path := existingSkillManifest(filepath.Join(root, skill)); path != "" {
+				return skillLocation{path: path, level: "project", root: projectRoot}
+			}
+			if pathExists(filepath.Join(root, skill)) {
+				return skillLocation{}
+			}
+		}
+		if skillTokenRE.MatchString(qualifier) {
+			return resolveClaudePluginSkill(qualifier, skill, cwd)
+		}
+		return skillLocation{}
 	}
 	if !skillTokenRE.MatchString(name) {
 		return skillLocation{}
@@ -361,21 +374,34 @@ func resolveClaudeSkill(name, cwd string) skillLocation {
 			return skillLocation{path: path, level: "personal", root: root}
 		}
 	}
-	if filepath.IsAbs(cwd) {
-		for dir := cwd; ; dir = filepath.Dir(dir) {
+	if projectRoot := claudeProjectRoot(cwd); projectRoot != "" {
+		root := filepath.Join(projectRoot, ".claude", "skills")
+		if path := existingSkillManifest(filepath.Join(root, name)); path != "" {
+			return skillLocation{path: path, level: "project", root: root}
+		}
+		for dir := filepath.Clean(cwd); dir != projectRoot; dir = filepath.Dir(dir) {
 			root := filepath.Join(dir, ".claude", "skills")
 			if path := existingSkillManifest(filepath.Join(root, name)); path != "" {
 				return skillLocation{path: path, level: "project", root: root}
 			}
-			if pathExists(filepath.Join(dir, ".git")) {
-				break
-			}
-			if parent := filepath.Dir(dir); parent == dir {
-				break
-			}
 		}
 	}
 	return skillLocation{}
+}
+
+func claudeProjectRoot(cwd string) string {
+	if !filepath.IsAbs(cwd) {
+		return ""
+	}
+	start := filepath.Clean(cwd)
+	for dir := start; ; dir = filepath.Dir(dir) {
+		if pathExists(filepath.Join(dir, ".git")) {
+			return dir
+		}
+		if parent := filepath.Dir(dir); parent == dir {
+			return start
+		}
+	}
 }
 
 func platformClaudeManagedSkillsRoot() string {

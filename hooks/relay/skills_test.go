@@ -171,6 +171,53 @@ func TestResolveActivatedSkillClaudeFindsProjectAtGitRoot(t *testing.T) {
 	require.Equal(t, path, resolved.sourcePath)
 }
 
+func TestResolveActivatedSkillClaudeUnqualifiedPrefersProjectRoot(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "packages", "web")
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".git"), 0o755))
+	rootPath := writeSkillManifest(t, filepath.Join(repo, ".claude", "skills", "deploy"), []byte("root"))
+	writeSkillManifest(t, filepath.Join(cwd, ".claude", "skills", "deploy"), []byte("nested"))
+
+	resolved := resolveActivatedSkill(claudeSkillEvent(cwd, "deploy"), activatedSkillPayload("deploy"))
+
+	require.Equal(t, "project", resolved.sourceLevel)
+	require.Equal(t, rootPath, resolved.sourcePath)
+	require.Equal(t, "root", resolved.content)
+}
+
+func TestResolveActivatedSkillClaudeDirectoryQualifiedProjectSkill(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	repo := filepath.Join(t.TempDir(), "repo")
+	cwd := filepath.Join(repo, "apps", "web")
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".git"), 0o755))
+	path := writeSkillManifest(t, filepath.Join(cwd, ".claude", "skills", "deploy"), []byte("nested"))
+
+	resolved := resolveActivatedSkill(claudeSkillEvent(cwd, "apps/web:deploy"), activatedSkillPayload("apps/web:deploy"))
+
+	require.Equal(t, "project", resolved.sourceLevel)
+	require.Equal(t, path, resolved.sourcePath)
+	require.Equal(t, "nested", resolved.content)
+	require.True(t, resolved.captureReady)
+}
+
+func TestResolveActivatedSkillClaudeRejectsUnsafeDirectoryQualifier(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	repo := filepath.Join(t.TempDir(), "repo")
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".git"), 0o755))
+	external := filepath.Join(t.TempDir(), "outside")
+	writeSkillManifest(t, filepath.Join(external, ".claude", "skills", "deploy"), []byte("outside"))
+
+	resolved := resolveActivatedSkill(claudeSkillEvent(repo, "../outside:deploy"), activatedSkillPayload("../outside:deploy"))
+
+	require.Empty(t, resolved.sourceLevel)
+	require.Empty(t, resolved.sourcePath)
+	require.False(t, resolved.captureReady)
+}
+
 func TestResolveActivatedSkillClaudeUsesConfigDirectory(t *testing.T) {
 	home := t.TempDir()
 	configRoot := filepath.Join(t.TempDir(), "custom-claude")

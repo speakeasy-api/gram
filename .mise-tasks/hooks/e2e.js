@@ -2019,7 +2019,7 @@ async function startHookRequestProbe(targetServerURL) {
         body: chunks.length > 0 ? Buffer.concat(chunks) : undefined,
         redirect: "manual",
       });
-      const responseHeaders = Object.fromEntries(upstream.headers);
+      const responseHeaders = new Headers(upstream.headers);
       // fetch transparently decodes compressed responses, so forwarding the
       // original encoding or length would corrupt the downstream response.
       for (const name of [
@@ -2028,9 +2028,10 @@ async function startHookRequestProbe(targetServerURL) {
         "content-length",
         "transfer-encoding",
       ]) {
-        delete responseHeaders[name];
+        responseHeaders.delete(name);
       }
-      res.writeHead(upstream.status, responseHeaders);
+      res.setHeaders(responseHeaders);
+      res.writeHead(upstream.status);
       res.end(Buffer.from(await upstream.arrayBuffer()));
     } catch (err) {
       res.writeHead(502);
@@ -2055,11 +2056,13 @@ async function startHookRequestProbe(targetServerURL) {
       ),
   };
 }
-async function uploadCountRemains(probe, expected) {
-  // Unit tests cover the no-worker branch deterministically. Since cmd.Start
-  // finishes before the hook returns, this short window only covers child scheduling.
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  return probe.uploadRequests() === expected;
+async function uploadCountRemains(probe, expected, deadlineMs) {
+  const observed = await poll(
+    deadlineMs,
+    () => probe.uploadRequests(),
+    (count) => count !== expected,
+  );
+  return observed === expected;
 }
 async function runSyntheticClaudeSkillActivation(args) {
   const configDir = path.join(args.rootDir, "synthetic-skill-hook");
@@ -2315,14 +2318,16 @@ async function runSkillUploadControlSuite(args) {
     );
 
     await run(fixture, "capture-skill-known-hash");
+    const knownHashDeadline = Date.now() + args.pollSeconds * 1000;
     const observationsAfter = await poll(
-      Date.now() + args.pollSeconds * 1000,
+      knownHashDeadline,
       () => countSkillObservations(args.session.projectId, fixture.skillName),
       (count) => count > observationsBefore,
     );
     const knownHashUploadCountStable = await uploadCountRemains(
       probe,
       baselineUploads,
+      knownHashDeadline,
     );
     checks.push({
       provider: "claude",
@@ -2350,8 +2355,9 @@ async function runSkillUploadControlSuite(args) {
     );
     const uploadsBeforeMetadata = probe.uploadRequests();
     await run(metadataFixture, "capture-skill-metadata-only");
+    const metadataDeadline = Date.now() + args.pollSeconds * 1000;
     const metadataEvidence = await poll(
-      Date.now() + args.pollSeconds * 1000,
+      metadataDeadline,
       () =>
         getSkillCaptureEvidence(
           args.session.projectId,
@@ -2367,6 +2373,7 @@ async function runSkillUploadControlSuite(args) {
     const metadataUploadCountStable = await uploadCountRemains(
       probe,
       uploadsBeforeMetadata,
+      metadataDeadline,
     );
     checks.push({
       provider: "claude",
