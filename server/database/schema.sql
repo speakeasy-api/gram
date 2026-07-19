@@ -274,7 +274,7 @@ CREATE TABLE IF NOT EXISTS skills (
 
   first_seen_at timestamptz,
   last_seen_at timestamptz,
-  seen_count bigint DEFAULT 0,
+  seen_count bigint NOT NULL DEFAULT 0,
 
   archived_at timestamptz,
 
@@ -350,7 +350,7 @@ CREATE TABLE IF NOT EXISTS skill_observations (
 
   CONSTRAINT skill_observations_pkey PRIMARY KEY (id),
   CONSTRAINT skill_observations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT skill_observations_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id)
+  CONSTRAINT skill_observations_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_observations_project_id_idempotency_key_key
