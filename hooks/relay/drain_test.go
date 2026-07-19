@@ -134,6 +134,7 @@ func TestDrainReplaysEnrichedSkillMetadataAndUploadsContent(t *testing.T) {
 	summary = Drain(t.Context())
 
 	require.Equal(t, 1, summary.Replayed)
+	require.Empty(t, spoolFiles(t), "a successful upload must remove the replayed entry")
 	require.Equal(t, []skillUploadTask{{
 		ServerURL: fs.URL, Project: "default", APIKey: "drain-key", RawSHA256: rawSHA256,
 		SourcePath: path, SourceRoot: root,
