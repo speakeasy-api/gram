@@ -555,7 +555,7 @@ func (q *Queries) ListHooksServerNameOverrides(ctx context.Context, projectID uu
 }
 
 const listSkillObservations = `-- name: ListSkillObservations :many
-SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, reconciled_at, reconcile_error_code, created_at
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, reconcile_error_code, created_at
 FROM skill_observations
 WHERE project_id = $1
 ORDER BY seen_at ASC, id ASC
@@ -586,6 +586,7 @@ func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID
 			&i.RawSha256,
 			&i.SeenAt,
 			&i.SkillID,
+			&i.SkillVersionID,
 			&i.ReconciledAt,
 			&i.ReconcileErrorCode,
 			&i.CreatedAt,
@@ -657,26 +658,41 @@ func (q *Queries) ListUserAccountsByUsers(ctx context.Context, arg ListUserAccou
 }
 
 const rememberKnownSkillRawHash = `-- name: RememberKnownSkillRawHash :one
-WITH inserted AS (
-  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
-  SELECT s.project_id, $2, sv.canonical_sha256
+WITH existing_alias AS (
+  SELECT srh.canonical_sha256
+  FROM skill_raw_hashes srh
+  WHERE srh.project_id = $1
+    AND srh.raw_sha256 = $2
+), known_version AS (
+  SELECT MIN(sv.canonical_sha256) AS canonical_sha256
   FROM skill_versions sv
   JOIN skills s ON s.id = sv.skill_id
   WHERE s.project_id = $1
     AND sv.raw_sha256 = $2
-  ORDER BY sv.created_at DESC, sv.id DESC
-  LIMIT 1
+    AND NOT EXISTS (SELECT 1 FROM existing_alias)
+  HAVING COUNT(*) = 1
+), inserted AS (
+  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
+  SELECT $1, $2, canonical_sha256
+  FROM known_version
+  WHERE canonical_sha256 IS NOT NULL
   ON CONFLICT (project_id, raw_sha256) DO NOTHING
-  RETURNING 1
+  RETURNING canonical_sha256
+), canonical_hash AS (
+  SELECT canonical_sha256 FROM existing_alias
+  UNION ALL
+  SELECT canonical_sha256 FROM inserted
+), resolved AS (
+  SELECT sv.id
+  FROM canonical_hash hash
+  JOIN skills s ON s.project_id = $1
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = hash.canonical_sha256
+  LIMIT 2
 )
-SELECT (
-  EXISTS (
-    SELECT 1
-    FROM skill_raw_hashes srh
-    WHERE srh.project_id = $1
-      AND srh.raw_sha256 = $2
-  ) OR EXISTS (SELECT 1 FROM inserted)
-)::boolean AS known
+SELECT COUNT(*) = 1 AS known
+FROM resolved
 `
 
 type RememberKnownSkillRawHashParams struct {

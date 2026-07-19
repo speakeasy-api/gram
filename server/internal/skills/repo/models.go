@@ -54,6 +54,7 @@ type SkillObservation struct {
 	RawSha256          pgtype.Text
 	SeenAt             pgtype.Timestamptz
 	SkillID            uuid.NullUUID
+	SkillVersionID     uuid.NullUUID
 	ReconciledAt       pgtype.Timestamptz
 	ReconcileErrorCode pgtype.Text
 	CreatedAt          pgtype.Timestamptz

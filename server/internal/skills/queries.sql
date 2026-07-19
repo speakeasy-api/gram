@@ -1,6 +1,9 @@
 -- name: LockSkillName :exec
 SELECT pg_advisory_xact_lock(hashtextextended('skill:' || (@project_id::uuid)::text || ':' || @name::text, 0));
 
+-- name: LockSkillObservationReconciliation :exec
+SELECT pg_advisory_xact_lock(hashtextextended('skill-observations:' || (@project_id::uuid)::text, 0));
+
 -- name: GetSkillByNameForUpdate :one
 SELECT *
 FROM skills
@@ -53,6 +56,23 @@ WHERE project_id = @project_id
 ORDER BY seen_at, id
 LIMIT @batch_size
 FOR UPDATE SKIP LOCKED;
+
+-- name: ResolveSkillObservationVersions :many
+SELECT srh.raw_sha256, candidate.skill_id, candidate.skill_version_id
+FROM skill_raw_hashes srh
+JOIN LATERAL (
+  SELECT sv.skill_id, sv.id AS skill_version_id
+  FROM skills s
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = srh.canonical_sha256
+  WHERE s.project_id = srh.project_id
+  ORDER BY sv.skill_id, sv.id
+  LIMIT 2
+) candidate ON TRUE
+WHERE srh.project_id = @project_id
+  AND srh.raw_sha256 = ANY(@raw_sha256s::text[])
+ORDER BY srh.raw_sha256, candidate.skill_id, candidate.skill_version_id;
 
 -- name: CreateSkill :one
 INSERT INTO skills (
@@ -118,6 +138,7 @@ RETURNING *;
 WITH completed AS (
   UPDATE skill_observations so
   SET skill_id = @skill_id,
+      skill_version_id = sqlc.narg(skill_version_id)::uuid,
       reconciled_at = clock_timestamp(),
       reconcile_error_code = NULL
   WHERE so.project_id = @project_id
@@ -199,7 +220,6 @@ SET first_seen_at = CASE
 FROM evidence
 WHERE s.project_id = @project_id
   AND s.id = @skill_id
-  AND s.archived_at IS NULL
   AND evidence.seen_count > 0
 RETURNING evidence.seen_count;
 
@@ -207,10 +227,29 @@ RETURNING evidence.seen_count;
 UPDATE skill_observations
 SET reconciled_at = clock_timestamp(),
     reconcile_error_code = @error_code,
-    skill_id = NULL
+    skill_id = NULL,
+    skill_version_id = NULL
 WHERE project_id = @project_id
   AND id = ANY(@observation_ids::uuid[])
   AND reconciled_at IS NULL;
+
+-- name: BackfillSkillObservationsForCapturedVersion :execrows
+UPDATE skill_observations so
+SET skill_id = sqlc.arg(skill_id)::uuid,
+    skill_version_id = sqlc.arg(skill_version_id)::uuid,
+    reconciled_at = CASE WHEN so.reconcile_error_code IS NULL THEN so.reconciled_at ELSE NULL END,
+    reconcile_error_code = NULL
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE so.project_id = @project_id
+  AND so.raw_sha256 = sqlc.arg(raw_sha256)::text
+  AND so.skill_version_id IS NULL
+  AND (so.skill_id IS NULL OR so.skill_id = sqlc.arg(skill_id)::uuid)
+  AND s.project_id = so.project_id
+  AND s.id = sqlc.arg(skill_id)::uuid
+  AND sv.skill_id = s.id
+  AND sv.id = sqlc.arg(skill_version_id)::uuid
+  AND sv.canonical_sha256 = @canonical_sha256;
 
 -- name: CreateSkillVersion :one
 INSERT INTO skill_versions (

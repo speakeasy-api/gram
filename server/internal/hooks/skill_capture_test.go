@@ -224,6 +224,35 @@ func TestIngest_ManualVersionRawHashIsKnownAndAliased(t *testing.T) {
 	require.Equal(t, version.CanonicalSha256, alias.CanonicalSha256)
 }
 
+func TestIngest_AmbiguousManualVersionRawHashRequestsContent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	rawSHA256 := strings.Repeat("a", 64)
+	queries := skillsrepo.New(ti.conn)
+	for _, name := range []string{"ambiguous-one", "ambiguous-two"} {
+		skill, err := queries.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+			ProjectID: *authCtx.ProjectID, Name: name, DisplayName: name, Summary: pgtype.Text{},
+		})
+		require.NoError(t, err)
+		_, err = queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+			Content: name, CanonicalSha256: "same-canonical", RawSha256: rawSHA256,
+			Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
+			ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
+			ProjectID: *authCtx.ProjectID, SkillID: skill.ID,
+		})
+		require.NoError(t, err)
+	}
+
+	result, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "ambiguous", "ambiguous-one", rawSHA256))
+	require.NoError(t, err)
+	require.Equal(t, true, requireEffectMap(t, result.Effects, "skill_capture")["content_required"])
+	_, err = queries.GetSkillRawHash(ctx, skillsrepo.GetSkillRawHashParams{ProjectID: *authCtx.ProjectID, RawSha256: rawSHA256})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
 func TestIngest_KnownSkillHashIsProjectLocal(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
