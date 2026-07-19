@@ -207,7 +207,7 @@ WITH completed AS (
         'anthropic', 'claude', 'claude-code', 'openai', 'codex', 'cursor',
         'built-in', 'builtin', 'bundled', 'system', 'vendor'
       )
-      OR lower(btrim(completed.provider)) IN ('anthropic', 'claude', 'claude-code', 'openai', 'codex', 'cursor')
+      OR lower(btrim(COALESCE(completed.provider, ''))) IN ('anthropic', 'claude', 'claude-code', 'openai', 'codex', 'cursor')
     )
     AND own_distributed_hashes.raw_sha256 IS NULL
     AND NOT (SELECT distributed FROM own_distributed_skill) AS built_in
