@@ -80,6 +80,7 @@ WITH existing_alias AS (
   JOIN skill_versions sv
     ON sv.skill_id = s.id
     AND sv.canonical_sha256 = hash.canonical_sha256
+  WHERE s.archived_at IS NULL
   LIMIT 2
 )
 SELECT COUNT(*) = 1 AS known

@@ -1284,7 +1284,9 @@ async function getSkillCaptureEvidence(projectId, skillName, expectedProvider) {
         provider,
         COALESCE(source_level, '') AS source_level,
         COALESCE(source_path, '') AS source_path,
-        COALESCE(raw_sha256, '') AS raw_sha256
+        COALESCE(raw_sha256, '') AS raw_sha256,
+        COALESCE(skill_id::text, '') AS skill_id,
+        COALESCE(skill_version_id::text, '') AS skill_version_id
       FROM skill_observations
       WHERE project_id = '${sqlString(projectId)}'
         AND skill_name = '${sqlString(skillName)}'
@@ -1305,6 +1307,8 @@ async function getSkillCaptureEvidence(projectId, skillName, expectedProvider) {
       source_level,
       source_path,
       raw_sha256,
+      skill_id,
+      skill_version_id,
       canonical_sha256 IS NOT NULL,
       EXISTS (
         SELECT 1
@@ -1320,6 +1324,8 @@ async function getSkillCaptureEvidence(projectId, skillName, expectedProvider) {
         WHERE skills.project_id = '${sqlString(projectId)}'
           AND skills.name = '${sqlString(skillName)}'
           AND skills.archived_at IS NULL
+          AND skills.id = NULLIF(mapped.skill_id, '')::uuid
+          AND skill_versions.id = NULLIF(mapped.skill_version_id, '')::uuid
       )
     FROM mapped;
   `;
@@ -1336,6 +1342,8 @@ async function getSkillCaptureEvidence(projectId, skillName, expectedProvider) {
     sourceLevel = "",
     sourcePath = "",
     rawSHA256 = "",
+    skillId = "",
+    skillVersionId = "",
     hasRawHashMapping = "f",
     hasCapturedVersion = "f",
   ] = line.split("\x1f");
@@ -1344,6 +1352,8 @@ async function getSkillCaptureEvidence(projectId, skillName, expectedProvider) {
     sourceLevel,
     sourcePath,
     rawSHA256,
+    skillId,
+    skillVersionId,
     hasRawHashMapping: hasRawHashMapping === "t",
     hasCapturedVersion: hasCapturedVersion === "t",
   };
@@ -1372,6 +1382,8 @@ function skillCaptureCheck(provider, fixture, evidence) {
     evidence.sourceLevel === (provider === "codex" ? "personal" : "project") &&
     evidence.sourcePath === fixture.manifestPath &&
     evidence.rawSHA256 === expectedRawSHA256 &&
+    evidence.skillId !== "" &&
+    evidence.skillVersionId !== "" &&
     evidence.hasRawHashMapping &&
     evidence.hasCapturedVersion;
   return {
@@ -1379,7 +1391,7 @@ function skillCaptureCheck(provider, fixture, evidence) {
     feature: "skill.content_captured",
     status: matches ? "PASS" : "FAIL",
     detail: evidence
-      ? `provider=${evidence.provider} level=${evidence.sourceLevel} path=${evidence.sourcePath} raw_sha256=${evidence.rawSHA256} mapped=${evidence.hasRawHashMapping} captured-origin=${evidence.hasCapturedVersion}`
+      ? `provider=${evidence.provider} level=${evidence.sourceLevel} path=${evidence.sourcePath} raw_sha256=${evidence.rawSHA256} skill_id=${evidence.skillId} skill_version_id=${evidence.skillVersionId} mapped=${evidence.hasRawHashMapping} captured-origin=${evidence.hasCapturedVersion}`
       : `no skill_observations row found for ${fixture.skillName}`,
   };
 }
@@ -2055,10 +2067,14 @@ async function startHookRequestProbe(targetServerURL) {
       ),
   };
 }
-async function uploadCountRemains(probe, expected) {
-  // Unit tests cover the no-worker branch deterministically. Since cmd.Start
-  // finishes before the hook returns, this short window only covers child scheduling.
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+async function uploadCountRemains(probe, expected, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (probe.uploadRequests() !== expected) {
+      return false;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
   return probe.uploadRequests() === expected;
 }
 async function runSyntheticClaudeSkillActivation(args) {
@@ -2323,6 +2339,7 @@ async function runSkillUploadControlSuite(args) {
     const knownHashUploadCountStable = await uploadCountRemains(
       probe,
       baselineUploads,
+      args.pollSeconds * 1000,
     );
     checks.push({
       provider: "claude",
@@ -2367,6 +2384,7 @@ async function runSkillUploadControlSuite(args) {
     const metadataUploadCountStable = await uploadCountRemains(
       probe,
       uploadsBeforeMetadata,
+      args.pollSeconds * 1000,
     );
     checks.push({
       provider: "claude",

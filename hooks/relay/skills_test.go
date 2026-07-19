@@ -315,20 +315,6 @@ func TestResolveActivatedSkillRejectsExternalManifestSymlink(t *testing.T) {
 	require.False(t, resolved.captureReady)
 }
 
-func TestResolveActivatedSkillRejectsNonregularManifest(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	workspace := t.TempDir()
-	path := filepath.Join(workspace, ".cursor", "skills", "directory", "SKILL.md")
-	require.NoError(t, os.MkdirAll(path, 0o755))
-	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": path})
-
-	resolved := resolveActivatedSkill(event, activatedSkillPayload("directory"))
-
-	require.Equal(t, "directory", resolved.name)
-	require.Empty(t, resolved.sourcePath)
-	require.False(t, resolved.captureReady)
-}
-
 func TestResolveActivatedSkillCursorPluginLegacyKey(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

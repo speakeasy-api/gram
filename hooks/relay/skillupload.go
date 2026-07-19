@@ -2,7 +2,6 @@ package relay
 
 import (
 	"context"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -139,7 +138,7 @@ func validSkillUploadTask(task skillUploadTask) bool {
 			return false
 		}
 	}
-	if _, err := hex.DecodeString(task.RawSHA256); err != nil || task.RawSHA256 != strings.ToLower(task.RawSHA256) {
+	if !validRawSHA256(task.RawSHA256) {
 		return false
 	}
 	u, err := url.Parse(task.ServerURL)

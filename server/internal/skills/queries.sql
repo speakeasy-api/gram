@@ -67,6 +67,7 @@ JOIN LATERAL (
     ON sv.skill_id = s.id
     AND sv.canonical_sha256 = srh.canonical_sha256
   WHERE s.project_id = srh.project_id
+    AND s.archived_at IS NULL
   ORDER BY sv.skill_id, sv.id
   LIMIT 2
 ) candidate ON TRUE
@@ -249,7 +250,16 @@ WHERE so.project_id = @project_id
   AND s.id = sqlc.arg(skill_id)::uuid
   AND sv.skill_id = s.id
   AND sv.id = sqlc.arg(skill_version_id)::uuid
-  AND sv.canonical_sha256 = @canonical_sha256;
+  AND sv.canonical_sha256 = @canonical_sha256
+  AND NOT EXISTS (
+    SELECT 1
+    FROM skill_versions conflicting_version
+    JOIN skills conflicting_skill ON conflicting_skill.id = conflicting_version.skill_id
+    WHERE conflicting_skill.project_id = so.project_id
+      AND conflicting_skill.archived_at IS NULL
+      AND conflicting_version.canonical_sha256 = @canonical_sha256
+      AND conflicting_version.id <> sqlc.arg(skill_version_id)::uuid
+  );
 
 -- name: CreateSkillVersion :one
 INSERT INTO skill_versions (

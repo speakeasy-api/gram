@@ -211,6 +211,34 @@ func TestReconcileSkillObservations_AmbiguousHashRemainsUnknown(t *testing.T) {
 	require.False(t, observations[0].SkillID.Valid)
 	require.False(t, observations[0].SkillVersionID.Valid)
 	require.Equal(t, "ambiguous_hash", observations[0].ReconcileErrorCode.String)
+	count, err := ti.repo.BackfillSkillObservationsForCapturedVersion(ctx, repo.BackfillSkillObservationsForCapturedVersionParams{
+		ProjectID: ti.projectID, SkillID: firstSkillID, SkillVersionID: firstVersionID,
+		RawSha256: rawHash, CanonicalSha256: canonicalHash,
+	})
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestReconcileSkillObservations_ArchivedVersionDoesNotMakeActiveVersionAmbiguous(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	content := capturedManifest("reused-name", "Reused.", "body")
+	archived, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+	_, err = ti.repo.ArchiveSkill(ctx, repo.ArchiveSkillParams{ProjectID: ti.projectID, ID: archived.SkillID})
+	require.NoError(t, err)
+	active, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+	require.NotEqual(t, archived.SkillID, active.SkillID)
+	insertSkillObservation(t, ti, "reused-name", "", "project", contentSHA256(content), time.Now().UTC())
+
+	result, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Processed)
+	observations, err := hooksrepo.New(ti.conn).ListSkillObservations(ctx, ti.projectID)
+	require.NoError(t, err)
+	require.Equal(t, active.SkillID, observations[0].SkillID.UUID)
+	require.Equal(t, active.SkillVersionID, observations[0].SkillVersionID.UUID)
 }
 
 func TestCaptureSkillContent_BackfillsLegacyAttributionWithoutRecounting(t *testing.T) {
