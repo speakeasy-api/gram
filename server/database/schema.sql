@@ -344,13 +344,16 @@ CREATE TABLE IF NOT EXISTS skill_observations (
   raw_sha256 TEXT,
   seen_at timestamptz NOT NULL,
   skill_id uuid,
+  skill_version_id uuid,
   reconciled_at timestamptz,
   reconcile_error_code TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT skill_observations_pkey PRIMARY KEY (id),
   CONSTRAINT skill_observations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT skill_observations_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id)
+  CONSTRAINT skill_observations_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id),
+  CONSTRAINT skill_observations_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE SET NULL (skill_version_id),
+  CONSTRAINT skill_observations_skill_id_skill_version_id_check CHECK (skill_version_id IS NULL OR skill_id IS NOT NULL)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_observations_project_id_idempotency_key_key
@@ -371,6 +374,10 @@ WHERE reconciled_at IS NULL;
 CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_id_seen_at_idx
 ON skill_observations (project_id, skill_id, seen_at DESC)
 WHERE skill_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_version_id_seen_at_idx
+ON skill_observations (project_id, skill_version_id, seen_at DESC)
+WHERE skill_version_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS skill_raw_hashes (
   project_id uuid NOT NULL,
