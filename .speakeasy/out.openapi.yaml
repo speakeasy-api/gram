@@ -58773,8 +58773,7 @@ components:
       properties:
         content:
           type: string
-          description: Raw UTF-8 skill manifest content.
-          maxLength: 65536
+          description: Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.
         raw_sha256:
           type: string
           description: Lowercase SHA-256 of the raw content.

@@ -22,7 +22,7 @@ export type SchemaVersion = ClosedEnum<typeof SchemaVersion>;
  */
 export type UploadSkillContentPayload = {
   /**
-   * Raw UTF-8 skill manifest content.
+   * Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.
    */
   content: string;
   /**

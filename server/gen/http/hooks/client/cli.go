@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"unicode/utf8"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goa "goa.design/goa/v3/pkg"
@@ -339,15 +338,12 @@ func BuildUploadSkillContentPayload(hooksUploadSkillContentBody string, hooksUpl
 	{
 		err = json.Unmarshal([]byte(hooksUploadSkillContentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"aaa\",\n      \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\",\n      \"schema_version\": \"hook.skill-content.v1\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\",\n      \"schema_version\": \"hook.skill-content.v1\"\n   }'")
 		}
 		if !(body.SchemaVersion == "hook.skill-content.v1") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.schema_version", body.SchemaVersion, []any{"hook.skill-content.v1"}))
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.raw_sha256", body.RawSha256, "^[0-9a-f]{64}$"))
-		if utf8.RuneCountInString(body.Content) > 65536 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", body.Content, utf8.RuneCountInString(body.Content), 65536, false))
-		}
 		if err != nil {
 			return nil, err
 		}

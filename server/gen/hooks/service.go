@@ -641,7 +641,8 @@ type UploadSkillContentPayload struct {
 	SchemaVersion string
 	// Lowercase SHA-256 of the raw content.
 	RawSha256 string
-	// Raw UTF-8 skill manifest content.
+	// Raw UTF-8 skill manifest content. The server rejects content whose UTF-8
+	// encoding exceeds 65,536 bytes.
 	Content string
 }
 

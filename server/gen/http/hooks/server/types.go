@@ -183,7 +183,8 @@ type UploadSkillContentRequestBody struct {
 	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
 	// Lowercase SHA-256 of the raw content.
 	RawSha256 *string `form:"raw_sha256,omitempty" json:"raw_sha256,omitempty" xml:"raw_sha256,omitempty"`
-	// Raw UTF-8 skill manifest content.
+	// Raw UTF-8 skill manifest content. The server rejects content whose UTF-8
+	// encoding exceeds 65,536 bytes.
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
 }
 
@@ -3147,11 +3148,6 @@ func ValidateUploadSkillContentRequestBody(body *UploadSkillContentRequestBody) 
 	}
 	if body.RawSha256 != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.raw_sha256", *body.RawSha256, "^[0-9a-f]{64}$"))
-	}
-	if body.Content != nil {
-		if utf8.RuneCountInString(*body.Content) > 65536 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", *body.Content, utf8.RuneCountInString(*body.Content), 65536, false))
-		}
 	}
 	return
 }

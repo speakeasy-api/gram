@@ -233,9 +233,7 @@ var UploadSkillContentPayload = Type("UploadSkillContentPayload", func() {
 	Attribute("raw_sha256", String, "Lowercase SHA-256 of the raw content.", func() {
 		Pattern("^[0-9a-f]{64}$")
 	})
-	Attribute("content", String, "Raw UTF-8 skill manifest content.", func() {
-		MaxLength(65536)
-	})
+	Attribute("content", String, "Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.")
 })
 
 var HookNotificationData = Type("HookNotificationData", func() {

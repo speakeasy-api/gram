@@ -33,7 +33,7 @@ func (e *SchemaVersion) UnmarshalJSON(data []byte) error {
 
 // UploadSkillContentPayload - Content for a skill manifest requested by a prior hook ingest response.
 type UploadSkillContentPayload struct {
-	// Raw UTF-8 skill manifest content.
+	// Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.
 	Content string `json:"content"`
 	// Lowercase SHA-256 of the raw content.
 	RawSha256 string `json:"raw_sha256"`

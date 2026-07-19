@@ -183,7 +183,8 @@ type UploadSkillContentRequestBody struct {
 	SchemaVersion string `form:"schema_version" json:"schema_version" xml:"schema_version"`
 	// Lowercase SHA-256 of the raw content.
 	RawSha256 string `form:"raw_sha256" json:"raw_sha256" xml:"raw_sha256"`
-	// Raw UTF-8 skill manifest content.
+	// Raw UTF-8 skill manifest content. The server rejects content whose UTF-8
+	// encoding exceeds 65,536 bytes.
 	Content string `form:"content" json:"content" xml:"content"`
 }
 

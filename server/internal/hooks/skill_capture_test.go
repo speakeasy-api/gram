@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -314,7 +315,7 @@ func TestUploadSkillContent_RejectsUnobservedHashWithoutWriting(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-func TestUploadSkillContent_RejectsMalformedOversizedAndWrongHash(t *testing.T) {
+func TestUploadSkillContent_RejectsMalformedAndWrongHash(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
@@ -323,10 +324,29 @@ func TestUploadSkillContent_RejectsMalformedOversizedAndWrongHash(t *testing.T) 
 	require.Error(t, ti.service.UploadSkillContent(ctx, malformed))
 	wrong := &gen.UploadSkillContentPayload{ApikeyToken: nil, ProjectSlugInput: nil, SchemaVersion: hookSkillContentSchemaV1, RawSha256: strings.Repeat("0", 64), Content: "x"}
 	require.Error(t, ti.service.UploadSkillContent(ctx, wrong))
-	oversizedContent := strings.Repeat("a", 65537)
-	_, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "oversized", "oversized", rawHash(oversizedContent)))
+}
+
+func TestUploadSkillContent_RejectsMultibyteContentOverByteLimitWithoutWriting(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	content := captureManifest("multibyte-oversized", strings.Repeat("界", 22_000))
+	require.Less(t, utf8.RuneCountInString(content), 65_536)
+	require.Greater(t, len(content), 65_536)
+	_, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "multibyte-oversized", "multibyte-oversized", rawHash(content)))
 	require.NoError(t, err)
-	require.Error(t, ti.service.UploadSkillContent(ctx, uploadPayload(oversizedContent)))
+	err = ti.service.UploadSkillContent(ctx, uploadPayload(content))
+	require.Error(t, err)
+	require.ErrorContains(t, err, "skill manifest exceeds the 65536 byte limit")
+
+	queries := skillsrepo.New(ti.conn)
+	_, err = queries.GetSkillByNameForUpdate(ctx, skillsrepo.GetSkillByNameForUpdateParams{ProjectID: *authCtx.ProjectID, Name: "multibyte-oversized"})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = queries.GetSkillRawHash(ctx, skillsrepo.GetSkillRawHashParams{ProjectID: *authCtx.ProjectID, RawSha256: rawHash(content)})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestUploadSkillContent_HTTPRouteRequiresAuthentication(t *testing.T) {

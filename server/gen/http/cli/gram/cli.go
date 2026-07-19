@@ -9877,7 +9877,7 @@ func hooksUploadSkillContentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks upload-skill-content --body '{\n      \"content\": \"aaa\",\n      \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\",\n      \"schema_version\": \"hook.skill-content.v1\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks upload-skill-content --body '{\n      \"content\": \"abc123\",\n      \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\",\n      \"schema_version\": \"hook.skill-content.v1\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func hooksLogsUsage() {
