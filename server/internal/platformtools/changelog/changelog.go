@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -189,7 +190,7 @@ func (c *Client) fetch(ctx context.Context) ([]Entry, error) {
 		return nil, fmt.Errorf("decode changelog feed: %w", err)
 	}
 	if len(posts) == 0 {
-		return nil, fmt.Errorf("decode changelog feed: no entries found")
+		return nil, fmt.Errorf("empty changelog feed")
 	}
 
 	// Keep only supported product areas so a default request never surfaces
@@ -256,8 +257,10 @@ func parseVersion(v string) []int {
 
 func toEntry(post feedPost) Entry {
 	title, summary, details := splitContent(post.Content)
-	if len(details) > maxDetailsLen {
-		details = details[:maxDetailsLen] + "…"
+	// Rune-safe truncation: a byte slice could split a multi-byte character
+	// and hand the model invalid UTF-8 at the cut point.
+	if truncated := conv.TruncateString(details, maxDetailsLen); truncated != details {
+		details = truncated + "…"
 	}
 
 	date := post.Metadata.Date
@@ -265,13 +268,20 @@ func toEntry(post feedPost) Entry {
 		date = t.Format("2006-01-02")
 	}
 
-	var permalink string
-	if post.Metadata.Version != "" {
-		permalink = fmt.Sprintf(releaseURLFormat, post.Metadata.Version)
+	var version, permalink string
+	if v := post.Metadata.Version; v != "" {
+		version = "v" + v
+		permalink = fmt.Sprintf(releaseURLFormat, v)
+	}
+	// If the feed's markdown shape drifts and no "### " title parses, fall
+	// back to the version so entries stay identifiable; the content itself is
+	// preserved in summary/details either way.
+	if title == "" {
+		title = version
 	}
 
 	return Entry{
-		Version: "v" + post.Metadata.Version,
+		Version: version,
 		Product: post.Metadata.Product,
 		Date:    date,
 		Title:   title,

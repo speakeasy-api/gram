@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 
@@ -293,4 +294,45 @@ func TestGetChangelogDescriptor(t *testing.T) {
 	require.NotNil(t, descriptor.Annotations)
 	require.NotNil(t, descriptor.Annotations.ReadOnlyHint)
 	require.True(t, *descriptor.Annotations.ReadOnlyHint)
+}
+
+func TestToEntryDegradedFeedPosts(t *testing.T) {
+	t.Parallel()
+
+	// No "### " title in the content: title falls back to the version.
+	titleless := feedPost{Content: "Just prose without a heading.\n\n#### Features\n\n- item", Metadata: struct {
+		Version string `json:"version"`
+		Date    string `json:"date"`
+		Product string `json:"product"`
+	}{Version: "3.0.0", Date: "2026-07-18T00:00:00.000Z", Product: "platform"}}
+	entry := toEntry(titleless)
+	require.Equal(t, "v3.0.0", entry.Title)
+	require.Equal(t, "Just prose without a heading.", entry.Summary)
+
+	// Missing version: no bogus "v" version and no permalink.
+	versionless := feedPost{Content: "### Real title\n\nSummary.", Metadata: struct {
+		Version string `json:"version"`
+		Date    string `json:"date"`
+		Product string `json:"product"`
+	}{Version: "", Date: "2026-07-18T00:00:00.000Z", Product: "platform"}}
+	entry = toEntry(versionless)
+	require.Empty(t, entry.Version)
+	require.Empty(t, entry.URL)
+	require.Equal(t, "Real title", entry.Title)
+}
+
+func TestToEntryTruncatesDetailsOnRuneBoundary(t *testing.T) {
+	t.Parallel()
+
+	// Details made entirely of multi-byte runes, long enough to trigger the
+	// cap: the truncated output must remain valid UTF-8.
+	body := "### T\n\nS.\n\n#### Features\n\n- " + strings.Repeat("—", maxDetailsLen)
+	entry := toEntry(feedPost{Content: body, Metadata: struct {
+		Version string `json:"version"`
+		Date    string `json:"date"`
+		Product string `json:"product"`
+	}{Version: "1.0.0", Date: "2026-07-18T00:00:00.000Z", Product: "platform"}})
+	require.True(t, strings.HasSuffix(entry.Details, "…"))
+	require.True(t, utf8.ValidString(entry.Details))
+	require.LessOrEqual(t, len([]rune(entry.Details)), maxDetailsLen+1)
 }
