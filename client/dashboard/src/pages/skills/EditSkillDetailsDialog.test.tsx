@@ -140,4 +140,22 @@ describe("EditSkillDetailsDialog", () => {
         .disabled,
     ).toBe(true);
   });
+
+  it("rejects canonical names over 64 characters", () => {
+    render(
+      <EditSkillDetailsDialog skill={skill} open onOpenChange={() => {}} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Canonical name"), {
+      target: { value: "a".repeat(65) },
+    });
+
+    expect(
+      screen.getByText("Canonical name must be 64 characters or fewer."),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
 });

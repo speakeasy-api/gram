@@ -78,7 +78,7 @@ var _ = Service("skills", func() {
 
 		Payload(func() {
 			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
-			Attribute("name", String, "The canonical skill name.")
+			Attribute("name", String, "The canonical skill name.", func() { MaxLength(64) })
 			Attribute("display_name", String, "The user-facing skill name.", func() { MaxLength(256) })
 			Attribute("summary", String, "The optional skill summary.", func() { MaxLength(1024) })
 			Required("id", "name", "display_name")
@@ -378,7 +378,7 @@ var UpdateSkillRequestBody = Type("UpdateSkillRequestBody", func() {
 	Meta("openapi:typename", "UpdateSkillRequestBody")
 
 	Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
-	Attribute("name", String, "The canonical skill name.")
+	Attribute("name", String, "The canonical skill name.", func() { MaxLength(64) })
 	Attribute("display_name", String, "The user-facing skill name.", func() { MaxLength(256) })
 	Attribute("summary", String, "The optional skill summary.", func() { MaxLength(1024) })
 	Required("id", "name", "display_name")

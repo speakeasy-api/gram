@@ -4315,6 +4315,11 @@ func ValidateUpdateRequestBody(body *UpdateRequestBody) (err error) {
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 64, false))
+		}
+	}
 	if body.DisplayName != nil {
 		if utf8.RuneCountInString(*body.DisplayName) > 256 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.display_name", *body.DisplayName, utf8.RuneCountInString(*body.DisplayName), 256, false))

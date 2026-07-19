@@ -27,6 +27,7 @@ export function EditSkillDetailsDialog({
   const trimmedName = name.trim();
   const trimmedDisplayName = displayName.trim();
   const trimmedSummary = summary.trim();
+  const nameTooLong = trimmedName.length > 64;
   const displayNameTooLong = Array.from(trimmedDisplayName).length > 256;
   const summaryTooLong = Array.from(trimmedSummary).length > 1024;
   const unchanged =
@@ -78,6 +79,11 @@ export function EditSkillDetailsDialog({
           <InputField
             label="Canonical name"
             hint="Unique within this project."
+            error={
+              nameTooLong
+                ? "Canonical name must be 64 characters or fewer."
+                : undefined
+            }
             value={name}
             disabled={update.isPending}
             onChange={(event) => setName(event.currentTarget.value)}
@@ -119,6 +125,7 @@ export function EditSkillDetailsDialog({
               update.isPending ||
               unchanged ||
               trimmedName.length === 0 ||
+              nameTooLong ||
               trimmedDisplayName.length === 0 ||
               displayNameTooLong ||
               summaryTooLong

@@ -59275,6 +59275,7 @@ components:
                 name:
                     type: string
                     description: The canonical skill name.
+                    maxLength: 64
                 summary:
                     type: string
                     description: The optional skill summary.
