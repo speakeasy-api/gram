@@ -93,10 +93,11 @@ func TestIngest_RecordsExplicitAndInferredSkillObservations(t *testing.T) {
 
 	content := captureManifest("repo-review", "explicit")
 	hash := rawHash(content)
-	level, path, hostname := "project", "/workspace/.agents/skills/repo-review/SKILL.md", "devbox"
+	source, level, path, hostname := "workspace", "project", "/workspace/.agents/skills/repo-review/SKILL.md", "devbox"
 	explicit := skillPayload("claude", eventTypeSkillActivated, "explicit-session", "repo-review", strings.ToUpper(hash))
 	explicit.IdempotencyKey = new(uuid.NewString())
 	explicit.Source.Hostname = &hostname
+	explicit.Data.Skill.Source = &source
 	explicit.Data.Skill.SourceLevel = &level
 	explicit.Data.Skill.SourcePath = &path
 	result, err := ti.service.Ingest(ctx, explicit)
@@ -116,6 +117,7 @@ func TestIngest_RecordsExplicitAndInferredSkillObservations(t *testing.T) {
 	require.Len(t, rows, 2)
 	require.Equal(t, "repo-review", rows[0].SkillName)
 	require.Equal(t, hash, rows[0].RawSha256.String)
+	require.Equal(t, source, rows[0].Source.String)
 	require.Equal(t, level, rows[0].SourceLevel.String)
 	require.Equal(t, path, rows[0].SourcePath.String)
 	require.Equal(t, hostname, rows[0].Hostname.String)

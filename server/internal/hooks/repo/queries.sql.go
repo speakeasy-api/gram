@@ -360,6 +360,7 @@ INSERT INTO skill_observations (
   , hostname
   , session_id
   , skill_name
+  , source
   , source_level
   , source_path
   , raw_sha256
@@ -377,6 +378,7 @@ INSERT INTO skill_observations (
   , $10
   , $11
   , $12
+  , $13
 )
 ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
 DO NOTHING
@@ -391,6 +393,7 @@ type InsertSkillObservationParams struct {
 	Hostname       pgtype.Text
 	SessionID      pgtype.Text
 	SkillName      string
+	Source         pgtype.Text
 	SourceLevel    pgtype.Text
 	SourcePath     pgtype.Text
 	RawSha256      pgtype.Text
@@ -407,6 +410,7 @@ func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObs
 		arg.Hostname,
 		arg.SessionID,
 		arg.SkillName,
+		arg.Source,
 		arg.SourceLevel,
 		arg.SourcePath,
 		arg.RawSha256,
@@ -551,7 +555,7 @@ func (q *Queries) ListHooksServerNameOverrides(ctx context.Context, projectID uu
 }
 
 const listSkillObservations = `-- name: ListSkillObservations :many
-SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source_level, source_path, raw_sha256, seen_at, created_at
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, reconciled_at, reconcile_error_code, created_at
 FROM skill_observations
 WHERE project_id = $1
 ORDER BY seen_at ASC, id ASC
@@ -576,10 +580,14 @@ func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID
 			&i.Hostname,
 			&i.SessionID,
 			&i.SkillName,
+			&i.Source,
 			&i.SourceLevel,
 			&i.SourcePath,
 			&i.RawSha256,
 			&i.SeenAt,
+			&i.SkillID,
+			&i.ReconciledAt,
+			&i.ReconcileErrorCode,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

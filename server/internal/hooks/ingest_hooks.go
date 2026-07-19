@@ -173,6 +173,7 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 		Hostname:       conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(payload.Source.Hostname, ""))),
 		SessionID:      conv.ToPGTextEmpty(canonicalSessionID(payload)),
 		SkillName:      name,
+		Source:         conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(skill.Source, ""))),
 		SourceLevel:    conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(skill.SourceLevel, ""))),
 		SourcePath:     conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(skill.SourcePath, ""))),
 		RawSha256:      conv.ToPGTextEmpty(rawSHA256),

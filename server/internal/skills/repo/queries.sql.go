@@ -19,7 +19,7 @@ SET archived_at = clock_timestamp(),
 WHERE project_id = $1
   AND id = $2
   AND archived_at IS NULL
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type ArchiveSkillParams struct {
@@ -38,11 +38,162 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const claimPendingSkillObservations = `-- name: ClaimPendingSkillObservations :many
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, reconciled_at, reconcile_error_code, created_at
+FROM skill_observations
+WHERE project_id = $1
+  AND reconciled_at IS NULL
+ORDER BY seen_at, id
+LIMIT $2
+FOR UPDATE SKIP LOCKED
+`
+
+type ClaimPendingSkillObservationsParams struct {
+	ProjectID uuid.UUID
+	BatchSize int32
+}
+
+func (q *Queries) ClaimPendingSkillObservations(ctx context.Context, arg ClaimPendingSkillObservationsParams) ([]SkillObservation, error) {
+	rows, err := q.db.Query(ctx, claimPendingSkillObservations, arg.ProjectID, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillObservation
+	for rows.Next() {
+		var i SkillObservation
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.IdempotencyKey,
+			&i.Provider,
+			&i.UserID,
+			&i.UserEmail,
+			&i.Hostname,
+			&i.SessionID,
+			&i.SkillName,
+			&i.Source,
+			&i.SourceLevel,
+			&i.SourcePath,
+			&i.RawSha256,
+			&i.SeenAt,
+			&i.SkillID,
+			&i.ReconciledAt,
+			&i.ReconcileErrorCode,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const completeSkillObservations = `-- name: CompleteSkillObservations :one
+WITH completed AS (
+  UPDATE skill_observations so
+  SET skill_id = $2,
+      reconciled_at = clock_timestamp(),
+      reconcile_error_code = NULL
+  WHERE so.project_id = $1
+    AND so.id = ANY($3::uuid[])
+    AND so.reconciled_at IS NULL
+  RETURNING so.seen_at, so.source, so.source_level, so.raw_sha256
+), completed_hashes AS (
+  SELECT DISTINCT raw_sha256
+  FROM completed
+  WHERE raw_sha256 IS NOT NULL
+), own_distributed_hashes AS (
+  SELECT completed_hashes.raw_sha256
+  FROM completed_hashes
+  WHERE EXISTS (
+    SELECT 1
+    FROM skill_distributions sd
+    JOIN skill_versions sv
+      ON sv.skill_id = sd.skill_id
+      AND sv.spec_valid IS TRUE
+    WHERE sd.project_id = $1
+      AND sd.channel = 'plugin'
+      AND (
+        sv.raw_sha256 = completed_hashes.raw_sha256
+        OR EXISTS (
+          SELECT 1
+          FROM skill_raw_hashes srh
+          WHERE srh.project_id = sd.project_id
+            AND srh.raw_sha256 = completed_hashes.raw_sha256
+            AND srh.canonical_sha256 = sv.canonical_sha256
+        )
+      )
+  )
+), evidence_rows AS (
+  SELECT
+    completed.seen_at,
+    (
+      lower(btrim(COALESCE(completed.source_level, ''))) IN ('plugin', 'bundled', 'admin', 'system')
+      OR lower(btrim(COALESCE(completed.source, ''))) IN (
+        'anthropic', 'claude', 'claude-code', 'openai', 'codex', 'cursor',
+        'built-in', 'builtin', 'bundled', 'system', 'vendor'
+      )
+    )
+    AND own_distributed_hashes.raw_sha256 IS NULL AS built_in
+  FROM completed
+  LEFT JOIN own_distributed_hashes USING (raw_sha256)
+), evidence AS (
+  SELECT
+    MIN(seen_at) AS first_seen_at,
+    MAX(seen_at) AS last_seen_at,
+    COUNT(*)::bigint AS seen_count,
+    COALESCE(bool_and(built_in), FALSE) AS all_built_in
+  FROM evidence_rows
+)
+UPDATE skills s
+SET first_seen_at = CASE
+      WHEN s.first_seen_at IS NULL THEN evidence.first_seen_at
+      ELSE LEAST(s.first_seen_at, evidence.first_seen_at)
+    END,
+    last_seen_at = CASE
+      WHEN s.last_seen_at IS NULL THEN evidence.last_seen_at
+      ELSE GREATEST(s.last_seen_at, evidence.last_seen_at)
+    END,
+    seen_count = COALESCE(s.seen_count, 0) + evidence.seen_count,
+    classification = CASE
+      WHEN s.source_kind <> 'captured' THEN s.classification
+      WHEN COALESCE(s.seen_count, 0) = 0 AND evidence.all_built_in THEN 'built_in'
+      WHEN NOT evidence.all_built_in THEN 'custom'
+      ELSE s.classification
+    END
+FROM evidence
+WHERE s.project_id = $1
+  AND s.id = $2
+  AND s.archived_at IS NULL
+  AND evidence.seen_count > 0
+RETURNING evidence.seen_count
+`
+
+type CompleteSkillObservationsParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	ObservationIds []uuid.UUID
+}
+
+func (q *Queries) CompleteSkillObservations(ctx context.Context, arg CompleteSkillObservationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, completeSkillObservations, arg.ProjectID, arg.SkillID, arg.ObservationIds)
+	var seen_count int64
+	err := row.Scan(&seen_count)
+	return seen_count, err
 }
 
 const createCapturedSkill = `-- name: CreateCapturedSkill :one
@@ -63,7 +214,7 @@ INSERT INTO skills (
 )
 ON CONFLICT (project_id, name) WHERE archived_at IS NULL
 DO NOTHING
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type CreateCapturedSkillParams struct {
@@ -89,6 +240,57 @@ func (q *Queries) CreateCapturedSkill(ctx context.Context, arg CreateCapturedSki
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createObservedSkill = `-- name: CreateObservedSkill :one
+INSERT INTO skills (
+  project_id,
+  name,
+  display_name,
+  summary,
+  source_kind,
+  classification
+) VALUES (
+  $1,
+  $2,
+  $3,
+  NULL,
+  'captured',
+  'custom'
+)
+ON CONFLICT (project_id, name) WHERE archived_at IS NULL
+DO NOTHING
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+`
+
+type CreateObservedSkillParams struct {
+	ProjectID   uuid.UUID
+	Name        string
+	DisplayName string
+}
+
+func (q *Queries) CreateObservedSkill(ctx context.Context, arg CreateObservedSkillParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, createObservedSkill, arg.ProjectID, arg.Name, arg.DisplayName)
+	var i Skill
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Summary,
+		&i.SourceKind,
+		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -114,7 +316,7 @@ INSERT INTO skills (
 )
 ON CONFLICT (project_id, name) WHERE archived_at IS NULL
 DO NOTHING
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type CreateSkillParams struct {
@@ -140,6 +342,9 @@ func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (Skill
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -294,6 +499,30 @@ func (q *Queries) DeleteSkillVersionOrigin(ctx context.Context, arg DeleteSkillV
 	return err
 }
 
+const failSkillObservationReconciliations = `-- name: FailSkillObservationReconciliations :execrows
+UPDATE skill_observations
+SET reconciled_at = clock_timestamp(),
+    reconcile_error_code = $1,
+    skill_id = NULL
+WHERE project_id = $2
+  AND id = ANY($3::uuid[])
+  AND reconciled_at IS NULL
+`
+
+type FailSkillObservationReconciliationsParams struct {
+	ErrorCode      pgtype.Text
+	ProjectID      uuid.UUID
+	ObservationIds []uuid.UUID
+}
+
+func (q *Queries) FailSkillObservationReconciliations(ctx context.Context, arg FailSkillObservationReconciliationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failSkillObservationReconciliations, arg.ErrorCode, arg.ProjectID, arg.ObservationIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActiveSkillDistributionRecord = `-- name: GetActiveSkillDistributionRecord :one
 SELECT
   sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
@@ -407,7 +636,7 @@ func (q *Queries) GetPluginForDistribution(ctx context.Context, arg GetPluginFor
 }
 
 const getSkill = `-- name: GetSkill :one
-SELECT id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
 WHERE project_id = $1
   AND id = $2
@@ -430,6 +659,9 @@ func (q *Queries) GetSkill(ctx context.Context, arg GetSkillParams) (Skill, erro
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -438,7 +670,7 @@ func (q *Queries) GetSkill(ctx context.Context, arg GetSkillParams) (Skill, erro
 }
 
 const getSkillByNameForUpdate = `-- name: GetSkillByNameForUpdate :one
-SELECT id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
 WHERE project_id = $1
   AND name = $2
@@ -462,6 +694,9 @@ func (q *Queries) GetSkillByNameForUpdate(ctx context.Context, arg GetSkillByNam
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -471,7 +706,7 @@ func (q *Queries) GetSkillByNameForUpdate(ctx context.Context, arg GetSkillByNam
 
 const getSkillDetails = `-- name: GetSkillDetails :one
 SELECT
-  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.archived_at, s.created_at, s.updated_at,
+  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
   latest.id, latest.skill_id, latest.content, latest.canonical_sha256, latest.raw_sha256, latest.description, latest.metadata, latest.spec_valid, latest.validation_errors, latest.created_at, latest.created_by_user_id,
   state.version_count
 FROM skills s
@@ -514,6 +749,9 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 		&i.Skill.Summary,
 		&i.Skill.SourceKind,
 		&i.Skill.Classification,
+		&i.Skill.FirstSeenAt,
+		&i.Skill.LastSeenAt,
+		&i.Skill.SeenCount,
 		&i.Skill.ArchivedAt,
 		&i.Skill.CreatedAt,
 		&i.Skill.UpdatedAt,
@@ -534,7 +772,7 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 }
 
 const getSkillForUpdate = `-- name: GetSkillForUpdate :one
-SELECT id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
 WHERE project_id = $1
   AND id = $2
@@ -558,6 +796,9 @@ func (q *Queries) GetSkillForUpdate(ctx context.Context, arg GetSkillForUpdatePa
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -854,6 +1095,58 @@ func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActi
 	return items, nil
 }
 
+const listProjectsWithPendingSkillObservations = `-- name: ListProjectsWithPendingSkillObservations :many
+WITH RECURSIVE pending_projects AS (
+  (
+    SELECT so.project_id
+    FROM skill_observations so
+    WHERE so.reconciled_at IS NULL
+      AND so.project_id > $2
+    ORDER BY so.project_id
+    LIMIT 1
+  )
+  UNION ALL
+  SELECT next_project.project_id
+  FROM pending_projects current_project
+  CROSS JOIN LATERAL (
+    SELECT so.project_id
+    FROM skill_observations so
+    WHERE so.reconciled_at IS NULL
+      AND so.project_id > current_project.project_id
+    ORDER BY so.project_id
+    LIMIT 1
+  ) next_project
+)
+SELECT project_id
+FROM pending_projects
+LIMIT $1
+`
+
+type ListProjectsWithPendingSkillObservationsParams struct {
+	PageLimit     int32
+	ProjectCursor uuid.UUID
+}
+
+func (q *Queries) ListProjectsWithPendingSkillObservations(ctx context.Context, arg ListProjectsWithPendingSkillObservationsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsWithPendingSkillObservations, arg.PageLimit, arg.ProjectCursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSkillVersions = `-- name: ListSkillVersions :many
 SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
 FROM skill_versions sv
@@ -920,7 +1213,7 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 
 const listSkills = `-- name: ListSkills :many
 SELECT
-  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.archived_at, s.created_at, s.updated_at,
+  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
   latest.id AS latest_version_id,
   latest.version_count
 FROM skills s
@@ -972,6 +1265,9 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 			&i.Skill.Summary,
 			&i.Skill.SourceKind,
 			&i.Skill.Classification,
+			&i.Skill.FirstSeenAt,
+			&i.Skill.LastSeenAt,
+			&i.Skill.SeenCount,
 			&i.Skill.ArchivedAt,
 			&i.Skill.CreatedAt,
 			&i.Skill.UpdatedAt,
@@ -1160,7 +1456,7 @@ SET display_name = $1,
 WHERE project_id = $3
   AND id = $4
   AND archived_at IS NULL
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type UpdateSkillParams struct {
@@ -1186,6 +1482,9 @@ func (q *Queries) UpdateSkill(ctx context.Context, arg UpdateSkillParams) (Skill
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,

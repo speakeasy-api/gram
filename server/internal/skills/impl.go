@@ -223,10 +223,12 @@ func (s *Service) recordVersion(
 	var beforeSnapshot *audit.SkillSnapshot
 	if !createdSkill {
 		latestBeforeID, countBefore, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
-		if err != nil {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
 		}
-		beforeSnapshot = buildSkillAuditSnapshot(skill, latestBeforeID, countBefore)
+		if err == nil {
+			beforeSnapshot = buildSkillAuditSnapshot(skill, latestBeforeID, countBefore)
+		}
 	}
 
 	version, err := queries.CreateSkillVersion(ctx, repo.CreateSkillVersionParams{
