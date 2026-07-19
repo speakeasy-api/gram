@@ -645,8 +645,9 @@ func TestServePublic_ToolsList_SourceTags_NoVariationRequired(t *testing.T) {
 
 	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
 	// removed also has source tag "billing" but its empty variation tag set takes
-	// it out of every filter, so only source_only remains.
-	require.Equal(t, []string{"source_only"}, names)
+	// it out of every filter, so only source_only remains. The synthetic
+	// instruction tool bypasses tag filtering and is always prepended.
+	require.Equal(t, []string{"instructions", "source_only"}, names)
 }
 
 func TestServePublic_ToolsList_SourceTags_NilVariationFallsBackToSource(t *testing.T) {
@@ -660,8 +661,10 @@ func TestServePublic_ToolsList_SourceTags_NilVariationFallsBackToSource(t *testi
 
 	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
 	// The renaming variation leaves tags unset, so the source "reporting" tag
-	// still matches; the wire name reflects the variation rename.
-	require.Equal(t, []string{"reporting_renamed"}, names)
+	// still matches; the wire name reflects the variation rename. The
+	// synthetic instruction tool bypasses tag filtering and is always
+	// prepended.
+	require.Equal(t, []string{"instructions", "reporting_renamed"}, names)
 }
 
 func TestServePublic_ToolsList_EmptyVariationTags_RemovesFromAllFilters(t *testing.T) {
@@ -674,7 +677,7 @@ func TestServePublic_ToolsList_EmptyVariationTags_RemovesFromAllFilters(t *testi
 	w := servePublicToolsRequest(t, ctx, ti, mcpSlug, "", makeToolsListBody())
 	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
 	all := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
-	require.ElementsMatch(t, []string{"source_only", "reporting_renamed", "removed"}, all)
+	require.ElementsMatch(t, []string{"instructions", "source_only", "reporting_renamed", "removed"}, all)
 
 	// Under a filter matching its source tag, the empty variation tag set keeps
 	// removed out of the results entirely.
@@ -706,6 +709,147 @@ func TestServePublic_ToolsCall_EmptyVariationTags_NotFound(t *testing.T) {
 	require.Contains(t, resp.Error.Message, "not found")
 }
 
+// createInstructionToolset creates a public MCP toolset with the given
+// instructions + instruction tool mode and returns its mcp slug.
+func createInstructionToolset(t *testing.T, ctx context.Context, ti *testInstance, slug, instructions, mode string) string {
+	t.Helper()
+
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	metadataRepo := metadata_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Instruction tool test server " + slug,
+		Slug:                   slug,
+		Description:            conv.ToPGText("A test MCP server"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText(slug),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolset.Name,
+		Description:            toolset.Description,
+		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+		McpSlug:                toolset.McpSlug,
+		McpIsPublic:            true,
+		McpEnabled:             toolset.McpEnabled,
+		Slug:                   toolset.Slug,
+		ProjectID:              toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	_, err = metadataRepo.UpsertMetadata(ctx, metadata_repo.UpsertMetadataParams{
+		ToolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID:                *authCtx.ProjectID,
+		ExternalDocumentationUrl: pgtype.Text{String: "", Valid: false},
+		LogoID:                   uuid.NullUUID{Valid: false},
+		Instructions:             conv.ToPGText(instructions),
+		InstructionToolMode:      mode,
+	})
+	require.NoError(t, err)
+
+	return toolset.McpSlug.String
+}
+
+// listToolNames runs tools/list against the public endpoint and returns the
+// tool names in order.
+func listToolNames(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug string) []string {
+	t.Helper()
+
+	w, err := servePublicHTTP(t, ctx, ti, mcpSlug, makeToolsListBody(), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var response struct {
+		Result struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response), "response body: %s", w.Body.String())
+
+	names := make([]string, 0, len(response.Result.Tools))
+	for _, tool := range response.Result.Tools {
+		names = append(names, tool.Name)
+	}
+	return names
+}
+
+func TestServePublic_InstructionToolListedFirst(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := createInstructionToolset(t, ctx, ti, "instr-list-required", "Verify the customer record after every write.", "required")
+
+	names := listToolNames(t, ctx, ti, mcpSlug)
+	require.NotEmpty(t, names)
+	require.Equal(t, "instructions", names[0])
+}
+
+func TestServePublic_InstructionToolListedInOptionalMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := createInstructionToolset(t, ctx, ti, "instr-list-optional", "Some instructions.", "optional")
+
+	names := listToolNames(t, ctx, ti, mcpSlug)
+	require.Contains(t, names, "instructions")
+}
+
+func TestServePublic_InstructionToolHiddenWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	mcpSlug := createInstructionToolset(t, ctx, ti, "instr-list-disabled", "Some instructions.", "disabled")
+
+	names := listToolNames(t, ctx, ti, mcpSlug)
+	require.NotContains(t, names, "instructions")
+}
+
+func TestServePublic_InstructionToolListedWithoutMetadataRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Instruction tool no metadata",
+		Slug:                   "instr-list-no-metadata",
+		Description:            conv.ToPGText("A test MCP server"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText("instr-list-no-metadata"),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	_, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolset.Name,
+		Description:            toolset.Description,
+		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+		McpSlug:                toolset.McpSlug,
+		McpIsPublic:            true,
+		McpEnabled:             toolset.McpEnabled,
+		Slug:                   toolset.Slug,
+		ProjectID:              toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	names := listToolNames(t, ctx, ti, "instr-list-no-metadata")
+	require.Equal(t, []string{"instructions"}, names)
+}
 func TestServePublic_ToolsCall_FilteredOutTool_NotFound(t *testing.T) {
 	t.Parallel()
 

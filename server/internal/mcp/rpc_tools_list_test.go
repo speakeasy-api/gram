@@ -213,8 +213,10 @@ func TestServePublic_ToolsList_ReturnsEmptyForEmptyToolset(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 
+	// The synthetic instruction tool is always injected, even for an empty
+	// toolset, so an "empty" toolset still lists that one tool.
 	resp := parseToolsListResponse(t, w.Body.Bytes())
-	require.Empty(t, resp.Result.Tools)
+	require.Equal(t, []string{"instructions"}, toolNames(resp))
 }
 
 func TestServePublic_ToolsList_ReturnsAllTools(t *testing.T) {
@@ -236,7 +238,8 @@ func TestServePublic_ToolsList_ReturnsAllTools(t *testing.T) {
 
 	resp := parseToolsListResponse(t, w.Body.Bytes())
 	names := toolNames(resp)
-	require.Len(t, names, 2)
+	require.Len(t, names, 3)
+	require.Contains(t, names, "instructions")
 	require.Contains(t, names, "tool_alpha")
 	require.Contains(t, names, "tool_beta")
 }
@@ -261,7 +264,8 @@ func TestServePublic_RBAC_ToolsList_PublicMCPSkipsFiltering(t *testing.T) {
 
 	resp := parseToolsListResponse(t, w.Body.Bytes())
 	names := toolNames(resp)
-	require.Len(t, names, 2)
+	require.Len(t, names, 3)
+	require.Contains(t, names, "instructions")
 	require.Contains(t, names, "pub_tool_a")
 	require.Contains(t, names, "pub_tool_b")
 }
@@ -503,8 +507,8 @@ func TestServePublic_ToolsList_NoTagsFilter_ReturnsAllWithVariationNames(t *test
 
 	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
 	// Variation-renamed names are exposed on the wire; the untagged tool keeps
-	// its original name.
-	require.ElementsMatch(t, []string{"alpha_renamed", "beta_renamed", "tool_gamma"}, names)
+	// its original name. The synthetic instruction tool is always present.
+	require.ElementsMatch(t, []string{"instructions", "alpha_renamed", "beta_renamed", "tool_gamma"}, names)
 }
 
 func TestServePublic_ToolsList_TagsFilter_SingleTag(t *testing.T) {
@@ -517,8 +521,10 @@ func TestServePublic_ToolsList_TagsFilter_SingleTag(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
 
 	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
-	// Only the alpha-tagged tool; beta and the variation-less gamma are excluded.
-	require.Equal(t, []string{"alpha_renamed"}, names)
+	// Only the alpha-tagged tool; beta and the variation-less gamma are
+	// excluded. The synthetic instruction tool bypasses tag filtering and is
+	// always prepended.
+	require.Equal(t, []string{"instructions", "alpha_renamed"}, names)
 }
 
 func TestServePublic_ToolsList_TagsFilter_Union(t *testing.T) {
@@ -531,7 +537,7 @@ func TestServePublic_ToolsList_TagsFilter_Union(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
 
 	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
-	require.ElementsMatch(t, []string{"alpha_renamed", "beta_renamed"}, names)
+	require.ElementsMatch(t, []string{"instructions", "alpha_renamed", "beta_renamed"}, names)
 }
 
 func TestServePublic_ToolsList_TagsFilter_SharedTagMatchesBoth(t *testing.T) {
@@ -544,7 +550,7 @@ func TestServePublic_ToolsList_TagsFilter_SharedTagMatchesBoth(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
 
 	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
-	require.ElementsMatch(t, []string{"alpha_renamed", "beta_renamed"}, names)
+	require.ElementsMatch(t, []string{"instructions", "alpha_renamed", "beta_renamed"}, names)
 }
 
 func TestServePublic_ToolsList_TagsFilter_NonexistentReturnsEmpty(t *testing.T) {
@@ -567,6 +573,8 @@ func TestServePublic_ToolsList_TagsFilter_NonexistentReturnsEmpty(t *testing.T) 
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &rpcResp))
 	require.Nil(t, rpcResp.Error, "expected empty tools list, got JSON-RPC error: %s", w.Body.String())
 
+	// The synthetic instruction tool bypasses tag filtering, so it is the only
+	// tool left when a filter matches nothing.
 	names := toolNames(parseToolsListResponse(t, w.Body.Bytes()))
-	require.Empty(t, names)
+	require.Equal(t, []string{"instructions"}, names)
 }

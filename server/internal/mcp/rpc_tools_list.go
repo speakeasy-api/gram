@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -59,6 +60,7 @@ func handleToolsList(
 	temporalEnv *temporal.Environment,
 	shadowMCPClient *shadowmcp.Client,
 	platformExtras []platformtools.ExternalTool,
+	mcpMetadataRepo *mcpmetadata_repo.Queries,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -132,6 +134,18 @@ func handleToolsList(
 			allowed = append(allowed, t)
 		}
 		tools = allowed
+	}
+
+	// Inject the synthetic instruction tool. Placed after the RBAC filter on
+	// purpose: the tool is gateway-provided, carries no customer data beyond
+	// the instructions text, and is not subject to per-tool grants. Placed
+	// before shadowmcp injection so its schema gets the same toolset-id
+	// constant as every other tool.
+	if toolsetUUID, err := uuid.Parse(toolset.ID); err != nil {
+		logger.WarnContext(ctx, "invalid toolset id; skipping instruction tool injection", attr.SlogError(err))
+	} else {
+		itCfg := fetchInstructionToolConfig(ctx, logger, mcpMetadataRepo, toolsetUUID)
+		tools = injectInstructionTool(tools, toolset.Tools, itCfg.Mode)
 	}
 
 	toolsetProjectID, err := uuid.Parse(toolset.ProjectID)
