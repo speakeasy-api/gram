@@ -1309,6 +1309,44 @@ func (q *Queries) LockSkillName(ctx context.Context, arg LockSkillNameParams) er
 	return err
 }
 
+const promoteObservedSkillToManual = `-- name: PromoteObservedSkillToManual :one
+UPDATE skills
+SET source_kind = 'manual',
+    classification = 'custom',
+    updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = $2
+  AND source_kind = 'captured'
+  AND archived_at IS NULL
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+`
+
+type PromoteObservedSkillToManualParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) PromoteObservedSkillToManual(ctx context.Context, arg PromoteObservedSkillToManualParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, promoteObservedSkillToManual, arg.ProjectID, arg.ID)
+	var i Skill
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Summary,
+		&i.SourceKind,
+		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const revokeActiveSkillDistribution = `-- name: RevokeActiveSkillDistribution :one
 UPDATE skill_distributions
 SET revoked_at = clock_timestamp(),

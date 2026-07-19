@@ -1639,7 +1639,7 @@ type Skill struct {
 	Classification string
 	FirstSeenAt    pgtype.Timestamptz
 	LastSeenAt     pgtype.Timestamptz
-	SeenCount      pgtype.Int8
+	SeenCount      int64
 	ArchivedAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
