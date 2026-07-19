@@ -102,7 +102,22 @@ type GetResponseBody struct {
 	// The skill.
 	Skill *SkillResponseBody `form:"skill" json:"skill" xml:"skill"`
 	// The latest immutable version by creation order.
-	LatestVersion *SkillVersionResponseBody `form:"latest_version" json:"latest_version" xml:"latest_version"`
+	LatestVersion *SkillVersionResponseBody `form:"latest_version,omitempty" json:"latest_version,omitempty" xml:"latest_version,omitempty"`
+	// Activation adoption metrics.
+	Adoption *SkillAdoptionResponseBody `form:"adoption" json:"adoption" xml:"adoption"`
+	// Daily activations in the adoption window.
+	SightingTimeline []*SkillSightingTimelinePointResponseBody `form:"sighting_timeline" json:"sighting_timeline" xml:"sighting_timeline"`
+	// Active-machine version convergence.
+	Drift *SkillDriftResponseBody `form:"drift" json:"drift" xml:"drift"`
+}
+
+// ListUnknownActivationsResponseBody is the type of the "skills" service
+// "listUnknownActivations" endpoint HTTP response body.
+type ListUnknownActivationsResponseBody struct {
+	// Unknown activations in this page.
+	Activations []*UnknownSkillActivationResponseBody `form:"activations" json:"activations" xml:"activations"`
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // ListVersionsResponseBody is the type of the "skills" service "listVersions"
@@ -859,6 +874,196 @@ type GetUnexpectedResponseBody struct {
 // GetGatewayErrorResponseBody is the type of the "skills" service "get"
 // endpoint HTTP response body for the "gateway_error" error.
 type GetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnknownActivationsUnauthorizedResponseBody is the type of the "skills"
+// service "listUnknownActivations" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListUnknownActivationsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnknownActivationsForbiddenResponseBody is the type of the "skills"
+// service "listUnknownActivations" endpoint HTTP response body for the
+// "forbidden" error.
+type ListUnknownActivationsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnknownActivationsBadRequestResponseBody is the type of the "skills"
+// service "listUnknownActivations" endpoint HTTP response body for the
+// "bad_request" error.
+type ListUnknownActivationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnknownActivationsNotFoundResponseBody is the type of the "skills"
+// service "listUnknownActivations" endpoint HTTP response body for the
+// "not_found" error.
+type ListUnknownActivationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnknownActivationsConflictResponseBody is the type of the "skills"
+// service "listUnknownActivations" endpoint HTTP response body for the
+// "conflict" error.
+type ListUnknownActivationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnknownActivationsUnsupportedMediaResponseBody is the type of the
+// "skills" service "listUnknownActivations" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListUnknownActivationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnknownActivationsInvalidResponseBody is the type of the "skills"
+// service "listUnknownActivations" endpoint HTTP response body for the
+// "invalid" error.
+type ListUnknownActivationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnknownActivationsInvariantViolationResponseBody is the type of the
+// "skills" service "listUnknownActivations" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListUnknownActivationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnknownActivationsUnexpectedResponseBody is the type of the "skills"
+// service "listUnknownActivations" endpoint HTTP response body for the
+// "unexpected" error.
+type ListUnknownActivationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListUnknownActivationsGatewayErrorResponseBody is the type of the "skills"
+// service "listUnknownActivations" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListUnknownActivationsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1798,9 +2003,15 @@ type SkillResponseBody struct {
 	Classification string `form:"classification" json:"classification" xml:"classification"`
 	// The derived latest version ID, selected from immutable version creation
 	// order.
-	LatestVersionID string `form:"latest_version_id" json:"latest_version_id" xml:"latest_version_id"`
+	LatestVersionID *string `form:"latest_version_id,omitempty" json:"latest_version_id,omitempty" xml:"latest_version_id,omitempty"`
 	// The number of immutable versions recorded for the skill.
 	VersionCount int64 `form:"version_count" json:"version_count" xml:"version_count"`
+	// When this skill was first activated.
+	FirstSeenAt *string `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
+	// When this skill was most recently activated.
+	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+	// The number of reconciled activations observed for this skill.
+	SeenCount int64 `form:"seen_count" json:"seen_count" xml:"seen_count"`
 	// When the skill was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the skill was last updated.
@@ -1833,6 +2044,12 @@ type SkillVersionResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The user that recorded this version.
 	CreatedByUserID string `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
+	// When this exact version was first activated.
+	FirstSeenAt *string `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
+	// When this exact version was most recently activated.
+	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+	// The number of activations attributed to this exact version.
+	SeenCount int64 `form:"seen_count" json:"seen_count" xml:"seen_count"`
 }
 
 // SkillValidationErrorResponseBody is used to define fields on response body
@@ -1844,6 +2061,68 @@ type SkillValidationErrorResponseBody struct {
 	Field string `form:"field" json:"field" xml:"field"`
 	// A human-readable explanation of the problem.
 	Message string `form:"message" json:"message" xml:"message"`
+}
+
+// SkillAdoptionResponseBody is used to define fields on response body types.
+type SkillAdoptionResponseBody struct {
+	// Start of the rolling adoption window.
+	WindowStart string `form:"window_start" json:"window_start" xml:"window_start"`
+	// End of the rolling adoption window.
+	WindowEnd string `form:"window_end" json:"window_end" xml:"window_end"`
+	// Distinct non-empty hostnames that activated the skill during the rolling
+	// window.
+	DistinctHostnames int64 `form:"distinct_hostnames" json:"distinct_hostnames" xml:"distinct_hostnames"`
+	// Activations observed during the rolling window.
+	ActivationsInWindow int64 `form:"activations_in_window" json:"activations_in_window" xml:"activations_in_window"`
+}
+
+// SkillSightingTimelinePointResponseBody is used to define fields on response
+// body types.
+type SkillSightingTimelinePointResponseBody struct {
+	// Start of the UTC day.
+	BucketStart string `form:"bucket_start" json:"bucket_start" xml:"bucket_start"`
+	// Activations observed during the day.
+	ActivationCount int64 `form:"activation_count" json:"activation_count" xml:"activation_count"`
+}
+
+// SkillDriftResponseBody is used to define fields on response body types.
+type SkillDriftResponseBody struct {
+	// Start of the active-machine window.
+	WindowStart string `form:"window_start" json:"window_start" xml:"window_start"`
+	// End of the active-machine window.
+	WindowEnd string `form:"window_end" json:"window_end" xml:"window_end"`
+	// Whether the skill has no distribution target, one target, or conflicting
+	// targets.
+	TargetState string `form:"target_state" json:"target_state" xml:"target_state"`
+	// Distinct versions targeted by active plugin distributions.
+	TargetVersionIds []string `form:"target_version_ids" json:"target_version_ids" xml:"target_version_ids"`
+	// Machines that activated the skill during the window.
+	ActiveMachines int64 `form:"active_machines" json:"active_machines" xml:"active_machines"`
+	// Active machines whose latest activation used the target version.
+	OnTargetMachines int64 `form:"on_target_machines" json:"on_target_machines" xml:"on_target_machines"`
+	// Active machines whose latest attributed activation used another version.
+	DriftedMachines int64 `form:"drifted_machines" json:"drifted_machines" xml:"drifted_machines"`
+	// Active machines without a version or without one unambiguous target.
+	IndeterminateMachines int64 `form:"indeterminate_machines" json:"indeterminate_machines" xml:"indeterminate_machines"`
+}
+
+// UnknownSkillActivationResponseBody is used to define fields on response body
+// types.
+type UnknownSkillActivationResponseBody struct {
+	// The activation observation ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The skill name reported by the agent.
+	SkillName string `form:"skill_name" json:"skill_name" xml:"skill_name"`
+	// The agent provider that reported the activation.
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// The optional provider-specific source.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// The optional source precedence level.
+	SourceLevel *string `form:"source_level,omitempty" json:"source_level,omitempty" xml:"source_level,omitempty"`
+	// When the activation occurred.
+	SeenAt string `form:"seen_at" json:"seen_at" xml:"seen_at"`
+	// Why exact version attribution failed.
+	Reason string `form:"reason" json:"reason" xml:"reason"`
 }
 
 // SkillDistributionResponseBody is used to define fields on response body
@@ -1939,6 +2218,45 @@ func NewGetResponseBody(res *skills.GetSkillResult) *GetResponseBody {
 	}
 	if res.LatestVersion != nil {
 		body.LatestVersion = marshalTypesSkillVersionToSkillVersionResponseBody(res.LatestVersion)
+	}
+	if res.Adoption != nil {
+		body.Adoption = marshalSkillsSkillAdoptionToSkillAdoptionResponseBody(res.Adoption)
+	}
+	if res.SightingTimeline != nil {
+		body.SightingTimeline = make([]*SkillSightingTimelinePointResponseBody, len(res.SightingTimeline))
+		for i, val := range res.SightingTimeline {
+			if val == nil {
+				body.SightingTimeline[i] = nil
+				continue
+			}
+			body.SightingTimeline[i] = marshalSkillsSkillSightingTimelinePointToSkillSightingTimelinePointResponseBody(val)
+		}
+	} else {
+		body.SightingTimeline = []*SkillSightingTimelinePointResponseBody{}
+	}
+	if res.Drift != nil {
+		body.Drift = marshalSkillsSkillDriftToSkillDriftResponseBody(res.Drift)
+	}
+	return body
+}
+
+// NewListUnknownActivationsResponseBody builds the HTTP response body from the
+// result of the "listUnknownActivations" endpoint of the "skills" service.
+func NewListUnknownActivationsResponseBody(res *skills.ListUnknownSkillActivationsResult) *ListUnknownActivationsResponseBody {
+	body := &ListUnknownActivationsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Activations != nil {
+		body.Activations = make([]*UnknownSkillActivationResponseBody, len(res.Activations))
+		for i, val := range res.Activations {
+			if val == nil {
+				body.Activations[i] = nil
+				continue
+			}
+			body.Activations[i] = marshalSkillsUnknownSkillActivationToUnknownSkillActivationResponseBody(val)
+		}
+	} else {
+		body.Activations = []*UnknownSkillActivationResponseBody{}
 	}
 	return body
 }
@@ -2556,6 +2874,156 @@ func NewGetUnexpectedResponseBody(res *goa.ServiceError) *GetUnexpectedResponseB
 // of the "get" endpoint of the "skills" service.
 func NewGetGatewayErrorResponseBody(res *goa.ServiceError) *GetGatewayErrorResponseBody {
 	body := &GetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnknownActivationsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listUnknownActivations" endpoint of the
+// "skills" service.
+func NewListUnknownActivationsUnauthorizedResponseBody(res *goa.ServiceError) *ListUnknownActivationsUnauthorizedResponseBody {
+	body := &ListUnknownActivationsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnknownActivationsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listUnknownActivations" endpoint of the "skills"
+// service.
+func NewListUnknownActivationsForbiddenResponseBody(res *goa.ServiceError) *ListUnknownActivationsForbiddenResponseBody {
+	body := &ListUnknownActivationsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnknownActivationsBadRequestResponseBody builds the HTTP response
+// body from the result of the "listUnknownActivations" endpoint of the
+// "skills" service.
+func NewListUnknownActivationsBadRequestResponseBody(res *goa.ServiceError) *ListUnknownActivationsBadRequestResponseBody {
+	body := &ListUnknownActivationsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnknownActivationsNotFoundResponseBody builds the HTTP response body
+// from the result of the "listUnknownActivations" endpoint of the "skills"
+// service.
+func NewListUnknownActivationsNotFoundResponseBody(res *goa.ServiceError) *ListUnknownActivationsNotFoundResponseBody {
+	body := &ListUnknownActivationsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnknownActivationsConflictResponseBody builds the HTTP response body
+// from the result of the "listUnknownActivations" endpoint of the "skills"
+// service.
+func NewListUnknownActivationsConflictResponseBody(res *goa.ServiceError) *ListUnknownActivationsConflictResponseBody {
+	body := &ListUnknownActivationsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnknownActivationsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listUnknownActivations" endpoint of
+// the "skills" service.
+func NewListUnknownActivationsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListUnknownActivationsUnsupportedMediaResponseBody {
+	body := &ListUnknownActivationsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnknownActivationsInvalidResponseBody builds the HTTP response body
+// from the result of the "listUnknownActivations" endpoint of the "skills"
+// service.
+func NewListUnknownActivationsInvalidResponseBody(res *goa.ServiceError) *ListUnknownActivationsInvalidResponseBody {
+	body := &ListUnknownActivationsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnknownActivationsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listUnknownActivations" endpoint of
+// the "skills" service.
+func NewListUnknownActivationsInvariantViolationResponseBody(res *goa.ServiceError) *ListUnknownActivationsInvariantViolationResponseBody {
+	body := &ListUnknownActivationsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnknownActivationsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listUnknownActivations" endpoint of the
+// "skills" service.
+func NewListUnknownActivationsUnexpectedResponseBody(res *goa.ServiceError) *ListUnknownActivationsUnexpectedResponseBody {
+	body := &ListUnknownActivationsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListUnknownActivationsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listUnknownActivations" endpoint of the
+// "skills" service.
+func NewListUnknownActivationsGatewayErrorResponseBody(res *goa.ServiceError) *ListUnknownActivationsGatewayErrorResponseBody {
+	body := &ListUnknownActivationsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3309,6 +3777,19 @@ func NewListPayload(cursor *string, limit int, sessionToken *string, apikeyToken
 func NewGetPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.GetPayload {
 	v := &skills.GetPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListUnknownActivationsPayload builds a skills service
+// listUnknownActivations endpoint payload.
+func NewListUnknownActivationsPayload(cursor *string, limit int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListUnknownActivationsPayload {
+	v := &skills.ListUnknownActivationsPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

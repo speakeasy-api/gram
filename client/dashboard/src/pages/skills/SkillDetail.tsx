@@ -29,6 +29,11 @@ import {
   type ArchiveSkillTarget,
 } from "./ArchiveSkillDialog";
 import { SkillDistributionsSection } from "./SkillDistributionsSection";
+import {
+  SKILL_ADOPTION_SECTION_ID,
+  SKILL_TIMELINE_SECTION_ID,
+  SkillActivitySections,
+} from "./SkillActivitySections";
 import { stripSkillFrontmatter } from "./skill-manifest";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import { SkillPluginBanner } from "./SkillPluginBanner";
@@ -44,10 +49,12 @@ export const SKILL_VERSIONS_SECTION_ID = "versions";
 const SKILL_DANGER_SECTION_ID = "danger";
 
 const SKILL_SECTION_IDS: readonly string[] = [
+  SKILL_ADOPTION_SECTION_ID,
   SKILL_MANIFEST_SECTION_ID,
   SKILL_FRONTMATTER_SECTION_ID,
   SKILL_DISTRIBUTIONS_SECTION_ID,
   SKILL_VERSIONS_SECTION_ID,
+  SKILL_TIMELINE_SECTION_ID,
   SKILL_DANGER_SECTION_ID,
 ];
 
@@ -152,14 +159,18 @@ function SkillDetailSections({
   useScrollToSectionHash();
 
   const { skill, latestVersion } = skillQueryData;
-  const body = stripSkillFrontmatter(latestVersion.content);
+  const body = latestVersion
+    ? stripSkillFrontmatter(latestVersion.content)
+    : "";
   const frontmatterEntries = Object.entries(
-    latestVersion.frontmatter ?? {},
+    latestVersion?.frontmatter ?? {},
   ).filter(([key]) => key !== "name" && key !== "description");
 
   return (
     <>
       <SkillPluginBanner skillId={skillId} />
+
+      <SkillActivitySections data={skillQueryData} />
 
       <SettingsSection id={SKILL_MANIFEST_SECTION_ID}>
         <SettingsSection.Header>
@@ -171,33 +182,42 @@ function SkillDetailSections({
         </SettingsSection.Header>
         <SettingsSection.Panel>
           <SettingsSection.Body>
-            {!latestVersion.specValid && (
+            {latestVersion && !latestVersion.specValid && (
               <ValidationErrors errors={latestVersion.validationErrors} />
             )}
             <div className="overflow-x-auto">
-              <ManifestBody body={body} />
+              {latestVersion ? (
+                <ManifestBody body={body} />
+              ) : (
+                <Type small muted>
+                  Manifest content has not been captured for this observed
+                  skill.
+                </Type>
+              )}
             </div>
           </SettingsSection.Body>
-          <SettingsSection.Footer>
-            <SettingsSection.FooterHint>
-              Latest version{" "}
-              <span className="font-mono">
-                {latestVersion.canonicalSha256.slice(0, 8)}
-              </span>{" "}
-              · updated <HumanizeDateTime date={skill.updatedAt} />
-            </SettingsSection.FooterHint>
-            <SettingsSection.FooterActions>
-              <RequireScope
-                scope="skill:write"
-                resourceId={project.id}
-                level="component"
-              >
-                <Button size="sm" onClick={() => setEditOpen(true)}>
-                  Edit skill
-                </Button>
-              </RequireScope>
-            </SettingsSection.FooterActions>
-          </SettingsSection.Footer>
+          {latestVersion && (
+            <SettingsSection.Footer>
+              <SettingsSection.FooterHint>
+                Latest version{" "}
+                <span className="font-mono">
+                  {latestVersion.canonicalSha256.slice(0, 8)}
+                </span>{" "}
+                · updated <HumanizeDateTime date={skill.updatedAt} />
+              </SettingsSection.FooterHint>
+              <SettingsSection.FooterActions>
+                <RequireScope
+                  scope="skill:write"
+                  resourceId={project.id}
+                  level="component"
+                >
+                  <Button size="sm" onClick={() => setEditOpen(true)}>
+                    Edit skill
+                  </Button>
+                </RequireScope>
+              </SettingsSection.FooterActions>
+            </SettingsSection.Footer>
+          )}
         </SettingsSection.Panel>
       </SettingsSection>
 
@@ -241,15 +261,20 @@ function SkillDetailSections({
         <SkillDistributionsSection skillId={skillId} />
       </SettingsSection>
 
-      <SettingsSection id={SKILL_VERSIONS_SECTION_ID}>
-        <SettingsSection.Header>
-          <SettingsSection.Title>Version history</SettingsSection.Title>
-          <SettingsSection.Description>
-            Every recorded version of this skill's manifest.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-        <VersionHistory skillId={skillId} latestVersionId={latestVersion.id} />
-      </SettingsSection>
+      {latestVersion && (
+        <SettingsSection id={SKILL_VERSIONS_SECTION_ID}>
+          <SettingsSection.Header>
+            <SettingsSection.Title>Version history</SettingsSection.Title>
+            <SettingsSection.Description>
+              Every recorded version of this skill's manifest.
+            </SettingsSection.Description>
+          </SettingsSection.Header>
+          <VersionHistory
+            skillId={skillId}
+            latestVersionId={latestVersion.id}
+          />
+        </SettingsSection>
+      )}
 
       <DangerSettingsSection id={SKILL_DANGER_SECTION_ID}>
         <DangerSettingsSection.Header>
@@ -285,14 +310,16 @@ function SkillDetailSections({
         </DangerSettingsSection.Panel>
       </DangerSettingsSection>
 
-      <SkillManifestDialog
-        key={editOpen ? "edit" : "closed"}
-        mode="edit"
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        skillId={skill.id}
-        initialContent={latestVersion.content}
-      />
+      {latestVersion && (
+        <SkillManifestDialog
+          key={editOpen ? "edit" : "closed"}
+          mode="edit"
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          skillId={skill.id}
+          initialContent={latestVersion.content}
+        />
+      )}
       <ArchiveSkillDialog
         skill={archiveTarget}
         onClose={() => setArchiveTarget(null)}
@@ -491,6 +518,31 @@ function versionColumns({
           )}
         </div>
       ),
+    },
+    {
+      key: "activations",
+      header: "Activations",
+      width: "110px",
+      render: (version) => <Type small>{version.seenCount}</Type>,
+    },
+    {
+      key: "lastSeen",
+      header: "Last activated",
+      width: "150px",
+      render: (version) =>
+        version.lastSeenAt ? (
+          <Type
+            small
+            muted
+            title={dateTimeFormatters.full.format(version.lastSeenAt)}
+          >
+            <HumanizeDateTime date={version.lastSeenAt} />
+          </Type>
+        ) : (
+          <Type small muted>
+            Never
+          </Type>
+        ),
     },
     {
       key: "created",

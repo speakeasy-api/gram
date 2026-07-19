@@ -736,6 +736,43 @@ func (q *Queries) GetSkill(ctx context.Context, arg GetSkillParams) (Skill, erro
 	return i, err
 }
 
+const getSkillAdoptionStats = `-- name: GetSkillAdoptionStats :one
+SELECT
+  COUNT(DISTINCT NULLIF(btrim(so.hostname), ''))::bigint AS distinct_hostnames,
+  COUNT(*)::bigint AS activations_in_window
+FROM skill_observations so
+WHERE so.project_id = $1
+  AND so.skill_id = $2::uuid
+  AND so.reconciled_at IS NOT NULL
+  AND so.reconcile_error_code IS NULL
+  AND so.seen_at >= $3
+  AND so.seen_at < $4
+`
+
+type GetSkillAdoptionStatsParams struct {
+	ProjectID   uuid.UUID
+	SkillID     uuid.UUID
+	WindowStart pgtype.Timestamptz
+	WindowEnd   pgtype.Timestamptz
+}
+
+type GetSkillAdoptionStatsRow struct {
+	DistinctHostnames   int64
+	ActivationsInWindow int64
+}
+
+func (q *Queries) GetSkillAdoptionStats(ctx context.Context, arg GetSkillAdoptionStatsParams) (GetSkillAdoptionStatsRow, error) {
+	row := q.db.QueryRow(ctx, getSkillAdoptionStats,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.WindowStart,
+		arg.WindowEnd,
+	)
+	var i GetSkillAdoptionStatsRow
+	err := row.Scan(&i.DistinctHostnames, &i.ActivationsInWindow)
+	return i, err
+}
+
 const getSkillByNameForUpdate = `-- name: GetSkillByNameForUpdate :one
 SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
@@ -774,10 +811,10 @@ func (q *Queries) GetSkillByNameForUpdate(ctx context.Context, arg GetSkillByNam
 const getSkillDetails = `-- name: GetSkillDetails :one
 SELECT
   s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
-  latest.id, latest.skill_id, latest.content, latest.canonical_sha256, latest.raw_sha256, latest.description, latest.metadata, latest.spec_valid, latest.validation_errors, latest.created_at, latest.created_by_user_id,
-  state.version_count
+  COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
+  COALESCE(state.version_count, 0)::bigint AS version_count
 FROM skills s
-JOIN LATERAL (
+LEFT JOIN LATERAL (
   SELECT
     sv.id AS latest_version_id,
     COUNT(*) OVER()::bigint AS version_count
@@ -786,9 +823,6 @@ JOIN LATERAL (
   ORDER BY sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) state ON TRUE
-JOIN skill_versions latest
-  ON latest.id = state.latest_version_id
-  AND latest.skill_id = s.id
 WHERE s.project_id = $1
   AND s.id = $2
   AND s.archived_at IS NULL
@@ -800,9 +834,9 @@ type GetSkillDetailsParams struct {
 }
 
 type GetSkillDetailsRow struct {
-	Skill        Skill
-	SkillVersion SkillVersion
-	VersionCount int64
+	Skill           Skill
+	LatestVersionID uuid.UUID
+	VersionCount    int64
 }
 
 func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams) (GetSkillDetailsRow, error) {
@@ -822,17 +856,7 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 		&i.Skill.ArchivedAt,
 		&i.Skill.CreatedAt,
 		&i.Skill.UpdatedAt,
-		&i.SkillVersion.ID,
-		&i.SkillVersion.SkillID,
-		&i.SkillVersion.Content,
-		&i.SkillVersion.CanonicalSha256,
-		&i.SkillVersion.RawSha256,
-		&i.SkillVersion.Description,
-		&i.SkillVersion.Metadata,
-		&i.SkillVersion.SpecValid,
-		&i.SkillVersion.ValidationErrors,
-		&i.SkillVersion.CreatedAt,
-		&i.SkillVersion.CreatedByUserID,
+		&i.LatestVersionID,
 		&i.VersionCount,
 	)
 	return i, err
@@ -988,6 +1012,67 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 	return i, err
 }
 
+const getSkillVersionDetails = `-- name: GetSkillVersionDetails :one
+SELECT
+  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id,
+  sightings.first_seen_at,
+  sightings.last_seen_at,
+  COALESCE(sightings.seen_count, 0)::bigint AS seen_count
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN LATERAL (
+  SELECT
+    MIN(so.seen_at)::timestamptz AS first_seen_at,
+    MAX(so.seen_at)::timestamptz AS last_seen_at,
+    COUNT(*)::bigint AS seen_count
+  FROM skill_observations so
+  WHERE so.project_id = s.project_id
+    AND so.skill_id = sv.skill_id
+    AND so.skill_version_id = sv.id
+    AND so.reconciled_at IS NOT NULL
+    AND so.reconcile_error_code IS NULL
+) sightings ON TRUE
+WHERE s.project_id = $1
+  AND s.id = $2
+  AND s.archived_at IS NULL
+  AND sv.id = $3
+`
+
+type GetSkillVersionDetailsParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+type GetSkillVersionDetailsRow struct {
+	SkillVersion SkillVersion
+	FirstSeenAt  pgtype.Timestamptz
+	LastSeenAt   pgtype.Timestamptz
+	SeenCount    int64
+}
+
+func (q *Queries) GetSkillVersionDetails(ctx context.Context, arg GetSkillVersionDetailsParams) (GetSkillVersionDetailsRow, error) {
+	row := q.db.QueryRow(ctx, getSkillVersionDetails, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
+	var i GetSkillVersionDetailsRow
+	err := row.Scan(
+		&i.SkillVersion.ID,
+		&i.SkillVersion.SkillID,
+		&i.SkillVersion.Content,
+		&i.SkillVersion.CanonicalSha256,
+		&i.SkillVersion.RawSha256,
+		&i.SkillVersion.Description,
+		&i.SkillVersion.Metadata,
+		&i.SkillVersion.SpecValid,
+		&i.SkillVersion.ValidationErrors,
+		&i.SkillVersion.CreatedAt,
+		&i.SkillVersion.CreatedByUserID,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
+	)
+	return i, err
+}
+
 const getSkillVersionOrigin = `-- name: GetSkillVersionOrigin :one
 SELECT skill_version_id, skill_id, project_id, origin, created_at
 FROM skill_version_origins
@@ -1059,6 +1144,63 @@ type InsertCapturedSkillVersionOriginParams struct {
 func (q *Queries) InsertCapturedSkillVersionOrigin(ctx context.Context, arg InsertCapturedSkillVersionOriginParams) error {
 	_, err := q.db.Exec(ctx, insertCapturedSkillVersionOrigin, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
 	return err
+}
+
+const listActiveMachineLatestVersions = `-- name: ListActiveMachineLatestVersions :many
+WITH latest AS (
+  SELECT DISTINCT ON (btrim(so.hostname))
+    btrim(so.hostname) AS hostname,
+    so.skill_version_id
+  FROM skill_observations so
+  WHERE so.project_id = $1
+    AND so.skill_id = $2::uuid
+    AND NULLIF(btrim(so.hostname), '') IS NOT NULL
+    AND so.reconciled_at IS NOT NULL
+    AND so.reconcile_error_code IS NULL
+    AND so.seen_at >= $3
+    AND so.seen_at < $4
+  ORDER BY btrim(so.hostname), so.seen_at DESC, so.id DESC
+)
+SELECT skill_version_id, COUNT(*)::bigint AS machine_count
+FROM latest
+GROUP BY skill_version_id
+`
+
+type ListActiveMachineLatestVersionsParams struct {
+	ProjectID   uuid.UUID
+	SkillID     uuid.UUID
+	WindowStart pgtype.Timestamptz
+	WindowEnd   pgtype.Timestamptz
+}
+
+type ListActiveMachineLatestVersionsRow struct {
+	SkillVersionID uuid.NullUUID
+	MachineCount   int64
+}
+
+func (q *Queries) ListActiveMachineLatestVersions(ctx context.Context, arg ListActiveMachineLatestVersionsParams) ([]ListActiveMachineLatestVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveMachineLatestVersions,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.WindowStart,
+		arg.WindowEnd,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveMachineLatestVersionsRow
+	for rows.Next() {
+		var i ListActiveMachineLatestVersionsRow
+		if err := rows.Scan(&i.SkillVersionID, &i.MachineCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listActiveSkillDistributions = `-- name: ListActiveSkillDistributions :many
@@ -1216,10 +1358,126 @@ func (q *Queries) ListProjectsWithPendingSkillObservations(ctx context.Context, 
 	return items, nil
 }
 
+const listSkillDistributionTargetVersions = `-- name: ListSkillDistributionTargetVersions :many
+SELECT DISTINCT resolved.id
+FROM skill_distributions sd
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.project_id = $1
+  AND sd.skill_id = $2
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL
+ORDER BY resolved.id
+`
+
+type ListSkillDistributionTargetVersionsParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+func (q *Queries) ListSkillDistributionTargetVersions(ctx context.Context, arg ListSkillDistributionTargetVersionsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listSkillDistributionTargetVersions, arg.ProjectID, arg.SkillID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillSightingTimeline = `-- name: ListSkillSightingTimeline :many
+SELECT
+  (date_trunc('day', so.seen_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')::timestamptz AS bucket_start,
+  COUNT(*)::bigint AS activation_count
+FROM skill_observations so
+WHERE so.project_id = $1
+  AND so.skill_id = $2::uuid
+  AND so.reconciled_at IS NOT NULL
+  AND so.reconcile_error_code IS NULL
+  AND so.seen_at >= $3
+  AND so.seen_at < $4
+GROUP BY bucket_start
+ORDER BY bucket_start ASC
+`
+
+type ListSkillSightingTimelineParams struct {
+	ProjectID   uuid.UUID
+	SkillID     uuid.UUID
+	WindowStart pgtype.Timestamptz
+	WindowEnd   pgtype.Timestamptz
+}
+
+type ListSkillSightingTimelineRow struct {
+	BucketStart     pgtype.Timestamptz
+	ActivationCount int64
+}
+
+func (q *Queries) ListSkillSightingTimeline(ctx context.Context, arg ListSkillSightingTimelineParams) ([]ListSkillSightingTimelineRow, error) {
+	rows, err := q.db.Query(ctx, listSkillSightingTimeline,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.WindowStart,
+		arg.WindowEnd,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillSightingTimelineRow
+	for rows.Next() {
+		var i ListSkillSightingTimelineRow
+		if err := rows.Scan(&i.BucketStart, &i.ActivationCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSkillVersions = `-- name: ListSkillVersions :many
-SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
+SELECT
+  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id,
+  sightings.first_seen_at,
+  sightings.last_seen_at,
+  COALESCE(sightings.seen_count, 0)::bigint AS seen_count
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN LATERAL (
+  SELECT
+    MIN(so.seen_at)::timestamptz AS first_seen_at,
+    MAX(so.seen_at)::timestamptz AS last_seen_at,
+    COUNT(*)::bigint AS seen_count
+  FROM skill_observations so
+  WHERE so.project_id = s.project_id
+    AND so.skill_id = sv.skill_id
+    AND so.skill_version_id = sv.id
+    AND so.reconciled_at IS NOT NULL
+    AND so.reconcile_error_code IS NULL
+) sightings ON TRUE
 WHERE s.project_id = $1
   AND s.id = $2
   AND s.archived_at IS NULL
@@ -1242,7 +1500,14 @@ type ListSkillVersionsParams struct {
 	PageLimit       int32
 }
 
-func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsParams) ([]SkillVersion, error) {
+type ListSkillVersionsRow struct {
+	SkillVersion SkillVersion
+	FirstSeenAt  pgtype.Timestamptz
+	LastSeenAt   pgtype.Timestamptz
+	SeenCount    int64
+}
+
+func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsParams) ([]ListSkillVersionsRow, error) {
 	rows, err := q.db.Query(ctx, listSkillVersions,
 		arg.ProjectID,
 		arg.SkillID,
@@ -1254,21 +1519,24 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SkillVersion
+	var items []ListSkillVersionsRow
 	for rows.Next() {
-		var i SkillVersion
+		var i ListSkillVersionsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.SkillID,
-			&i.Content,
-			&i.CanonicalSha256,
-			&i.RawSha256,
-			&i.Description,
-			&i.Metadata,
-			&i.SpecValid,
-			&i.ValidationErrors,
-			&i.CreatedAt,
-			&i.CreatedByUserID,
+			&i.SkillVersion.ID,
+			&i.SkillVersion.SkillID,
+			&i.SkillVersion.Content,
+			&i.SkillVersion.CanonicalSha256,
+			&i.SkillVersion.RawSha256,
+			&i.SkillVersion.Description,
+			&i.SkillVersion.Metadata,
+			&i.SkillVersion.SpecValid,
+			&i.SkillVersion.ValidationErrors,
+			&i.SkillVersion.CreatedAt,
+			&i.SkillVersion.CreatedByUserID,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+			&i.SeenCount,
 		); err != nil {
 			return nil, err
 		}
@@ -1283,10 +1551,10 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 const listSkills = `-- name: ListSkills :many
 SELECT
   s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
-  latest.id AS latest_version_id,
-  latest.version_count
+  COALESCE(latest.id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
+  COALESCE(latest.version_count, 0)::bigint AS version_count
 FROM skills s
-JOIN LATERAL (
+LEFT JOIN LATERAL (
   SELECT
     sv.id,
     COUNT(*) OVER()::bigint AS version_count
@@ -1342,6 +1610,76 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 			&i.Skill.UpdatedAt,
 			&i.LatestVersionID,
 			&i.VersionCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUnknownSkillActivations = `-- name: ListUnknownSkillActivations :many
+SELECT so.id, so.project_id, so.idempotency_key, so.provider, so.user_id, so.user_email, so.hostname, so.session_id, so.skill_name, so.source, so.source_level, so.source_path, so.raw_sha256, so.seen_at, so.skill_id, so.skill_version_id, so.reconciled_at, so.reconcile_error_code, so.created_at
+FROM skill_observations so
+WHERE so.project_id = $1
+  AND so.skill_id IS NULL
+  AND so.reconciled_at IS NOT NULL
+  AND so.reconcile_error_code IS NOT NULL
+  AND (
+    $2::timestamptz IS NULL
+    OR (so.seen_at, so.id) < (
+      $2::timestamptz,
+      $3::uuid
+    )
+  )
+ORDER BY so.seen_at DESC, so.id DESC
+LIMIT $4
+`
+
+type ListUnknownSkillActivationsParams struct {
+	ProjectID    uuid.UUID
+	CursorSeenAt pgtype.Timestamptz
+	CursorID     uuid.NullUUID
+	PageLimit    int32
+}
+
+func (q *Queries) ListUnknownSkillActivations(ctx context.Context, arg ListUnknownSkillActivationsParams) ([]SkillObservation, error) {
+	rows, err := q.db.Query(ctx, listUnknownSkillActivations,
+		arg.ProjectID,
+		arg.CursorSeenAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillObservation
+	for rows.Next() {
+		var i SkillObservation
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.IdempotencyKey,
+			&i.Provider,
+			&i.UserID,
+			&i.UserEmail,
+			&i.Hostname,
+			&i.SessionID,
+			&i.SkillName,
+			&i.Source,
+			&i.SourceLevel,
+			&i.SourcePath,
+			&i.RawSha256,
+			&i.SeenAt,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.ReconciledAt,
+			&i.ReconcileErrorCode,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

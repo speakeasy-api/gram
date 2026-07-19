@@ -196,6 +196,64 @@ func BuildGetPayload(skillsGetID string, skillsGetSessionToken string, skillsGet
 	return v, nil
 }
 
+// BuildListUnknownActivationsPayload builds the payload for the skills
+// listUnknownActivations endpoint from CLI flags.
+func BuildListUnknownActivationsPayload(skillsListUnknownActivationsCursor string, skillsListUnknownActivationsLimit string, skillsListUnknownActivationsSessionToken string, skillsListUnknownActivationsApikeyToken string, skillsListUnknownActivationsProjectSlugInput string) (*skills.ListUnknownActivationsPayload, error) {
+	var err error
+	var cursor *string
+	{
+		if skillsListUnknownActivationsCursor != "" {
+			cursor = &skillsListUnknownActivationsCursor
+		}
+	}
+	var limit int
+	{
+		if skillsListUnknownActivationsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(skillsListUnknownActivationsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsListUnknownActivationsSessionToken != "" {
+			sessionToken = &skillsListUnknownActivationsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsListUnknownActivationsApikeyToken != "" {
+			apikeyToken = &skillsListUnknownActivationsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsListUnknownActivationsProjectSlugInput != "" {
+			projectSlugInput = &skillsListUnknownActivationsProjectSlugInput
+		}
+	}
+	v := &skills.ListUnknownActivationsPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListVersionsPayload builds the payload for the skills listVersions
 // endpoint from CLI flags.
 func BuildListVersionsPayload(skillsListVersionsID string, skillsListVersionsCursor string, skillsListVersionsLimit string, skillsListVersionsSessionToken string, skillsListVersionsApikeyToken string, skillsListVersionsProjectSlugInput string) (*skills.ListVersionsPayload, error) {

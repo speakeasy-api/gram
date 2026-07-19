@@ -989,6 +989,251 @@ func DecodeGetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody
 	}
 }
 
+// BuildListUnknownActivationsRequest instantiates a HTTP request object with
+// method and path set to call the "skills" service "listUnknownActivations"
+// endpoint
+func (c *Client) BuildListUnknownActivationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListUnknownActivationsSkillsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "listUnknownActivations", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListUnknownActivationsRequest returns an encoder for requests sent to
+// the skills listUnknownActivations server.
+func EncodeListUnknownActivationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.ListUnknownActivationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "listUnknownActivations", "*skills.ListUnknownActivationsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListUnknownActivationsResponse returns a decoder for responses
+// returned by the skills listUnknownActivations endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListUnknownActivationsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListUnknownActivationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListUnknownActivationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			res := NewListUnknownActivationsListUnknownSkillActivationsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListUnknownActivationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListUnknownActivationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListUnknownActivationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListUnknownActivationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListUnknownActivationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListUnknownActivationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListUnknownActivationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListUnknownActivationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+				}
+				err = ValidateListUnknownActivationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+				}
+				return nil, NewListUnknownActivationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListUnknownActivationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+				}
+				err = ValidateListUnknownActivationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+				}
+				return nil, NewListUnknownActivationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "listUnknownActivations", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListUnknownActivationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "listUnknownActivations", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListVersionsRequest instantiates a HTTP request object with method and
 // path set to call the "skills" service "listVersions" endpoint
 func (c *Client) BuildListVersionsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2195,8 +2440,11 @@ func unmarshalSkillResponseBodyToTypesSkill(v *SkillResponseBody) *types.Skill {
 		Summary:         v.Summary,
 		SourceKind:      *v.SourceKind,
 		Classification:  *v.Classification,
-		LatestVersionID: *v.LatestVersionID,
+		LatestVersionID: v.LatestVersionID,
 		VersionCount:    *v.VersionCount,
+		FirstSeenAt:     v.FirstSeenAt,
+		LastSeenAt:      v.LastSeenAt,
+		SeenCount:       *v.SeenCount,
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,
 	}
@@ -2217,6 +2465,9 @@ func unmarshalSkillVersionResponseBodyToTypesSkillVersion(v *SkillVersionRespons
 		SpecValid:       *v.SpecValid,
 		CreatedAt:       *v.CreatedAt,
 		CreatedByUserID: *v.CreatedByUserID,
+		FirstSeenAt:     v.FirstSeenAt,
+		LastSeenAt:      v.LastSeenAt,
+		SeenCount:       *v.SeenCount,
 	}
 	res.Metadata = make(map[string]any, len(v.Metadata))
 	for key, val := range v.Metadata {
@@ -2250,6 +2501,68 @@ func unmarshalSkillValidationErrorResponseBodyToTypesSkillValidationError(v *Ski
 		Code:    *v.Code,
 		Field:   *v.Field,
 		Message: *v.Message,
+	}
+
+	return res
+}
+
+// unmarshalSkillAdoptionResponseBodyToSkillsSkillAdoption builds a value of
+// type *skills.SkillAdoption from a value of type *SkillAdoptionResponseBody.
+func unmarshalSkillAdoptionResponseBodyToSkillsSkillAdoption(v *SkillAdoptionResponseBody) *skills.SkillAdoption {
+	res := &skills.SkillAdoption{
+		WindowStart:         *v.WindowStart,
+		WindowEnd:           *v.WindowEnd,
+		DistinctHostnames:   *v.DistinctHostnames,
+		ActivationsInWindow: *v.ActivationsInWindow,
+	}
+
+	return res
+}
+
+// unmarshalSkillSightingTimelinePointResponseBodyToSkillsSkillSightingTimelinePoint
+// builds a value of type *skills.SkillSightingTimelinePoint from a value of
+// type *SkillSightingTimelinePointResponseBody.
+func unmarshalSkillSightingTimelinePointResponseBodyToSkillsSkillSightingTimelinePoint(v *SkillSightingTimelinePointResponseBody) *skills.SkillSightingTimelinePoint {
+	res := &skills.SkillSightingTimelinePoint{
+		BucketStart:     *v.BucketStart,
+		ActivationCount: *v.ActivationCount,
+	}
+
+	return res
+}
+
+// unmarshalSkillDriftResponseBodyToSkillsSkillDrift builds a value of type
+// *skills.SkillDrift from a value of type *SkillDriftResponseBody.
+func unmarshalSkillDriftResponseBodyToSkillsSkillDrift(v *SkillDriftResponseBody) *skills.SkillDrift {
+	res := &skills.SkillDrift{
+		WindowStart:           *v.WindowStart,
+		WindowEnd:             *v.WindowEnd,
+		TargetState:           *v.TargetState,
+		ActiveMachines:        *v.ActiveMachines,
+		OnTargetMachines:      *v.OnTargetMachines,
+		DriftedMachines:       *v.DriftedMachines,
+		IndeterminateMachines: *v.IndeterminateMachines,
+	}
+	res.TargetVersionIds = make([]string, len(v.TargetVersionIds))
+	for i, val := range v.TargetVersionIds {
+		res.TargetVersionIds[i] = val
+	}
+
+	return res
+}
+
+// unmarshalUnknownSkillActivationResponseBodyToSkillsUnknownSkillActivation
+// builds a value of type *skills.UnknownSkillActivation from a value of type
+// *UnknownSkillActivationResponseBody.
+func unmarshalUnknownSkillActivationResponseBodyToSkillsUnknownSkillActivation(v *UnknownSkillActivationResponseBody) *skills.UnknownSkillActivation {
+	res := &skills.UnknownSkillActivation{
+		ID:          *v.ID,
+		SkillName:   *v.SkillName,
+		Provider:    *v.Provider,
+		Source:      v.Source,
+		SourceLevel: v.SourceLevel,
+		SeenAt:      *v.SeenAt,
+		Reason:      *v.Reason,
 	}
 
 	return res

@@ -26,9 +26,15 @@ type Skill struct {
 	Classification string
 	// The derived latest version ID, selected from immutable version creation
 	// order.
-	LatestVersionID string
+	LatestVersionID *string
 	// The number of immutable versions recorded for the skill.
 	VersionCount int64
+	// When this skill was first activated.
+	FirstSeenAt *string
+	// When this skill was most recently activated.
+	LastSeenAt *string
+	// The number of reconciled activations observed for this skill.
+	SeenCount int64
 	// When the skill was created.
 	CreatedAt string
 	// When the skill was last updated.

@@ -56,6 +56,17 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
     refetch: vi.fn(),
   }),
 }));
+vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
+  useUnknownSkillActivationsInfinite: () => ({
+    data: { pages: [{ result: { activations: [] } }] },
+    isPending: false,
+    isFetchingNextPage: false,
+    isFetchNextPageError: false,
+    hasNextPage: false,
+    error: null,
+    fetchNextPage: vi.fn(),
+  }),
+}));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -120,6 +131,7 @@ function makeSkills(count: number): Array<Record<string, unknown>> {
     classification: "custom",
     latestVersionId: `version_${index}`,
     versionCount: 1,
+    seenCount: 0,
     createdAt: new Date("2026-07-16T00:00:00Z"),
     updatedAt: new Date("2026-07-16T00:00:00Z"),
   }));

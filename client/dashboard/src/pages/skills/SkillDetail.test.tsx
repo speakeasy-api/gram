@@ -22,6 +22,7 @@ const testState = vi.hoisted(() => ({
   isFetchNextPageError: false,
   versionError: null as Error | null,
   versions: [] as Array<Record<string, unknown>>,
+  latestVersion: undefined as Record<string, unknown> | undefined,
   version: {
     id: "version_latest",
     skillId: "skill_a",
@@ -39,6 +40,7 @@ const testState = vi.hoisted(() => ({
     },
     specValid: true,
     validationErrors: [],
+    seenCount: 3,
   },
 }));
 
@@ -81,9 +83,27 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
         classification: "custom",
         sourceKind: "manual",
         versionCount: 1,
+        seenCount: 3,
         updatedAt: new Date("2026-07-16T00:00:00Z"),
       },
-      latestVersion: testState.version,
+      latestVersion: testState.latestVersion,
+      adoption: {
+        activationsInWindow: 3,
+        distinctHostnames: 2,
+        windowStart: new Date("2026-06-16T00:00:00Z"),
+        windowEnd: new Date("2026-07-16T00:00:00Z"),
+      },
+      drift: {
+        activeMachines: 2,
+        driftedMachines: 0,
+        indeterminateMachines: 2,
+        onTargetMachines: 0,
+        targetState: "not_distributed",
+        targetVersionIds: [],
+        windowStart: new Date("2026-06-16T00:00:00Z"),
+        windowEnd: new Date("2026-07-16T00:00:00Z"),
+      },
+      sightingTimeline: [],
     },
   }),
   invalidateAllSkill: testState.invalidateSkill,
@@ -184,6 +204,7 @@ beforeEach(() => {
   testState.isFetchNextPageError = false;
   testState.versionError = null;
   testState.versions = [testState.version];
+  testState.latestVersion = testState.version;
 });
 
 afterEach(cleanup);
@@ -226,12 +247,27 @@ describe("SkillDetail", () => {
     ).toBeTruthy();
   });
 
+  it("shows observed metadata when manifest content was not captured", () => {
+    testState.latestVersion = undefined;
+    testState.versions = [];
+
+    render(<SkillDetail />);
+
+    expect(
+      screen.getByText(
+        "Manifest content has not been captured for this observed skill.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit skill" })).toBeNull();
+    expect(screen.queryByText("Version history")).toBeNull();
+  });
+
   it("keeps loaded versions visible and retries a next-page failure explicitly", () => {
     testState.isFetchNextPageError = true;
     testState.versionError = new Error("next page failed");
     render(<SkillDetail />);
 
-    expect(screen.getByText("Version table")).toBeTruthy();
+    expect(screen.getAllByText("Version table").length).toBeGreaterThan(0);
     expect(screen.getByText("Unable to load more versions.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.fetchNextPage).toHaveBeenCalledOnce();

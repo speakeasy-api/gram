@@ -351,6 +351,7 @@ trackedFiles:
   src/funcs/skillsGet.ts: {}
   src/funcs/skillsList.ts: {}
   src/funcs/skillsListDistributions.ts: {}
+  src/funcs/skillsListUnknownActivations.ts: {}
   src/funcs/skillsListVersions.ts: {}
   src/funcs/skillsUndistribute.ts: {}
   src/funcs/telemetryCaptureEvent.ts: {}
@@ -736,6 +737,7 @@ trackedFiles:
   src/models/components/listtriggerdefinitionsresult.ts: {}
   src/models/components/listtriggerinstancesresult.ts: {}
   src/models/components/listtunneledmcpserversresult.ts: {}
+  src/models/components/listunknownskillactivationsresult.ts: {}
   src/models/components/listusergrantsresult.ts: {}
   src/models/components/listusersessionclientsresult.ts: {}
   src/models/components/listusersessionconsentsresult.ts: {}
@@ -937,8 +939,11 @@ trackedFiles:
   src/models/components/shadowmcpinventoryurlstate.ts: {}
   src/models/components/shadowmcpinventoryuser.ts: {}
   src/models/components/skill.ts: {}
+  src/models/components/skilladoption.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
   src/models/components/skilldistribution.ts: {}
+  src/models/components/skilldrift.ts: {}
+  src/models/components/skillsightingtimelinepoint.ts: {}
   src/models/components/skillsummary.ts: {}
   src/models/components/skilltimeseriespoint.ts: {}
   src/models/components/skillvalidationerror.ts: {}
@@ -1005,6 +1010,7 @@ trackedFiles:
   src/models/components/tunneledmcpserver.ts: {}
   src/models/components/tunneledmcpserverconnections.ts: {}
   src/models/components/undistributeskillrequestbody.ts: {}
+  src/models/components/unknownskillactivation.ts: {}
   src/models/components/updateassistantform.ts: {}
   src/models/components/updateawsiamcredentialrequestbody.ts: {}
   src/models/components/updatecustomdetectionrulerequestbody.ts: {}
@@ -1354,6 +1360,7 @@ trackedFiles:
   src/models/operations/listtriggerinstances.ts: {}
   src/models/operations/listtunneledmcpserverconnections.ts: {}
   src/models/operations/listtunneledmcpservers.ts: {}
+  src/models/operations/listunknownskillactivations.ts: {}
   src/models/operations/listusersessionclients.ts: {}
   src/models/operations/listusersessionconsents.ts: {}
   src/models/operations/listusersessionfacets.ts: {}
@@ -2008,6 +2015,8 @@ trackedFiles:
   src/react-query/tunneledMcpServers.core.ts: {}
   src/react-query/tunneledMcpServers.ts: {}
   src/react-query/undistributeSkill.ts: {}
+  src/react-query/unknownSkillActivations.core.ts: {}
+  src/react-query/unknownSkillActivations.ts: {}
   src/react-query/updateAwsIamCredential.ts: {}
   src/react-query/updateDomain.ts: {}
   src/react-query/updateEnvironment.ts: {}
@@ -2201,7 +2210,7 @@ examples:
         application/json: {"content": "<value>", "id": "104f5927-f9aa-409a-86bf-44c0840df1ef"}
       responses:
         "200":
-          application/json: {"created_skill": true, "created_version": true, "skill": {"classification": "<value>", "created_at": "2024-08-08T21:51:24.554Z", "display_name": "Haven.Morar32", "id": "8efe7fe2-2883-4364-ac53-724a85f9e654", "latest_version_id": "ada141f3-3b94-405d-8400-ce98f0762b7c", "name": "<value>", "project_id": "3905e984-9fa4-4329-b718-85f9ba073020", "source_kind": "<value>", "updated_at": "2025-12-03T10:35:10.200Z", "version_count": 945826}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2026-09-24T06:04:07.980Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "b0ac1a92-6523-4258-ae53-fed55482cfaf", "metadata": {"key": "<value>", "key1": "<value>"}, "raw_sha256": "<value>", "skill_id": "506b16a6-9645-4f91-923e-6eb8af1756c7", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
+          application/json: {"created_skill": true, "created_version": true, "skill": {"classification": "<value>", "created_at": "2024-08-08T21:51:24.554Z", "display_name": "Haven.Morar32", "id": "8efe7fe2-2883-4364-ac53-724a85f9e654", "name": "<value>", "project_id": "3905e984-9fa4-4329-b718-85f9ba073020", "seen_count": 115197, "source_kind": "<value>", "updated_at": "2025-12-03T10:35:10.200Z", "version_count": 945826}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2026-09-24T06:04:07.980Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "b0ac1a92-6523-4258-ae53-fed55482cfaf", "metadata": {"key": "<value>", "key1": "<value>"}, "raw_sha256": "<value>", "seen_count": 34366, "skill_id": "506b16a6-9645-4f91-923e-6eb8af1756c7", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -2800,7 +2809,7 @@ examples:
         application/json: {"content": "<value>"}
       responses:
         "200":
-          application/json: {"created_skill": true, "created_version": false, "skill": {"classification": "<value>", "created_at": "2024-01-13T21:05:53.029Z", "display_name": "Rogelio69", "id": "2e459553-2788-40d9-9e7f-cb880cd0af9b", "latest_version_id": "7a086c59-5736-4ed9-be8e-5d72f84a4698", "name": "<value>", "project_id": "ed4b5d13-e447-4362-b38c-56e022bbde92", "source_kind": "<value>", "updated_at": "2024-03-04T07:12:28.139Z", "version_count": 10884}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2024-02-08T17:49:00.730Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "6cc0e78a-6a20-4ed4-bfe0-3715423123bb", "metadata": {}, "raw_sha256": "<value>", "skill_id": "230cdb0e-343f-4b0b-b323-5520def4b85d", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
+          application/json: {"created_skill": true, "created_version": false, "skill": {"classification": "<value>", "created_at": "2024-01-13T21:05:53.029Z", "display_name": "Rogelio69", "id": "2e459553-2788-40d9-9e7f-cb880cd0af9b", "name": "<value>", "project_id": "ed4b5d13-e447-4362-b38c-56e022bbde92", "seen_count": 91660, "source_kind": "<value>", "updated_at": "2024-03-04T07:12:28.139Z", "version_count": 10884}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2024-02-08T17:49:00.730Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "6cc0e78a-6a20-4ed4-bfe0-3715423123bb", "metadata": {}, "raw_sha256": "<value>", "seen_count": 819902, "skill_id": "230cdb0e-343f-4b0b-b323-5520def4b85d", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -4093,7 +4102,7 @@ examples:
           id: "3600ba92-a629-4238-b118-2374ee531ccc"
       responses:
         "200":
-          application/json: {"latest_version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2026-06-02T20:33:21.780Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "2e6966fd-4684-47b1-ac07-ab29fb52e761", "metadata": {"key": "<value>"}, "raw_sha256": "<value>", "skill_id": "e5e1156e-4514-4c59-bdac-f9b2b6d2b1e8", "spec_valid": true, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}, "skill": {"classification": "<value>", "created_at": "2026-06-16T05:42:51.497Z", "display_name": "Adan_Parisian83", "id": "2f844f68-8ade-4021-927e-ce44754f24fc", "latest_version_id": "6f25054d-4dc5-4073-a06c-bfeec492294d", "name": "<value>", "project_id": "cb362ec4-4029-48dd-8e7d-90248980a327", "source_kind": "<value>", "updated_at": "2024-08-06T14:28:41.275Z", "version_count": 278392}}
+          application/json: {"adoption": {"activations_in_window": 193282, "distinct_hostnames": 385005, "window_end": "2024-02-17T23:16:40.002Z", "window_start": "2024-01-07T02:41:01.226Z"}, "drift": {"active_machines": 728301, "drifted_machines": 675725, "indeterminate_machines": 591176, "on_target_machines": 139736, "target_state": "ambiguous", "target_version_ids": ["29238118-2374-4ee5-931c-ccec2e6966fd"], "window_end": "2025-03-15T22:58:09.934Z", "window_start": "2025-07-10T02:38:34.910Z"}, "sighting_timeline": [], "skill": {"classification": "<value>", "created_at": "2026-06-16T05:42:51.497Z", "display_name": "Adan_Parisian83", "id": "2f844f68-8ade-4021-927e-ce44754f24fc", "name": "<value>", "project_id": "cb362ec4-4029-48dd-8e7d-90248980a327", "seen_count": 486771, "source_kind": "<value>", "updated_at": "2024-08-06T14:28:41.275Z", "version_count": 278392}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -5057,7 +5066,7 @@ examples:
           limit: 50
       responses:
         "200":
-          application/json: {"skills": [{"classification": "<value>", "created_at": "2025-12-01T14:04:14.090Z", "display_name": "Ted_Medhurst44", "id": "a629e09f-919e-4d88-8c05-cebb47ad66a9", "latest_version_id": "77214f80-c570-4870-b5c3-21f19e9fee9e", "name": "<value>", "project_id": "e35c924f-8388-4d55-a06c-1f5093920091", "source_kind": "<value>", "updated_at": "2025-12-29T20:39:39.995Z", "version_count": 665804}]}
+          application/json: {"skills": [{"classification": "<value>", "created_at": "2025-12-01T14:04:14.090Z", "display_name": "Ted_Medhurst44", "id": "a629e09f-919e-4d88-8c05-cebb47ad66a9", "latest_version_id": "77214f80-c570-4870-b5c3-21f19e9fee9e", "name": "<value>", "project_id": "e35c924f-8388-4d55-a06c-1f5093920091", "seen_count": 708579, "source_kind": "<value>", "updated_at": "2025-12-29T20:39:39.995Z", "version_count": 665804}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5183,6 +5192,18 @@ examples:
       responses:
         "200":
           application/json: {"tunneled_mcp_servers": [{"active_connection_count": 394924, "active_consumer_session_count": 517799, "connection_status": "inactive", "created_at": "2025-03-13T14:21:51.961Z", "id": "9bf38405-daa1-4ca6-8caa-29a17f23666a", "key_prefix": "<value>", "name": "<value>", "project_id": "7d962e11-27f3-472f-8f59-3f11bf110668", "status": "created", "updated_at": "2024-04-13T11:16:25.561Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listUnknownSkillActivations:
+    speakeasy-default-list-unknown-skill-activations:
+      parameters:
+        query:
+          limit: 50
+      responses:
+        "200":
+          application/json: {"activations": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

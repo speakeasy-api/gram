@@ -30,6 +30,10 @@ type Client struct {
 	// Get Doer is the HTTP client used to make requests to the get endpoint.
 	GetDoer goahttp.Doer
 
+	// ListUnknownActivations Doer is the HTTP client used to make requests to the
+	// listUnknownActivations endpoint.
+	ListUnknownActivationsDoer goahttp.Doer
+
 	// ListVersions Doer is the HTTP client used to make requests to the
 	// listVersions endpoint.
 	ListVersionsDoer goahttp.Doer
@@ -70,20 +74,21 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateDoer:            doer,
-		AddVersionDoer:        doer,
-		ListDoer:              doer,
-		GetDoer:               doer,
-		ListVersionsDoer:      doer,
-		ArchiveDoer:           doer,
-		DistributeDoer:        doer,
-		UndistributeDoer:      doer,
-		ListDistributionsDoer: doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		CreateDoer:                 doer,
+		AddVersionDoer:             doer,
+		ListDoer:                   doer,
+		GetDoer:                    doer,
+		ListUnknownActivationsDoer: doer,
+		ListVersionsDoer:           doer,
+		ArchiveDoer:                doer,
+		DistributeDoer:             doer,
+		UndistributeDoer:           doer,
+		ListDistributionsDoer:      doer,
+		RestoreResponseBody:        restoreBody,
+		scheme:                     scheme,
+		host:                       host,
+		decoder:                    dec,
+		encoder:                    enc,
 	}
 }
 
@@ -178,6 +183,30 @@ func (c *Client) Get() goa.Endpoint {
 		resp, err := c.GetDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "get", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListUnknownActivations returns an endpoint that makes HTTP requests to the
+// skills service listUnknownActivations server.
+func (c *Client) ListUnknownActivations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListUnknownActivationsRequest(c.encoder)
+		decodeResponse = DecodeListUnknownActivationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListUnknownActivationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListUnknownActivationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listUnknownActivations", err)
 		}
 		return decodeResponse(resp)
 	}
