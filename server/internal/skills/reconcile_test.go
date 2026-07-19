@@ -83,7 +83,7 @@ func TestReconcileSkillObservations_NormalizesAndAggregatesMetadataOnlySightings
 	require.NoError(t, err)
 	require.Equal(t, "captured", skill.SourceKind)
 	require.Equal(t, "custom", skill.Classification)
-	require.Equal(t, int64(2), skill.SeenCount.Int64)
+	require.Equal(t, int64(2), skill.SeenCount)
 	require.True(t, skill.FirstSeenAt.Time.Equal(firstSeen))
 	require.True(t, skill.LastSeenAt.Time.Equal(lastSeen))
 	versions, err := ti.repo.ListSkillVersions(ctx, repo.ListSkillVersionsParams{
@@ -97,7 +97,7 @@ func TestReconcileSkillObservations_NormalizesAndAggregatesMetadataOnlySightings
 	require.Zero(t, result.Processed)
 	skill, err = ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: skill.ID})
 	require.NoError(t, err)
-	require.Equal(t, int64(2), skill.SeenCount.Int64)
+	require.Equal(t, int64(2), skill.SeenCount)
 }
 
 func TestReconcileSkillObservations_RoutesToManualSkill(t *testing.T) {
@@ -113,7 +113,7 @@ func TestReconcileSkillObservations_RoutesToManualSkill(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "manual", skill.SourceKind)
 	require.Equal(t, "custom", skill.Classification)
-	require.Equal(t, int64(1), skill.SeenCount.Int64)
+	require.Equal(t, int64(1), skill.SeenCount)
 	observations, err := hooksrepo.New(ti.conn).ListSkillObservations(ctx, ti.projectID)
 	require.NoError(t, err)
 	require.True(t, observations[0].SkillID.Valid)
@@ -171,7 +171,7 @@ func TestReconcileSkillObservations_DelayedContentBackfillsExactVersion(t *testi
 	require.Equal(t, 1, result.Processed)
 	skill, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: captured.SkillID})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), skill.SeenCount.Int64)
+	require.Equal(t, int64(1), skill.SeenCount)
 }
 
 func TestReconcileSkillObservations_AmbiguousHashRemainsUnknown(t *testing.T) {
@@ -264,17 +264,19 @@ func TestCaptureSkillContent_BackfillsLegacyAttributionWithoutRecounting(t *test
 	require.True(t, observations[0].ReconciledAt.Valid)
 	skill, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: captured.SkillID})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), skill.SeenCount.Int64)
+	require.Equal(t, int64(1), skill.SeenCount)
 }
 
 func TestReconcileSkillObservations_ManualCreateFillsMetadataOnlyPlaceholder(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	insertSkillObservation(t, ti, "placeholder-skill", "", "project", "", time.Now().UTC())
+	insertSkillObservation(t, ti, "vendor:placeholder-skill", "marketplace", "plugin", "", time.Now().UTC())
 	_, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
 	require.NoError(t, err)
 	placeholder, err := ti.repo.GetSkillByNameForUpdate(ctx, repo.GetSkillByNameForUpdateParams{ProjectID: ti.projectID, Name: "placeholder-skill"})
 	require.NoError(t, err)
+	require.Equal(t, "captured", placeholder.SourceKind)
+	require.Equal(t, "built_in", placeholder.Classification)
 
 	created, err := ti.service.Create(ctx, &gen.CreatePayload{
 		Content:      capturedManifest("placeholder-skill", "Recorded.", "body"),
@@ -284,6 +286,8 @@ func TestReconcileSkillObservations_ManualCreateFillsMetadataOnlyPlaceholder(t *
 	require.False(t, created.CreatedSkill)
 	require.True(t, created.CreatedVersion)
 	require.Equal(t, placeholder.ID.String(), created.Skill.ID)
+	require.Equal(t, "manual", created.Skill.SourceKind)
+	require.Equal(t, "custom", created.Skill.Classification)
 }
 
 func TestReconcileSkillObservations_ClassifiesExternalPluginAsBuiltIn(t *testing.T) {
