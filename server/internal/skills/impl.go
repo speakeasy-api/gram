@@ -211,6 +211,7 @@ func (s *Service) recordVersion(
 	skill repo.Skill,
 	parsed parsedSkillManifest,
 	createdSkill bool,
+	createAudit bool,
 ) (*gen.RecordSkillResult, error) {
 	metadataJSON, err := json.Marshal(parsed.Metadata)
 	if err != nil {
@@ -314,7 +315,7 @@ func (s *Service) recordVersion(
 	}
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-	if createdSkill {
+	if createAudit {
 		err = s.audit.LogSkillCreate(ctx, dbtx, audit.LogSkillCreateEvent{
 			OrganizationID:   authCtx.ActiveOrganizationID,
 			ProjectID:        *authCtx.ProjectID,
@@ -382,6 +383,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		Name:      parsed.Name,
 	})
 	createdSkill := false
+	createAudit := false
 	if errors.Is(err, pgx.ErrNoRows) {
 		skill, err = queries.CreateSkill(ctx, repo.CreateSkillParams{
 			ProjectID:   *authCtx.ProjectID,
@@ -396,6 +398,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 			})
 		} else if err == nil {
 			createdSkill = true
+			createAudit = true
 		}
 	}
 	if err != nil {
@@ -412,12 +415,13 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "promote observed skill to manual").LogError(ctx, logger)
 			}
+			createAudit = true
 		case stateErr != nil:
 			return nil, oops.E(oops.CodeUnexpected, stateErr, "load observed skill state").LogError(ctx, logger)
 		}
 	}
 
-	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, createdSkill)
+	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, createdSkill, createAudit)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +475,7 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 		return nil, oops.E(oops.CodeInvalid, nil, "manifest name does not match the skill")
 	}
 
-	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false)
+	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false)
 	if err != nil {
 		return nil, err
 	}

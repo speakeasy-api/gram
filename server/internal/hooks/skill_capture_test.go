@@ -224,6 +224,50 @@ func TestIngest_ManualVersionRawHashIsKnownAndAliased(t *testing.T) {
 	require.Equal(t, version.CanonicalSha256, alias.CanonicalSha256)
 }
 
+func TestIngest_ManualVersionRawHashIgnoresArchivedSkills(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	content := captureManifest("recreated-manual", "manual")
+	hash := rawHash(content)
+	queries := skillsrepo.New(ti.conn)
+
+	archived, err := queries.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID: *authCtx.ProjectID, Name: "recreated-manual", DisplayName: "recreated-manual", Summary: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content: content, CanonicalSha256: strings.Repeat("c", 64), RawSha256: hash,
+		Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
+		ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
+		ProjectID: *authCtx.ProjectID, SkillID: archived.ID,
+	})
+	require.NoError(t, err)
+	_, err = queries.ArchiveSkill(ctx, skillsrepo.ArchiveSkillParams{ProjectID: *authCtx.ProjectID, ID: archived.ID})
+	require.NoError(t, err)
+
+	active, err := queries.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID: *authCtx.ProjectID, Name: "recreated-manual", DisplayName: "recreated-manual", Summary: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	activeVersion, err := queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content: content, CanonicalSha256: strings.Repeat("d", 64), RawSha256: hash,
+		Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
+		ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
+		ProjectID: *authCtx.ProjectID, SkillID: active.ID,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "recreated", "recreated-manual", hash))
+	require.NoError(t, err)
+	require.Equal(t, false, requireEffectMap(t, result.Effects, "skill_capture")["content_required"])
+	alias, err := queries.GetSkillRawHash(ctx, skillsrepo.GetSkillRawHashParams{ProjectID: *authCtx.ProjectID, RawSha256: hash})
+	require.NoError(t, err)
+	require.Equal(t, activeVersion.CanonicalSha256, alias.CanonicalSha256)
+}
+
 func TestIngest_AmbiguousManualVersionRawHashRequestsContent(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

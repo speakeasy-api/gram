@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills"
@@ -277,6 +279,8 @@ func TestReconcileSkillObservations_ManualCreateFillsMetadataOnlyPlaceholder(t *
 	require.NoError(t, err)
 	require.Equal(t, "captured", placeholder.SourceKind)
 	require.Equal(t, "built_in", placeholder.Classification)
+	createAudits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillCreate)
+	require.NoError(t, err)
 
 	created, err := ti.service.Create(ctx, &gen.CreatePayload{
 		Content:      capturedManifest("placeholder-skill", "Recorded.", "body"),
@@ -288,6 +292,9 @@ func TestReconcileSkillObservations_ManualCreateFillsMetadataOnlyPlaceholder(t *
 	require.Equal(t, placeholder.ID.String(), created.Skill.ID)
 	require.Equal(t, "manual", created.Skill.SourceKind)
 	require.Equal(t, "custom", created.Skill.Classification)
+	createAuditsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillCreate)
+	require.NoError(t, err)
+	require.Equal(t, createAudits+1, createAuditsAfter)
 }
 
 func TestReconcileSkillObservations_ClassifiesExternalPluginAsBuiltIn(t *testing.T) {

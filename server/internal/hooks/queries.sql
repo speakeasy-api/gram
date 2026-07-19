@@ -59,6 +59,7 @@ WITH existing_alias AS (
   FROM skill_versions sv
   JOIN skills s ON s.id = sv.skill_id
   WHERE s.project_id = @project_id
+    AND s.archived_at IS NULL
     AND sv.raw_sha256 = @raw_sha256
     AND NOT EXISTS (SELECT 1 FROM existing_alias)
   HAVING COUNT(*) = 1
