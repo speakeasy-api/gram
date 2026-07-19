@@ -268,7 +268,7 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 		}
 	}
 	if base.Provider == agenthooks.ProviderCursor && base.Kind == agenthooks.KindToolPre {
-		if name := cursorToolSkillName(tool); name != "" {
+		if name := cursorToolSkillName(tool, base.Session.CWD, base.Session.WorkspaceRoots); name != "" {
 			data.Skill = &components.HookSkillData{Name: name, Source: nil}
 		}
 	}

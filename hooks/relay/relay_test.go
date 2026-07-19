@@ -811,6 +811,8 @@ func TestEnvelopeCodexSkillInference(t *testing.T) {
 
 func TestEnvelopeCursorSkillInference(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	sequence := 0
 	payload := func(nativeName, toolName string, toolInput any) []byte {
 		t.Helper()
@@ -858,12 +860,15 @@ func TestEnvelopeCursorSkillInference(t *testing.T) {
 		return got.Data.Skill.Name
 	}
 
-	workspacePath := filepath.Join(t.TempDir(), ".cursor", "skills", "workspace-skill", "SKILL.md")
+	workspacePath := filepath.Join(home, ".cursor", "skills", "workspace-skill", "SKILL.md")
 	got := envelope(payload("preToolUse", "Read", map[string]any{"file_path": workspacePath}))
 	require.Equal(t, components.TypeToolRequested, got.Event.Type)
 	require.Equal(t, "workspace-skill", skillOf(got))
 
-	pluginPath := filepath.Join(t.TempDir(), "arbitrary", "plugin", "skills", "plugin-skill", "SKILL.md")
+	pluginRoot := filepath.Join(t.TempDir(), "arbitrary", "plugin")
+	pluginPath := filepath.Join(pluginRoot, "skills", "plugin-skill", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Join(pluginRoot, ".cursor-plugin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginRoot, ".cursor-plugin", "plugin.json"), []byte(`{}`), 0o644))
 	got = envelope(payload("preToolUse", "Read", map[string]any{"file_path": pluginPath}))
 	require.Equal(t, components.TypeToolRequested, got.Event.Type)
 	require.Equal(t, "plugin-skill", skillOf(got))
@@ -886,6 +891,7 @@ func TestEnvelopeCursorSkillInference(t *testing.T) {
 	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{}))))
 	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": "SKILL.md"}))))
 	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "docs", "not-a-skill", "SKILL.md")}))))
+	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "docs", "skills", "example", "SKILL.md")}))))
 	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "plugin", "skills", "SKILL.md")}))))
 }
 

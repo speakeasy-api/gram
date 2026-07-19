@@ -159,9 +159,9 @@ func resolveCodexToolSkill(tool *agenthooks.ToolCall, cwd string) skillLocation 
 	return skillLocation{path: path, level: level, root: root}
 }
 
-func cursorToolSkillName(tool *agenthooks.ToolCall) string {
-	_, name := cursorToolSkillPath(tool, "")
-	return name
+func cursorToolSkillName(tool *agenthooks.ToolCall, cwd string, workspaceRoots []string) string {
+	location := resolveCursorToolSkill(tool, cwd, workspaceRoots)
+	return skillNameFromManifestPath(location.path, false)
 }
 
 func cursorToolSkillPath(tool *agenthooks.ToolCall, cwd string) (string, string) {
