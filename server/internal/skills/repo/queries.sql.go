@@ -738,7 +738,7 @@ func (q *Queries) GetSkill(ctx context.Context, arg GetSkillParams) (Skill, erro
 
 const getSkillAdoptionStats = `-- name: GetSkillAdoptionStats :one
 SELECT
-  COUNT(DISTINCT NULLIF(btrim(so.hostname), ''))::bigint AS distinct_hostnames,
+  COUNT(DISTINCT NULLIF(lower(btrim(so.hostname)), ''))::bigint AS distinct_hostnames,
   COUNT(*)::bigint AS activations_in_window
 FROM skill_observations so
 WHERE so.project_id = $1
@@ -1148,8 +1148,8 @@ func (q *Queries) InsertCapturedSkillVersionOrigin(ctx context.Context, arg Inse
 
 const listActiveMachineLatestVersions = `-- name: ListActiveMachineLatestVersions :many
 WITH latest AS (
-  SELECT DISTINCT ON (btrim(so.hostname))
-    btrim(so.hostname) AS hostname,
+  SELECT DISTINCT ON (lower(btrim(so.hostname)))
+    lower(btrim(so.hostname)) AS hostname,
     so.skill_version_id
   FROM skill_observations so
   WHERE so.project_id = $1
@@ -1159,7 +1159,7 @@ WITH latest AS (
     AND so.reconcile_error_code IS NULL
     AND so.seen_at >= $3
     AND so.seen_at < $4
-  ORDER BY btrim(so.hostname), so.seen_at DESC, so.id DESC
+  ORDER BY lower(btrim(so.hostname)), so.seen_at DESC, so.id DESC
 )
 SELECT skill_version_id, COUNT(*)::bigint AS machine_count
 FROM latest

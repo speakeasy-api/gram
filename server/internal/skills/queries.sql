@@ -500,7 +500,7 @@ WHERE s.project_id = @project_id
 
 -- name: GetSkillAdoptionStats :one
 SELECT
-  COUNT(DISTINCT NULLIF(btrim(so.hostname), ''))::bigint AS distinct_hostnames,
+  COUNT(DISTINCT NULLIF(lower(btrim(so.hostname)), ''))::bigint AS distinct_hostnames,
   COUNT(*)::bigint AS activations_in_window
 FROM skill_observations so
 WHERE so.project_id = @project_id
@@ -526,8 +526,8 @@ ORDER BY bucket_start ASC;
 
 -- name: ListActiveMachineLatestVersions :many
 WITH latest AS (
-  SELECT DISTINCT ON (btrim(so.hostname))
-    btrim(so.hostname) AS hostname,
+  SELECT DISTINCT ON (lower(btrim(so.hostname)))
+    lower(btrim(so.hostname)) AS hostname,
     so.skill_version_id
   FROM skill_observations so
   WHERE so.project_id = @project_id
@@ -537,7 +537,7 @@ WITH latest AS (
     AND so.reconcile_error_code IS NULL
     AND so.seen_at >= @window_start
     AND so.seen_at < @window_end
-  ORDER BY btrim(so.hostname), so.seen_at DESC, so.id DESC
+  ORDER BY lower(btrim(so.hostname)), so.seen_at DESC, so.id DESC
 )
 SELECT skill_version_id, COUNT(*)::bigint AS machine_count
 FROM latest
