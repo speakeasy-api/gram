@@ -127,6 +127,7 @@ func TestDrainReplaysEnrichedSkillMetadataAndUploadsContent(t *testing.T) {
 
 	summary := Drain(t.Context())
 	require.Equal(t, DrainSummary{Replayed: 0, Dropped: 0, Expired: 0, Skipped: 1, Remaining: 1, Aborted: false}, summary)
+	require.Len(t, capturedTasks, 1, "the first drain must attempt the upload")
 	require.Len(t, spoolFiles(t), 1, "a failed upload must remain retryable")
 
 	failUpload = false
