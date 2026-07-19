@@ -73,12 +73,10 @@ var startSkillUploadProcess = func(task skillUploadTask) error {
 	return nil
 }
 
-// startSkillContentUpload hands an upload to a detached process only when the
-// final accepted ingest response requests the exact captured content.
-func startSkillContentUpload(c creds, res ingestResult, skill *resolvedSkill) error {
+func requestedSkillUploadTask(c creds, res ingestResult, skill *resolvedSkill) (skillUploadTask, bool, error) {
 	if !res.accepted() || res.skillCapture == nil || !res.skillCapture.contentRequired || skill == nil ||
 		!skill.captureReady || res.skillCapture.rawSHA256 != skill.rawSHA256 {
-		return nil
+		return skillUploadTask{}, false, nil
 	}
 	task := skillUploadTask{
 		ServerURL:  c.ServerURL,
@@ -89,9 +87,38 @@ func startSkillContentUpload(c creds, res ingestResult, skill *resolvedSkill) er
 		SourceRoot: skill.root,
 	}
 	if !validSkillUploadTask(task) {
-		return fmt.Errorf("invalid skill upload task")
+		return skillUploadTask{}, false, fmt.Errorf("invalid skill upload task")
+	}
+	return task, true, nil
+}
+
+// startSkillContentUpload hands live traffic to a detached process so content
+// upload never extends the hook's gating path.
+func startSkillContentUpload(c creds, res ingestResult, skill *resolvedSkill) error {
+	task, requested, err := requestedSkillUploadTask(c, res, skill)
+	if err != nil || !requested {
+		return err
 	}
 	return startSkillUploadProcess(task)
+}
+
+// uploadSkillContent completes replay uploads before their spool entry is
+// removed, keeping the task retryable when verification or upload fails.
+func uploadSkillContent(ctx context.Context, c creds, res ingestResult, skill *resolvedSkill) error {
+	task, requested, err := requestedSkillUploadTask(c, res, skill)
+	if err != nil || !requested {
+		return err
+	}
+	return executeSkillUpload(ctx, task)
+}
+
+var executeSkillUpload = func(ctx context.Context, task skillUploadTask) error {
+	skill := captureResolvedSkill(&resolvedSkill{}, skillLocation{path: task.SourcePath, level: "", root: task.SourceRoot})
+	if !skill.captureReady || skill.rawSHA256 != task.RawSHA256 {
+		return fmt.Errorf("skill manifest no longer matches captured content")
+	}
+	c := creds{ServerURL: task.ServerURL, APIKey: task.APIKey, Project: task.Project, Email: "", Org: "", Source: credEnv}
+	return newClient(task.ServerURL).uploadSkillContent(ctx, c, task.RawSHA256, skill.content)
 }
 
 // RunSkillUpload reads one bounded credential, reopens one manifest from a
@@ -117,12 +144,7 @@ func RunSkillUpload(ctx context.Context, args []string, credential io.Reader) in
 	if !validSkillUploadTask(task) {
 		return 1
 	}
-	skill := captureResolvedSkill(&resolvedSkill{}, skillLocation{path: task.SourcePath, level: "", root: task.SourceRoot})
-	if !skill.captureReady || skill.rawSHA256 != task.RawSHA256 {
-		return 1
-	}
-	c := creds{ServerURL: task.ServerURL, APIKey: task.APIKey, Project: task.Project, Email: "", Org: "", Source: credEnv}
-	if err := newClient(task.ServerURL).uploadSkillContent(ctx, c, task.RawSHA256, skill.content); err != nil {
+	if err := executeSkillUpload(ctx, task); err != nil {
 		return 1
 	}
 	return 0
