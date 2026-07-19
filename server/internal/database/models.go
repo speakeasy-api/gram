@@ -1701,18 +1701,23 @@ type SkillSyncReceipt struct {
 }
 
 type SkillVersion struct {
-	ID                   uuid.UUID
+	ID               uuid.UUID
+	SkillID          uuid.UUID
+	Content          string
+	CanonicalSha256  string
+	RawSha256        string
+	Description      pgtype.Text
+	Metadata         []byte
+	SpecValid        bool
+	ValidationErrors []byte
+	CreatedAt        pgtype.Timestamptz
+	CreatedByUserID  string
+}
+
+type SkillVersionLineage struct {
+	SkillVersionID       uuid.UUID
 	SkillID              uuid.UUID
-	Content              string
-	CanonicalSha256      string
-	RawSha256            string
-	Description          pgtype.Text
-	Metadata             []byte
-	SpecValid            bool
-	ValidationErrors     []byte
-	DerivedFromVersionID uuid.NullUUID
-	CreatedAt            pgtype.Timestamptz
-	CreatedByUserID      string
+	DerivedFromVersionID uuid.UUID
 }
 
 type SkillVersionOrigin struct {

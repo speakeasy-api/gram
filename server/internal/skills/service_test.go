@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	skillservice "github.com/speakeasy-api/gram/server/internal/skills"
+	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
 func TestSkillsCreateValidManifestRoundTrip(t *testing.T) {
@@ -228,6 +229,13 @@ func TestSkillsCurateCapturedSkillWithVersionLineage(t *testing.T) {
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
+	err = ti.repo.CreateSkillVersionLineage(ctx, repo.CreateSkillVersionLineageParams{
+		ProjectID:            ti.projectID,
+		SkillID:              uuid.MustParse(updated.ID),
+		SkillVersionID:       captured.SkillVersionID,
+		DerivedFromVersionID: uuid.MustParse(other.Version.ID),
+	})
+	require.ErrorContains(t, err, "skill_version_lineages_skill_id_derived_from_version_id_fkey")
 	insertSkillObservation(t, ti, "captured-name", "", "project", contentSHA256(originalContent), time.Now().UTC())
 	result, err := skillservice.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
 	require.NoError(t, err)

@@ -190,7 +190,7 @@ func TestReconcileSkillObservations_AmbiguousHashRemainsUnknown(t *testing.T) {
 		version, err := ti.repo.CreateSkillVersion(ctx, repo.CreateSkillVersionParams{
 			SkillID: skill.ID, Content: name, CanonicalSha256: canonicalHash, RawSha256: rawHash,
 			Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
-			ValidationErrors: []byte(`[]`), DerivedFromVersionID: uuid.NullUUID{}, CreatedByUserID: "test", ProjectID: ti.projectID,
+			ValidationErrors: []byte(`[]`), CreatedByUserID: "test", ProjectID: ti.projectID,
 		})
 		require.NoError(t, err)
 		if firstSkillID == uuid.Nil {

@@ -51,7 +51,7 @@ type SkillVersionSightingStats struct {
 	SeenCount   int64
 }
 
-func BuildSkillVersionView(version repo.SkillVersion, frontmatter map[string]any, sightings SkillVersionSightingStats) (*types.SkillVersion, error) {
+func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.NullUUID, frontmatter map[string]any, sightings SkillVersionSightingStats) (*types.SkillVersion, error) {
 	metadata := make(map[string]any)
 	metadataDecoder := json.NewDecoder(bytes.NewReader(version.Metadata))
 	metadataDecoder.UseNumber()
@@ -86,7 +86,7 @@ func BuildSkillVersionView(version repo.SkillVersion, frontmatter map[string]any
 		Frontmatter:          frontmatter,
 		SpecValid:            version.SpecValid,
 		ValidationErrors:     validationErrors,
-		DerivedFromVersionID: conv.FromNullableUUID(version.DerivedFromVersionID),
+		DerivedFromVersionID: conv.FromNullableUUID(derivedFromVersionID),
 		CreatedAt:            conv.FromPGTimestamptz(version.CreatedAt),
 		CreatedByUserID:      version.CreatedByUserID,
 		FirstSeenAt:          conv.PtrEmpty(conv.FromPGTimestamptz(sightings.FirstSeenAt)),
@@ -98,7 +98,7 @@ func BuildSkillVersionView(version repo.SkillVersion, frontmatter map[string]any
 func BuildSkillVersionListView(rows []repo.ListSkillVersionsRow, frontmatter func(content string) map[string]any) ([]*types.SkillVersion, error) {
 	result := make([]*types.SkillVersion, len(rows))
 	for i, row := range rows {
-		view, err := BuildSkillVersionView(row.SkillVersion, frontmatter(row.SkillVersion.Content), SkillVersionSightingStats{
+		view, err := BuildSkillVersionView(row.SkillVersion, row.DerivedFromVersionID, frontmatter(row.SkillVersion.Content), SkillVersionSightingStats{
 			FirstSeenAt: row.FirstSeenAt,
 			LastSeenAt:  row.LastSeenAt,
 			SeenCount:   row.SeenCount,

@@ -211,7 +211,7 @@ func TestIngest_ManualVersionRawHashIsKnownAndAliased(t *testing.T) {
 	version, err := queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
 		Content: content, CanonicalSha256: strings.Repeat("c", 64), RawSha256: hash,
 		Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
-		ValidationErrors: []byte(`[]`), DerivedFromVersionID: uuid.NullUUID{}, CreatedByUserID: authCtx.UserID,
+		ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
 		ProjectID: *authCtx.ProjectID, SkillID: skill.ID,
 	})
 	require.NoError(t, err)
@@ -241,7 +241,7 @@ func TestIngest_ManualVersionRawHashIgnoresArchivedSkills(t *testing.T) {
 	_, err = queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
 		Content: content, CanonicalSha256: strings.Repeat("c", 64), RawSha256: hash,
 		Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
-		ValidationErrors: []byte(`[]`), DerivedFromVersionID: uuid.NullUUID{}, CreatedByUserID: authCtx.UserID,
+		ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
 		ProjectID: *authCtx.ProjectID, SkillID: archived.ID,
 	})
 	require.NoError(t, err)
@@ -255,7 +255,7 @@ func TestIngest_ManualVersionRawHashIgnoresArchivedSkills(t *testing.T) {
 	activeVersion, err := queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
 		Content: content, CanonicalSha256: strings.Repeat("d", 64), RawSha256: hash,
 		Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
-		ValidationErrors: []byte(`[]`), DerivedFromVersionID: uuid.NullUUID{}, CreatedByUserID: authCtx.UserID,
+		ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
 		ProjectID: *authCtx.ProjectID, SkillID: active.ID,
 	})
 	require.NoError(t, err)
@@ -284,7 +284,7 @@ func TestIngest_AmbiguousManualVersionRawHashRequestsContent(t *testing.T) {
 		_, err = queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
 			Content: name, CanonicalSha256: "same-canonical", RawSha256: rawSHA256,
 			Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
-			ValidationErrors: []byte(`[]`), DerivedFromVersionID: uuid.NullUUID{}, CreatedByUserID: authCtx.UserID,
+			ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
 			ProjectID: *authCtx.ProjectID, SkillID: skill.ID,
 		})
 		require.NoError(t, err)
@@ -317,7 +317,7 @@ func TestIngest_KnownSkillHashIsProjectLocal(t *testing.T) {
 	_, err = queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
 		Content: content, CanonicalSha256: strings.Repeat("d", 64), RawSha256: hash,
 		Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
-		ValidationErrors: []byte(`[]`), DerivedFromVersionID: uuid.NullUUID{}, CreatedByUserID: authCtx.UserID,
+		ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
 		ProjectID: otherProject.ID, SkillID: skill.ID,
 	})
 	require.NoError(t, err)

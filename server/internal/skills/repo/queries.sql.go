@@ -484,7 +484,6 @@ INSERT INTO skill_versions (
   metadata,
   spec_valid,
   validation_errors,
-  derived_from_version_id,
   created_by_user_id
 )
 SELECT
@@ -496,29 +495,27 @@ SELECT
   $5::jsonb,
   $6,
   $7::jsonb,
-  $8::uuid,
-  $9
+  $8
 FROM skills s
-WHERE s.project_id = $10
-  AND s.id = $11
+WHERE s.project_id = $9
+  AND s.id = $10
   AND s.archived_at IS NULL
 ON CONFLICT (skill_id, canonical_sha256)
 DO NOTHING
-RETURNING id, skill_id, content, canonical_sha256, raw_sha256, description, metadata, spec_valid, validation_errors, derived_from_version_id, created_at, created_by_user_id
+RETURNING id, skill_id, content, canonical_sha256, raw_sha256, description, metadata, spec_valid, validation_errors, created_at, created_by_user_id
 `
 
 type CreateSkillVersionParams struct {
-	Content              string
-	CanonicalSha256      string
-	RawSha256            string
-	Description          pgtype.Text
-	Metadata             []byte
-	SpecValid            bool
-	ValidationErrors     []byte
-	DerivedFromVersionID uuid.NullUUID
-	CreatedByUserID      string
-	ProjectID            uuid.UUID
-	SkillID              uuid.UUID
+	Content          string
+	CanonicalSha256  string
+	RawSha256        string
+	Description      pgtype.Text
+	Metadata         []byte
+	SpecValid        bool
+	ValidationErrors []byte
+	CreatedByUserID  string
+	ProjectID        uuid.UUID
+	SkillID          uuid.UUID
 }
 
 func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersionParams) (SkillVersion, error) {
@@ -530,7 +527,6 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 		arg.Metadata,
 		arg.SpecValid,
 		arg.ValidationErrors,
-		arg.DerivedFromVersionID,
 		arg.CreatedByUserID,
 		arg.ProjectID,
 		arg.SkillID,
@@ -546,11 +542,41 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 		&i.Metadata,
 		&i.SpecValid,
 		&i.ValidationErrors,
-		&i.DerivedFromVersionID,
 		&i.CreatedAt,
 		&i.CreatedByUserID,
 	)
 	return i, err
+}
+
+const createSkillVersionLineage = `-- name: CreateSkillVersionLineage :exec
+INSERT INTO skill_version_lineages (
+  skill_version_id,
+  skill_id,
+  derived_from_version_id
+)
+SELECT sv.id, sv.skill_id, $1
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $2
+  AND s.id = $3
+  AND sv.id = $4
+`
+
+type CreateSkillVersionLineageParams struct {
+	DerivedFromVersionID uuid.UUID
+	ProjectID            uuid.UUID
+	SkillID              uuid.UUID
+	SkillVersionID       uuid.UUID
+}
+
+func (q *Queries) CreateSkillVersionLineage(ctx context.Context, arg CreateSkillVersionLineageParams) error {
+	_, err := q.db.Exec(ctx, createSkillVersionLineage,
+		arg.DerivedFromVersionID,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.SkillVersionID,
+	)
+	return err
 }
 
 const deleteSkillVersionOrigin = `-- name: DeleteSkillVersionOrigin :exec
@@ -709,7 +735,7 @@ func (q *Queries) GetPluginForDistribution(ctx context.Context, arg GetPluginFor
 }
 
 const getProjectSkillVersion = `-- name: GetProjectSkillVersion :one
-SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.derived_from_version_id, sv.created_at, sv.created_by_user_id
+SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -734,7 +760,6 @@ func (q *Queries) GetProjectSkillVersion(ctx context.Context, arg GetProjectSkil
 		&i.Metadata,
 		&i.SpecValid,
 		&i.ValidationErrors,
-		&i.DerivedFromVersionID,
 		&i.CreatedAt,
 		&i.CreatedByUserID,
 	)
@@ -1017,7 +1042,7 @@ func (q *Queries) GetSkillState(ctx context.Context, arg GetSkillStateParams) (G
 }
 
 const getSkillVersionByHash = `-- name: GetSkillVersionByHash :one
-SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.derived_from_version_id, sv.created_at, sv.created_by_user_id
+SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -1045,7 +1070,6 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 		&i.Metadata,
 		&i.SpecValid,
 		&i.ValidationErrors,
-		&i.DerivedFromVersionID,
 		&i.CreatedAt,
 		&i.CreatedByUserID,
 	)
@@ -1054,12 +1078,16 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 
 const getSkillVersionDetails = `-- name: GetSkillVersionDetails :one
 SELECT
-  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.derived_from_version_id, sv.created_at, sv.created_by_user_id,
+  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id,
+  svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
   COALESCE(sightings.seen_count, 0)::bigint AS seen_count
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN skill_version_lineages svl
+  ON svl.skill_id = sv.skill_id
+  AND svl.skill_version_id = sv.id
 LEFT JOIN LATERAL (
   SELECT
     MIN(so.seen_at)::timestamptz AS first_seen_at,
@@ -1085,10 +1113,11 @@ type GetSkillVersionDetailsParams struct {
 }
 
 type GetSkillVersionDetailsRow struct {
-	SkillVersion SkillVersion
-	FirstSeenAt  pgtype.Timestamptz
-	LastSeenAt   pgtype.Timestamptz
-	SeenCount    int64
+	SkillVersion         SkillVersion
+	DerivedFromVersionID uuid.NullUUID
+	FirstSeenAt          pgtype.Timestamptz
+	LastSeenAt           pgtype.Timestamptz
+	SeenCount            int64
 }
 
 func (q *Queries) GetSkillVersionDetails(ctx context.Context, arg GetSkillVersionDetailsParams) (GetSkillVersionDetailsRow, error) {
@@ -1104,9 +1133,9 @@ func (q *Queries) GetSkillVersionDetails(ctx context.Context, arg GetSkillVersio
 		&i.SkillVersion.Metadata,
 		&i.SkillVersion.SpecValid,
 		&i.SkillVersion.ValidationErrors,
-		&i.SkillVersion.DerivedFromVersionID,
 		&i.SkillVersion.CreatedAt,
 		&i.SkillVersion.CreatedByUserID,
+		&i.DerivedFromVersionID,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -1501,12 +1530,16 @@ func (q *Queries) ListSkillSightingTimeline(ctx context.Context, arg ListSkillSi
 
 const listSkillVersions = `-- name: ListSkillVersions :many
 SELECT
-  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.derived_from_version_id, sv.created_at, sv.created_by_user_id,
+  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id,
+  svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
   COALESCE(sightings.seen_count, 0)::bigint AS seen_count
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN skill_version_lineages svl
+  ON svl.skill_id = sv.skill_id
+  AND svl.skill_version_id = sv.id
 LEFT JOIN LATERAL (
   SELECT
     MIN(so.seen_at)::timestamptz AS first_seen_at,
@@ -1542,10 +1575,11 @@ type ListSkillVersionsParams struct {
 }
 
 type ListSkillVersionsRow struct {
-	SkillVersion SkillVersion
-	FirstSeenAt  pgtype.Timestamptz
-	LastSeenAt   pgtype.Timestamptz
-	SeenCount    int64
+	SkillVersion         SkillVersion
+	DerivedFromVersionID uuid.NullUUID
+	FirstSeenAt          pgtype.Timestamptz
+	LastSeenAt           pgtype.Timestamptz
+	SeenCount            int64
 }
 
 func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsParams) ([]ListSkillVersionsRow, error) {
@@ -1573,9 +1607,9 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 			&i.SkillVersion.Metadata,
 			&i.SkillVersion.SpecValid,
 			&i.SkillVersion.ValidationErrors,
-			&i.SkillVersion.DerivedFromVersionID,
 			&i.SkillVersion.CreatedAt,
 			&i.SkillVersion.CreatedByUserID,
+			&i.DerivedFromVersionID,
 			&i.FirstSeenAt,
 			&i.LastSeenAt,
 			&i.SeenCount,

@@ -263,17 +263,16 @@ func (s *Service) recordVersion(
 	}
 
 	version, err := queries.CreateSkillVersion(ctx, repo.CreateSkillVersionParams{
-		Content:              parsed.RawContent,
-		CanonicalSha256:      parsed.CanonicalSHA256,
-		RawSha256:            parsed.RawSHA256,
-		Description:          conv.PtrToPGText(parsed.Description),
-		Metadata:             metadataJSON,
-		SpecValid:            parsed.SpecValid,
-		ValidationErrors:     validationErrorsJSON,
-		DerivedFromVersionID: derivedFromVersionID,
-		CreatedByUserID:      authCtx.UserID,
-		ProjectID:            *authCtx.ProjectID,
-		SkillID:              skill.ID,
+		Content:          parsed.RawContent,
+		CanonicalSha256:  parsed.CanonicalSHA256,
+		RawSha256:        parsed.RawSHA256,
+		Description:      conv.PtrToPGText(parsed.Description),
+		Metadata:         metadataJSON,
+		SpecValid:        parsed.SpecValid,
+		ValidationErrors: validationErrorsJSON,
+		CreatedByUserID:  authCtx.UserID,
+		ProjectID:        *authCtx.ProjectID,
+		SkillID:          skill.ID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		matched, getErr := queries.GetSkillVersionByHash(ctx, repo.GetSkillVersionByHashParams{
@@ -302,7 +301,7 @@ func (s *Service) recordVersion(
 		if getErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, getErr, "load existing skill version details").LogError(ctx, logger)
 		}
-		matchedView, viewErr := mv.BuildSkillVersionView(matchedDetails.SkillVersion, manifestFrontmatter(matchedDetails.SkillVersion.Content), mv.SkillVersionSightingStats{
+		matchedView, viewErr := mv.BuildSkillVersionView(matchedDetails.SkillVersion, matchedDetails.DerivedFromVersionID, manifestFrontmatter(matchedDetails.SkillVersion.Content), mv.SkillVersionSightingStats{
 			FirstSeenAt: matchedDetails.FirstSeenAt, LastSeenAt: matchedDetails.LastSeenAt, SeenCount: matchedDetails.SeenCount,
 		})
 		if viewErr != nil {
@@ -319,6 +318,16 @@ func (s *Service) recordVersion(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create skill version").LogError(ctx, logger)
 	}
+	if derivedFromVersionID.Valid {
+		if err := queries.CreateSkillVersionLineage(ctx, repo.CreateSkillVersionLineageParams{
+			ProjectID:            *authCtx.ProjectID,
+			SkillID:              skill.ID,
+			SkillVersionID:       version.ID,
+			DerivedFromVersionID: derivedFromVersionID.UUID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "create skill version lineage").LogError(ctx, logger)
+		}
+	}
 
 	updated, err := queries.TouchSkill(ctx, repo.TouchSkillParams{
 		ProjectID: *authCtx.ProjectID,
@@ -333,7 +342,7 @@ func (s *Service) recordVersion(
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
 	}
 	afterView := mv.BuildSkillView(updated, latestID, count)
-	versionView, err := mv.BuildSkillVersionView(version, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
+	versionView, err := mv.BuildSkillVersionView(version, derivedFromVersionID, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
 		FirstSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		LastSeenAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		SeenCount:   0,
@@ -673,7 +682,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 		if latestErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, latestErr, "get latest skill version details").LogError(ctx, logger)
 		}
-		latestView, latestErr = mv.BuildSkillVersionView(latest.SkillVersion, manifestFrontmatter(latest.SkillVersion.Content), mv.SkillVersionSightingStats{
+		latestView, latestErr = mv.BuildSkillVersionView(latest.SkillVersion, latest.DerivedFromVersionID, manifestFrontmatter(latest.SkillVersion.Content), mv.SkillVersionSightingStats{
 			FirstSeenAt: latest.FirstSeenAt, LastSeenAt: latest.LastSeenAt, SeenCount: latest.SeenCount,
 		})
 		if latestErr != nil {

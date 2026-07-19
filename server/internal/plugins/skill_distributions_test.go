@@ -37,17 +37,16 @@ func TestPluginsService_DeletePluginRevokesSkillDistributions(t *testing.T) {
 	})
 	require.NoError(t, err)
 	version, err := skills.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
-		Content:              "---\nname: revoked-on-plugin-delete\ndescription: d\n---\n\nbody\n",
-		CanonicalSha256:      uuid.NewString(),
-		RawSha256:            uuid.NewString(),
-		Description:          pgtype.Text{},
-		Metadata:             []byte(`{}`),
-		SpecValid:            true,
-		ValidationErrors:     []byte(`[]`),
-		DerivedFromVersionID: uuid.NullUUID{},
-		CreatedByUserID:      authCtx.UserID,
-		ProjectID:            projectID,
-		SkillID:              skill.ID,
+		Content:          "---\nname: revoked-on-plugin-delete\ndescription: d\n---\n\nbody\n",
+		CanonicalSha256:  uuid.NewString(),
+		RawSha256:        uuid.NewString(),
+		Description:      pgtype.Text{},
+		Metadata:         []byte(`{}`),
+		SpecValid:        true,
+		ValidationErrors: []byte(`[]`),
+		CreatedByUserID:  authCtx.UserID,
+		ProjectID:        projectID,
+		SkillID:          skill.ID,
 	})
 	require.NoError(t, err)
 	for _, plugin := range []string{doomed.ID, kept.ID} {
@@ -105,17 +104,16 @@ func TestListPluginSkillsForProjectResolvesContent(t *testing.T) {
 	}
 	makeVersion := func(skillID uuid.UUID, content string, valid bool) skillsrepo.SkillVersion {
 		version, err := skills.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
-			Content:              content,
-			CanonicalSha256:      uuid.NewString(),
-			RawSha256:            uuid.NewString(),
-			Description:          pgtype.Text{},
-			Metadata:             []byte(`{}`),
-			SpecValid:            valid,
-			ValidationErrors:     []byte(`[]`),
-			DerivedFromVersionID: uuid.NullUUID{},
-			CreatedByUserID:      authCtx.UserID,
-			ProjectID:            projectID,
-			SkillID:              skillID,
+			Content:          content,
+			CanonicalSha256:  uuid.NewString(),
+			RawSha256:        uuid.NewString(),
+			Description:      pgtype.Text{},
+			Metadata:         []byte(`{}`),
+			SpecValid:        valid,
+			ValidationErrors: []byte(`[]`),
+			CreatedByUserID:  authCtx.UserID,
+			ProjectID:        projectID,
+			SkillID:          skillID,
 		})
 		require.NoError(t, err)
 		return version

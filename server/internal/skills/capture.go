@@ -73,7 +73,7 @@ func CaptureSkillContent(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	version, err := queries.CreateSkillVersion(ctx, repo.CreateSkillVersionParams{
 		Content: parsed.RawContent, CanonicalSha256: parsed.CanonicalSHA256, RawSha256: parsed.RawSHA256,
 		Description: conv.PtrToPGText(parsed.Description), Metadata: metadata, SpecValid: parsed.SpecValid,
-		ValidationErrors: validationErrors, DerivedFromVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, CreatedByUserID: "system", ProjectID: projectID, SkillID: skill.ID,
+		ValidationErrors: validationErrors, CreatedByUserID: "system", ProjectID: projectID, SkillID: skill.ID,
 	})
 	createdVersion := err == nil
 	if errors.Is(err, pgx.ErrNoRows) {

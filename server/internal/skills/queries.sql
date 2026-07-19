@@ -272,7 +272,6 @@ INSERT INTO skill_versions (
   metadata,
   spec_valid,
   validation_errors,
-  derived_from_version_id,
   created_by_user_id
 )
 SELECT
@@ -284,7 +283,6 @@ SELECT
   @metadata::jsonb,
   @spec_valid,
   @validation_errors::jsonb,
-  sqlc.narg(derived_from_version_id)::uuid,
   @created_by_user_id
 FROM skills s
 WHERE s.project_id = @project_id
@@ -293,6 +291,19 @@ WHERE s.project_id = @project_id
 ON CONFLICT (skill_id, canonical_sha256)
 DO NOTHING
 RETURNING *;
+
+-- name: CreateSkillVersionLineage :exec
+INSERT INTO skill_version_lineages (
+  skill_version_id,
+  skill_id,
+  derived_from_version_id
+)
+SELECT sv.id, sv.skill_id, @derived_from_version_id
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND sv.id = @skill_version_id;
 
 -- name: GetProjectSkillVersion :one
 SELECT sv.*
@@ -462,11 +473,15 @@ LIMIT @page_limit;
 -- name: ListSkillVersions :many
 SELECT
   sqlc.embed(sv),
+  svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
   COALESCE(sightings.seen_count, 0)::bigint AS seen_count
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN skill_version_lineages svl
+  ON svl.skill_id = sv.skill_id
+  AND svl.skill_version_id = sv.id
 LEFT JOIN LATERAL (
   SELECT
     MIN(so.seen_at)::timestamptz AS first_seen_at,
@@ -495,11 +510,15 @@ LIMIT @page_limit;
 -- name: GetSkillVersionDetails :one
 SELECT
   sqlc.embed(sv),
+  svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
   COALESCE(sightings.seen_count, 0)::bigint AS seen_count
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN skill_version_lineages svl
+  ON svl.skill_id = sv.skill_id
+  AND svl.skill_version_id = sv.id
 LEFT JOIN LATERAL (
   SELECT
     MIN(so.seen_at)::timestamptz AS first_seen_at,
