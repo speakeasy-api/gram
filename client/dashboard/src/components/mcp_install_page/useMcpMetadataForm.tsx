@@ -1,4 +1,7 @@
-import type { McpMetadata } from "@gram/client/models/components/mcpmetadata.js";
+import type {
+  InstructionToolMode,
+  McpMetadata,
+} from "@gram/client/models/components/mcpmetadata.js";
 import { invalidateGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useMcpMetadataSetMutation } from "@gram/client/react-query/mcpMetadataSet.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,6 +21,7 @@ interface MetadataParams {
   externalDocumentationUrl: string | undefined;
   externalDocumentationText: string | undefined;
   instructions: string | undefined;
+  instructionToolMode: InstructionToolMode | undefined;
   installationOverrideUrl: string | undefined;
 }
 
@@ -65,6 +69,10 @@ export interface UseMcpMetadataMetadataFormResult {
     value: string | undefined;
     onChange: ChangeEventHandler<HTMLTextAreaElement>;
   };
+  instructionToolModeHandlers: {
+    value: InstructionToolMode;
+    onChange: (mode: InstructionToolMode) => void;
+  };
   installationOverrideUrlInputHandlers: {
     value: string | undefined;
     error?: boolean;
@@ -104,6 +112,7 @@ export function useMcpMetadataMetadataForm(
       currentMetadata?.externalDocumentationText ?? undefined,
     logoAssetId: currentMetadata?.logoAssetId ?? undefined,
     instructions: currentMetadata?.instructions ?? undefined,
+    instructionToolMode: currentMetadata?.instructionToolMode ?? undefined,
   });
 
   const [urlValid, setUrlValid] = useState<ValidationResult>({ valid: true });
@@ -150,6 +159,7 @@ export function useMcpMetadataMetadataForm(
         externalDocumentationText: currentMetadata?.externalDocumentationText,
         logoAssetId: currentMetadata?.logoAssetId,
         instructions: currentMetadata?.instructions,
+        instructionToolMode: currentMetadata?.instructionToolMode,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- syncs server→local only on server change; including metadataParams would overwrite user edits
@@ -218,10 +228,20 @@ export function useMcpMetadataMetadataForm(
 
   const instructionsDirty = useMemo(() => {
     if (!currentMetadata) {
-      return metadataParams.instructions !== undefined;
+      return (
+        metadataParams.instructions !== undefined ||
+        metadataParams.instructionToolMode !== undefined
+      );
     }
-    return metadataParams.instructions !== currentMetadata.instructions;
-  }, [currentMetadata, metadataParams.instructions]);
+    return (
+      metadataParams.instructions !== currentMetadata.instructions ||
+      metadataParams.instructionToolMode !== currentMetadata.instructionToolMode
+    );
+  }, [
+    currentMetadata,
+    metadataParams.instructions,
+    metadataParams.instructionToolMode,
+  ]);
 
   const handleUpload = useAssetImageUploadHandler((assetResult) => {
     setMetadataParams((prev) => ({
@@ -236,6 +256,7 @@ export function useMcpMetadataMetadataForm(
       externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
       externalDocumentationText: currentMetadata?.externalDocumentationText,
       instructions: currentMetadata?.instructions,
+      instructionToolMode: currentMetadata?.instructionToolMode,
       installationOverrideUrl: currentMetadata?.installationOverrideUrl,
     });
   }, [currentMetadata]);
@@ -254,6 +275,7 @@ export function useMcpMetadataMetadataForm(
     setMetadataParams((prev) => ({
       ...prev,
       instructions: currentMetadata?.instructions,
+      instructionToolMode: currentMetadata?.instructionToolMode,
     }));
   }, [currentMetadata]);
 
@@ -334,6 +356,14 @@ export function useMcpMetadataMetadataForm(
         setMetadataParams((prev) => ({
           ...prev,
           instructions: e.target.value === "" ? undefined : e.target.value,
+        })),
+    },
+    instructionToolModeHandlers: {
+      value: metadataParams.instructionToolMode ?? "required",
+      onChange: (mode: InstructionToolMode) =>
+        setMetadataParams((prev) => ({
+          ...prev,
+          instructionToolMode: mode,
         })),
     },
     reset,

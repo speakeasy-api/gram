@@ -761,6 +761,24 @@ export function MCPStatusDropdown({
  */
 const INSTRUCTIONS_SOFT_LIMIT = 2000;
 
+const INSTRUCTION_TOOL_MODES = [
+  {
+    value: "required",
+    label: "Required",
+    hint: "Agents must read instructions before their first tool call in each session.",
+  },
+  {
+    value: "optional",
+    label: "Optional",
+    hint: "The instructions tool is listed, but agents aren't required to call it.",
+  },
+  {
+    value: "disabled",
+    label: "Disabled",
+    hint: "The instructions tool is not listed on this server.",
+  },
+] as const;
+
 function ServerInstructionsSection({
   toolset,
   form,
@@ -797,6 +815,34 @@ function ServerInstructionsSection({
           </span>
         )}
       </div>
+      <Stack gap={1}>
+        <Stack direction="horizontal" gap={1}>
+          {INSTRUCTION_TOOL_MODES.map((mode) => (
+            <Button
+              key={mode.value}
+              size="sm"
+              variant={
+                form.instructionToolModeHandlers.value === mode.value
+                  ? "secondary"
+                  : "tertiary"
+              }
+              disabled={!canWrite}
+              onClick={() =>
+                form.instructionToolModeHandlers.onChange(mode.value)
+              }
+            >
+              <Button.Text>{mode.label}</Button.Text>
+            </Button>
+          ))}
+        </Stack>
+        <span className="text-muted-foreground text-xs">
+          {
+            INSTRUCTION_TOOL_MODES.find(
+              (mode) => mode.value === form.instructionToolModeHandlers.value,
+            )?.hint
+          }
+        </span>
+      </Stack>
       {canWrite && (
         <Stack direction="horizontal" gap={2} justify="end">
           <GenerateInstructionsButton toolset={toolset} form={form} />
