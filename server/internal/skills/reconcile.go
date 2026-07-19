@@ -101,7 +101,7 @@ func ReconcileSkillObservations(ctx context.Context, db *pgxpool.Pool, projectID
 			failedIDs[errorCode] = append(failedIDs[errorCode], row.ID)
 			continue
 		}
-		displayName, name, normalizeErr := normalizeObservedSkillName(row.SkillName, row.SourceLevel.String)
+		displayName, name, normalizeErr := normalizeObservedSkillName(row.SkillName, row.Source.String, row.SourceLevel.String, row.Provider)
 		if normalizeErr != nil {
 			failedIDs[reconcileErrorInvalidName] = append(failedIDs[reconcileErrorInvalidName], row.ID)
 			continue
@@ -185,9 +185,13 @@ func ReconcileSkillObservations(ctx context.Context, db *pgxpool.Pool, projectID
 	return &ReconcileSkillObservationsResult{Processed: processed, HasMore: len(rows) == int(batchSize)}, nil
 }
 
-func normalizeObservedSkillName(observedName, sourceLevel string) (string, string, error) {
+func normalizeObservedSkillName(observedName, source, sourceLevel, provider string) (string, string, error) {
 	displayName := strings.TrimSpace(observedName)
-	if strings.EqualFold(strings.TrimSpace(sourceLevel), "plugin") {
+	if strings.EqualFold(strings.TrimSpace(sourceLevel), "plugin") ||
+		strings.EqualFold(strings.TrimSpace(source), "marketplace") ||
+		strings.EqualFold(strings.TrimSpace(source), "plugin") ||
+		strings.EqualFold(strings.TrimSpace(provider), "marketplace") ||
+		strings.EqualFold(strings.TrimSpace(provider), "plugin") {
 		if separator := strings.LastIndexByte(displayName, ':'); separator >= 0 {
 			displayName = strings.TrimSpace(displayName[separator+1:])
 		}
