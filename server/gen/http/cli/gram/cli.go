@@ -127,7 +127,7 @@ func UsageCommands() []string {
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
-		"skills (create|add-version|list|get|list-unknown-activations|list-versions|archive|distribute|undistribute|list-distributions)",
+		"skills (create|add-version|update|list|get|list-unknown-activations|list-versions|archive|distribute|undistribute|list-distributions)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -2014,6 +2014,12 @@ func ParseEndpoint(
 		skillsAddVersionApikeyTokenFlag      = skillsAddVersionFlags.String("apikey-token", "", "")
 		skillsAddVersionProjectSlugInputFlag = skillsAddVersionFlags.String("project-slug-input", "", "")
 
+		skillsUpdateFlags                = flag.NewFlagSet("update", flag.ExitOnError)
+		skillsUpdateBodyFlag             = skillsUpdateFlags.String("body", "REQUIRED", "")
+		skillsUpdateSessionTokenFlag     = skillsUpdateFlags.String("session-token", "", "")
+		skillsUpdateApikeyTokenFlag      = skillsUpdateFlags.String("apikey-token", "", "")
+		skillsUpdateProjectSlugInputFlag = skillsUpdateFlags.String("project-slug-input", "", "")
+
 		skillsListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
 		skillsListCursorFlag           = skillsListFlags.String("cursor", "", "")
 		skillsListLimitFlag            = skillsListFlags.String("limit", "50", "")
@@ -3001,6 +3007,7 @@ func ParseEndpoint(
 	skillsFlags.Usage = skillsUsage
 	skillsCreateFlags.Usage = skillsCreateUsage
 	skillsAddVersionFlags.Usage = skillsAddVersionUsage
+	skillsUpdateFlags.Usage = skillsUpdateUsage
 	skillsListFlags.Usage = skillsListUsage
 	skillsGetFlags.Usage = skillsGetUsage
 	skillsListUnknownActivationsFlags.Usage = skillsListUnknownActivationsUsage
@@ -4430,6 +4437,9 @@ func ParseEndpoint(
 
 			case "add-version":
 				epf = skillsAddVersionFlags
+
+			case "update":
+				epf = skillsUpdateFlags
 
 			case "list":
 				epf = skillsListFlags
@@ -5959,6 +5969,9 @@ func ParseEndpoint(
 			case "add-version":
 				endpoint = c.AddVersion()
 				data, err = skillsc.BuildAddVersionPayload(*skillsAddVersionBodyFlag, *skillsAddVersionSessionTokenFlag, *skillsAddVersionApikeyTokenFlag, *skillsAddVersionProjectSlugInputFlag)
+			case "update":
+				endpoint = c.Update()
+				data, err = skillsc.BuildUpdatePayload(*skillsUpdateBodyFlag, *skillsUpdateSessionTokenFlag, *skillsUpdateApikeyTokenFlag, *skillsUpdateProjectSlugInputFlag)
 			case "list":
 				endpoint = c.List()
 				data, err = skillsc.BuildListPayload(*skillsListCursorFlag, *skillsListLimitFlag, *skillsListSessionTokenFlag, *skillsListApikeyTokenFlag, *skillsListProjectSlugInputFlag)
@@ -14447,6 +14460,7 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Record an uploaded SKILL.md. The implementation requires the skills product feature and skill write scope, and may create a skill, add a version to an existing skill, or return an existing canonical version as a no-op.`)
 	fmt.Fprintln(os.Stderr, `    add-version: Record an uploaded SKILL.md as a version of an existing skill. The implementation requires the skills product feature and skill write scope, and returns the existing canonical version as a no-op when appropriate.`)
+	fmt.Fprintln(os.Stderr, `    update: Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.`)
 	fmt.Fprintln(os.Stderr, `    list: List active skills in the project. The implementation requires the skills product feature and skill read scope.`)
 	fmt.Fprintln(os.Stderr, `    get: Get an active skill and its latest version. The implementation requires the skills product feature and skill read scope.`)
 	fmt.Fprintln(os.Stderr, `    list-unknown-activations: List terminal skill activations that could not be attributed to a skill version.`)
@@ -14504,7 +14518,31 @@ func skillsAddVersionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills add-version --body '{\n      \"content\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills add-version --body '{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsUpdateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills update", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills update --body '{\n      \"display_name\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"summary\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsListUsage() {

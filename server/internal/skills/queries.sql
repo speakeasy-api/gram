@@ -272,6 +272,7 @@ INSERT INTO skill_versions (
   metadata,
   spec_valid,
   validation_errors,
+  derived_from_version_id,
   created_by_user_id
 )
 SELECT
@@ -283,6 +284,7 @@ SELECT
   @metadata::jsonb,
   @spec_valid,
   @validation_errors::jsonb,
+  sqlc.narg(derived_from_version_id)::uuid,
   @created_by_user_id
 FROM skills s
 WHERE s.project_id = @project_id
@@ -291,6 +293,13 @@ WHERE s.project_id = @project_id
 ON CONFLICT (skill_id, canonical_sha256)
 DO NOTHING
 RETURNING *;
+
+-- name: GetProjectSkillVersion :one
+SELECT sv.*
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND sv.id = @skill_version_id;
 
 -- name: GetSkillVersionByHash :one
 SELECT sv.*
@@ -352,9 +361,18 @@ FROM skill_raw_hashes
 WHERE project_id = @project_id
   AND raw_sha256 = @raw_sha256;
 
--- name: UpdateSkill :one
+-- name: TouchSkill :one
 UPDATE skills
-SET display_name = @display_name,
+SET updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = @id
+  AND archived_at IS NULL
+RETURNING *;
+
+-- name: UpdateSkillDetails :one
+UPDATE skills
+SET name = @name,
+    display_name = @display_name,
     summary = sqlc.narg(summary)::text,
     updated_at = clock_timestamp()
 WHERE project_id = @project_id

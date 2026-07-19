@@ -7,8 +7,7 @@
 
 package types
 
-// An active project skill. All API reads return active skills, and archive
-// returns an empty response.
+// Skill is the result type of the skills service update method.
 type Skill struct {
 	// The skill ID.
 	ID string
@@ -16,9 +15,9 @@ type Skill struct {
 	ProjectID string
 	// The normalized project-unique skill name.
 	Name string
-	// The display name from the latest recorded manifest.
+	// The user-facing registry name.
 	DisplayName string
-	// The optional summary from the latest recorded manifest.
+	// The optional registry summary.
 	Summary *string
 	// How the skill entered the registry.
 	SourceKind string

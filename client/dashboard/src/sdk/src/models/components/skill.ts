@@ -21,7 +21,7 @@ export type Skill = {
    */
   createdAt: Date;
   /**
-   * The display name from the latest recorded manifest.
+   * The user-facing registry name.
    */
   displayName: string;
   /**
@@ -57,7 +57,7 @@ export type Skill = {
    */
   sourceKind: string;
   /**
-   * The optional summary from the latest recorded manifest.
+   * The optional registry summary.
    */
   summary?: string | undefined;
   /**

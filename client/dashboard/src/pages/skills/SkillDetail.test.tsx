@@ -15,6 +15,7 @@ const testState = vi.hoisted(() => ({
   navigate: vi.fn(),
   invalidateSkills: vi.fn().mockResolvedValue(undefined),
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
+  invalidateDistributions: vi.fn().mockResolvedValue(undefined),
   invalidateVersions: vi.fn().mockResolvedValue(undefined),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
@@ -120,6 +121,9 @@ vi.mock("@gram/client/react-query/skillVersions.js", () => ({
   }),
   invalidateAllSkillVersions: testState.invalidateVersions,
 }));
+vi.mock("@gram/client/react-query/skillDistributions.js", () => ({
+  invalidateAllSkillDistributions: testState.invalidateDistributions,
+}));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   invalidateAllSkills: testState.invalidateSkills,
 }));
@@ -149,6 +153,9 @@ vi.mock("@/elements/components/Markdown", () => ({
   Markdown: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("./SkillManifestDialog", () => ({ SkillManifestDialog: () => null }));
+vi.mock("./EditSkillDetailsDialog", () => ({
+  EditSkillDetailsDialog: () => null,
+}));
 vi.mock("@/components/page-layout", () => {
   const Wrapper = ({ children }: { children?: ReactNode }) => (
     <div>{children}</div>
@@ -197,6 +204,7 @@ beforeEach(() => {
   testState.navigate.mockReset();
   testState.invalidateSkills.mockClear();
   testState.invalidateSkill.mockClear();
+  testState.invalidateDistributions.mockClear();
   testState.invalidateVersions.mockClear();
   testState.toastSuccess.mockReset();
   testState.toastError.mockReset();
@@ -258,7 +266,7 @@ describe("SkillDetail", () => {
         "Manifest content has not been captured for this observed skill.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Edit skill" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit SKILL.md" })).toBeNull();
     expect(screen.queryByText("Version history")).toBeNull();
     expect(screen.queryByText("Distribution banner")).toBeNull();
     expect(screen.queryByText("Distribution controls")).toBeNull();
@@ -291,6 +299,9 @@ describe("SkillDetail", () => {
       testState.queryClient,
     );
     expect(testState.invalidateSkill).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(testState.invalidateDistributions).toHaveBeenCalledWith(
       testState.queryClient,
     );
     expect(testState.invalidateVersions).toHaveBeenCalledWith(

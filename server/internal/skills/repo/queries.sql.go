@@ -484,6 +484,7 @@ INSERT INTO skill_versions (
   metadata,
   spec_valid,
   validation_errors,
+  derived_from_version_id,
   created_by_user_id
 )
 SELECT
@@ -495,27 +496,29 @@ SELECT
   $5::jsonb,
   $6,
   $7::jsonb,
-  $8
+  $8::uuid,
+  $9
 FROM skills s
-WHERE s.project_id = $9
-  AND s.id = $10
+WHERE s.project_id = $10
+  AND s.id = $11
   AND s.archived_at IS NULL
 ON CONFLICT (skill_id, canonical_sha256)
 DO NOTHING
-RETURNING id, skill_id, content, canonical_sha256, raw_sha256, description, metadata, spec_valid, validation_errors, created_at, created_by_user_id
+RETURNING id, skill_id, content, canonical_sha256, raw_sha256, description, metadata, spec_valid, validation_errors, derived_from_version_id, created_at, created_by_user_id
 `
 
 type CreateSkillVersionParams struct {
-	Content          string
-	CanonicalSha256  string
-	RawSha256        string
-	Description      pgtype.Text
-	Metadata         []byte
-	SpecValid        bool
-	ValidationErrors []byte
-	CreatedByUserID  string
-	ProjectID        uuid.UUID
-	SkillID          uuid.UUID
+	Content              string
+	CanonicalSha256      string
+	RawSha256            string
+	Description          pgtype.Text
+	Metadata             []byte
+	SpecValid            bool
+	ValidationErrors     []byte
+	DerivedFromVersionID uuid.NullUUID
+	CreatedByUserID      string
+	ProjectID            uuid.UUID
+	SkillID              uuid.UUID
 }
 
 func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersionParams) (SkillVersion, error) {
@@ -527,6 +530,7 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 		arg.Metadata,
 		arg.SpecValid,
 		arg.ValidationErrors,
+		arg.DerivedFromVersionID,
 		arg.CreatedByUserID,
 		arg.ProjectID,
 		arg.SkillID,
@@ -542,6 +546,7 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 		&i.Metadata,
 		&i.SpecValid,
 		&i.ValidationErrors,
+		&i.DerivedFromVersionID,
 		&i.CreatedAt,
 		&i.CreatedByUserID,
 	)
@@ -700,6 +705,39 @@ func (q *Queries) GetPluginForDistribution(ctx context.Context, arg GetPluginFor
 	row := q.db.QueryRow(ctx, getPluginForDistribution, arg.PluginID, arg.ProjectID)
 	var i GetPluginForDistributionRow
 	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
+const getProjectSkillVersion = `-- name: GetProjectSkillVersion :one
+SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.derived_from_version_id, sv.created_at, sv.created_by_user_id
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND sv.id = $2
+`
+
+type GetProjectSkillVersionParams struct {
+	ProjectID      uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+func (q *Queries) GetProjectSkillVersion(ctx context.Context, arg GetProjectSkillVersionParams) (SkillVersion, error) {
+	row := q.db.QueryRow(ctx, getProjectSkillVersion, arg.ProjectID, arg.SkillVersionID)
+	var i SkillVersion
+	err := row.Scan(
+		&i.ID,
+		&i.SkillID,
+		&i.Content,
+		&i.CanonicalSha256,
+		&i.RawSha256,
+		&i.Description,
+		&i.Metadata,
+		&i.SpecValid,
+		&i.ValidationErrors,
+		&i.DerivedFromVersionID,
+		&i.CreatedAt,
+		&i.CreatedByUserID,
+	)
 	return i, err
 }
 
@@ -979,7 +1017,7 @@ func (q *Queries) GetSkillState(ctx context.Context, arg GetSkillStateParams) (G
 }
 
 const getSkillVersionByHash = `-- name: GetSkillVersionByHash :one
-SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
+SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.derived_from_version_id, sv.created_at, sv.created_by_user_id
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -1007,6 +1045,7 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 		&i.Metadata,
 		&i.SpecValid,
 		&i.ValidationErrors,
+		&i.DerivedFromVersionID,
 		&i.CreatedAt,
 		&i.CreatedByUserID,
 	)
@@ -1015,7 +1054,7 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 
 const getSkillVersionDetails = `-- name: GetSkillVersionDetails :one
 SELECT
-  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id,
+  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.derived_from_version_id, sv.created_at, sv.created_by_user_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
   COALESCE(sightings.seen_count, 0)::bigint AS seen_count
@@ -1065,6 +1104,7 @@ func (q *Queries) GetSkillVersionDetails(ctx context.Context, arg GetSkillVersio
 		&i.SkillVersion.Metadata,
 		&i.SkillVersion.SpecValid,
 		&i.SkillVersion.ValidationErrors,
+		&i.SkillVersion.DerivedFromVersionID,
 		&i.SkillVersion.CreatedAt,
 		&i.SkillVersion.CreatedByUserID,
 		&i.FirstSeenAt,
@@ -1461,7 +1501,7 @@ func (q *Queries) ListSkillSightingTimeline(ctx context.Context, arg ListSkillSi
 
 const listSkillVersions = `-- name: ListSkillVersions :many
 SELECT
-  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id,
+  sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.derived_from_version_id, sv.created_at, sv.created_by_user_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
   COALESCE(sightings.seen_count, 0)::bigint AS seen_count
@@ -1533,6 +1573,7 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 			&i.SkillVersion.Metadata,
 			&i.SkillVersion.SpecValid,
 			&i.SkillVersion.ValidationErrors,
+			&i.SkillVersion.DerivedFromVersionID,
 			&i.SkillVersion.CreatedAt,
 			&i.SkillVersion.CreatedByUserID,
 			&i.FirstSeenAt,
@@ -1953,26 +1994,64 @@ func (q *Queries) StoreSkillRawHashAlias(ctx context.Context, arg StoreSkillRawH
 	return matches, err
 }
 
-const updateSkill = `-- name: UpdateSkill :one
+const touchSkill = `-- name: TouchSkill :one
 UPDATE skills
-SET display_name = $1,
-    summary = $2::text,
-    updated_at = clock_timestamp()
-WHERE project_id = $3
-  AND id = $4
+SET updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = $2
   AND archived_at IS NULL
 RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
-type UpdateSkillParams struct {
+type TouchSkillParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) TouchSkill(ctx context.Context, arg TouchSkillParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, touchSkill, arg.ProjectID, arg.ID)
+	var i Skill
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Summary,
+		&i.SourceKind,
+		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateSkillDetails = `-- name: UpdateSkillDetails :one
+UPDATE skills
+SET name = $1,
+    display_name = $2,
+    summary = $3::text,
+    updated_at = clock_timestamp()
+WHERE project_id = $4
+  AND id = $5
+  AND archived_at IS NULL
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+`
+
+type UpdateSkillDetailsParams struct {
+	Name        string
 	DisplayName string
 	Summary     pgtype.Text
 	ProjectID   uuid.UUID
 	ID          uuid.UUID
 }
 
-func (q *Queries) UpdateSkill(ctx context.Context, arg UpdateSkillParams) (Skill, error) {
-	row := q.db.QueryRow(ctx, updateSkill,
+func (q *Queries) UpdateSkillDetails(ctx context.Context, arg UpdateSkillDetailsParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, updateSkillDetails,
+		arg.Name,
 		arg.DisplayName,
 		arg.Summary,
 		arg.ProjectID,

@@ -17,6 +17,11 @@ func AddVersionSkillsPath() string {
 	return "/rpc/skills.addVersion"
 }
 
+// UpdateSkillsPath returns the URL path to the skills service update HTTP endpoint.
+func UpdateSkillsPath() string {
+	return "/rpc/skills.update"
+}
+
 // ListSkillsPath returns the URL path to the skills service list HTTP endpoint.
 func ListSkillsPath() string {
 	return "/rpc/skills.list"

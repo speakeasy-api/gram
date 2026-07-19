@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	skillservice "github.com/speakeasy-api/gram/server/internal/skills"
 )
 
 func TestSkillsCreateValidManifestRoundTrip(t *testing.T) {
@@ -134,8 +136,8 @@ func TestSkillsVersioningByNormalizedNameAndExplicitAdd(t *testing.T) {
 	require.Equal(t, first.Skill.ID, second.Skill.ID)
 	require.NotEqual(t, first.Version.ID, second.Version.ID)
 	require.Equal(t, "my-skill", second.Skill.Name)
-	require.Equal(t, "my.skill", second.Skill.DisplayName)
-	require.Equal(t, "Second summary.", *second.Skill.Summary)
+	require.Equal(t, "My_Skill", second.Skill.DisplayName)
+	require.Equal(t, "First summary.", *second.Skill.Summary)
 	require.Equal(t, int64(2), second.Skill.VersionCount)
 	require.NotNil(t, second.Skill.LatestVersionID)
 	require.Equal(t, second.Version.ID, *second.Skill.LatestVersionID)
@@ -155,7 +157,7 @@ func TestSkillsVersioningByNormalizedNameAndExplicitAdd(t *testing.T) {
 	require.Equal(t, int64(3), third.Skill.VersionCount)
 	require.NotNil(t, third.Skill.LatestVersionID)
 	require.Equal(t, third.Version.ID, *third.Skill.LatestVersionID)
-	require.Equal(t, "Third summary.", *third.Skill.Summary)
+	require.Equal(t, "First summary.", *third.Skill.Summary)
 
 	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{
 		ID:               first.Skill.ID,
@@ -168,6 +170,79 @@ func TestSkillsVersioningByNormalizedNameAndExplicitAdd(t *testing.T) {
 	versions, err := ti.service.ListVersions(ctx, &gen.ListVersionsPayload{ID: first.Skill.ID, Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Len(t, versions.Versions, 3)
+}
+
+func TestSkillsCurateCapturedSkillWithVersionLineage(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	originalContent := skillManifest("captured-name", "Captured summary.", "captured body")
+	captured, err := skillservice.CaptureSkillContent(ctx, ti.conn, ti.projectID, originalContent)
+	require.NoError(t, err)
+	updateAudits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillUpdate)
+	require.NoError(t, err)
+
+	updated, err := ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: captured.SkillID.String(), Name: "curated-name", DisplayName: "Curated skill",
+		Summary: conv.PtrEmpty("Curated summary."), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, captured.SkillID.String(), updated.ID)
+	require.Equal(t, "curated-name", updated.Name)
+	require.Equal(t, "Curated skill", updated.DisplayName)
+	require.Equal(t, "captured", updated.SourceKind)
+	updateAuditsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillUpdate)
+	require.NoError(t, err)
+	require.Equal(t, updateAudits+1, updateAuditsAfter)
+	_, err = ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: updated.ID, Name: updated.Name, DisplayName: strings.Repeat("界", 257),
+		Summary: updated.Summary, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: updated.ID, Name: updated.Name, DisplayName: updated.DisplayName,
+		Summary: conv.PtrEmpty(strings.Repeat("界", 1025)), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	createSkill(t, ctx, ti, "occupied-name", "Occupied.")
+	_, err = ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: updated.ID, Name: "occupied-name", DisplayName: updated.DisplayName,
+		Summary: updated.Summary, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	derivedContent := skillManifest("captured-name", "Edited description.", "curated body")
+	derived, err := ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID: updated.ID, Content: derivedContent, DerivedFromVersionID: conv.PtrEmpty(captured.SkillVersionID.String()),
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, derived.Version.DerivedFromVersionID)
+	require.Equal(t, captured.SkillVersionID.String(), *derived.Version.DerivedFromVersionID)
+	require.Equal(t, "curated-name", derived.Skill.Name)
+	require.Equal(t, "Curated skill", derived.Skill.DisplayName)
+	require.Equal(t, "Curated summary.", *derived.Skill.Summary)
+
+	other := createSkill(t, ctx, ti, "other-skill", "Other summary.")
+	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID: updated.ID, Content: derivedContent, DerivedFromVersionID: conv.PtrEmpty(other.Version.ID),
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	insertSkillObservation(t, ti, "captured-name", "", "project", contentSHA256(originalContent), time.Now().UTC())
+	result, err := skillservice.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Processed)
+	afterActivation, err := ti.service.Get(ctx, &gen.GetPayload{ID: updated.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), afterActivation.Skill.SeenCount)
+
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "curated-plugin")
+	distribution, err := ti.service.Distribute(ctx, &gen.DistributePayload{
+		ID: updated.ID, PluginID: plugin.ID.String(), PinnedVersionID: conv.PtrEmpty(derived.Version.ID),
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, derived.Version.ID, distribution.ResolvedVersionID)
 }
 
 func TestSkillsCanonicalDuplicatesPreserveOriginalVersionAndParent(t *testing.T) {
@@ -233,7 +308,7 @@ func TestSkillsHistoricalDuplicateDoesNotMoveLatestBackward(t *testing.T) {
 	require.NotNil(t, duplicate.Skill.LatestVersionID)
 	require.Equal(t, newer.Version.ID, *duplicate.Skill.LatestVersionID)
 	require.Equal(t, int64(2), duplicate.Skill.VersionCount)
-	require.Equal(t, "Second.", *duplicate.Skill.Summary)
+	require.Equal(t, "First.", *duplicate.Skill.Summary)
 }
 
 func TestSkillsArchiveIsIdempotentAndAllowsReplacement(t *testing.T) {
@@ -302,6 +377,11 @@ func TestSkillsProjectIsolation(t *testing.T) {
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = ti.service.AddVersion(otherCtx, &gen.AddVersionPayload{
+		ID: second.Skill.ID, Content: skillManifest("shared-name", "Cross-project parent.", "body"),
+		DerivedFromVersionID: conv.PtrEmpty(first.Version.ID), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	require.NoError(t, ti.service.Archive(otherCtx, &gen.ArchivePayload{ID: first.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}))
@@ -398,6 +478,8 @@ func TestSkillsReadAndWriteRBACExpansion(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.AddVersion(readCtx, &gen.AddVersionPayload{ID: created.Skill.ID, Content: skillManifest("rbac-skill", "Denied.", "body"), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.Update(readCtx, &gen.UpdatePayload{ID: created.Skill.ID, Name: "rbac-skill", DisplayName: "Denied", Summary: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
 	err = ti.service.Archive(readCtx, &gen.ArchivePayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
@@ -410,6 +492,8 @@ func TestSkillsReadAndWriteRBACExpansion(t *testing.T) {
 	_, err = ti.service.ListVersions(writeCtx, &gen.ListVersionsPayload{ID: writable.Skill.ID, Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	_, err = ti.service.AddVersion(writeCtx, &gen.AddVersionPayload{ID: writable.Skill.ID, Content: skillManifest("write-skill", "Two.", "two"), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	_, err = ti.service.Update(writeCtx, &gen.UpdatePayload{ID: writable.Skill.ID, Name: "renamed-write-skill", DisplayName: "Renamed write skill", Summary: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.NoError(t, ti.service.Archive(writeCtx, &gen.ArchivePayload{ID: writable.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}))
 }

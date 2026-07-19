@@ -29,6 +29,21 @@ type AddVersionRequestBody struct {
 	// The complete uploaded SKILL.md content. Handlers enforce a maximum size of
 	// 65,536 UTF-8 bytes.
 	Content string `form:"content" json:"content" xml:"content"`
+	// The optional source version this new version was derived from.
+	DerivedFromVersionID *string `form:"derived_from_version_id,omitempty" json:"derived_from_version_id,omitempty" xml:"derived_from_version_id,omitempty"`
+}
+
+// UpdateRequestBody is the type of the "skills" service "update" endpoint HTTP
+// request body.
+type UpdateRequestBody struct {
+	// The skill ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The canonical skill name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The user-facing skill name.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// The optional skill summary.
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 }
 
 // ArchiveRequestBody is the type of the "skills" service "archive" endpoint
@@ -85,6 +100,40 @@ type AddVersionResponseBody struct {
 	// Whether this request created a new immutable version rather than resolving
 	// to an existing canonical version.
 	CreatedVersion *bool `form:"created_version,omitempty" json:"created_version,omitempty" xml:"created_version,omitempty"`
+}
+
+// UpdateResponseBody is the type of the "skills" service "update" endpoint
+// HTTP response body.
+type UpdateResponseBody struct {
+	// The skill ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project that owns the skill.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The normalized project-unique skill name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The user-facing registry name.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// The optional registry summary.
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// How the skill entered the registry.
+	SourceKind *string `form:"source_kind,omitempty" json:"source_kind,omitempty" xml:"source_kind,omitempty"`
+	// The skill classification.
+	Classification *string `form:"classification,omitempty" json:"classification,omitempty" xml:"classification,omitempty"`
+	// The derived latest version ID, selected from immutable version creation
+	// order.
+	LatestVersionID *string `form:"latest_version_id,omitempty" json:"latest_version_id,omitempty" xml:"latest_version_id,omitempty"`
+	// The number of immutable versions recorded for the skill.
+	VersionCount *int64 `form:"version_count,omitempty" json:"version_count,omitempty" xml:"version_count,omitempty"`
+	// When this skill was first activated.
+	FirstSeenAt *string `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
+	// When this skill was most recently activated.
+	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+	// The number of reconciled activations observed for this skill.
+	SeenCount *int64 `form:"seen_count,omitempty" json:"seen_count,omitempty" xml:"seen_count,omitempty"`
+	// When the skill was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the skill was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListResponseBody is the type of the "skills" service "list" endpoint HTTP
@@ -514,6 +563,186 @@ type AddVersionUnexpectedResponseBody struct {
 // AddVersionGatewayErrorResponseBody is the type of the "skills" service
 // "addVersion" endpoint HTTP response body for the "gateway_error" error.
 type AddVersionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUnauthorizedResponseBody is the type of the "skills" service "update"
+// endpoint HTTP response body for the "unauthorized" error.
+type UpdateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateForbiddenResponseBody is the type of the "skills" service "update"
+// endpoint HTTP response body for the "forbidden" error.
+type UpdateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateBadRequestResponseBody is the type of the "skills" service "update"
+// endpoint HTTP response body for the "bad_request" error.
+type UpdateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateNotFoundResponseBody is the type of the "skills" service "update"
+// endpoint HTTP response body for the "not_found" error.
+type UpdateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateConflictResponseBody is the type of the "skills" service "update"
+// endpoint HTTP response body for the "conflict" error.
+type UpdateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUnsupportedMediaResponseBody is the type of the "skills" service
+// "update" endpoint HTTP response body for the "unsupported_media" error.
+type UpdateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateInvalidResponseBody is the type of the "skills" service "update"
+// endpoint HTTP response body for the "invalid" error.
+type UpdateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateInvariantViolationResponseBody is the type of the "skills" service
+// "update" endpoint HTTP response body for the "invariant_violation" error.
+type UpdateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateUnexpectedResponseBody is the type of the "skills" service "update"
+// endpoint HTTP response body for the "unexpected" error.
+type UpdateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateGatewayErrorResponseBody is the type of the "skills" service "update"
+// endpoint HTTP response body for the "gateway_error" error.
+type UpdateGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1993,9 +2222,9 @@ type SkillResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The normalized project-unique skill name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The display name from the latest recorded manifest.
+	// The user-facing registry name.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	// The optional summary from the latest recorded manifest.
+	// The optional registry summary.
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// How the skill entered the registry.
 	SourceKind *string `form:"source_kind,omitempty" json:"source_kind,omitempty" xml:"source_kind,omitempty"`
@@ -2040,6 +2269,8 @@ type SkillVersionResponseBody struct {
 	SpecValid *bool `form:"spec_valid,omitempty" json:"spec_valid,omitempty" xml:"spec_valid,omitempty"`
 	// Specification validation problems recorded for this manifest version.
 	ValidationErrors []*SkillValidationErrorResponseBody `form:"validation_errors,omitempty" json:"validation_errors,omitempty" xml:"validation_errors,omitempty"`
+	// The source version this version was derived from.
+	DerivedFromVersionID *string `form:"derived_from_version_id,omitempty" json:"derived_from_version_id,omitempty" xml:"derived_from_version_id,omitempty"`
 	// When this immutable version was recorded.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The user that recorded this version.
@@ -2169,8 +2400,21 @@ func NewCreateRequestBody(p *skills.CreatePayload) *CreateRequestBody {
 // the "addVersion" endpoint of the "skills" service.
 func NewAddVersionRequestBody(p *skills.AddVersionPayload) *AddVersionRequestBody {
 	body := &AddVersionRequestBody{
-		ID:      p.ID,
-		Content: p.Content,
+		ID:                   p.ID,
+		Content:              p.Content,
+		DerivedFromVersionID: p.DerivedFromVersionID,
+	}
+	return body
+}
+
+// NewUpdateRequestBody builds the HTTP request body from the payload of the
+// "update" endpoint of the "skills" service.
+func NewUpdateRequestBody(p *skills.UpdatePayload) *UpdateRequestBody {
+	body := &UpdateRequestBody{
+		ID:          p.ID,
+		Name:        p.Name,
+		DisplayName: p.DisplayName,
+		Summary:     p.Summary,
 	}
 	return body
 }
@@ -2514,6 +2758,174 @@ func NewAddVersionUnexpected(body *AddVersionUnexpectedResponseBody) *goa.Servic
 // NewAddVersionGatewayError builds a skills service addVersion endpoint
 // gateway_error error.
 func NewAddVersionGatewayError(body *AddVersionGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateSkillOK builds a "skills" service "update" endpoint result from a
+// HTTP "OK" response.
+func NewUpdateSkillOK(body *UpdateResponseBody) *types.Skill {
+	v := &types.Skill{
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		Name:            *body.Name,
+		DisplayName:     *body.DisplayName,
+		Summary:         body.Summary,
+		SourceKind:      *body.SourceKind,
+		Classification:  *body.Classification,
+		LatestVersionID: body.LatestVersionID,
+		VersionCount:    *body.VersionCount,
+		FirstSeenAt:     body.FirstSeenAt,
+		LastSeenAt:      body.LastSeenAt,
+		SeenCount:       *body.SeenCount,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewUpdateUnauthorized builds a skills service update endpoint unauthorized
+// error.
+func NewUpdateUnauthorized(body *UpdateUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateForbidden builds a skills service update endpoint forbidden error.
+func NewUpdateForbidden(body *UpdateForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateBadRequest builds a skills service update endpoint bad_request
+// error.
+func NewUpdateBadRequest(body *UpdateBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateNotFound builds a skills service update endpoint not_found error.
+func NewUpdateNotFound(body *UpdateNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateConflict builds a skills service update endpoint conflict error.
+func NewUpdateConflict(body *UpdateConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUnsupportedMedia builds a skills service update endpoint
+// unsupported_media error.
+func NewUpdateUnsupportedMedia(body *UpdateUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateInvalid builds a skills service update endpoint invalid error.
+func NewUpdateInvalid(body *UpdateInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateInvariantViolation builds a skills service update endpoint
+// invariant_violation error.
+func NewUpdateInvariantViolation(body *UpdateInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateUnexpected builds a skills service update endpoint unexpected error.
+func NewUpdateUnexpected(body *UpdateUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateGatewayError builds a skills service update endpoint gateway_error
+// error.
+func NewUpdateGatewayError(body *UpdateGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3879,6 +4291,62 @@ func ValidateAddVersionResponseBody(body *AddVersionResponseBody) (err error) {
 	return
 }
 
+// ValidateUpdateResponseBody runs the validations defined on UpdateResponseBody
+func ValidateUpdateResponseBody(body *UpdateResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	}
+	if body.SourceKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_kind", "body"))
+	}
+	if body.Classification == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("classification", "body"))
+	}
+	if body.VersionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_count", "body"))
+	}
+	if body.SeenCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("seen_count", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.LatestVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.latest_version_id", *body.LatestVersionID, goa.FormatUUID))
+	}
+	if body.FirstSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen_at", *body.FirstSeenAt, goa.FormatDateTime))
+	}
+	if body.LastSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateListResponseBody runs the validations defined on ListResponseBody
 func ValidateListResponseBody(body *ListResponseBody) (err error) {
 	if body.Skills == nil {
@@ -4516,6 +4984,246 @@ func ValidateAddVersionUnexpectedResponseBody(body *AddVersionUnexpectedResponse
 // ValidateAddVersionGatewayErrorResponseBody runs the validations defined on
 // addVersion_gateway_error_response_body
 func ValidateAddVersionGatewayErrorResponseBody(body *AddVersionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUnauthorizedResponseBody runs the validations defined on
+// update_unauthorized_response_body
+func ValidateUpdateUnauthorizedResponseBody(body *UpdateUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateForbiddenResponseBody runs the validations defined on
+// update_forbidden_response_body
+func ValidateUpdateForbiddenResponseBody(body *UpdateForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateBadRequestResponseBody runs the validations defined on
+// update_bad_request_response_body
+func ValidateUpdateBadRequestResponseBody(body *UpdateBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateNotFoundResponseBody runs the validations defined on
+// update_not_found_response_body
+func ValidateUpdateNotFoundResponseBody(body *UpdateNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateConflictResponseBody runs the validations defined on
+// update_conflict_response_body
+func ValidateUpdateConflictResponseBody(body *UpdateConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUnsupportedMediaResponseBody runs the validations defined on
+// update_unsupported_media_response_body
+func ValidateUpdateUnsupportedMediaResponseBody(body *UpdateUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateInvalidResponseBody runs the validations defined on
+// update_invalid_response_body
+func ValidateUpdateInvalidResponseBody(body *UpdateInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateInvariantViolationResponseBody runs the validations defined on
+// update_invariant_violation_response_body
+func ValidateUpdateInvariantViolationResponseBody(body *UpdateInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateUnexpectedResponseBody runs the validations defined on
+// update_unexpected_response_body
+func ValidateUpdateUnexpectedResponseBody(body *UpdateUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateGatewayErrorResponseBody runs the validations defined on
+// update_gateway_error_response_body
+func ValidateUpdateGatewayErrorResponseBody(body *UpdateGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6565,6 +7273,9 @@ func ValidateSkillVersionResponseBody(body *SkillVersionResponseBody) (err error
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	if body.DerivedFromVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.derived_from_version_id", *body.DerivedFromVersionID, goa.FormatUUID))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

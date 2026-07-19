@@ -50,6 +50,7 @@ var _ = Service("skills", func() {
 				Format(FormatUUID)
 			})
 			Attribute("content", String, "The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
+			Attribute("derived_from_version_id", String, "The optional source version this new version was derived from.", func() { Format(FormatUUID) })
 			Required("id", "content")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -70,6 +71,36 @@ var _ = Service("skills", func() {
 		Meta("openapi:operationId", "addSkillVersion")
 		Meta("openapi:extension:x-speakeasy-name-override", "addVersion")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddSkillVersion"}`)
+	})
+
+	Method("update", func() {
+		Description("Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.")
+
+		Payload(func() {
+			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Attribute("name", String, "The canonical skill name.")
+			Attribute("display_name", String, "The user-facing skill name.", func() { MaxLength(256) })
+			Attribute("summary", String, "The optional skill summary.", func() { MaxLength(1024) })
+			Required("id", "name", "display_name")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(Skill)
+
+		HTTP(func() {
+			POST("/rpc/skills.update")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(UpdateSkillRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateSkill"}`)
 	})
 
 	Method("list", func() {
@@ -339,7 +370,18 @@ var AddSkillVersionRequestBody = Type("AddSkillVersionRequestBody", func() {
 		Format(FormatUUID)
 	})
 	Attribute("content", String, "The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
+	Attribute("derived_from_version_id", String, "The optional source version this new version was derived from.", func() { Format(FormatUUID) })
 	Required("id", "content")
+})
+
+var UpdateSkillRequestBody = Type("UpdateSkillRequestBody", func() {
+	Meta("openapi:typename", "UpdateSkillRequestBody")
+
+	Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The canonical skill name.")
+	Attribute("display_name", String, "The user-facing skill name.", func() { MaxLength(256) })
+	Attribute("summary", String, "The optional skill summary.", func() { MaxLength(1024) })
+	Required("id", "name", "display_name")
 })
 
 var ArchiveSkillRequestBody = Type("ArchiveSkillRequestBody", func() {
@@ -389,8 +431,8 @@ var Skill = Type("Skill", func() {
 		Format(FormatUUID)
 	})
 	Attribute("name", String, "The normalized project-unique skill name.")
-	Attribute("display_name", String, "The display name from the latest recorded manifest.")
-	Attribute("summary", String, "The optional summary from the latest recorded manifest.")
+	Attribute("display_name", String, "The user-facing registry name.")
+	Attribute("summary", String, "The optional registry summary.")
 	Attribute("source_kind", String, "How the skill entered the registry.")
 	Attribute("classification", String, "The skill classification.")
 	Attribute("latest_version_id", String, "The derived latest version ID, selected from immutable version creation order.", func() {
@@ -428,6 +470,7 @@ var SkillVersion = Type("SkillVersion", func() {
 	Attribute("frontmatter", MapOf(String, Any), "All top-level frontmatter fields parsed from this manifest version.")
 	Attribute("spec_valid", Boolean, "Whether this manifest version conforms to the Agent Skills specification.")
 	Attribute("validation_errors", ArrayOf(SkillValidationError), "Specification validation problems recorded for this manifest version.")
+	Attribute("derived_from_version_id", String, "The source version this version was derived from.", func() { Format(FormatUUID) })
 	Attribute("created_at", String, "When this immutable version was recorded.", func() {
 		Format(FormatDateTime)
 	})

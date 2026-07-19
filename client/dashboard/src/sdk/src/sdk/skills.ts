@@ -12,9 +12,11 @@ import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
 import { skillsListUnknownActivations } from "../funcs/skillsListUnknownActivations.js";
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
 import { skillsUndistribute } from "../funcs/skillsUndistribute.js";
+import { skillsUpdate } from "../funcs/skillsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetSkillResult } from "../models/components/getskillresult.js";
 import { RecordSkillResult } from "../models/components/recordskillresult.js";
+import { Skill } from "../models/components/skill.js";
 import { SkillDistribution } from "../models/components/skilldistribution.js";
 import {
   AddSkillVersionRequest,
@@ -60,6 +62,10 @@ import {
   UndistributeSkillRequest,
   UndistributeSkillSecurity,
 } from "../models/operations/undistributeskill.js";
+import {
+  UpdateSkillRequest,
+  UpdateSkillSecurity,
+} from "../models/operations/updateskill.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -249,6 +255,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(skillsUndistribute(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * update skills
+   *
+   * @remarks
+   * Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.
+   */
+  async update(
+    request: UpdateSkillRequest,
+    security?: UpdateSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Skill> {
+    return unwrapAsync(skillsUpdate(
       this,
       request,
       security,

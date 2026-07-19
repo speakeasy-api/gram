@@ -76,21 +76,22 @@ func BuildSkillVersionView(version repo.SkillVersion, frontmatter map[string]any
 	}
 
 	return &types.SkillVersion{
-		ID:               version.ID.String(),
-		SkillID:          version.SkillID.String(),
-		Content:          version.Content,
-		CanonicalSha256:  version.CanonicalSha256,
-		RawSha256:        version.RawSha256,
-		Description:      conv.FromPGText[string](version.Description),
-		Metadata:         metadata,
-		Frontmatter:      frontmatter,
-		SpecValid:        version.SpecValid,
-		ValidationErrors: validationErrors,
-		CreatedAt:        conv.FromPGTimestamptz(version.CreatedAt),
-		CreatedByUserID:  version.CreatedByUserID,
-		FirstSeenAt:      conv.PtrEmpty(conv.FromPGTimestamptz(sightings.FirstSeenAt)),
-		LastSeenAt:       conv.PtrEmpty(conv.FromPGTimestamptz(sightings.LastSeenAt)),
-		SeenCount:        sightings.SeenCount,
+		ID:                   version.ID.String(),
+		SkillID:              version.SkillID.String(),
+		Content:              version.Content,
+		CanonicalSha256:      version.CanonicalSha256,
+		RawSha256:            version.RawSha256,
+		Description:          conv.FromPGText[string](version.Description),
+		Metadata:             metadata,
+		Frontmatter:          frontmatter,
+		SpecValid:            version.SpecValid,
+		ValidationErrors:     validationErrors,
+		DerivedFromVersionID: conv.FromNullableUUID(version.DerivedFromVersionID),
+		CreatedAt:            conv.FromPGTimestamptz(version.CreatedAt),
+		CreatedByUserID:      version.CreatedByUserID,
+		FirstSeenAt:          conv.PtrEmpty(conv.FromPGTimestamptz(sightings.FirstSeenAt)),
+		LastSeenAt:           conv.PtrEmpty(conv.FromPGTimestamptz(sightings.LastSeenAt)),
+		SeenCount:            sightings.SeenCount,
 	}, nil
 }
 

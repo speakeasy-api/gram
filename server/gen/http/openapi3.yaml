@@ -33120,6 +33120,110 @@ paths:
             x-speakeasy-name-override: undistribute
             x-speakeasy-react-hook:
                 name: UndistributeSkill
+    /rpc/skills.update:
+        post:
+            description: Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.
+            operationId: updateSkill
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSkillRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Skill'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: update skills
+            tags:
+                - skills
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateSkill
     /rpc/telemetry.captureEvent:
         post:
             description: Capture a telemetry event and forward it to PostHog
@@ -42245,6 +42349,10 @@ components:
                 content:
                     type: string
                     description: The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
+                derived_from_version_id:
+                    type: string
+                    description: The optional source version this new version was derived from.
+                    format: uuid
                 id:
                     type: string
                     description: The skill ID.
@@ -55750,7 +55858,7 @@ components:
                     format: date-time
                 display_name:
                     type: string
-                    description: The display name from the latest recorded manifest.
+                    description: The user-facing registry name.
                 first_seen_at:
                     type: string
                     description: When this skill was first activated.
@@ -55783,7 +55891,7 @@ components:
                     description: How the skill entered the registry.
                 summary:
                     type: string
-                    description: The optional summary from the latest recorded manifest.
+                    description: The optional registry summary.
                 updated_at:
                     type: string
                     description: When the skill was last updated.
@@ -56048,6 +56156,10 @@ components:
                 created_by_user_id:
                     type: string
                     description: The user that recorded this version.
+                derived_from_version_id:
+                    type: string
+                    description: The source version this version was derived from.
+                    format: uuid
                 description:
                     type: string
                     description: The optional description from this manifest version.
@@ -59149,6 +59261,28 @@ components:
                 - project_id
                 - server_url
                 - name
+        UpdateSkillRequestBody:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                    description: The user-facing skill name.
+                    maxLength: 256
+                id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: The canonical skill name.
+                summary:
+                    type: string
+                    description: The optional skill summary.
+                    maxLength: 1024
+            required:
+                - id
+                - name
+                - display_name
         UpdateToolsetForm:
             type: object
             properties:
