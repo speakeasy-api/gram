@@ -159,6 +159,21 @@ func TestReconcileSkillObservations_ClassifiesExternalPluginAsBuiltIn(t *testing
 	require.Equal(t, "built_in", skill.Classification)
 }
 
+func TestReconcileSkillObservations_StripsPluginPrefixWithoutSourceLevel(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	insertSkillObservation(t, ti, "vendor:external-plugin", "marketplace", "", "", time.Now().UTC())
+
+	result, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Processed)
+	_, err = ti.repo.GetSkillByNameForUpdate(ctx, repo.GetSkillByNameForUpdateParams{
+		ProjectID: ti.projectID,
+		Name:      "external-plugin",
+	})
+	require.NoError(t, err)
+}
+
 func TestReconcileSkillObservations_ClassifiesBuiltInProvider(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
