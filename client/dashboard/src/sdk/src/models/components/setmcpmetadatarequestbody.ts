@@ -4,11 +4,27 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
 import {
   McpEnvironmentConfigInput,
   McpEnvironmentConfigInput$Outbound,
   McpEnvironmentConfigInput$outboundSchema,
 } from "./mcpenvironmentconfiginput.js";
+
+/**
+ * Behavior of the synthetic instructions tool on this MCP server. 'required' (default) gates each session on reading instructions, 'optional' lists the tool without gating, 'disabled' hides it.
+ */
+export const SetMcpMetadataRequestBodyInstructionToolMode = {
+  Disabled: "disabled",
+  Optional: "optional",
+  Required: "required",
+} as const;
+/**
+ * Behavior of the synthetic instructions tool on this MCP server. 'required' (default) gates each session on reading instructions, 'optional' lists the tool without gating, 'disabled' hides it.
+ */
+export type SetMcpMetadataRequestBodyInstructionToolMode = ClosedEnum<
+  typeof SetMcpMetadataRequestBodyInstructionToolMode
+>;
 
 export type SetMcpMetadataRequestBody = {
   /**
@@ -32,6 +48,12 @@ export type SetMcpMetadataRequestBody = {
    */
   installationOverrideUrl?: string | undefined;
   /**
+   * Behavior of the synthetic instructions tool on this MCP server. 'required' (default) gates each session on reading instructions, 'optional' lists the tool without gating, 'disabled' hides it.
+   */
+  instructionToolMode?:
+    | SetMcpMetadataRequestBodyInstructionToolMode
+    | undefined;
+  /**
    * Server instructions returned in the MCP initialize response
    */
   instructions?: string | undefined;
@@ -50,12 +72,19 @@ export type SetMcpMetadataRequestBody = {
 };
 
 /** @internal */
+export const SetMcpMetadataRequestBodyInstructionToolMode$outboundSchema:
+  z.ZodMiniEnum<typeof SetMcpMetadataRequestBodyInstructionToolMode> = z.enum(
+    SetMcpMetadataRequestBodyInstructionToolMode,
+  );
+
+/** @internal */
 export type SetMcpMetadataRequestBody$Outbound = {
   default_environment_id?: string | undefined;
   environment_configs?: Array<McpEnvironmentConfigInput$Outbound> | undefined;
   external_documentation_text?: string | undefined;
   external_documentation_url?: string | undefined;
   installation_override_url?: string | undefined;
+  instruction_tool_mode?: string | undefined;
   instructions?: string | undefined;
   logo_asset_id?: string | undefined;
   mcp_server_id?: string | undefined;
@@ -75,6 +104,9 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodMiniType<
     externalDocumentationText: z.optional(z.string()),
     externalDocumentationUrl: z.optional(z.string()),
     installationOverrideUrl: z.optional(z.string()),
+    instructionToolMode: z.optional(
+      SetMcpMetadataRequestBodyInstructionToolMode$outboundSchema,
+    ),
     instructions: z.optional(z.string()),
     logoAssetId: z.optional(z.string()),
     mcpServerId: z.optional(z.string()),
@@ -87,6 +119,7 @@ export const SetMcpMetadataRequestBody$outboundSchema: z.ZodMiniType<
       externalDocumentationText: "external_documentation_text",
       externalDocumentationUrl: "external_documentation_url",
       installationOverrideUrl: "installation_override_url",
+      instructionToolMode: "instruction_tool_mode",
       logoAssetId: "logo_asset_id",
       mcpServerId: "mcp_server_id",
       toolsetSlug: "toolset_slug",

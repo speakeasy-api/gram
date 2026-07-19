@@ -105,6 +105,9 @@ var McpMetadata = Type("McpMetadata", func() {
 	})
 	Attribute("external_documentation_text", String, "A blob of text for the button on the MCP server page")
 	Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
+	Attribute("instruction_tool_mode", String, "Behavior of the synthetic instructions tool on this MCP server. 'required' (default) gates each session on reading instructions, 'optional' lists the tool without gating, 'disabled' hides it.", func() {
+		Enum("disabled", "optional", "required")
+	})
 	Attribute("default_environment_id", String, "The default environment to load variables from", func() {
 		Format(FormatUUID)
 	})
@@ -185,6 +188,9 @@ var _ = Service("mcpMetadata", func() {
 			Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page")
 			Attribute("external_documentation_text", String, "A blob of text for the button on the MCP server page")
 			Attribute("instructions", String, "Server instructions returned in the MCP initialize response")
+			Attribute("instruction_tool_mode", String, "Behavior of the synthetic instructions tool on this MCP server. 'required' (default) gates each session on reading instructions, 'optional' lists the tool without gating, 'disabled' hides it.", func() {
+				Enum("disabled", "optional", "required")
+			})
 			Attribute("default_environment_id", String, "The default environment to load variables from. Not supported when mcp_server_id is provided.", func() {
 				Format(FormatUUID)
 			})

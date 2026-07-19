@@ -5,12 +5,26 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   McpEnvironmentConfig,
   McpEnvironmentConfig$inboundSchema,
 } from "./mcpenvironmentconfig.js";
+
+/**
+ * Behavior of the synthetic instructions tool on this MCP server. 'required' (default) gates each session on reading instructions, 'optional' lists the tool without gating, 'disabled' hides it.
+ */
+export const InstructionToolMode = {
+  Disabled: "disabled",
+  Optional: "optional",
+  Required: "required",
+} as const;
+/**
+ * Behavior of the synthetic instructions tool on this MCP server. 'required' (default) gates each session on reading instructions, 'optional' lists the tool without gating, 'disabled' hides it.
+ */
+export type InstructionToolMode = ClosedEnum<typeof InstructionToolMode>;
 
 /**
  * Metadata used to configure the MCP install page. Exactly one of toolset_id or mcp_server_id identifies which backend the metadata belongs to.
@@ -45,6 +59,10 @@ export type McpMetadata = {
    */
   installationOverrideUrl?: string | undefined;
   /**
+   * Behavior of the synthetic instructions tool on this MCP server. 'required' (default) gates each session on reading instructions, 'optional' lists the tool without gating, 'disabled' hides it.
+   */
+  instructionToolMode?: InstructionToolMode | undefined;
+  /**
    * Server instructions returned in the MCP initialize response
    */
   instructions?: string | undefined;
@@ -67,6 +85,11 @@ export type McpMetadata = {
 };
 
 /** @internal */
+export const InstructionToolMode$inboundSchema: z.ZodMiniEnum<
+  typeof InstructionToolMode
+> = z.enum(InstructionToolMode);
+
+/** @internal */
 export const McpMetadata$inboundSchema: z.ZodMiniType<McpMetadata, unknown> = z
   .pipe(
     z.object({
@@ -82,6 +105,7 @@ export const McpMetadata$inboundSchema: z.ZodMiniType<McpMetadata, unknown> = z
       external_documentation_url: z.optional(z.string()),
       id: z.string(),
       installation_override_url: z.optional(z.string()),
+      instruction_tool_mode: z.optional(InstructionToolMode$inboundSchema),
       instructions: z.optional(z.string()),
       logo_asset_id: z.optional(z.string()),
       mcp_server_id: z.optional(z.string()),
@@ -99,6 +123,7 @@ export const McpMetadata$inboundSchema: z.ZodMiniType<McpMetadata, unknown> = z
         "external_documentation_text": "externalDocumentationText",
         "external_documentation_url": "externalDocumentationUrl",
         "installation_override_url": "installationOverrideUrl",
+        "instruction_tool_mode": "instructionToolMode",
         "logo_asset_id": "logoAssetId",
         "mcp_server_id": "mcpServerId",
         "toolset_id": "toolsetId",

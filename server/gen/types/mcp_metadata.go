@@ -26,6 +26,10 @@ type McpMetadata struct {
 	ExternalDocumentationText *string
 	// Server instructions returned in the MCP initialize response
 	Instructions *string
+	// Behavior of the synthetic instructions tool on this MCP server. 'required'
+	// (default) gates each session on reading instructions, 'optional' lists the
+	// tool without gating, 'disabled' hides it.
+	InstructionToolMode *string
 	// The default environment to load variables from
 	DefaultEnvironmentID *string
 	// URL to redirect to instead of showing the default installation page

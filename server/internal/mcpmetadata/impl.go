@@ -391,6 +391,16 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		instructions = conv.ToPGText(*payload.Instructions)
 	}
 
+	instructionToolMode := "required"
+	if payload.InstructionToolMode != nil {
+		instructionToolMode = *payload.InstructionToolMode
+	}
+	switch instructionToolMode {
+	case "disabled", "optional", "required":
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid instruction_tool_mode: must be one of disabled, optional, required").LogError(ctx, logger)
+	}
+
 	var defaultEnvironmentID uuid.NullUUID
 	if payload.DefaultEnvironmentID != nil {
 		if backend.mcpServer != nil {
@@ -432,6 +442,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 			ExternalDocumentationText: externalDocText,
 			LogoID:                    logoID,
 			Instructions:              instructions,
+			InstructionToolMode:       instructionToolMode,
 			DefaultEnvironmentID:      defaultEnvironmentID,
 			InstallationOverrideUrl:   installationOverrideURL,
 		})
@@ -443,6 +454,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 			ExternalDocumentationText: externalDocText,
 			LogoID:                    logoID,
 			Instructions:              instructions,
+			InstructionToolMode:       instructionToolMode,
 			DefaultEnvironmentID:      defaultEnvironmentID,
 			InstallationOverrideUrl:   installationOverrideURL,
 		})
@@ -831,6 +843,7 @@ func ToMCPMetadata(ctx context.Context, queries *repo.Queries, record repo.McpMe
 		ExternalDocumentationText: conv.FromPGText[string](record.ExternalDocumentationText),
 		LogoAssetID:               conv.FromNullableUUID(record.LogoID),
 		Instructions:              conv.FromPGText[string](record.Instructions),
+		InstructionToolMode:       conv.PtrEmpty(record.InstructionToolMode),
 		DefaultEnvironmentID:      conv.FromNullableUUID(record.DefaultEnvironmentID),
 		InstallationOverrideURL:   conv.FromPGText[string](record.InstallationOverrideUrl),
 		EnvironmentConfigs:        environmentConfigs,

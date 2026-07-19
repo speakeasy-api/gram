@@ -614,3 +614,50 @@ func TestService_SetMcpMetadata_RejectsForeignProjectMcpServer(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
+
+func TestService_SetMcpMetadata_InstructionToolMode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("round-trips instruction tool mode", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPMetadataService(t)
+		toolset := createTestToolset(t, ctx, ti, "test-instruction-mode")
+
+		result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+			ToolsetSlug:         conv.PtrEmpty(types.Slug(toolset.Slug)),
+			Instructions:        new("Always verify the customer record after writes."),
+			InstructionToolMode: new("optional"),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result.InstructionToolMode)
+		require.Equal(t, "optional", *result.InstructionToolMode)
+	})
+
+	t.Run("defaults to required when omitted", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPMetadataService(t)
+		toolset := createTestToolset(t, ctx, ti, "test-instruction-mode-default")
+
+		result, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+			ToolsetSlug: conv.PtrEmpty(types.Slug(toolset.Slug)),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result.InstructionToolMode)
+		require.Equal(t, "required", *result.InstructionToolMode)
+	})
+
+	t.Run("rejects invalid mode", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestMCPMetadataService(t)
+		toolset := createTestToolset(t, ctx, ti, "test-instruction-mode-invalid")
+
+		_, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+			ToolsetSlug:         conv.PtrEmpty(types.Slug(toolset.Slug)),
+			InstructionToolMode: new("sometimes"),
+		})
+		require.Error(t, err)
+	})
+}

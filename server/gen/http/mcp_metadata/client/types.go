@@ -30,6 +30,10 @@ type SetMcpMetadataRequestBody struct {
 	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Behavior of the synthetic instructions tool on this MCP server. 'required'
+	// (default) gates each session on reading instructions, 'optional' lists the
+	// tool without gating, 'disabled' hides it.
+	InstructionToolMode *string `form:"instruction_tool_mode,omitempty" json:"instruction_tool_mode,omitempty" xml:"instruction_tool_mode,omitempty"`
 	// The default environment to load variables from. Not supported when
 	// mcp_server_id is provided.
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
@@ -72,6 +76,10 @@ type SetMcpMetadataResponseBody struct {
 	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Behavior of the synthetic instructions tool on this MCP server. 'required'
+	// (default) gates each session on reading instructions, 'optional' lists the
+	// tool without gating, 'disabled' hides it.
+	InstructionToolMode *string `form:"instruction_tool_mode,omitempty" json:"instruction_tool_mode,omitempty" xml:"instruction_tool_mode,omitempty"`
 	// The default environment to load variables from
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
 	// URL to redirect to instead of showing the default installation page
@@ -687,6 +695,10 @@ type McpMetadataResponseBody struct {
 	ExternalDocumentationText *string `form:"external_documentation_text,omitempty" json:"external_documentation_text,omitempty" xml:"external_documentation_text,omitempty"`
 	// Server instructions returned in the MCP initialize response
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Behavior of the synthetic instructions tool on this MCP server. 'required'
+	// (default) gates each session on reading instructions, 'optional' lists the
+	// tool without gating, 'disabled' hides it.
+	InstructionToolMode *string `form:"instruction_tool_mode,omitempty" json:"instruction_tool_mode,omitempty" xml:"instruction_tool_mode,omitempty"`
 	// The default environment to load variables from
 	DefaultEnvironmentID *string `form:"default_environment_id,omitempty" json:"default_environment_id,omitempty" xml:"default_environment_id,omitempty"`
 	// URL to redirect to instead of showing the default installation page
@@ -764,6 +776,7 @@ func NewSetMcpMetadataRequestBody(p *mcpmetadata.SetMcpMetadataPayload) *SetMcpM
 		ExternalDocumentationURL:  p.ExternalDocumentationURL,
 		ExternalDocumentationText: p.ExternalDocumentationText,
 		Instructions:              p.Instructions,
+		InstructionToolMode:       p.InstructionToolMode,
 		DefaultEnvironmentID:      p.DefaultEnvironmentID,
 		InstallationOverrideURL:   p.InstallationOverrideURL,
 	}
@@ -965,6 +978,7 @@ func NewSetMcpMetadataMcpMetadataOK(body *SetMcpMetadataResponseBody) *types.Mcp
 		ExternalDocumentationURL:  body.ExternalDocumentationURL,
 		ExternalDocumentationText: body.ExternalDocumentationText,
 		Instructions:              body.Instructions,
+		InstructionToolMode:       body.InstructionToolMode,
 		DefaultEnvironmentID:      body.DefaultEnvironmentID,
 		InstallationOverrideURL:   body.InstallationOverrideURL,
 		CreatedAt:                 *body.CreatedAt,
@@ -1343,6 +1357,11 @@ func ValidateSetMcpMetadataResponseBody(body *SetMcpMetadataResponseBody) (err e
 	}
 	if body.ExternalDocumentationURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_documentation_url", *body.ExternalDocumentationURL, goa.FormatURI))
+	}
+	if body.InstructionToolMode != nil {
+		if !(*body.InstructionToolMode == "disabled" || *body.InstructionToolMode == "optional" || *body.InstructionToolMode == "required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.instruction_tool_mode", *body.InstructionToolMode, []any{"disabled", "optional", "required"}))
+		}
 	}
 	if body.DefaultEnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))
@@ -2142,6 +2161,11 @@ func ValidateMcpMetadataResponseBody(body *McpMetadataResponseBody) (err error) 
 	}
 	if body.ExternalDocumentationURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_documentation_url", *body.ExternalDocumentationURL, goa.FormatURI))
+	}
+	if body.InstructionToolMode != nil {
+		if !(*body.InstructionToolMode == "disabled" || *body.InstructionToolMode == "optional" || *body.InstructionToolMode == "required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.instruction_tool_mode", *body.InstructionToolMode, []any{"disabled", "optional", "required"}))
+		}
 	}
 	if body.DefaultEnvironmentID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.default_environment_id", *body.DefaultEnvironmentID, goa.FormatUUID))

@@ -50070,6 +50070,13 @@ components:
                     type: string
                     description: URL to redirect to instead of showing the default installation page
                     format: uri
+                instruction_tool_mode:
+                    type: string
+                    description: Behavior of the synthetic instructions tool on this MCP server. 'required' (default) gates each session on reading instructions, 'optional' lists the tool without gating, 'disabled' hides it.
+                    enum:
+                        - disabled
+                        - optional
+                        - required
                 instructions:
                     type: string
                     description: Server instructions returned in the MCP initialize response
@@ -54967,6 +54974,13 @@ components:
                     type: string
                     description: URL to redirect to instead of showing the default installation page
                     format: uri
+                instruction_tool_mode:
+                    type: string
+                    description: Behavior of the synthetic instructions tool on this MCP server. 'required' (default) gates each session on reading instructions, 'optional' lists the tool without gating, 'disabled' hides it.
+                    enum:
+                        - disabled
+                        - optional
+                        - required
                 instructions:
                     type: string
                     description: Server instructions returned in the MCP initialize response
