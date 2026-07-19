@@ -47,7 +47,14 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Network, Puzzle, Sparkles, Trash2 } from "lucide-react";
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate, useParams } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
@@ -94,6 +101,9 @@ export default function PluginDetail(): JSX.Element | null {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isAssignmentsOpen, setIsAssignmentsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // The component stays mounted when only :pluginId changes, so a stale query
+  // from a previous plugin would filter the new plugin's lists.
+  useEffect(() => setSearch(""), [pluginId]);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
   // Polled so the publish-freshness badges/banner pick up the Temporal
