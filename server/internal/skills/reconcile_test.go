@@ -20,15 +20,15 @@ import (
 
 func insertSkillObservation(t *testing.T, ti *testInstance, name, source, sourceLevel, rawSHA256 string, seenAt time.Time) {
 	t.Helper()
-	insertSkillObservationForProject(t, ti, ti.projectID, name, source, sourceLevel, rawSHA256, seenAt)
+	insertSkillObservationForProject(t, ti, ti.projectID, "test", name, source, sourceLevel, rawSHA256, seenAt)
 }
 
-func insertSkillObservationForProject(t *testing.T, ti *testInstance, projectID uuid.UUID, name, source, sourceLevel, rawSHA256 string, seenAt time.Time) {
+func insertSkillObservationForProject(t *testing.T, ti *testInstance, projectID uuid.UUID, provider, name, source, sourceLevel, rawSHA256 string, seenAt time.Time) {
 	t.Helper()
 	require.NoError(t, hooksrepo.New(ti.conn).InsertSkillObservation(t.Context(), hooksrepo.InsertSkillObservationParams{
 		ProjectID:      projectID,
 		IdempotencyKey: conv.ToPGText(uuid.NewString()),
-		Provider:       "test",
+		Provider:       provider,
 		UserID:         conv.ToPGTextEmpty(""),
 		UserEmail:      conv.ToPGTextEmpty(""),
 		Hostname:       conv.ToPGTextEmpty(""),
@@ -50,8 +50,8 @@ func TestListProjectsWithPendingSkillObservationsPaginatesDistinctProjects(t *te
 	projectIDs := []uuid.UUID{ti.projectID, secondProjectID, thirdProjectID}
 	sort.Slice(projectIDs, func(i, j int) bool { return projectIDs[i].String() < projectIDs[j].String() })
 	for _, projectID := range projectIDs {
-		insertSkillObservationForProject(t, ti, projectID, "pending-skill", "", "project", "", time.Now().UTC())
-		insertSkillObservationForProject(t, ti, projectID, "another-pending-skill", "", "project", "", time.Now().UTC())
+		insertSkillObservationForProject(t, ti, projectID, "test", "pending-skill", "", "project", "", time.Now().UTC())
+		insertSkillObservationForProject(t, ti, projectID, "test", "another-pending-skill", "", "project", "", time.Now().UTC())
 	}
 
 	firstPage, err := ti.repo.ListProjectsWithPendingSkillObservations(ctx, repo.ListProjectsWithPendingSkillObservationsParams{
@@ -155,6 +155,18 @@ func TestReconcileSkillObservations_ClassifiesExternalPluginAsBuiltIn(t *testing
 	_, err = skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
 	require.NoError(t, err)
 	skill, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: captured.SkillID})
+	require.NoError(t, err)
+	require.Equal(t, "built_in", skill.Classification)
+}
+
+func TestReconcileSkillObservations_ClassifiesBuiltInProvider(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	insertSkillObservationForProject(t, ti, ti.projectID, "claude", "provider-skill", "", "", "", time.Now().UTC())
+
+	_, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	skill, err := ti.repo.GetSkillByNameForUpdate(ctx, repo.GetSkillByNameForUpdateParams{ProjectID: ti.projectID, Name: "provider-skill"})
 	require.NoError(t, err)
 	require.Equal(t, "built_in", skill.Classification)
 }
