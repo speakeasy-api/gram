@@ -200,5 +200,6 @@ describe("SkillsList pagination surfaces", () => {
       screen.getByRole("button", { name: "View unknown activations" }),
     );
     expect(testState.unknownEnabled).toBe(true);
+    expect(screen.getByText("No unknown activations found.")).toBeTruthy();
   });
 });

@@ -47,8 +47,6 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
       </section>
     );
   }
-  if (!query.error && query.data && activations.length === 0) return null;
-
   const columns: Column<UnknownSkillActivation>[] = [
     {
       key: "skill",
@@ -100,7 +98,12 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
           </Button>
         </div>
       ) : (
-        <Table columns={columns} data={activations} rowKey={(row) => row.id} />
+        <Table
+          columns={columns}
+          data={activations}
+          rowKey={(row) => row.id}
+          noResultsMessage={<Type>No unknown activations found.</Type>}
+        />
       )}
       {query.isFetchNextPageError && (
         <ErrorAlert
