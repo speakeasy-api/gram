@@ -66,6 +66,22 @@ type slackEventRequestBody struct {
 	Reaction string              `json:"reaction,omitempty"`
 	ItemUser string              `json:"item_user,omitempty"`
 	Item     *slackEventItemBody `json:"item,omitempty"`
+
+	// Files carries the attachments of a message event (e.g. the file_share
+	// subtype). See https://docs.slack.dev/reference/events/message/file_share.
+	Files []slackEventFile `json:"files,omitempty"`
+}
+
+// slackEventFile models the subset of Slack's file object
+// (https://docs.slack.dev/reference/objects/file-object) surfaced downstream.
+// Metadata only — file contents are never fetched here.
+type slackEventFile struct {
+	ID                 string `json:"id" cel:"id"`
+	Name               string `json:"name,omitempty" cel:"name"`
+	Title              string `json:"title,omitempty" cel:"title"`
+	Mimetype           string `json:"mimetype,omitempty" cel:"mimetype"`
+	Size               int64  `json:"size,omitempty" cel:"size"`
+	URLPrivateDownload string `json:"url_private_download,omitempty" cel:"url_private_download"`
 }
 
 // slackUserChangeEventBody matches the team_join and user_change payloads,
@@ -175,6 +191,7 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 			Reaction: "",
 			ItemUser: "",
 			Item:     nil,
+			Files:    nil,
 		}, nil
 	case "channel_created":
 		var ev slackChannelObjectEventBody
@@ -197,6 +214,7 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 			Reaction: "",
 			ItemUser: "",
 			Item:     nil,
+			Files:    nil,
 		}, nil
 	case "channel_rename", "group_rename":
 		var ev slackChannelObjectEventBody
@@ -217,6 +235,7 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 			Reaction: "",
 			ItemUser: "",
 			Item:     nil,
+			Files:    nil,
 		}, nil
 	case "channel_id_changed":
 		var ev slackChannelIDChangedEventBody
@@ -237,6 +256,7 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 			Reaction: "",
 			ItemUser: "",
 			Item:     nil,
+			Files:    nil,
 		}, nil
 	case "link_shared":
 		var ev slackLinkSharedEventBody
@@ -257,6 +277,7 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 			Reaction: "",
 			ItemUser: "",
 			Item:     nil,
+			Files:    nil,
 		}, nil
 	case "file_shared":
 		var ev slackFileSharedEventBody
@@ -277,6 +298,7 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 			Reaction: "",
 			ItemUser: "",
 			Item:     nil,
+			Files:    nil,
 		}, nil
 	default:
 		var ev slackEventRequestBody
@@ -412,6 +434,7 @@ func handleSlackInteraction(body []byte) (*WebhookIngest, error) {
 		ActionID:     action.ActionID,
 		ActionValue:  action.Value,
 		BlockID:      action.BlockID,
+		Files:        nil,
 	}
 
 	// A block_actions interaction anchored to a channel message folds onto that
@@ -469,6 +492,10 @@ type slackTriggerEvent struct {
 	ActionID    string `json:"action_id,omitempty" cel:"action_id"`
 	ActionValue string `json:"action_value,omitempty" cel:"action_value"`
 	BlockID     string `json:"block_id,omitempty" cel:"block_id"`
+
+	// Files carries attachment metadata for message events that share files
+	// (e.g. the file_share subtype). Empty for all other events.
+	Files []slackEventFile `json:"files,omitempty" cel:"files"`
 }
 
 var supportedSlackEventTypes = []string{
@@ -688,6 +715,7 @@ func slackIngest(body []byte, headers http.Header) (*WebhookIngest, error) {
 		ActionID:     "",
 		ActionValue:  "",
 		BlockID:      "",
+		Files:        event.Files,
 	}
 
 	return &WebhookIngest{
