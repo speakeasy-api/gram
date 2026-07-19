@@ -62,6 +62,10 @@ import {
   showsTopSessionsWidget,
 } from "./taxonomy";
 
+// Server-side cap on the per-session list (ranked by cost). SessionTable's
+// truncation footer and the search zero-match copy both key off it.
+const SESSION_LIMIT = 100;
+
 const EMPTY_MEASURES: Measures = {
   cost: 0,
   sessions: 0,
@@ -478,7 +482,7 @@ export function CostsExplorer(): JSX.Element {
             from,
             to,
             sortBy: "total_cost",
-            limit: 100,
+            limit: SESSION_LIMIT,
             filters: filters.length ? filters : undefined,
           },
         }),
@@ -940,6 +944,16 @@ export function CostsExplorer(): JSX.Element {
         ),
       )
     : allSessions;
+
+  // Zero-match copy for the session search. Over a capped slice, scope the
+  // claim to what was actually searched — lower-ranked sessions may still match.
+  let sessionsEmptyMessage: string | undefined;
+  if (normalizedSearch) {
+    sessionsEmptyMessage = "No matches for your search.";
+    if (allSessions.length >= SESSION_LIMIT) {
+      sessionsEmptyMessage = `No matches in the ${SESSION_LIMIT} most expensive sessions.`;
+    }
+  }
   const onViewSessions =
     sessionsMode || !sliceScoped
       ? undefined
@@ -1134,9 +1148,8 @@ export function CostsExplorer(): JSX.Element {
               onOpen={setOpenChatId}
               hiddenColumns={hiddenSessionColumns}
               billingMode={viewBillingMode}
-              emptyMessage={
-                normalizedSearch ? "No matches for your search." : undefined
-              }
+              emptyMessage={sessionsEmptyMessage}
+              sourceCount={allSessions.length}
             />
           ) : undefined
         }
