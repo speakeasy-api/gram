@@ -17,7 +17,7 @@ function labelFor(value: string): string {
 export function SkillSourceBadge({ value }: { value: string }): JSX.Element {
   return (
     <Badge variant={value === "captured" ? "information" : "neutral"}>
-      {labelFor(value)}
+      <Badge.Text>{labelFor(value)}</Badge.Text>
     </Badge>
   );
 }
@@ -27,5 +27,9 @@ export function SkillClassificationBadge({
 }: {
   value: string;
 }): JSX.Element {
-  return <Badge variant="neutral">{labelFor(value)}</Badge>;
+  return (
+    <Badge variant="neutral">
+      <Badge.Text>{labelFor(value)}</Badge.Text>
+    </Badge>
+  );
 }

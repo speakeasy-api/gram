@@ -943,10 +943,10 @@ func (q *Queries) GetSkillRawHash(ctx context.Context, arg GetSkillRawHashParams
 
 const getSkillState = `-- name: GetSkillState :one
 SELECT
-  state.latest_version_id,
-  state.version_count
+  COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
+  COALESCE(state.version_count, 0)::bigint AS version_count
 FROM skills s
-JOIN LATERAL (
+LEFT JOIN LATERAL (
   SELECT
     sv.id AS latest_version_id,
     COUNT(*) OVER()::bigint AS version_count

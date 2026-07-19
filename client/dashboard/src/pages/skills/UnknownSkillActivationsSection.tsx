@@ -37,14 +37,14 @@ export function UnknownSkillActivationsSection(): JSX.Element | null {
     {
       key: "source",
       header: "Source",
-      render: (row) => row.source || row.sourceLevel || "Unknown",
+      render: (row) => row.source || "Not reported",
     },
     {
       key: "reason",
       header: "Reason",
       render: (row) => (
         <Badge variant="neutral">
-          {reasonLabels[row.reason] ?? row.reason}
+          <Badge.Text>{reasonLabels[row.reason] ?? row.reason}</Badge.Text>
         </Badge>
       ),
     },

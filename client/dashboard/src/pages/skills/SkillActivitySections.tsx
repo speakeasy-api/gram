@@ -18,6 +18,10 @@ function metricValue(value: number): string {
   return new Intl.NumberFormat().format(value);
 }
 
+function machineLabel(count: number): string {
+  return count === 1 ? "machine" : "machines";
+}
+
 export function SkillActivitySections({
   data,
 }: {
@@ -70,10 +74,14 @@ export function SkillActivitySections({
             <Type small muted>
               {drift.targetState === "single" && (
                 <>
-                  {metricValue(drift.onTargetMachines)} machines are on the
+                  {metricValue(drift.onTargetMachines)}{" "}
+                  {machineLabel(drift.onTargetMachines)}{" "}
+                  {drift.onTargetMachines === 1 ? "is" : "are"} on the
                   distributed version.{" "}
-                  {metricValue(drift.indeterminateMachines)} have an unknown
-                  version.
+                  {metricValue(drift.indeterminateMachines)}{" "}
+                  {machineLabel(drift.indeterminateMachines)}{" "}
+                  {drift.indeterminateMachines === 1 ? "has" : "have"} an
+                  unknown version.
                 </>
               )}
               {drift.targetState === "not_distributed" &&

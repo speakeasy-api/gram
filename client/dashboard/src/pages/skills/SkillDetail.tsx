@@ -526,6 +526,25 @@ function versionColumns({
       render: (version) => <Type small>{version.seenCount}</Type>,
     },
     {
+      key: "firstSeen",
+      header: "First activated",
+      width: "150px",
+      render: (version) =>
+        version.firstSeenAt ? (
+          <Type
+            small
+            muted
+            title={dateTimeFormatters.full.format(version.firstSeenAt)}
+          >
+            <HumanizeDateTime date={version.firstSeenAt} />
+          </Type>
+        ) : (
+          <Type small muted>
+            Never
+          </Type>
+        ),
+    },
+    {
       key: "lastSeen",
       header: "Last activated",
       width: "150px",

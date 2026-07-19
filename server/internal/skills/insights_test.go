@@ -105,6 +105,13 @@ func TestSkillInsightsExposeVersionlessObservedSkill(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, details.LatestVersion)
 	require.Equal(t, int64(1), details.Skill.SeenCount)
+
+	require.NoError(t, ti.service.Archive(ctx, &gen.ArchivePayload{
+		ID: listed.Skills[0].ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	}))
+	listed, err = ti.service.List(ctx, &gen.ListPayload{Limit: 20, Cursor: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Empty(t, listed.Skills)
 }
 
 func TestListUnknownSkillActivationsPaginatesTerminalFailures(t *testing.T) {

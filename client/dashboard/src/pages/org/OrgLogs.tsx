@@ -206,39 +206,44 @@ function OrgLogsInner() {
 
           <div className="border-border border-t" />
 
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <FileText className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
-                  Upload Skill Content
-                </Type>
-              </Stack>
-              <Type
-                variant="body"
-                className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
+          {featuresData?.skillsEnabled && (
+            <>
+              <Stack
+                direction="horizontal"
+                justify="space-between"
+                align="center"
               >
-                When enabled, Gram uploads SKILL.md content at activation so
-                captured skills can be inspected. When disabled, Gram only
-                receives skill names, source details, hashes, users, and
-                hostnames at activation.
-              </Type>
-            </Stack>
-            {featuresData && (
-              <RequireScope scope="org:admin" level="component">
-                <Switch
-                  checked={!effectiveSkillCaptureMetadataOnly}
-                  onCheckedChange={(enabled) =>
-                    handleSetSkillCaptureMetadataOnly(!enabled)
-                  }
-                  disabled={isMutatingLogs}
-                  aria-label="Upload skill content"
-                />
-              </RequireScope>
-            )}
-          </Stack>
-
-          <div className="border-border border-t" />
+                <Stack gap={1}>
+                  <Stack direction="horizontal" align="center" gap={2}>
+                    <FileText className="text-muted-foreground h-4 w-4" />
+                    <Type variant="body" className="font-medium">
+                      Upload Skill Content
+                    </Type>
+                  </Stack>
+                  <Type
+                    variant="body"
+                    className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
+                  >
+                    When enabled, Gram uploads SKILL.md content at activation so
+                    captured skills can be inspected. When disabled, Gram only
+                    receives skill names, source details, hashes, users, and
+                    hostnames at activation.
+                  </Type>
+                </Stack>
+                <RequireScope scope="org:admin" level="component">
+                  <Switch
+                    checked={!effectiveSkillCaptureMetadataOnly}
+                    onCheckedChange={(enabled) =>
+                      handleSetSkillCaptureMetadataOnly(!enabled)
+                    }
+                    disabled={isMutatingLogs}
+                    aria-label="Upload skill content"
+                  />
+                </RequireScope>
+              </Stack>
+              <div className="border-border border-t" />
+            </>
+          )}
 
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
