@@ -230,7 +230,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// kept for replay, a healthy exchange flushes any backlog, and a
 	// definitive 4xx does neither — the server answered, and would reject a
 	// replay identically.
-	r.finishExchange(idemKey, payload, res)
+	r.finishExchange(idemKey, payload, res, resolvedSkill)
 	if err := startSkillContentUpload(finalCreds, res, resolvedSkill); err != nil {
 		r.debugf("skill upload: %v", err)
 	}
