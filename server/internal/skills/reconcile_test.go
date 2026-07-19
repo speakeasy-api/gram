@@ -174,7 +174,7 @@ func TestReconcileSkillObservations_StripsPluginPrefixWithoutSourceLevel(t *test
 	require.NoError(t, err)
 }
 
-func TestReconcileSkillObservations_ClassifiesBuiltInProvider(t *testing.T) {
+func TestReconcileSkillObservations_ProviderAloneRemainsCustom(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	insertSkillObservationForProject(t, ti, ti.projectID, "claude", "provider-skill", "", "", "", time.Now().UTC())
@@ -183,7 +183,7 @@ func TestReconcileSkillObservations_ClassifiesBuiltInProvider(t *testing.T) {
 	require.NoError(t, err)
 	skill, err := ti.repo.GetSkillByNameForUpdate(ctx, repo.GetSkillByNameForUpdateParams{ProjectID: ti.projectID, Name: "provider-skill"})
 	require.NoError(t, err)
-	require.Equal(t, "built_in", skill.Classification)
+	require.Equal(t, "custom", skill.Classification)
 }
 
 func TestReconcileSkillObservations_DistributedPluginRemainsCustom(t *testing.T) {
