@@ -2,6 +2,7 @@ package changelog
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,17 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
+
+// unorderedFeed lists releases out of chronological order and includes an
+// unsupported product area (`cli`) with the newest date, exercising both the
+// product filter and the newest-first (version-descending on same-day ties)
+// sort.
+const unorderedFeed = `[
+  {"slug":"a","content":"### Old release\n\nOld one.","metadata":{"version":"0.88.0","date":"2026-07-10T00:00:00.000Z","product":"platform"}},
+  {"slug":"b","content":"### CLI release\n\nCLI note.","metadata":{"version":"2.0.0","date":"2026-07-20T00:00:00.000Z","product":"cli"}},
+  {"slug":"c","content":"### Newer patch\n\nPatch.","metadata":{"version":"0.90.1","date":"2026-07-17T00:00:00.000Z","product":"platform"}},
+  {"slug":"d","content":"### Same day minor\n\nMinor.","metadata":{"version":"0.90.0","date":"2026-07-17T00:00:00.000Z","product":"dashboard"}}
+]`
 
 // fixtureFeed mirrors the shape of speakeasy.com/changelog/data/gram.json:
 // an array of posts with raw markdown content (leading "### " title, prose
@@ -175,6 +187,89 @@ func TestClientErrorsWhenNoCacheAndFetchFails(t *testing.T) {
 	_, err := client.Entries(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unexpected status 500")
+}
+
+func TestClientFiltersAndSortsEntries(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(unorderedFeed))
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewClient(server.Client(), server.URL)
+
+	entries, err := client.Entries(t.Context())
+	require.NoError(t, err)
+
+	// The `cli` entry is dropped even though it has the newest date, and the
+	// rest are newest-first with the same-day 0.90.1 ahead of 0.90.0.
+	require.Len(t, entries, 3)
+	require.Equal(t, []string{"v0.90.1", "v0.90.0", "v0.88.0"}, []string{
+		entries[0].Version, entries[1].Version, entries[2].Version,
+	})
+	for _, e := range entries {
+		require.NotEqual(t, "v2.0.0", e.Version)
+		require.Contains(t, supportedProducts, e.Product)
+	}
+}
+
+func TestGetChangelogToolCallRejectsUnsupportedProduct(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(fixtureFeed))
+	}))
+	t.Cleanup(server.Close)
+
+	tool := NewGetChangelogToolWithURL(server.Client(), server.URL)
+
+	var out bytes.Buffer
+	err := tool.Call(t.Context(), toolconfig.ToolCallEnv{}, strings.NewReader(`{"product": "cli"}`), &out)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported product")
+}
+
+func TestClientServesStaleWhenRefreshStalls(t *testing.T) {
+	t.Parallel()
+
+	var stall atomic.Bool
+	block := make(chan struct{})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if stall.Load() {
+			<-block // simulate a stalled upstream that never responds
+			return
+		}
+		_, _ = w.Write([]byte(fixtureFeed))
+	}))
+	// Unblock the stalled handler before the server closes so the outstanding
+	// request drains (cleanups run last-registered-first).
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(block) })
+
+	client := NewClient(server.Client(), server.URL)
+
+	entries, err := client.Entries(t.Context())
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+
+	// Expire the cache and make the origin stall indefinitely.
+	stall.Store(true)
+	client.mu.Lock()
+	client.fetchedAt = time.Now().Add(-time.Hour)
+	client.mu.Unlock()
+
+	// A caller with a short deadline gets stale entries promptly instead of
+	// blocking on the stalled refresh — the fetch no longer holds the mutex.
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	entries, err = client.Entries(ctx)
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	require.Less(t, time.Since(start), 5*time.Second)
 }
 
 func TestGetChangelogDescriptor(t *testing.T) {

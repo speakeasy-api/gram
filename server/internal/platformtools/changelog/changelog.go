@@ -11,9 +11,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -25,6 +29,21 @@ const DefaultFeedURL = "https://www.speakeasy.com/changelog/data/gram.json"
 // releaseURLFormat builds the public permalink for a release, matching the
 // permalinks rendered on the changelog page itself.
 const releaseURLFormat = "https://www.speakeasy.com/changelog/release/%s?product=mcp-platform"
+
+// FetchTimeout bounds a single feed fetch (dial through response read) so a
+// stalled marketing-site response can't hang the tool. Applied both to the
+// detached refresh context inside the client and to the dedicated guardian
+// client at the call site.
+const FetchTimeout = 15 * time.Second
+
+// supportedProducts are the changelog product areas this tool serves. The feed
+// is already scoped to these, but the client filters to them defensively so a
+// default (unfiltered) request can never surface release notes from another
+// area, and the tool validates the caller's `product` against the same set.
+var supportedProducts = map[string]bool{"platform": true, "dashboard": true}
+
+// refreshKey is the singleflight key coalescing concurrent feed refreshes.
+const refreshKey = "entries"
 
 const (
 	// cacheTTL bounds how often the feed is re-fetched. The changelog updates
@@ -63,12 +82,14 @@ type feedPost struct {
 	} `json:"metadata"`
 }
 
-// Client fetches and caches changelog entries. Safe for concurrent use; a
-// single in-flight fetch is serialized behind the mutex so bursts of tool
-// calls hit the cache rather than the marketing site.
+// Client fetches and caches changelog entries. Safe for concurrent use: the
+// cache is guarded by a mutex held only for in-memory reads/writes, and network
+// I/O happens outside it, coalesced by singleflight so a burst of tool calls
+// triggers a single fetch rather than hammering the marketing site.
 type Client struct {
 	httpClient *guardian.HTTPClient
 	feedURL    string
+	refresh    singleflight.Group
 
 	mu        sync.Mutex
 	entries   []Entry
@@ -81,6 +102,7 @@ func NewClient(httpClient *guardian.HTTPClient, feedURL string) *Client {
 	return &Client{
 		httpClient: httpClient,
 		feedURL:    feedURL,
+		refresh:    singleflight.Group{},
 		mu:         sync.Mutex{},
 		entries:    nil,
 		fetchedAt:  time.Time{},
@@ -93,23 +115,56 @@ func NewClient(httpClient *guardian.HTTPClient, feedURL string) *Client {
 // freshness rather than break the tool.
 func (c *Client) Entries(ctx context.Context) ([]Entry, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	cached := c.entries
+	fresh := cached != nil && time.Since(c.fetchedAt) < cacheTTL
+	c.mu.Unlock()
 
-	if c.entries != nil && time.Since(c.fetchedAt) < cacheTTL {
-		return c.entries, nil
+	if fresh {
+		return cached, nil
 	}
 
-	entries, err := c.fetch(ctx)
-	if err != nil {
-		if c.entries != nil {
-			return c.entries, nil
+	// Refresh outside the cache mutex so a slow fetch never blocks other
+	// callers on c.mu. singleflight coalesces a burst of tool calls into one
+	// fetch, which runs on a context detached from any single caller (but
+	// bounded by FetchTimeout) so one canceled request can't abort the shared
+	// refresh. Each caller still honors its own deadline via the select below,
+	// falling back to stale entries rather than waiting on the network.
+	ch := c.refresh.DoChan(refreshKey, func() (any, error) {
+		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), FetchTimeout)
+		defer cancel()
+
+		entries, err := c.fetch(fetchCtx)
+		if err != nil {
+			return nil, err
 		}
-		return nil, err
-	}
 
-	c.entries = entries
-	c.fetchedAt = time.Now()
-	return c.entries, nil
+		c.mu.Lock()
+		c.entries = entries
+		c.fetchedAt = time.Now()
+		c.mu.Unlock()
+
+		return entries, nil
+	})
+
+	select {
+	case <-ctx.Done():
+		if cached != nil {
+			return cached, nil
+		}
+		return nil, fmt.Errorf("await changelog refresh: %w", ctx.Err())
+	case res := <-ch:
+		if res.Err != nil {
+			if cached != nil {
+				return cached, nil
+			}
+			return nil, res.Err
+		}
+		entries, ok := res.Val.([]Entry)
+		if !ok {
+			return nil, fmt.Errorf("changelog refresh returned unexpected type %T", res.Val)
+		}
+		return entries, nil
+	}
 }
 
 func (c *Client) fetch(ctx context.Context) ([]Entry, error) {
@@ -137,11 +192,66 @@ func (c *Client) fetch(ctx context.Context) ([]Entry, error) {
 		return nil, fmt.Errorf("decode changelog feed: no entries found")
 	}
 
+	// Keep only supported product areas so a default request never surfaces
+	// release notes from another area, then sort newest-first (version
+	// descending on same-day ties) so `limit` returns the most recent releases
+	// regardless of the feed's array order.
+	supported := posts[:0]
+	for _, post := range posts {
+		if supportedProducts[post.Metadata.Product] {
+			supported = append(supported, post)
+		}
+	}
+	posts = supported
+
+	sort.SliceStable(posts, func(i, j int) bool {
+		di, dj := parseFeedDate(posts[i].Metadata.Date), parseFeedDate(posts[j].Metadata.Date)
+		if !di.Equal(dj) {
+			return di.After(dj)
+		}
+		return versionGreater(posts[i].Metadata.Version, posts[j].Metadata.Version)
+	})
+
 	entries := make([]Entry, 0, len(posts))
 	for _, post := range posts {
 		entries = append(entries, toEntry(post))
 	}
 	return entries, nil
+}
+
+// parseFeedDate parses a feed post's date, accepting both the RFC3339 form the
+// feed emits and a bare calendar date, returning the zero time when neither
+// parses (such entries sort last).
+func parseFeedDate(s string) time.Time {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t
+	}
+	return time.Time{}
+}
+
+// versionGreater reports whether dotted version a is greater than b, compared
+// numerically segment by segment (e.g. "0.90.1" > "0.89.0"). A missing or
+// non-numeric segment is treated as 0.
+func versionGreater(a, b string) bool {
+	pa, pb := parseVersion(a), parseVersion(b)
+	for i := 0; i < len(pa) && i < len(pb); i++ {
+		if pa[i] != pb[i] {
+			return pa[i] > pb[i]
+		}
+	}
+	return len(pa) > len(pb)
+}
+
+func parseVersion(v string) []int {
+	parts := strings.Split(strings.TrimPrefix(v, "v"), ".")
+	out := make([]int, len(parts))
+	for i, p := range parts {
+		out[i], _ = strconv.Atoi(strings.TrimSpace(p))
+	}
+	return out
 }
 
 func toEntry(post feedPost) Entry {

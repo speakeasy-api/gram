@@ -83,6 +83,10 @@ func (s *GetChangelog) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 	}
 
 	product := strings.ToLower(strings.TrimSpace(input.Product))
+	if product != "" && !supportedProducts[product] {
+		return fmt.Errorf("unsupported product %q: must be one of platform, dashboard", product)
+	}
+
 	out := make([]Entry, 0, limit)
 	for _, entry := range entries {
 		if product != "" && entry.Product != product {
