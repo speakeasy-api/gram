@@ -111,7 +111,7 @@ WITH completed AS (
   WHERE so.project_id = $1
     AND so.id = ANY($3::uuid[])
     AND so.reconciled_at IS NULL
-  RETURNING so.seen_at, so.source, so.source_level, so.raw_sha256
+  RETURNING so.seen_at, so.provider, so.source, so.source_level, so.raw_sha256
 ), completed_hashes AS (
   SELECT DISTINCT raw_sha256
   FROM completed
@@ -155,6 +155,7 @@ WITH completed AS (
         'anthropic', 'claude', 'claude-code', 'openai', 'codex', 'cursor',
         'built-in', 'builtin', 'bundled', 'system', 'vendor'
       )
+      OR lower(btrim(completed.provider)) IN ('anthropic', 'claude', 'claude-code', 'openai', 'codex', 'cursor')
     )
     AND own_distributed_hashes.raw_sha256 IS NULL
     AND NOT (SELECT distributed FROM own_distributed_skill) AS built_in
