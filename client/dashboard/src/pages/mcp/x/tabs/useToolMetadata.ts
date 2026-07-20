@@ -41,7 +41,10 @@ export function useToolMetadata(
   );
 
   const metadataByTool = useMemo(() => {
-    const byName: ToolMetadataByName = {};
+    // Null-prototype: tool names come from the remote server, so a tool called
+    // `__proto__` or `constructor` would otherwise either fail to become an own
+    // property or make an absent tool look present, and drift would miss it.
+    const byName = Object.create(null) as ToolMetadataByName;
     for (const entry of data?.tools ?? []) {
       byName[entry.toolName] = entry;
     }

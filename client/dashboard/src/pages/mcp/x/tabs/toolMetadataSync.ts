@@ -50,6 +50,21 @@ function storedField(
 }
 
 /**
+ * Own-property lookup for a tool name.
+ *
+ * Tool names come from the remote server, so plain member access can't be
+ * trusted: on any object carrying Object.prototype, `stored["toString"]`
+ * resolves to an inherited function and a tool that has no stored entry looks
+ * like it has one. `in` has the same problem, hence Object.hasOwn throughout.
+ */
+function storedEntry(
+  stored: ToolMetadataByName,
+  toolName: string,
+): ToolMetadata | undefined {
+  return Object.hasOwn(stored, toolName) ? stored[toolName] : undefined;
+}
+
+/**
  * Compare Speakeasy's stored metadata against what the live MCP session advertises.
  *
  * The session is the source of truth: this is what a sync would change, in the
@@ -63,7 +78,7 @@ export function computeDrift(
   const drift: ToolDrift[] = [];
 
   for (const [toolName, tool] of Object.entries(live)) {
-    const entry = stored[toolName];
+    const entry = storedEntry(stored, toolName);
     if (!entry) {
       drift.push({
         kind: "new",
@@ -85,7 +100,7 @@ export function computeDrift(
   }
 
   for (const toolName of Object.keys(stored)) {
-    if (!(toolName in live)) {
+    if (!Object.hasOwn(live, toolName)) {
       drift.push({ kind: "removed", toolName });
     }
   }
@@ -125,7 +140,9 @@ export function newToolsBatch(
   live: LiveTools,
   stored: ToolMetadataByName,
 ): ToolMetadataForm[] | null {
-  const missing = Object.entries(live).filter(([name]) => !stored[name]);
+  const missing = Object.entries(live).filter(
+    ([name]) => !storedEntry(stored, name),
+  );
   if (missing.length === 0) return null;
 
   return sortForms(missing.map(([name, tool]) => advertisedToForm(name, tool)));

@@ -71,6 +71,20 @@ describe("computeDrift", () => {
     ]);
   });
 
+  it("reports a stored tool named after an Object.prototype member as removed", () => {
+    // Tool names are remote input. `"toString" in live` is true on any plain
+    // object, so an inherited member must not make an absent tool look present.
+    expect(computeDrift(live(), byName(stored("toString")))).toEqual([
+      { kind: "removed", toolName: "toString" },
+    ]);
+  });
+
+  it("treats a tool named after an Object.prototype member as new", () => {
+    expect(computeDrift(live(["toString", {}]), byName())).toEqual([
+      { kind: "new", toolName: "toString", advertised: {} },
+    ]);
+  });
+
   it("treats an unset hint as different from an explicit false", () => {
     // The runtime distinguishes the two, so a sync has to be able to move a
     // stored `false` back to unset when the server stops asserting it.
@@ -118,6 +132,13 @@ describe("newToolsBatch", () => {
         openWorldHint: undefined,
       },
     ]);
+  });
+
+  it("records a tool named after an Object.prototype member", () => {
+    // `stored["toString"]` resolves to an inherited function on a plain object,
+    // which would make this tool look already-recorded and skip it forever.
+    const batch = newToolsBatch(live(["toString", {}]), byName());
+    expect(batch?.map((f) => f.toolName)).toEqual(["toString"]);
   });
 
   it("never carries a stored tool the session no longer advertises", () => {
