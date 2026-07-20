@@ -25,7 +25,7 @@ var sourceCategories = map[string][]categories.Category{
 	shadowmcp.SourceDestructiveTool: {categories.CategoryDestructiveTool},
 	SourceCLIDestructive:            {categories.CategoryCLIDestructive},
 	SourceCustom:                    {categories.CategoryCustom},
-	promptpolicy.Source:                  {categories.CategoryPromptPolicy},
+	promptpolicy.Source:             {categories.CategoryPromptPolicy},
 }
 
 // SourceCategories returns the categories a detector source can emit.
