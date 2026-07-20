@@ -32,10 +32,12 @@ Env vars only. Never hardcode a key in source.
 | `GRAM_PROJECT`    | yes      | —                        | Target project slug (`Gram-Project` header)             |
 | `GRAM_USER_EMAIL` | no       | —                        | Best-effort attribution when the key is shared org-wide |
 
-If `GRAM_KEY`/`GRAM_PROJECT` are missing, the plugin logs one warning at
-startup and keeps sending unauthenticated requests (fail-open, matching the
-`hooks.ingest` endpoint's own behavior) rather than throwing and blocking the
-agent.
+If `GRAM_KEY`/`GRAM_PROJECT` are missing, the plugin logs one warning on the
+first event delivery and keeps sending unauthenticated requests (fail-open,
+matching the `hooks.ingest` endpoint's own behavior) rather than throwing and
+blocking the agent. If `GRAM_URL` is not an `https` endpoint (loopback hosts
+excepted for local dev), events are dropped to avoid sending `GRAM_KEY` and
+payloads in plaintext.
 
 ## Behavior
 
@@ -47,9 +49,10 @@ agent.
 - **MCP tool-name normalization**: opencode names an MCP tool call
   `<server>_<tool>` (e.g. `context7_query-docs`), but Gram's shadow-MCP scanner
   and MCP attribution only recognize the `mcp__<server>__<tool>` convention
-  (`toolref.IsMCPToolName`). At startup the plugin fetches the configured MCP
-  server list (`client.mcp.status()`) and rewrites matching tool-call names
-  into that form; native tools (`bash`, `edit`, …) are left untouched. Without
+  (`toolref.IsMCPToolName`). On the first tool call the plugin fetches the
+  configured MCP server list (`client.mcp.status()`) and rewrites matching
+  tool-call names into that form; native tools (`bash`, `edit`, …) are left
+  untouched. Without
   this, opencode MCP calls are treated as native tools and skip shadow-MCP
   detection entirely.
 

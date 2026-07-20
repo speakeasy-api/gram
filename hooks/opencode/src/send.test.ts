@@ -46,6 +46,16 @@ describe("send", () => {
     expect(JSON.parse(init.body as string)).toEqual(body);
   });
 
+  it("drops the event without fetching when GRAM_URL is not TLS", async () => {
+    process.env.GRAM_URL = "http://evil.example.com";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await send(body);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("retries once then swallows the failure instead of throwing", async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
     vi.stubGlobal("fetch", fetchMock);
