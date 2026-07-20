@@ -14,12 +14,15 @@ import { send } from "./send.js";
 
 const PLUGIN_VERSION = "0.1.0";
 
-export const GramObservability: Plugin = async ({ directory }) => {
+export const GramObservability: Plugin = async ({ directory, client }) => {
   const ctx: Ctx = {
     directory,
     fallbackSession: crypto.randomUUID(),
     adapterVersion: PLUGIN_VERSION,
     userEmail: process.env.GRAM_USER_EMAIL,
+    // Resolved once at startup; opencode reloads plugins on config change, so
+    // the MCP server set is stable for the life of this instance.
+    mcpServers: await loadMcpServerNames(client, directory),
   };
 
   // Assistant text streams in over several message.part.updated events
@@ -113,6 +116,22 @@ function textFromParts(
     .filter((part) => part.type === "text")
     .map((part) => part.text ?? "")
     .join("\n");
+}
+
+// The keys of the MCP status map are the configured server names (e.g.
+// "context7"), which is what tool names are prefixed with. Fail-open: any
+// error yields an empty list, so tool names pass through un-normalized —
+// exactly the behavior before normalization existed.
+async function loadMcpServerNames(
+  client: Parameters<Plugin>[0]["client"],
+  directory: string,
+): Promise<readonly string[]> {
+  try {
+    const res = await client.mcp.status({ query: { directory } });
+    return Object.keys(res.data ?? {});
+  } catch {
+    return [];
+  }
 }
 
 export default GramObservability;
