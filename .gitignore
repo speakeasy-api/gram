@@ -94,3 +94,6 @@ __pycache__/
 
 .playwright-mcp
 .playwright-cli
+
+# Riptide artifacts (cloud-synced)
+.humanlayer/tasks/

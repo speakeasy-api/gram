@@ -150,6 +150,17 @@ export function assert<V extends { error: string; stack?: never }>(
   }
 }
 
+/**
+ * Identity of the MCP client that initiated a tool call, as reported by the
+ * client during the MCP `initialize` handshake (or forwarded per-call via
+ * `_meta["io.modelcontextprotocol/clientInfo"]`). Present only when the tool is
+ * invoked over MCP; `undefined` for direct (non-MCP) invocations.
+ */
+export interface MCPClientInfo {
+  name: string;
+  version: string;
+}
+
 class ToolContext<Env> {
   /**
    * The parsed environment variables available to the tool.
@@ -160,9 +171,19 @@ class ToolContext<Env> {
    * calls and other async operations to propagate cancellation.
    */
   readonly signal: AbortSignal;
-  constructor(signal: AbortSignal, env: Env) {
+  /**
+   * Identity of the MCP client that initiated the call, when available. This is
+   * populated from the MCP client's `clientInfo` when the tool is invoked over
+   * MCP and is `undefined` otherwise. Tools can use it to adapt behavior for
+   * known clients (e.g. inferring a caller's identity without an explicit
+   * input). Treat it as untrusted, self-reported metadata: use it for
+   * observability and convenience, never for authorization.
+   */
+  readonly clientInfo?: MCPClientInfo;
+  constructor(signal: AbortSignal, env: Env, clientInfo?: MCPClientInfo) {
     this.signal = signal;
     this.env = env;
+    this.clientInfo = clientInfo;
   }
 
   /**
@@ -475,7 +496,7 @@ export class Gram<
       name: TName;
       input: InferInput<TTools[TName]>;
     },
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; clientInfo?: MCPClientInfo },
   ): Promise<InferResult<TTools[TName]>> {
     const tool = this.#tools.get(request.name);
     if (!tool) {
@@ -487,6 +508,7 @@ export class Gram<
     const ctx = new ToolContext(
       options?.signal || new AbortController().signal,
       envSchema.parse(tool.inputEnv ?? process.env),
+      options?.clientInfo,
     );
 
     const schema = zm.object(tool.inputSchema);

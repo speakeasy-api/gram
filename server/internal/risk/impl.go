@@ -470,16 +470,55 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies").LogError(ctx, s.logger)
 	}
 
+	if len(rows) == 0 {
+		return &gen.ListRiskPoliciesResult{Policies: []*types.RiskPolicy{}}, nil
+	}
+
+	// Enrichment is resolved once for the whole set rather than per policy (the
+	// old N+1). totalMessages is project-wide and identical for every policy;
+	// analyzed counts and audience grants are batched into one query each and
+	// looked up per row below.
+	totalMessages, err := s.repo.CountTotalMessages(ctx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true})
+	if err != nil {
+		totalMessages = 0
+	}
+
+	// Analyzed counts are optional status enrichment, so a failure degrades to
+	// zero (pending = total) rather than failing the whole list — matching the
+	// tolerance of the single-policy CountAnalyzedMessages path.
+	analyzedByPolicy := map[analyzedMessagesKey]int64{}
+	if analyzedRows, err := s.repo.CountAnalyzedMessagesByProject(ctx, *authCtx.ProjectID); err != nil {
+		s.logger.WarnContext(ctx, "count analyzed messages for risk policy list failed", attr.SlogError(err))
+	} else {
+		analyzedByPolicy = make(map[analyzedMessagesKey]int64, len(analyzedRows))
+		for _, r := range analyzedRows {
+			analyzedByPolicy[analyzedMessagesKey{policyID: r.RiskPolicyID, version: r.RiskPolicyVersion}] = r.AnalyzedMessages
+		}
+	}
+
+	policyIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		policyIDs = append(policyIDs, row.ID.String())
+	}
+	audienceByPolicy, err := riskPolicyAudienceURNsByPolicy(ctx, s.db, authCtx.ActiveOrganizationID, policyIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audiences").LogError(ctx, s.logger)
+	}
+
 	policies := make([]*types.RiskPolicy, 0, len(rows))
 	for _, row := range rows {
-		p, err := s.policyToType(ctx, row)
-		if err != nil {
-			return nil, err
-		}
-		policies = append(policies, p)
+		analyzedMessages := analyzedByPolicy[analyzedMessagesKey{policyID: row.ID, version: row.Version}]
+		policies = append(policies, buildRiskPolicyType(row, totalMessages, analyzedMessages, audienceByPolicy[row.ID.String()]))
 	}
 
 	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
+}
+
+// analyzedMessagesKey keys the batched analyzed-message counts by the
+// (policy, version) pair they were aggregated on.
+type analyzedMessagesKey struct {
+	policyID uuid.UUID
+	version  int64
 }
 
 // ListBuiltinExclusions returns the built-in exclusion library grouped by
@@ -1307,12 +1346,22 @@ func redactMatch(source string, match *string, orgID string) string {
 	if source == shadowmcp.SourceShadowMCP || source == ra.SourceAccountIdentity {
 		return *match
 	}
+	return fingerprintRedactedMatch(orgID, *match)
+}
+
+// fingerprintRedactedMatch encodes match as `<redacted len=N sha=XXXXXXXX>`.
+// Unlike redactMatch it applies to every source with no shadow_mcp/
+// account_identity passthrough, so the ClickHouse writer can store a display
+// string without ever persisting a plaintext match or PII. The hash is salted
+// by orgID with a NUL separator so two orgs holding the same secret produce
+// different fingerprints, while staying deterministic within an org.
+func fingerprintRedactedMatch(orgID, match string) string {
 	var buf []byte
 	buf = append(buf, orgID...)
 	buf = append(buf, 0x00)
-	buf = append(buf, *match...)
+	buf = append(buf, match...)
 	sum := sha256.Sum256(buf)
-	return fmt.Sprintf("<redacted len=%d sha=%s>", len(*match), hex.EncodeToString(sum[:4]))
+	return fmt.Sprintf("<redacted len=%d sha=%s>", len(match), hex.EncodeToString(sum[:4]))
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
@@ -1377,13 +1426,22 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	}
 
 	window := riskOverviewWindowParams(from, to)
-	counts, err := s.repo.GetRiskOverviewCounts(ctx, repo.GetRiskOverviewCountsParams{
+	scanCounts, err := s.repo.GetRiskOverviewScanCounts(ctx, repo.GetRiskOverviewScanCountsParams{
 		ProjectID: *authCtx.ProjectID,
 		FromTime:  window.from,
 		ToTime:    window.to,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview counts").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview scan counts").LogError(ctx, s.logger)
+	}
+
+	findingCounts, err := s.repo.GetRiskOverviewFindingCounts(ctx, repo.GetRiskOverviewFindingCountsParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview finding counts").LogError(ctx, s.logger)
 	}
 
 	userRows, err := s.repo.ListRiskOverviewTopUsers(ctx, repo.ListRiskOverviewTopUsersParams{
@@ -1453,10 +1511,10 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	return &gen.RiskOverviewResult{
 		From:               from.UTC().Format(time.RFC3339),
 		To:                 to.UTC().Format(time.RFC3339),
-		MessagesScanned:    counts.MessagesScanned,
-		Findings:           counts.Findings,
-		FlaggedSessions:    counts.FlaggedSessions,
-		ActivePolicies:     counts.ActivePolicies,
+		MessagesScanned:    scanCounts.MessagesScanned,
+		Findings:           findingCounts.Findings,
+		FlaggedSessions:    findingCounts.FlaggedSessions,
+		ActivePolicies:     scanCounts.ActivePolicies,
 		TopCategories:      topCategories,
 		TopUsers:           topUsers,
 		TopRules:           topRules,
@@ -3069,12 +3127,21 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	if err != nil {
 		analyzedMessages = 0
 	}
-	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	audiencePrincipalURNs, err := riskPolicyAudiencePrincipalURNs(ctx, s.db, row.OrganizationID, row.ID.String())
 	if err != nil {
 		return nil, fmt.Errorf("load risk policy audience: %w", err)
 	}
+
+	return buildRiskPolicyType(row, totalMessages, analyzedMessages, audiencePrincipalURNs), nil
+}
+
+// buildRiskPolicyType assembles the API type from a policy row and its already
+// resolved message counts and audience. The enrichment queries are the caller's
+// responsibility so batched paths (ListRiskPolicies) can resolve them once for
+// the whole set instead of per policy.
+func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages int64, audiencePrincipalURNs []string) *types.RiskPolicy {
+	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	return &types.RiskPolicy{
 		ID:                     row.ID.String(),
@@ -3105,7 +3172,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
 		PendingMessages:        pendingMessages,
 		TotalMessages:          totalMessages,
-	}, nil
+	}
 }
 
 func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []string) *types.RiskPolicy {

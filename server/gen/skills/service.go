@@ -39,6 +39,15 @@ type Service interface {
 	// feature and skill write scope. Repeated requests for the same skill succeed
 	// without creating another state transition.
 	Archive(context.Context, *ArchivePayload) (err error)
+	// Create or update the active distribution of a skill to exactly one plugin or
+	// assistant. Repeating the request for the same target updates the version pin
+	// or is a no-op.
+	Distribute(context.Context, *DistributePayload) (res *types.SkillDistribution, err error)
+	// Revoke a skill's active distribution to exactly one plugin or assistant.
+	// Repeated requests are a no-op.
+	Undistribute(context.Context, *UndistributePayload) (err error)
+	// List active plugin skill distributions for the current project.
+	ListDistributions(context.Context, *ListDistributionsPayload) (res *ListSkillDistributionsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -61,7 +70,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"create", "addVersion", "list", "get", "listVersions", "archive"}
+var MethodNames = [9]string{"create", "addVersion", "list", "get", "listVersions", "archive", "distribute", "undistribute", "listDistributions"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -95,6 +104,23 @@ type CreatePayload struct {
 	ProjectSlugInput *string
 }
 
+// DistributePayload is the payload type of the skills service distribute
+// method.
+type DistributePayload struct {
+	// The skill ID.
+	ID string
+	// The plugin that carries the skill.
+	PluginID *string
+	// The assistant that carries the skill.
+	AssistantID *string
+	// An optional valid version to pin instead of tracking the latest valid
+	// version.
+	PinnedVersionID  *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // GetPayload is the payload type of the skills service get method.
 type GetPayload struct {
 	// The skill ID.
@@ -110,6 +136,24 @@ type GetSkillResult struct {
 	Skill *types.Skill
 	// The latest immutable version by creation order.
 	LatestVersion *types.SkillVersion
+	// The number of active, non-deleted assistants using the skill.
+	AssistantCount int64
+}
+
+// ListDistributionsPayload is the payload type of the skills service
+// listDistributions method.
+type ListDistributionsPayload struct {
+	// Only return distributions of this skill.
+	SkillID *string
+	// Only return distributions carried by this plugin.
+	PluginID *string
+	// Cursor for the next page of skill distributions.
+	Cursor *string
+	// The number of skill distributions to return per page.
+	Limit            int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // ListPayload is the payload type of the skills service list method.
@@ -121,6 +165,15 @@ type ListPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// ListSkillDistributionsResult is the result type of the skills service
+// listDistributions method.
+type ListSkillDistributionsResult struct {
+	// The active plugin skill distributions in this page.
+	Distributions []*types.PluginSkillDistribution
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string
 }
 
 // ListSkillVersionsResult is the result type of the skills service
@@ -165,6 +218,20 @@ type RecordSkillResult struct {
 	// Whether this request created a new immutable version rather than resolving
 	// to an existing canonical version.
 	CreatedVersion bool
+}
+
+// UndistributePayload is the payload type of the skills service undistribute
+// method.
+type UndistributePayload struct {
+	// The skill ID.
+	ID string
+	// The plugin the skill was distributed to.
+	PluginID *string
+	// The assistant the skill was distributed to.
+	AssistantID      *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

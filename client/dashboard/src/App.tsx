@@ -4,7 +4,6 @@ import "./App.css"; // Import this second to override certain values in moonshin
 import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
-import { FontTexture, WebGLCanvas } from "@/components/webgl";
 import {
   MoonshineConfigProvider,
   TooltipProvider,
@@ -130,10 +129,6 @@ function AppContent() {
    * 4. Authenticated user is redirected back to the component.
    */
   const cliFlow = useCliAuthFlow();
-  const location = useLocation();
-
-  // Only render WebGL canvas during onboarding
-  const isOnboarding = location.pathname.includes("/onboarding");
 
   if (cliFlow) {
     return (
@@ -152,12 +147,6 @@ function AppContent() {
   return (
     <AuthProvider>
       <ProjectProvider>
-        {isOnboarding && (
-          <>
-            <WebGLCanvas />
-            <FontTexture />
-          </>
-        )}
         <RouteProvider />
         <PlatformAdminToolbar />
       </ProjectProvider>

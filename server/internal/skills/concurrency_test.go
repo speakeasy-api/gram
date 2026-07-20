@@ -7,11 +7,114 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 )
 
 type concurrentCreateResult struct {
 	result *gen.RecordSkillResult
 	err    error
+}
+
+type concurrentDistributionResult struct {
+	id  string
+	err error
+}
+
+func TestSkillsConcurrentDistributionCreatesOneActiveRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "concurrent-distribution", "Valid distribution.")
+	plugin := createPlugin(t, ctx, ti, ti.projectID, "concurrent-plugin")
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillDistribute)
+	require.NoError(t, err)
+	const requests = 8
+	start := make(chan struct{})
+	results := make(chan concurrentDistributionResult, requests)
+
+	for range requests {
+		go func() {
+			<-start
+			distribution, distributeErr := ti.service.Distribute(ctx, &gen.DistributePayload{
+				ID: created.Skill.ID, PluginID: new(plugin.ID.String()), PinnedVersionID: nil,
+				SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+			})
+			if distributeErr != nil {
+				results <- concurrentDistributionResult{id: "", err: distributeErr}
+				return
+			}
+			results <- concurrentDistributionResult{id: distribution.ID, err: nil}
+		}()
+	}
+	close(start)
+
+	var distributionID string
+	for range requests {
+		result := <-results
+		require.NoError(t, result.err)
+		if distributionID == "" {
+			distributionID = result.id
+		}
+		require.Equal(t, distributionID, result.id)
+	}
+	listed, err := ti.service.ListDistributions(ctx, &gen.ListDistributionsPayload{Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Distributions, 1)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillDistribute)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+}
+
+func TestSkillsConcurrentAssistantDistributionCreatesOneActiveRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "concurrent-assistant-distribution", "Valid distribution.")
+	assistant := createAssistant(t, ctx, ti, ti.projectID, "Concurrent assistant")
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeSkillRead, ti.projectID.String()),
+		authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String()),
+	)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillDistribute)
+	require.NoError(t, err)
+	const requests = 8
+	start := make(chan struct{})
+	results := make(chan concurrentDistributionResult, requests)
+
+	for range requests {
+		go func() {
+			<-start
+			distribution, distributeErr := ti.service.Distribute(ctx, &gen.DistributePayload{
+				ID: created.Skill.ID, AssistantID: new(assistant.ID.String()), PinnedVersionID: nil,
+				SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+			})
+			if distributeErr != nil {
+				results <- concurrentDistributionResult{id: "", err: distributeErr}
+				return
+			}
+			results <- concurrentDistributionResult{id: distribution.ID, err: nil}
+		}()
+	}
+	close(start)
+
+	var distributionID string
+	for range requests {
+		result := <-results
+		require.NoError(t, result.err)
+		if distributionID == "" {
+			distributionID = result.id
+		}
+		require.Equal(t, distributionID, result.id)
+	}
+	details, err := ti.service.Get(ctx, &gen.GetPayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, details.AssistantCount)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillDistribute)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
 }
 
 func TestSkillsConcurrentSameNameAndHashCreatesOneVersion(t *testing.T) {

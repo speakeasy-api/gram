@@ -189,6 +189,7 @@ function AssignmentsEditor({
           creatable
           searchable
           hideSelectAll
+          modalPopover
           maxCount={20}
         />
         <Type muted small className="mt-2">

@@ -5,12 +5,16 @@
 import { skillsAddVersion } from "../funcs/skillsAddVersion.js";
 import { skillsArchive } from "../funcs/skillsArchive.js";
 import { skillsCreate } from "../funcs/skillsCreate.js";
+import { skillsDistribute } from "../funcs/skillsDistribute.js";
 import { skillsGet } from "../funcs/skillsGet.js";
 import { skillsList } from "../funcs/skillsList.js";
+import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
+import { skillsUndistribute } from "../funcs/skillsUndistribute.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetSkillResult } from "../models/components/getskillresult.js";
 import { RecordSkillResult } from "../models/components/recordskillresult.js";
+import { SkillDistribution } from "../models/components/skilldistribution.js";
 import {
   AddSkillVersionRequest,
   AddSkillVersionSecurity,
@@ -24,9 +28,18 @@ import {
   CreateSkillSecurity,
 } from "../models/operations/createskill.js";
 import {
+  DistributeSkillRequest,
+  DistributeSkillSecurity,
+} from "../models/operations/distributeskill.js";
+import {
   GetSkillRequest,
   GetSkillSecurity,
 } from "../models/operations/getskill.js";
+import {
+  ListSkillDistributionsRequest,
+  ListSkillDistributionsResponse,
+  ListSkillDistributionsSecurity,
+} from "../models/operations/listskilldistributions.js";
 import {
   ListSkillsRequest,
   ListSkillsResponse,
@@ -37,6 +50,10 @@ import {
   ListSkillVersionsResponse,
   ListSkillVersionsSecurity,
 } from "../models/operations/listskillversions.js";
+import {
+  UndistributeSkillRequest,
+  UndistributeSkillSecurity,
+} from "../models/operations/undistributeskill.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -99,6 +116,25 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * distribute skills
+   *
+   * @remarks
+   * Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.
+   */
+  async distribute(
+    request: DistributeSkillRequest,
+    security?: DistributeSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SkillDistribution> {
+    return unwrapAsync(skillsDistribute(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * get skills
    *
    * @remarks
@@ -137,6 +173,25 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * listDistributions skills
+   *
+   * @remarks
+   * List active plugin skill distributions for the current project.
+   */
+  async listDistributions(
+    request?: ListSkillDistributionsRequest | undefined,
+    security?: ListSkillDistributionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<PageIterator<ListSkillDistributionsResponse, { cursor: string }>> {
+    return unwrapResultIterator(skillsListDistributions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listVersions skills
    *
    * @remarks
@@ -148,6 +203,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PageIterator<ListSkillVersionsResponse, { cursor: string }>> {
     return unwrapResultIterator(skillsListVersions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * undistribute skills
+   *
+   * @remarks
+   * Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.
+   */
+  async undistribute(
+    request: UndistributeSkillRequest,
+    security?: UndistributeSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(skillsUndistribute(
       this,
       request,
       security,

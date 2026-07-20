@@ -498,8 +498,12 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     -- https://kb.altinity.com/altinity-kb-queries-and-syntax/delete-via-tombstone-column/):
     --
     -- generation is an IMMUTABLE sort-key discriminator separating coexisting
-    -- data generations: 0 = original/MV-ingested rows, 1 = the 2026-07 full
-    -- re-derive backfill (future backfills increment). Because it is part of
+    -- data generations: 0 = MV rows ingested before 2026-07-17, 1 = the
+    -- 2026-07 full re-derive backfill, 2 = the current generation — both the
+    -- 2026-07 account-type unset->team backfill (POC-305) and live MV
+    -- ingestion since then (the MV stamps the current generation so fresh
+    -- rows are immune to that backfill's generation-0/1 cutover flips; future
+    -- backfills increment). Because it is part of
     -- the sorting key, a backfill row never merges with the original row for
     -- the same logical key — the two generations coexist untouched, which is
     -- what makes rollback lossless. Sort-key columns cannot be ALTER UPDATEd,
@@ -517,7 +521,15 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     -- target column; column defaults are not applied. Production runbook:
     -- clickhouse/local/backfill/20260713000000_backfill-attribute-metrics-summaries.sql
     generation UInt8,
-    is_active UInt8 DEFAULT 1
+    is_active UInt8 DEFAULT 1,
+
+    -- Device hostname (gram.hook.hostname): reported by the Go hooks on every
+    -- event and propagated onto Claude OTEL rows via the session cache. A
+    -- sort-key DIMENSION appended after generation (MODIFY ORDER BY can only
+    -- append), declared last in the table to match the MV's positional SELECT.
+    -- Lets the user breakdown fall back to the device when a session carries
+    -- no email (company-credential sessions emit no user identity).
+    hook_hostname String
 ) ENGINE = AggregatingMergeTree
 -- Primary key stays the original 12 dimensions; account_type, provider,
 -- billing_mode, attribution dimensions, and generation are appended to ORDER BY
@@ -527,7 +539,7 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
 -- primary key includes the appended dims, and atlas would see drift it can't
 -- reconcile — "modifying primary key is not supported").
 PRIMARY KEY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
-ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation)
+ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation, hook_hostname)
 -- Retained beyond the standard 90-day telemetry window (matching
 -- chat_token_summaries) so the costs page can break down token usage across
 -- the same lookback that TUM billing reports cover.
@@ -657,13 +669,21 @@ SELECT
     if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
     if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name,
 
-    -- Rollback machinery: MV rows are always generation 0 and active. These are
-    -- emitted explicitly (as constants) rather than relying on column defaults —
-    -- a TO-table MV inserts positionally with no column list, so the SELECT must
-    -- produce every target column or ingestion fails with a column-count
-    -- mismatch. Constants need no GROUP BY entry.
-    toUInt8(0) AS generation,
-    toUInt8(1) AS is_active
+    -- Rollback machinery: MV rows are stamped with the CURRENT generation (2
+    -- since the 2026-07 account-type backfill; see the generation column
+    -- comment) and active. Emitting the current generation makes fresh
+    -- ingestion immune to that backfill's cutover flips, which only target
+    -- generations 0/1. These are emitted explicitly (as constants) rather than
+    -- relying on column defaults — a TO-table MV inserts positionally with no
+    -- column list, so the SELECT must produce every target column or ingestion
+    -- fails with a column-count mismatch. Constants need no GROUP BY entry.
+    toUInt8(2) AS generation,
+    toUInt8(1) AS is_active,
+
+    -- Device hostname: on hook rows directly and on Claude OTEL rows via
+    -- session-cache propagation. Declared last to match the table column
+    -- order (positional insert).
+    toString(attributes.gram.hook.hostname) AS hook_hostname
 FROM telemetry_logs
 -- Admit only the three agent surfaces: Claude OTEL api_request/tool_result
 -- rows, Codex/Cursor usage rows, and Codex/Cursor completed tool-call hook
@@ -691,7 +711,8 @@ GROUP BY
     skill_name,
     agent_name,
     mcp_server_name,
-    mcp_tool_name;
+    mcp_tool_name,
+    hook_hostname;
 
 CREATE TABLE IF NOT EXISTS chat_token_summaries (
     -- Key columns
@@ -841,6 +862,7 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- Identity
     id UUID COMMENT 'Finding UUIDv7, supplied by the scanner that produced it.',
     created_at DateTime64(9) COMMENT 'Time the finding was produced.' CODEC(DoubleDelta, ZSTD),
+    inserted_at DateTime64(9) DEFAULT now64(9) COMMENT 'Server-side ingestion time, stamped on insert. Used for ingestion-lag diagnostics and to tie-break redelivered rows sharing the same id.' CODEC(DoubleDelta, ZSTD),
 
     -- Tenancy
     organization_id String COMMENT 'Organization the finding belongs to (HKDF salt for the tenant fingerprint).' CODEC(ZSTD),
@@ -873,7 +895,13 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- One-way fingerprints (base64url of HMAC-SHA256). See internal/risk/fingerprint.go.
     fingerprint_pepper_version String DEFAULT '' COMMENT 'Pepper keyring version used to compute the fingerprints.',
     fingerprint_global_hs256 String DEFAULT '' COMMENT 'Global fingerprint: base64url HMAC-SHA256 of the match under the current pepper. Stable across tenants.' CODEC(ZSTD),
-    fingerprint_tenant_hs256 String DEFAULT '' COMMENT 'Tenant-qualified fingerprint: base64url HMAC-SHA256 under a per-org HKDF key. Used to dedupe unique matches within an org.' CODEC(ZSTD)
+    fingerprint_tenant_hs256 String DEFAULT '' COMMENT 'Tenant-qualified fingerprint: base64url HMAC-SHA256 under a per-org HKDF key. Used to dedupe unique matches within an org.' CODEC(ZSTD),
+
+    -- Exclusion annotation. When a going-forward exclusion suppresses a finding
+    -- it is recorded here rather than dropped, so excluded findings remain
+    -- auditable and can be filtered in or out at read time.
+    excluded_at Nullable(DateTime64(9)) COMMENT 'Time the finding was suppressed by an exclusion. Null when the finding is not excluded.' CODEC(DoubleDelta, ZSTD),
+    exclusion_id Nullable(UUID) COMMENT 'Id of the risk_exclusions row that suppressed the finding. Null when the finding is not excluded.' CODEC(ZSTD)
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)

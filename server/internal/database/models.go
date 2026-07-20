@@ -173,18 +173,19 @@ type AssistantRuntime struct {
 }
 
 type AssistantThread struct {
-	ID            uuid.UUID
-	AssistantID   uuid.UUID
-	ProjectID     uuid.UUID
-	CorrelationID string
-	ChatID        uuid.UUID
-	SourceKind    string
-	SourceRefJson []byte
-	LastEventAt   pgtype.Timestamptz
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	ID               uuid.UUID
+	AssistantID      uuid.UUID
+	ProjectID        uuid.UUID
+	CorrelationID    string
+	ChatID           uuid.UUID
+	SourceKind       string
+	SourceRefJson    []byte
+	SkillSetSnapshot []byte
+	LastEventAt      pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type AssistantThreadEvent struct {
@@ -1648,11 +1649,36 @@ type SkillDistribution struct {
 	SkillID         uuid.UUID
 	PinnedVersionID uuid.NullUUID
 	PluginID        uuid.NullUUID
+	AssistantID     uuid.NullUUID
 	Channel         string
 	CreatedByUserID string
 	RevokedAt       pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+}
+
+type SkillObservation struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	IdempotencyKey pgtype.Text
+	Provider       string
+	UserID         pgtype.Text
+	UserEmail      pgtype.Text
+	Hostname       pgtype.Text
+	SessionID      pgtype.Text
+	SkillName      string
+	SourceLevel    pgtype.Text
+	SourcePath     pgtype.Text
+	RawSha256      pgtype.Text
+	SeenAt         pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+}
+
+type SkillRawHash struct {
+	ProjectID       uuid.UUID
+	RawSha256       string
+	CanonicalSha256 string
+	CreatedAt       pgtype.Timestamptz
 }
 
 type SkillSyncReceipt struct {
@@ -1680,6 +1706,14 @@ type SkillVersion struct {
 	ValidationErrors []byte
 	CreatedAt        pgtype.Timestamptz
 	CreatedByUserID  string
+}
+
+type SkillVersionOrigin struct {
+	SkillVersionID uuid.UUID
+	SkillID        uuid.UUID
+	ProjectID      uuid.UUID
+	Origin         string
+	CreatedAt      pgtype.Timestamptz
 }
 
 type SlackApp struct {
@@ -1912,6 +1946,21 @@ type TunneledMcpServer struct {
 	DeletedAt pgtype.Timestamptz
 	// Generated soft-delete flag derived from deleted_at and used by partial indexes.
 	Deleted bool
+}
+
+type TunneledMcpServerHeader struct {
+	ID                     uuid.UUID
+	TunneledMcpServerID    uuid.UUID
+	Name                   string
+	Description            pgtype.Text
+	IsRequired             bool
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type User struct {

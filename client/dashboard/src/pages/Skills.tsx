@@ -21,6 +21,22 @@ export default function Skills(): JSX.Element {
     throwOnError: false,
   });
 
+  const resolvedIsLoading = isLoading || (!error && features === undefined);
+  const skillsEnabled = features?.skillsEnabled;
+
+  // Sub-pages own their full Page shell (the detail page needs a full-width
+  // body and its own sidebar), so the enabled branch renders a bare Outlet
+  // and only the gate states carry a shell here.
+  if (!resolvedIsLoading && !(error && skillsEnabled === undefined)) {
+    if (skillsEnabled !== false) {
+      return (
+        <RequireScope scope="skill:read" resourceId={projectId} level="page">
+          <Outlet />
+        </RequireScope>
+      );
+    }
+  }
+
   return (
     <Page>
       <Page.Header>
@@ -29,9 +45,8 @@ export default function Skills(): JSX.Element {
       <Page.Body>
         <SkillsFeatureGate
           error={error}
-          isLoading={isLoading || (!error && features === undefined)}
-          skillsEnabled={features?.skillsEnabled}
-          projectId={projectId}
+          isLoading={resolvedIsLoading}
+          skillsEnabled={skillsEnabled}
           onRetry={() => void refetch()}
         />
       </Page.Body>
@@ -43,13 +58,11 @@ function SkillsFeatureGate({
   error,
   isLoading,
   skillsEnabled,
-  projectId,
   onRetry,
 }: {
   error: Error | null;
   isLoading: boolean;
   skillsEnabled: boolean | undefined;
-  projectId: string;
   onRetry: () => void;
 }): JSX.Element {
   if (isLoading) {
@@ -71,17 +84,9 @@ function SkillsFeatureGate({
     );
   }
 
-  if (skillsEnabled === false) {
-    return (
-      <RequireScope scope="project:read" level="page">
-        <SkillsComingSoon />
-      </RequireScope>
-    );
-  }
-
   return (
-    <RequireScope scope="skill:read" resourceId={projectId} level="page">
-      <Outlet />
+    <RequireScope scope="project:read" level="page">
+      <SkillsComingSoon />
     </RequireScope>
   );
 }

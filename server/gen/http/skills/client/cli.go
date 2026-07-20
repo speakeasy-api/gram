@@ -305,3 +305,189 @@ func BuildArchivePayload(skillsArchiveBody string, skillsArchiveSessionToken str
 
 	return v, nil
 }
+
+// BuildDistributePayload builds the payload for the skills distribute endpoint
+// from CLI flags.
+func BuildDistributePayload(skillsDistributeBody string, skillsDistributeSessionToken string, skillsDistributeApikeyToken string, skillsDistributeProjectSlugInput string) (*skills.DistributePayload, error) {
+	var err error
+	var body DistributeRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsDistributeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440001\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.PluginID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", *body.PluginID, goa.FormatUUID))
+		}
+		if body.AssistantID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", *body.AssistantID, goa.FormatUUID))
+		}
+		if body.PinnedVersionID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.pinned_version_id", *body.PinnedVersionID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsDistributeSessionToken != "" {
+			sessionToken = &skillsDistributeSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsDistributeApikeyToken != "" {
+			apikeyToken = &skillsDistributeApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsDistributeProjectSlugInput != "" {
+			projectSlugInput = &skillsDistributeProjectSlugInput
+		}
+	}
+	v := &skills.DistributePayload{
+		ID:              body.ID,
+		PluginID:        body.PluginID,
+		AssistantID:     body.AssistantID,
+		PinnedVersionID: body.PinnedVersionID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUndistributePayload builds the payload for the skills undistribute
+// endpoint from CLI flags.
+func BuildUndistributePayload(skillsUndistributeBody string, skillsUndistributeSessionToken string, skillsUndistributeApikeyToken string, skillsUndistributeProjectSlugInput string) (*skills.UndistributePayload, error) {
+	var err error
+	var body UndistributeRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsUndistributeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440001\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.PluginID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", *body.PluginID, goa.FormatUUID))
+		}
+		if body.AssistantID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", *body.AssistantID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsUndistributeSessionToken != "" {
+			sessionToken = &skillsUndistributeSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsUndistributeApikeyToken != "" {
+			apikeyToken = &skillsUndistributeApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsUndistributeProjectSlugInput != "" {
+			projectSlugInput = &skillsUndistributeProjectSlugInput
+		}
+	}
+	v := &skills.UndistributePayload{
+		ID:          body.ID,
+		PluginID:    body.PluginID,
+		AssistantID: body.AssistantID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListDistributionsPayload builds the payload for the skills
+// listDistributions endpoint from CLI flags.
+func BuildListDistributionsPayload(skillsListDistributionsSkillID string, skillsListDistributionsPluginID string, skillsListDistributionsCursor string, skillsListDistributionsLimit string, skillsListDistributionsSessionToken string, skillsListDistributionsApikeyToken string, skillsListDistributionsProjectSlugInput string) (*skills.ListDistributionsPayload, error) {
+	var err error
+	var skillID *string
+	{
+		if skillsListDistributionsSkillID != "" {
+			skillID = &skillsListDistributionsSkillID
+			err = goa.MergeErrors(err, goa.ValidateFormat("skill_id", *skillID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var pluginID *string
+	{
+		if skillsListDistributionsPluginID != "" {
+			pluginID = &skillsListDistributionsPluginID
+			err = goa.MergeErrors(err, goa.ValidateFormat("plugin_id", *pluginID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if skillsListDistributionsCursor != "" {
+			cursor = &skillsListDistributionsCursor
+		}
+	}
+	var limit int
+	{
+		if skillsListDistributionsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(skillsListDistributionsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 50 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsListDistributionsSessionToken != "" {
+			sessionToken = &skillsListDistributionsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsListDistributionsApikeyToken != "" {
+			apikeyToken = &skillsListDistributionsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsListDistributionsProjectSlugInput != "" {
+			projectSlugInput = &skillsListDistributionsProjectSlugInput
+		}
+	}
+	v := &skills.ListDistributionsPayload{}
+	v.SkillID = skillID
+	v.PluginID = pluginID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

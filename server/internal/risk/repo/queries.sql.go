@@ -336,6 +336,45 @@ func (q *Queries) CountAnalyzedMessages(ctx context.Context, arg CountAnalyzedMe
 	return column_1, err
 }
 
+const countAnalyzedMessagesByProject = `-- name: CountAnalyzedMessagesByProject :many
+SELECT
+    rr.risk_policy_id
+  , rr.risk_policy_version
+  , COUNT(DISTINCT rr.chat_message_id)::BIGINT AS analyzed_messages
+FROM risk_results rr
+WHERE rr.project_id = $1
+GROUP BY rr.risk_policy_id, rr.risk_policy_version
+`
+
+type CountAnalyzedMessagesByProjectRow struct {
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	AnalyzedMessages  int64
+}
+
+// Batched form of CountAnalyzedMessages: the analyzed-message count for every
+// (policy, version) in a project in one query, so ListRiskPolicies avoids a
+// per-policy round trip.
+func (q *Queries) CountAnalyzedMessagesByProject(ctx context.Context, projectID uuid.UUID) ([]CountAnalyzedMessagesByProjectRow, error) {
+	rows, err := q.db.Query(ctx, countAnalyzedMessagesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountAnalyzedMessagesByProjectRow
+	for rows.Next() {
+		var i CountAnalyzedMessagesByProjectRow
+		if err := rows.Scan(&i.RiskPolicyID, &i.RiskPolicyVersion, &i.AnalyzedMessages); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countEnabledRegexExclusionsInScope = `-- name: CountEnabledRegexExclusionsInScope :one
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions
@@ -1215,16 +1254,45 @@ func (q *Queries) GetRiskExclusionForReconcile(ctx context.Context, arg GetRiskE
 	return i, err
 }
 
-const getRiskOverviewCounts = `-- name: GetRiskOverviewCounts :one
+const getRiskOverviewFindingCounts = `-- name: GetRiskOverviewFindingCounts :one
+SELECT
+    COUNT(*)::BIGINT AS findings
+  , COUNT(DISTINCT cm.chat_id)::BIGINT AS flagged_sessions
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.project_id = $1
+  AND rr.created_at >= $2
+  AND rr.created_at < $3
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+`
+
+type GetRiskOverviewFindingCountsParams struct {
+	ProjectID uuid.UUID
+	FromTime  pgtype.Timestamptz
+	ToTime    pgtype.Timestamptz
+}
+
+type GetRiskOverviewFindingCountsRow struct {
+	Findings        int64
+	FlaggedSessions int64
+}
+
+// findings + flagged_sessions over the live-found subset. Pushing the found
+// predicate into WHERE lets the partial risk_results_project_found_idx serve the
+// scan, so the JOIN to chat_messages only touches found rows instead of every
+// scanned row. COUNT(DISTINCT cm.chat_id) already skips NULL chat_ids.
+func (q *Queries) GetRiskOverviewFindingCounts(ctx context.Context, arg GetRiskOverviewFindingCountsParams) (GetRiskOverviewFindingCountsRow, error) {
+	row := q.db.QueryRow(ctx, getRiskOverviewFindingCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
+	var i GetRiskOverviewFindingCountsRow
+	err := row.Scan(&i.Findings, &i.FlaggedSessions)
+	return i, err
+}
+
+const getRiskOverviewScanCounts = `-- name: GetRiskOverviewScanCounts :one
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
-  , (COUNT(*) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    ))::BIGINT AS findings
-  , (COUNT(DISTINCT cm.chat_id) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-        AND cm.chat_id IS NOT NULL
-    ))::BIGINT AS flagged_sessions
   , (
       SELECT COUNT(*)::BIGINT
       FROM risk_policies active_rp
@@ -1233,34 +1301,31 @@ SELECT
         AND deleted IS FALSE
     ) AS active_policies
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
 WHERE rr.project_id = $1
   AND rr.created_at >= $2
   AND rr.created_at < $3
 `
 
-type GetRiskOverviewCountsParams struct {
+type GetRiskOverviewScanCountsParams struct {
 	ProjectID uuid.UUID
 	FromTime  pgtype.Timestamptz
 	ToTime    pgtype.Timestamptz
 }
 
-type GetRiskOverviewCountsRow struct {
+type GetRiskOverviewScanCountsRow struct {
 	MessagesScanned int64
-	Findings        int64
-	FlaggedSessions int64
 	ActivePolicies  int64
 }
 
-func (q *Queries) GetRiskOverviewCounts(ctx context.Context, arg GetRiskOverviewCountsParams) (GetRiskOverviewCountsRow, error) {
-	row := q.db.QueryRow(ctx, getRiskOverviewCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
-	var i GetRiskOverviewCountsRow
-	err := row.Scan(
-		&i.MessagesScanned,
-		&i.Findings,
-		&i.FlaggedSessions,
-		&i.ActivePolicies,
-	)
+// messages_scanned counts every scanned message in the window regardless of
+// found state. chat_message_id is NOT NULL with a FK to chat_messages, so the
+// old JOIN was lossless — dropping it lets this be an index-only distinct on
+// risk_results_project_created_msg_idx (project_id, created_at, chat_message_id).
+// active_policies is a cheap scalar subquery, folded in here to save a round trip.
+func (q *Queries) GetRiskOverviewScanCounts(ctx context.Context, arg GetRiskOverviewScanCountsParams) (GetRiskOverviewScanCountsRow, error) {
+	row := q.db.QueryRow(ctx, getRiskOverviewScanCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
+	var i GetRiskOverviewScanCountsRow
+	err := row.Scan(&i.MessagesScanned, &i.ActivePolicies)
 	return i, err
 }
 

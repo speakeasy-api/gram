@@ -68,6 +68,26 @@ WHERE id = @id
 SELECT
   p.*,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+  (
+    SELECT count(*)
+    FROM skill_distributions sd
+    JOIN skills s
+      ON s.id = sd.skill_id
+      AND s.project_id = sd.project_id
+      AND s.archived_at IS NULL
+    WHERE sd.plugin_id = p.id
+      AND sd.project_id = p.project_id
+      AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
+      AND sd.revoked_at IS NULL
+      AND EXISTS (
+        SELECT 1
+        FROM skill_versions sv
+        WHERE sv.skill_id = sd.skill_id
+          AND sv.spec_valid IS TRUE
+          AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+      )
+  ) AS skill_count,
   (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
 FROM plugins p
 WHERE p.organization_id = @organization_id
@@ -459,3 +479,73 @@ ON CONFLICT (project_id) DO UPDATE
   SET marketplace_name = EXCLUDED.marketplace_name,
       updated_at = clock_timestamp()
 RETURNING *;
+
+-- name: RevokeSkillDistributionsByPlugin :many
+-- Deleting a plugin revokes the skill distributions it carries so active
+-- distributions never reference a tombstoned plugin. The self-join returns
+-- the pre-revocation updated_at for audit snapshots.
+UPDATE skill_distributions sd
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM skill_distributions prev
+JOIN skills s ON s.id = prev.skill_id
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = prev.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE sv.skill_id = prev.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE prev.id = sd.id
+  AND sd.project_id = @project_id
+  AND sd.plugin_id = @plugin_id
+  AND sd.channel = 'plugin'
+  AND sd.assistant_id IS NULL
+  AND sd.revoked_at IS NULL
+RETURNING sd.*, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id, s.name AS skill_name, s.display_name AS skill_display_name;
+
+-- name: ListPluginSkillsForProject :many
+-- Plugin-generation companion to ListPluginsWithServersForProject covering
+-- skill distributions: each active distribution's plugin identity, skill name,
+-- and resolved manifest content (the pinned version when set, otherwise the
+-- latest valid version). Distributions with no valid resolvable version are
+-- dropped — packages only ever carry valid manifests. Plugin identity is
+-- selected here so a skills-only plugin (no servers) still generates a package.
+SELECT
+  p.id AS plugin_id,
+  p.name AS plugin_name,
+  p.slug AS plugin_slug,
+  p.description AS plugin_description,
+  s.name AS skill_name,
+  resolved.content AS skill_content
+FROM skill_distributions sd
+JOIN plugins p ON p.id = sd.plugin_id AND p.deleted IS FALSE
+JOIN skills s
+  ON s.project_id = sd.project_id
+  AND s.id = sd.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.content
+  FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.project_id = @project_id
+  AND sd.channel = 'plugin'
+  AND sd.plugin_id IS NOT NULL
+  AND sd.assistant_id IS NULL
+  AND sd.revoked_at IS NULL
+ORDER BY p.slug ASC, s.name ASC;

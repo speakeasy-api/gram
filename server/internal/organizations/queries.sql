@@ -99,7 +99,8 @@ SELECT
 FROM organization_user_relationships our
 JOIN users u ON u.id = our.user_id
 WHERE our.organization_id = @organization_id
-  AND our.deleted_at IS NULL;
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL;
 
 -- name: ListActiveOrganizationUserIDs :many
 -- Returns the Gram user IDs of active members of the organization. Used to

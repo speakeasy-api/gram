@@ -89,3 +89,39 @@ func BuildSkillVersionListView(rows []repo.SkillVersion, frontmatter func(conten
 
 	return result, nil
 }
+
+func BuildSkillDistributionView(distribution repo.SkillDistribution, skillName, skillDisplayName string, pluginName, assistantName *string, resolvedVersionID uuid.UUID) *types.SkillDistribution {
+	return &types.SkillDistribution{
+		ID:                distribution.ID.String(),
+		ProjectID:         distribution.ProjectID.String(),
+		SkillID:           distribution.SkillID.String(),
+		SkillName:         skillName,
+		SkillDisplayName:  skillDisplayName,
+		PluginID:          conv.FromNullableUUID(distribution.PluginID),
+		PluginName:        pluginName,
+		AssistantID:       conv.FromNullableUUID(distribution.AssistantID),
+		AssistantName:     assistantName,
+		PinnedVersionID:   conv.FromNullableUUID(distribution.PinnedVersionID),
+		ResolvedVersionID: resolvedVersionID.String(),
+		Channel:           distribution.Channel,
+		CreatedByUserID:   distribution.CreatedByUserID,
+		CreatedAt:         conv.FromPGTimestamptz(distribution.CreatedAt),
+		UpdatedAt:         conv.FromPGTimestamptz(distribution.UpdatedAt),
+	}
+}
+
+func BuildSkillDistributionListView(rows []repo.ListActiveSkillDistributionsRow) []*types.PluginSkillDistribution {
+	result := make([]*types.PluginSkillDistribution, len(rows))
+	for i, row := range rows {
+		result[i] = &types.PluginSkillDistribution{
+			ID: row.SkillDistribution.ID.String(), ProjectID: row.SkillDistribution.ProjectID.String(),
+			SkillID: row.SkillDistribution.SkillID.String(), SkillName: row.SkillName, SkillDisplayName: row.SkillDisplayName,
+			PluginID: row.SkillDistribution.PluginID.UUID.String(), PluginName: row.PluginName,
+			PinnedVersionID: conv.FromNullableUUID(row.SkillDistribution.PinnedVersionID), ResolvedVersionID: row.ResolvedVersionID.String(),
+			Channel: row.SkillDistribution.Channel, CreatedByUserID: row.SkillDistribution.CreatedByUserID,
+			CreatedAt: conv.FromPGTimestamptz(row.SkillDistribution.CreatedAt), UpdatedAt: conv.FromPGTimestamptz(row.SkillDistribution.UpdatedAt),
+		}
+	}
+
+	return result
+}
