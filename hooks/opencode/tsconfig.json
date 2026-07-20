@@ -1,0 +1,31 @@
+{
+  "extends": "../../tsconfig.strict.json",
+  "include": ["src"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "rootDir": "./src",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "resolveJsonModule": true,
+
+    "noEmit": true,
+
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "strict": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  }
+}

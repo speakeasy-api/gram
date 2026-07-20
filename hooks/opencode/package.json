@@ -1,0 +1,23 @@
+{
+  "name": "@gram/opencode-observability",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Gram observability plugin for opencode. Maps opencode plugin events to Gram's canonical hook vocabulary and ships them to /rpc/hooks.ingest.",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest --run",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [],
+  "license": "MIT",
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.17.19",
+    "@types/node": "^22.20.0",
+    "typescript": "catalog:",
+    "vitest": "^4.1.10"
+  }
+}
