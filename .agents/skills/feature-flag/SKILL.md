@@ -7,14 +7,7 @@ description: >
   involves gating a feature behind a flag, dogfooding a change, deciding which system to
   use, or adding a new product feature or PostHog flag.
 metadata:
-  relevant_files:
-    - "server/internal/productfeatures/**/*.go"
-    - "server/internal/productfeatures/queries.sql"
-    - "server/design/productfeatures/design.go"
-    - "server/internal/feature/flags.go"
-    - "server/internal/feature/provider.go"
-    - "server/internal/thirdparty/posthog/posthog.go"
-    - "client/dashboard/src/pages/**"
+  relevant_files: "server/internal/productfeatures/**/*.go, server/internal/productfeatures/queries.sql, server/design/productfeatures/design.go, server/internal/feature/flags.go, server/internal/feature/provider.go, server/internal/thirdparty/posthog/posthog.go, client/dashboard/src/pages/**"
 ---
 
 ## Two systems, two purposes

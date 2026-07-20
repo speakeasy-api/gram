@@ -262,6 +262,248 @@ func DecodeCreateResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildFetchFromGitHubRequest instantiates a HTTP request object with method
+// and path set to call the "skills" service "fetchFromGitHub" endpoint
+func (c *Client) BuildFetchFromGitHubRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FetchFromGitHubSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "fetchFromGitHub", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeFetchFromGitHubRequest returns an encoder for requests sent to the
+// skills fetchFromGitHub server.
+func EncodeFetchFromGitHubRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.FetchFromGitHubPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "fetchFromGitHub", "*skills.FetchFromGitHubPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewFetchFromGitHubRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "fetchFromGitHub", err)
+		}
+		return nil
+	}
+}
+
+// DecodeFetchFromGitHubResponse returns a decoder for responses returned by
+// the skills fetchFromGitHub endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeFetchFromGitHubResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeFetchFromGitHubResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body FetchFromGitHubResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "fetchFromGitHub", err)
+			}
+			err = ValidateFetchFromGitHubResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "fetchFromGitHub", err)
+			}
+			res := NewFetchFromGitHubFetchSkillsFromGitHubResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body FetchFromGitHubUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "fetchFromGitHub", err)
+			}
+			err = ValidateFetchFromGitHubUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "fetchFromGitHub", err)
+			}
+			return nil, NewFetchFromGitHubUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body FetchFromGitHubForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "fetchFromGitHub", err)
+			}
+			err = ValidateFetchFromGitHubForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "fetchFromGitHub", err)
+			}
+			return nil, NewFetchFromGitHubForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body FetchFromGitHubBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "fetchFromGitHub", err)
+			}
+			err = ValidateFetchFromGitHubBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "fetchFromGitHub", err)
+			}
+			return nil, NewFetchFromGitHubBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body FetchFromGitHubNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "fetchFromGitHub", err)
+			}
+			err = ValidateFetchFromGitHubNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "fetchFromGitHub", err)
+			}
+			return nil, NewFetchFromGitHubNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body FetchFromGitHubConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "fetchFromGitHub", err)
+			}
+			err = ValidateFetchFromGitHubConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "fetchFromGitHub", err)
+			}
+			return nil, NewFetchFromGitHubConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body FetchFromGitHubUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "fetchFromGitHub", err)
+			}
+			err = ValidateFetchFromGitHubUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "fetchFromGitHub", err)
+			}
+			return nil, NewFetchFromGitHubUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body FetchFromGitHubInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "fetchFromGitHub", err)
+			}
+			err = ValidateFetchFromGitHubInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "fetchFromGitHub", err)
+			}
+			return nil, NewFetchFromGitHubInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body FetchFromGitHubInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "fetchFromGitHub", err)
+				}
+				err = ValidateFetchFromGitHubInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "fetchFromGitHub", err)
+				}
+				return nil, NewFetchFromGitHubInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body FetchFromGitHubUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "fetchFromGitHub", err)
+				}
+				err = ValidateFetchFromGitHubUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "fetchFromGitHub", err)
+				}
+				return nil, NewFetchFromGitHubUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "fetchFromGitHub", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body FetchFromGitHubGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "fetchFromGitHub", err)
+			}
+			err = ValidateFetchFromGitHubGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "fetchFromGitHub", err)
+			}
+			return nil, NewFetchFromGitHubGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "fetchFromGitHub", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildAddVersionRequest instantiates a HTTP request object with method and
 // path set to call the "skills" service "addVersion" endpoint
 func (c *Client) BuildAddVersionRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2249,6 +2491,57 @@ func unmarshalSkillValidationErrorResponseBodyToTypesSkillValidationError(v *Ski
 	res := &types.SkillValidationError{
 		Code:    *v.Code,
 		Field:   *v.Field,
+		Message: *v.Message,
+	}
+
+	return res
+}
+
+// unmarshalFetchedGitHubRepositoryResponseBodyToSkillsFetchedGitHubRepository
+// builds a value of type *skills.FetchedGitHubRepository from a value of type
+// *FetchedGitHubRepositoryResponseBody.
+func unmarshalFetchedGitHubRepositoryResponseBodyToSkillsFetchedGitHubRepository(v *FetchedGitHubRepositoryResponseBody) *skills.FetchedGitHubRepository {
+	res := &skills.FetchedGitHubRepository{
+		URL:           *v.URL,
+		FullName:      *v.FullName,
+		DefaultBranch: *v.DefaultBranch,
+		CommitSha:     *v.CommitSha,
+		Visibility:    *v.Visibility,
+	}
+
+	return res
+}
+
+// unmarshalFetchedGitHubSkillResponseBodyToSkillsFetchedGitHubSkill builds a
+// value of type *skills.FetchedGitHubSkill from a value of type
+// *FetchedGitHubSkillResponseBody.
+func unmarshalFetchedGitHubSkillResponseBodyToSkillsFetchedGitHubSkill(v *FetchedGitHubSkillResponseBody) *skills.FetchedGitHubSkill {
+	res := &skills.FetchedGitHubSkill{
+		Path:        *v.Path,
+		Content:     *v.Content,
+		Name:        *v.Name,
+		DisplayName: *v.DisplayName,
+		Description: v.Description,
+		SpecValid:   *v.SpecValid,
+	}
+	res.ValidationErrors = make([]*types.SkillValidationError, len(v.ValidationErrors))
+	for i, val := range v.ValidationErrors {
+		if val == nil {
+			res.ValidationErrors[i] = nil
+			continue
+		}
+		res.ValidationErrors[i] = unmarshalSkillValidationErrorResponseBodyToTypesSkillValidationError(val)
+	}
+
+	return res
+}
+
+// unmarshalGitHubSkillIssueResponseBodyToSkillsGitHubSkillIssue builds a value
+// of type *skills.GitHubSkillIssue from a value of type
+// *GitHubSkillIssueResponseBody.
+func unmarshalGitHubSkillIssueResponseBodyToSkillsGitHubSkillIssue(v *GitHubSkillIssueResponseBody) *skills.GitHubSkillIssue {
+	res := &skills.GitHubSkillIssue{
+		Path:    *v.Path,
 		Message: *v.Message,
 	}
 

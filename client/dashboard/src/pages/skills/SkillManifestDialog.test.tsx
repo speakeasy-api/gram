@@ -21,6 +21,12 @@ const testState = vi.hoisted(() => ({
     reset: vi.fn(),
     isPending: false,
   },
+  fetchRepository: {
+    mutateAsync: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    error: null as Error | null,
+  },
   invalidateSkills: vi.fn().mockResolvedValue(undefined),
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
   invalidateVersions: vi.fn().mockResolvedValue(undefined),
@@ -35,6 +41,9 @@ vi.mock("@gram/client/react-query/createSkill.js", () => ({
 }));
 vi.mock("@gram/client/react-query/addSkillVersion.js", () => ({
   useAddSkillVersionMutation: () => testState.addVersion,
+}));
+vi.mock("@gram/client/react-query/fetchSkillsFromGitHub.js", () => ({
+  useFetchSkillsFromGitHubMutation: () => testState.fetchRepository,
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   invalidateAllSkills: testState.invalidateSkills,
@@ -68,6 +77,10 @@ const validResult = {
   },
 };
 
+function chooseManualUpload(): void {
+  fireEvent.click(screen.getByRole("button", { name: /Manual upload/i }));
+}
+
 beforeEach(() => {
   testState.create.isPending = false;
   testState.addVersion.isPending = false;
@@ -75,6 +88,10 @@ beforeEach(() => {
   testState.create.reset.mockReset();
   testState.addVersion.mutateAsync.mockReset();
   testState.addVersion.reset.mockReset();
+  testState.fetchRepository.isPending = false;
+  testState.fetchRepository.error = null;
+  testState.fetchRepository.mutateAsync.mockReset();
+  testState.fetchRepository.reset.mockReset();
   testState.invalidateSkills.mockClear();
   testState.invalidateSkill.mockClear();
   testState.invalidateVersions.mockClear();
@@ -87,6 +104,7 @@ describe("SkillManifestDialog", () => {
   it("uses the exact create wrapper and broadly invalidates before navigating by result skill ID", async () => {
     testState.create.mutateAsync.mockResolvedValue(validResult);
     render(<SkillManifestDialog mode="create" open onOpenChange={() => {}} />);
+    chooseManualUpload();
     fireEvent.change(screen.getByLabelText("SKILL.md content"), {
       target: { value: VALID_MANIFEST },
     });
@@ -154,6 +172,7 @@ describe("SkillManifestDialog", () => {
       },
     });
     render(<SkillManifestDialog mode="create" open onOpenChange={() => {}} />);
+    chooseManualUpload();
     fireEvent.change(screen.getByLabelText("SKILL.md content"), {
       target: { value: INVALID_MANIFEST },
     });
@@ -204,6 +223,7 @@ describe("SkillManifestDialog", () => {
       createdVersion: false,
     });
     render(<SkillManifestDialog mode="create" open onOpenChange={() => {}} />);
+    chooseManualUpload();
     fireEvent.change(screen.getByLabelText("SKILL.md content"), {
       target: { value: VALID_MANIFEST },
     });
@@ -246,6 +266,7 @@ describe("SkillManifestDialog", () => {
     );
     const read = vi.spyOn(file, "arrayBuffer");
     render(<SkillManifestDialog mode="create" open onOpenChange={() => {}} />);
+    chooseManualUpload();
 
     fireEvent.change(screen.getByLabelText("Upload .md file"), {
       target: { files: [file] },
@@ -264,5 +285,161 @@ describe("SkillManifestDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("invalidates caches and prunes imported skills when an import partially fails", async () => {
+    const onOpenChange = vi.fn((_open: boolean): void => {});
+    const repositoryManifest =
+      "---\nname: repository-skill\ndescription: Imported.\n---\n# Imported";
+    testState.fetchRepository.mutateAsync.mockResolvedValue({
+      repository: {
+        url: "https://github.com/example/repository",
+        fullName: "example/repository",
+        defaultBranch: "main",
+        commitSha: "abcdef123456",
+        visibility: "public",
+      },
+      skills: [
+        {
+          path: "skills/repository-skill/SKILL.md",
+          content: repositoryManifest,
+          name: "repository-skill",
+          displayName: "repository-skill",
+          description: "Imported.",
+          specValid: true,
+          validationErrors: [],
+        },
+        {
+          path: "skills/second/SKILL.md",
+          content: "---\nname: second\ndescription: Second.\n---\n",
+          name: "second",
+          displayName: "second",
+          description: "Second.",
+          specValid: true,
+          validationErrors: [],
+        },
+      ],
+      issues: [],
+    });
+    testState.create.mutateAsync
+      .mockResolvedValueOnce(validResult)
+      .mockRejectedValueOnce(new Error("second manifest rejected"));
+    render(
+      <SkillManifestDialog mode="create" open onOpenChange={onOpenChange} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /GitHub repository/i }));
+    fireEvent.change(screen.getByLabelText("Public GitHub repository"), {
+      target: { value: "example/repository" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Scan repository" }));
+    expect(await screen.findByText("Skills found")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import 2 skills" }));
+    expect(await screen.findByText(/second manifest rejected/)).toBeTruthy();
+    expect(testState.invalidateSkills).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Import 1 skill" })).toBeTruthy();
+  });
+
+  it("does not close while a GitHub scan or import is in flight", () => {
+    const onOpenChange = vi.fn((_open: boolean): void => {});
+    testState.fetchRepository.isPending = true;
+    render(
+      <SkillManifestDialog mode="create" open onOpenChange={onOpenChange} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /GitHub repository/i }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("fetches, selects, and imports real repository scan results", async () => {
+    const onOpenChange = vi.fn((_open: boolean): void => {});
+    const repositoryManifest =
+      "---\nname: repository-skill\ndescription: Imported.\n---\n# Imported";
+    testState.fetchRepository.mutateAsync.mockResolvedValue({
+      repository: {
+        url: "https://github.com/example/repository",
+        fullName: "example/repository",
+        defaultBranch: "main",
+        commitSha: "abcdef123456",
+        visibility: "public",
+      },
+      skills: [
+        {
+          path: "skills/repository-skill/SKILL.md",
+          content: repositoryManifest,
+          name: "repository-skill",
+          displayName: "repository-skill",
+          description: "Imported.",
+          specValid: true,
+          validationErrors: [],
+        },
+        {
+          path: "skills/invalid/SKILL.md",
+          content: "---\nname: invalid\n---\n",
+          name: "invalid",
+          displayName: "invalid",
+          specValid: false,
+          validationErrors: [
+            {
+              code: "required",
+              field: "description",
+              message: "description is required",
+            },
+          ],
+        },
+      ],
+      issues: [],
+    });
+    testState.create.mutateAsync.mockResolvedValue(validResult);
+    render(
+      <SkillManifestDialog mode="create" open onOpenChange={onOpenChange} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /GitHub repository/i }));
+    fireEvent.change(screen.getByLabelText("Public GitHub repository"), {
+      target: { value: "example/repository" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Scan repository" }));
+
+    expect(await screen.findByText("Skills found")).toBeTruthy();
+    expect(testState.fetchRepository.mutateAsync).toHaveBeenCalledWith({
+      request: {
+        fetchSkillsFromGitHubRequestBody: {
+          repoUrl: "https://github.com/example/repository",
+        },
+      },
+    });
+    expect(screen.getByRole("button", { name: "Import 1 skill" })).toBeTruthy();
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Select invalid" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select invalid" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import 2 skills" }));
+    await waitFor(() => {
+      expect(testState.create.mutateAsync).toHaveBeenCalledWith({
+        request: {
+          createSkillRequestBody: { content: repositoryManifest },
+        },
+      });
+    });
+    expect(testState.create.mutateAsync).toHaveBeenCalledWith({
+      request: {
+        createSkillRequestBody: { content: "---\nname: invalid\n---\n" },
+      },
+    });
+    expect(testState.invalidateSkills).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
   });
 });

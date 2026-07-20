@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	skills "github.com/speakeasy-api/gram/server/gen/skills"
 	goa "goa.design/goa/v3/pkg"
@@ -47,6 +48,52 @@ func BuildCreatePayload(skillsCreateBody string, skillsCreateSessionToken string
 	}
 	v := &skills.CreatePayload{
 		Content: body.Content,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildFetchFromGitHubPayload builds the payload for the skills
+// fetchFromGitHub endpoint from CLI flags.
+func BuildFetchFromGitHubPayload(skillsFetchFromGitHubBody string, skillsFetchFromGitHubSessionToken string, skillsFetchFromGitHubApikeyToken string, skillsFetchFromGitHubProjectSlugInput string) (*skills.FetchFromGitHubPayload, error) {
+	var err error
+	var body FetchFromGitHubRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsFetchFromGitHubBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"repo_url\": \"aaa\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.repo_url", body.RepoURL, goa.FormatURI))
+		if utf8.RuneCountInString(body.RepoURL) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.repo_url", body.RepoURL, utf8.RuneCountInString(body.RepoURL), 500, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsFetchFromGitHubSessionToken != "" {
+			sessionToken = &skillsFetchFromGitHubSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsFetchFromGitHubApikeyToken != "" {
+			apikeyToken = &skillsFetchFromGitHubApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsFetchFromGitHubProjectSlugInput != "" {
+			projectSlugInput = &skillsFetchFromGitHubProjectSlugInput
+		}
+	}
+	v := &skills.FetchFromGitHubPayload{
+		RepoURL: body.RepoURL,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

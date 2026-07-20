@@ -22,6 +22,9 @@ type Service interface {
 	// feature and skill write scope, and may create a skill, add a version to an
 	// existing skill, or return an existing canonical version as a no-op.
 	Create(context.Context, *CreatePayload) (res *RecordSkillResult, err error)
+	// Fetch every SKILL.md from a public GitHub repository, parse each manifest,
+	// and return the results without persisting them.
+	FetchFromGitHub(context.Context, *FetchFromGitHubPayload) (res *FetchSkillsFromGitHubResult, err error)
 	// Record an uploaded SKILL.md as a version of an existing skill. The
 	// implementation requires the skills product feature and skill write scope,
 	// and returns the existing canonical version as a no-op when appropriate.
@@ -70,7 +73,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"create", "addVersion", "list", "get", "listVersions", "archive", "distribute", "undistribute", "listDistributions"}
+var MethodNames = [10]string{"create", "fetchFromGitHub", "addVersion", "list", "get", "listVersions", "archive", "distribute", "undistribute", "listDistributions"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -121,6 +124,59 @@ type DistributePayload struct {
 	ProjectSlugInput *string
 }
 
+// FetchFromGitHubPayload is the payload type of the skills service
+// fetchFromGitHub method.
+type FetchFromGitHubPayload struct {
+	// The public GitHub repository URL.
+	RepoURL          string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// FetchSkillsFromGitHubResult is the result type of the skills service
+// fetchFromGitHub method.
+type FetchSkillsFromGitHubResult struct {
+	// The repository snapshot that was scanned.
+	Repository *FetchedGitHubRepository
+	// Structurally valid manifests discovered in the repository.
+	Skills []*FetchedGitHubSkill
+	// Candidates excluded because they could not be parsed or exceeded limits.
+	Issues []*GitHubSkillIssue
+}
+
+// The public GitHub repository snapshot used to discover skills.
+type FetchedGitHubRepository struct {
+	// The canonical GitHub repository URL.
+	URL string
+	// The repository in owner/name form.
+	FullName string
+	// The repository default branch.
+	DefaultBranch string
+	// The immutable commit scanned for skills.
+	CommitSha string
+	// The GitHub repository visibility.
+	Visibility string
+}
+
+// A parsed SKILL.md fetched from a public GitHub repository.
+type FetchedGitHubSkill struct {
+	// The repository-relative SKILL.md path.
+	Path string
+	// The exact SKILL.md content fetched from GitHub.
+	Content string
+	// The normalized skill name.
+	Name string
+	// The skill name as written in frontmatter.
+	DisplayName string
+	// The optional skill description.
+	Description *string
+	// Whether the manifest conforms to the Agent Skills specification.
+	SpecValid bool
+	// Specification validation problems.
+	ValidationErrors []*types.SkillValidationError
+}
+
 // GetPayload is the payload type of the skills service get method.
 type GetPayload struct {
 	// The skill ID.
@@ -138,6 +194,14 @@ type GetSkillResult struct {
 	LatestVersion *types.SkillVersion
 	// The number of active, non-deleted assistants using the skill.
 	AssistantCount int64
+}
+
+// A SKILL.md candidate that was excluded from the results.
+type GitHubSkillIssue struct {
+	// The repository-relative candidate path.
+	Path string
+	// A safe explanation of why the manifest was excluded.
+	Message string
 }
 
 // ListDistributionsPayload is the payload type of the skills service

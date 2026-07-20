@@ -20,6 +20,10 @@ type Client struct {
 	// Create Doer is the HTTP client used to make requests to the create endpoint.
 	CreateDoer goahttp.Doer
 
+	// FetchFromGitHub Doer is the HTTP client used to make requests to the
+	// fetchFromGitHub endpoint.
+	FetchFromGitHubDoer goahttp.Doer
+
 	// AddVersion Doer is the HTTP client used to make requests to the addVersion
 	// endpoint.
 	AddVersionDoer goahttp.Doer
@@ -71,6 +75,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		CreateDoer:            doer,
+		FetchFromGitHubDoer:   doer,
 		AddVersionDoer:        doer,
 		ListDoer:              doer,
 		GetDoer:               doer,
@@ -106,6 +111,30 @@ func (c *Client) Create() goa.Endpoint {
 		resp, err := c.CreateDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "create", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// FetchFromGitHub returns an endpoint that makes HTTP requests to the skills
+// service fetchFromGitHub server.
+func (c *Client) FetchFromGitHub() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeFetchFromGitHubRequest(c.encoder)
+		decodeResponse = DecodeFetchFromGitHubResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildFetchFromGitHubRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.FetchFromGitHubDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "fetchFromGitHub", err)
 		}
 		return decodeResponse(resp)
 	}

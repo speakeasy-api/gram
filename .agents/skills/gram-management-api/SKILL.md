@@ -2,14 +2,7 @@
 name: gram-management-api
 description: Concepts, external interfaces, and conventions for Gram's management API — the Goa-designed HTTP-RPC surface under `/rpc/<service>.<method>` that powers the dashboard, CLI, and public SDK. Activate whenever the task involves designing, implementing, or modifying a management endpoint (new service, new method, payload/result changes, OpenAPI/SDK surface changes, CLI changes, wiring a new service into the server).
 metadata:
-  relevant_files:
-    - "server/design/**/*.go"
-    - "server/internal/*/impl.go"
-    - "server/internal/*/queries.sql"
-    - "server/internal/*/setup_test.go"
-    - "server/internal/mv/**/*.go"
-    - "server/cmd/gram/start.go"
-    - ".changeset/**/*.md"
+  relevant_files: "server/design/**/*.go, server/internal/*/impl.go, server/internal/*/queries.sql, server/internal/*/setup_test.go, server/internal/mv/**/*.go, server/cmd/gram/start.go, .changeset/**/*.md"
 ---
 
 Gram's management API is the internal HTTP-RPC surface that the dashboard, CLI, and SDK use to administer projects, toolsets, deployments, access, and related resources. Every endpoint lives at `/rpc/<service>.<method>`, is authored in Goa DSL under `server/design/`, implemented in a single `Service` struct per package under `server/internal/<service>/`, and exposed through generated server stubs, OpenAPI, CLI bindings, and a TypeScript SDK.

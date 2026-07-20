@@ -2,8 +2,7 @@
 name: page-toolbar
 description: Build the control bar (search, filters, sort, view) on dashboard list/collection pages with the unified `Page.Toolbar` compound component. Activate whenever adding or editing the controls above a list/grid/table on a `client/dashboard` page — a search box, filter chips/sheet, sort dropdown, grid/table view toggle, result count, or a mode toggle — so the page uses `Page.Toolbar` instead of hand-rolled controls. Phrases like "add a search/filter to this page", "filter bar", "sort dropdown", "view toggle", or "let users filter the list" should trigger it.
 metadata:
-  relevant_files:
-    - "client/dashboard/**"
+  relevant_files: "client/dashboard/**"
 ---
 
 # Page.Toolbar — the one control bar for list pages

@@ -2,10 +2,7 @@
 name: gram-audit-logging
 description: Concepts, external interfaces, and conventions for Gram's audit logging subsystem — the internal Go API for recording actor/action/subject events and the `/rpc/auditlogs.*` management API that exposes them. Activate whenever the task involves recording or exposing audit events (adding or changing audit coverage on a service, introducing a new audited subject or action, writing tests that assert an event was recorded, changing how entries are displayed or filtered).
 metadata:
-  relevant_files:
-    - "server/internal/audit/**/*.go"
-    - "server/internal/audit/**/*.sql"
-    - "server/design/auditlogs/**"
+  relevant_files: "server/internal/audit/**/*.go, server/internal/audit/**/*.sql, server/design/auditlogs/**"
 ---
 
 Audit logging is how Gram records _who did what to which resource_. Every meaningful mutation on a project- or org-scoped resource is expected to produce one audit entry per affected row, written inside the same database transaction as the mutation so events can't drift from the state they describe. Entries are exposed to Gram users through the `auditlogs` management API.

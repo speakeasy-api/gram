@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -46,6 +47,7 @@ type Service struct {
 	authz    *authz.Engine
 	features *productfeatures.Client
 	audit    *audit.Logger
+	repos    ghclient.PublicRepositoryReader
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -59,6 +61,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
+	repositoryReader ghclient.PublicRepositoryReader,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("skills"))
 
@@ -70,6 +73,7 @@ func NewService(
 		authz:    authzEngine,
 		features: features,
 		audit:    auditLogger,
+		repos:    repositoryReader,
 	}
 }
 

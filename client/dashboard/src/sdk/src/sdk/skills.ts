@@ -6,12 +6,14 @@ import { skillsAddVersion } from "../funcs/skillsAddVersion.js";
 import { skillsArchive } from "../funcs/skillsArchive.js";
 import { skillsCreate } from "../funcs/skillsCreate.js";
 import { skillsDistribute } from "../funcs/skillsDistribute.js";
+import { skillsFetchFromGitHub } from "../funcs/skillsFetchFromGitHub.js";
 import { skillsGet } from "../funcs/skillsGet.js";
 import { skillsList } from "../funcs/skillsList.js";
 import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
 import { skillsUndistribute } from "../funcs/skillsUndistribute.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { FetchSkillsFromGitHubResult } from "../models/components/fetchskillsfromgithubresult.js";
 import { GetSkillResult } from "../models/components/getskillresult.js";
 import { RecordSkillResult } from "../models/components/recordskillresult.js";
 import { SkillDistribution } from "../models/components/skilldistribution.js";
@@ -31,6 +33,10 @@ import {
   DistributeSkillRequest,
   DistributeSkillSecurity,
 } from "../models/operations/distributeskill.js";
+import {
+  FetchSkillsFromGitHubRequest,
+  FetchSkillsFromGitHubSecurity,
+} from "../models/operations/fetchskillsfromgithub.js";
 import {
   GetSkillRequest,
   GetSkillSecurity,
@@ -127,6 +133,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SkillDistribution> {
     return unwrapAsync(skillsDistribute(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * fetchFromGitHub skills
+   *
+   * @remarks
+   * Fetch every SKILL.md from a public GitHub repository, parse each manifest, and return the results without persisting them.
+   */
+  async fetchFromGitHub(
+    request: FetchSkillsFromGitHubRequest,
+    security?: FetchSkillsFromGitHubSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<FetchSkillsFromGitHubResult> {
+    return unwrapAsync(skillsFetchFromGitHub(
       this,
       request,
       security,

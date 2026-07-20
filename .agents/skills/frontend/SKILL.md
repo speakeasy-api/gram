@@ -2,8 +2,7 @@
 name: frontend
 description: Rules and best practices when working on the dashboard React frontend codebase (including the inlined Gram Elements code)
 metadata:
-  relevant_files:
-    - "client/dashboard/**"
+  relevant_files: "client/dashboard/**"
 ---
 
 ## React & Frontend Coding Guidelines

@@ -347,6 +347,7 @@ trackedFiles:
   src/funcs/skillsArchive.ts: {}
   src/funcs/skillsCreate.ts: {}
   src/funcs/skillsDistribute.ts: {}
+  src/funcs/skillsFetchFromGitHub.ts: {}
   src/funcs/skillsGet.ts: {}
   src/funcs/skillsList.ts: {}
   src/funcs/skillsListDistributions.ts: {}
@@ -597,7 +598,11 @@ trackedFiles:
   src/models/components/externalmcptooldefinition.ts: {}
   src/models/components/externaloauthserver.ts: {}
   src/models/components/externaloauthserverform.ts: {}
+  src/models/components/fetchedgithubrepository.ts: {}
+  src/models/components/fetchedgithubskill.ts: {}
   src/models/components/fetchopenapiv3fromurlform2.ts: {}
+  src/models/components/fetchskillsfromgithubrequestbody.ts: {}
+  src/models/components/fetchskillsfromgithubresult.ts: {}
   src/models/components/filteroption.ts: {}
   src/models/components/functionenvironmentvariable.ts: {}
   src/models/components/functionresourcedefinition.ts: {}
@@ -638,6 +643,7 @@ trackedFiles:
   src/models/components/gettoolusagesummaryresult.ts: {}
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
+  src/models/components/githubskillissue.ts: {}
   src/models/components/hookingestdata.ts: {}
   src/models/components/hookingestevent.ts: {}
   src/models/components/hookingestsession.ts: {}
@@ -1204,6 +1210,7 @@ trackedFiles:
   src/models/operations/evolvedeployment.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
   src/models/operations/fetchopenapiv3fromurl.ts: {}
+  src/models/operations/fetchskillsfromgithub.ts: {}
   src/models/operations/generatetitle.ts: {}
   src/models/operations/generateworkosadminportallink.ts: {}
   src/models/operations/getactivedeployment.ts: {}
@@ -1629,6 +1636,7 @@ trackedFiles:
   src/react-query/exportMcpMetadata.ts: {}
   src/react-query/featuresSet.ts: {}
   src/react-query/fetchOpenAPIv3FromURL.ts: {}
+  src/react-query/fetchSkillsFromGitHub.ts: {}
   src/react-query/generateWorkOSAdminPortalLink.ts: {}
   src/react-query/getAssistantMemory.core.ts: {}
   src/react-query/getAssistantMemory.ts: {}
@@ -3496,6 +3504,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  fetchSkillsFromGitHub:
+    speakeasy-default-fetch-skills-from-git-hub:
+      requestBody:
+        application/json: {"repo_url": "https://stale-bonfire.name/"}
+      responses:
+        "200":
+          application/json: {"issues": [], "repository": {"commit_sha": "<value>", "default_branch": "<value>", "full_name": "Cindy Adams III", "url": "https://illiterate-hundred.com", "visibility": "public"}, "skills": [{"content": "<value>", "display_name": "Arno.Feest", "name": "<value>", "path": "/var/log", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  fetchSkillsFromRepository:
+    speakeasy-default-fetch-skills-from-repository:
+      requestBody:
+        application/json: {"repo_url": "https://dismal-devastation.com/"}
+      responses:
+        "200":
+          application/json: {"issues": [], "repository": {"commit_sha": "<value>", "default_branch": "<value>", "full_name": "Lowell Champlin", "url": "https://agitated-cardboard.name/", "visibility": "public"}, "skills": [{"content": "<value>", "display_name": "Marty_Rippin", "name": "<value>", "path": "/var/tmp", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   generateTitle:
     speakeasy-default-generate-title:
       requestBody:

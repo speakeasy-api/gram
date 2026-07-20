@@ -2,10 +2,7 @@
 name: golang
 description: Rules and best practices when writing and editing Go (Golang) code
 metadata:
-  relevant_files:
-    - "server/**/*.go"
-    - "functions/**/*.go"
-    - "cli/**/*.go"
+  relevant_files: "server/**/*.go, functions/**/*.go, cli/**/*.go"
 ---
 
 This codebases uses features from Go 1.25 and above.

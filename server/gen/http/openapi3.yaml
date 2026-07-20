@@ -32306,6 +32306,110 @@ paths:
             x-speakeasy-name-override: distribute
             x-speakeasy-react-hook:
                 name: DistributeSkill
+    /rpc/skills.fetchFromGitHub:
+        post:
+            description: Fetch every SKILL.md from a public GitHub repository, parse each manifest, and return the results without persisting them.
+            operationId: fetchSkillsFromGitHub
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FetchSkillsFromGitHubRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/FetchSkillsFromGitHubResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: fetchFromGitHub skills
+            tags:
+                - skills
+            x-speakeasy-name-override: fetchFromGitHub
+            x-speakeasy-react-hook:
+                name: FetchSkillsFromGitHub
     /rpc/skills.get:
         get:
             description: Get an active skill and its latest version. The implementation requires the skills product feature and skill read scope.
@@ -46779,6 +46883,98 @@ components:
                     description: The URL to fetch the OpenAPI document from
             required:
                 - url
+        FetchSkillsFromGitHubRequestBody:
+            type: object
+            properties:
+                repo_url:
+                    type: string
+                    description: The public GitHub repository URL.
+                    format: uri
+                    maxLength: 500
+            required:
+                - repo_url
+        FetchSkillsFromGitHubResult:
+            type: object
+            properties:
+                issues:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/GitHubSkillIssue'
+                    description: Candidates excluded because they could not be parsed or exceeded limits.
+                repository:
+                    $ref: '#/components/schemas/FetchedGitHubRepository'
+                skills:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/FetchedGitHubSkill'
+                    description: Structurally valid manifests discovered in the repository.
+            description: Parsed skills and excluded candidates from a public GitHub repository snapshot.
+            required:
+                - repository
+                - skills
+                - issues
+        FetchedGitHubRepository:
+            type: object
+            properties:
+                commit_sha:
+                    type: string
+                    description: The immutable commit scanned for skills.
+                default_branch:
+                    type: string
+                    description: The repository default branch.
+                full_name:
+                    type: string
+                    description: The repository in owner/name form.
+                url:
+                    type: string
+                    description: The canonical GitHub repository URL.
+                    format: uri
+                visibility:
+                    type: string
+                    description: The GitHub repository visibility.
+                    enum:
+                        - public
+            description: The public GitHub repository snapshot used to discover skills.
+            required:
+                - url
+                - full_name
+                - default_branch
+                - commit_sha
+                - visibility
+        FetchedGitHubSkill:
+            type: object
+            properties:
+                content:
+                    type: string
+                    description: The exact SKILL.md content fetched from GitHub.
+                description:
+                    type: string
+                    description: The optional skill description.
+                display_name:
+                    type: string
+                    description: The skill name as written in frontmatter.
+                name:
+                    type: string
+                    description: The normalized skill name.
+                path:
+                    type: string
+                    description: The repository-relative SKILL.md path.
+                spec_valid:
+                    type: boolean
+                    description: Whether the manifest conforms to the Agent Skills specification.
+                validation_errors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillValidationError'
+                    description: Specification validation problems.
+            description: A parsed SKILL.md fetched from a public GitHub repository.
+            required:
+                - path
+                - content
+                - name
+                - display_name
+                - spec_valid
+                - validation_errors
         FilterOption:
             type: object
             properties:
@@ -47948,6 +48144,19 @@ components:
             description: Result of user metrics summary query
             required:
                 - metrics
+        GitHubSkillIssue:
+            type: object
+            properties:
+                message:
+                    type: string
+                    description: A safe explanation of why the manifest was excluded.
+                path:
+                    type: string
+                    description: The repository-relative candidate path.
+            description: A SKILL.md candidate that was excluded from the results.
+            required:
+                - path
+                - message
         HTTPToolDefinition:
             type: object
             properties:
