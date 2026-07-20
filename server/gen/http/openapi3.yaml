@@ -4598,13 +4598,13 @@ paths:
             operationId: getAgentPlugins
             parameters:
                 - allowEmptyValue: true
-                  description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+                  description: Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
                   example: dev@acme.corp
                   in: query
                   name: email
                   required: true
                   schema:
-                    description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+                    description: Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
                     example: dev@acme.corp
                     type: string
                 - allowEmptyValue: true
@@ -35814,6 +35814,91 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateTemplate
+    /rpc/tokenExchange.exchange:
+        post:
+            description: Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent_user' scope. Authenticated with an org-scoped API key carrying the 'agent' scope — deliberately broader than the 'agent_user' scope the minted per-user keys carry, so a leaked per-user key cannot re-enter this endpoint to forge another user's key. The raw key is returned exactly once.
+            operationId: tokenExchange
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ExchangeRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TokenResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: exchange tokenExchange
+            tags:
+                - tokenExchange
+            x-speakeasy-name-override: exchange
     /rpc/tools.list:
         get:
             description: List all tools for a project
@@ -46180,6 +46265,15 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        ExchangeRequestBody:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Email address of the enrolled user to mint a per-user key for. Resolved to a user within the authenticated org.
+                    example: dev@acme.corp
+            required:
+                - email
         ExportMcpMetadataRequestBody:
             type: object
             properties:
@@ -56404,6 +56498,28 @@ components:
                 - failed_tool_calls
                 - avg_tool_latency_ms
                 - avg_session_duration_ms
+        TokenResult:
+            type: object
+            properties:
+                access_token:
+                    type: string
+                    description: The raw per-user API key (carries the `agent_user` scope). Returned exactly once; store it securely. Presented as the Gram-Key on downstream user-scoped endpoints.
+                expires_in:
+                    type: integer
+                    description: Always zero. The minted key has no expiry (api_keys has no TTL).
+                    format: int64
+                refresh_token:
+                    type: string
+                    description: Always empty. The minted key is long-lived and does not refresh; its lifecycle lever is revocation.
+                user_email:
+                    type: string
+                    description: Email the key was minted for.
+            description: A minted per-user API key for the device agent.
+            required:
+                - access_token
+                - refresh_token
+                - expires_in
+                - user_email
         TokensUnderManagement:
             type: object
             properties:
@@ -59852,7 +59968,7 @@ tags:
     - name: admin
       description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: agent
-      description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.
+      description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.
     - name: aiIntegrations
       description: Manage organization-level AI provider integrations.
     - name: assets
@@ -59941,6 +60057,8 @@ tags:
       description: Fetch telemetry data for tools in Gram.
     - name: templates
       description: Manages re-usable prompt templates and higher-order tools for a project.
+    - name: tokenExchange
+      description: 'Device-agent token exchange: trade an org-scoped install credential (an API key with the ''agent'' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.'
     - name: tools
       description: Dashboard API for interacting with tools.
     - name: toolsets
