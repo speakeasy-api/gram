@@ -1,0 +1,21 @@
+client/dashboard/src/pages/security/cel-sample.ts
+  s_09e46b15ddbad6::t_ded78248a6d4d8 13,17,27
+client/dashboard/src/pages/security/cel-wasm.ts
+  s_09e46b15ddbad6::t_5ce4b2b82df4f6 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "098e830136da78ea878f87eaf2190fde3db2f1ba",
+  "prompts": {},
+  "sessions": {
+    "s_09e46b15ddbad6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ac4e8538-3450-4bb8-926b-387012d62634",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
