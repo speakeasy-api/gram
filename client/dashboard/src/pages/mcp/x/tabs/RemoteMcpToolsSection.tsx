@@ -17,7 +17,7 @@ import {
   type ProxiedMcpTool,
   type ProxiedMcpToolAnnotations,
 } from "@/hooks/useProxiedMcpTools";
-import { useProxiedMcpUserSessionToken } from "@/hooks/useProxiedMcpUserSessionToken";
+import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
 import { Badge, Button } from "@speakeasy-api/moonshine";
@@ -157,8 +157,10 @@ function RemoteMcpToolsSectionInner({
   mcpServerId,
   isIssuerGated,
 }: RemoteMcpToolsSectionProps): JSX.Element {
-  const { accessToken, isLoading: isTokenLoading } =
-    useProxiedMcpUserSessionToken({ mcpServerId, isIssuerGated });
+  const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
+    target: { kind: "mcpServer", id: mcpServerId },
+    isIssuerGated,
+  });
 
   // Issuer-gated servers must wait for the JWT before connecting, otherwise the
   // unauthenticated request 401s and caches a spurious `needsAuth`.

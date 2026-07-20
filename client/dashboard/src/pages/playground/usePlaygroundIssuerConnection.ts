@@ -1,5 +1,5 @@
-import { useRemoteMcpTools } from "@/hooks/useRemoteMcpTools";
-import { useToolsetUserSessionToken } from "@/hooks/useToolsetUserSessionToken";
+import { useProxiedMcpTools } from "@/hooks/useProxiedMcpTools";
+import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import { Toolset } from "@/lib/toolTypes";
 import { firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
@@ -41,12 +41,10 @@ export function usePlaygroundIssuerConnection(
 ): PlaygroundIssuerConnection {
   const isIssuerGated = !!toolset?.userSessionIssuerSlug;
 
-  const { accessToken, isLoading: isTokenLoading } = useToolsetUserSessionToken(
-    {
-      toolsetId: toolset?.id,
-      isIssuerGated,
-    },
-  );
+  const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
+    target: { kind: "toolset", id: toolset?.id },
+    isIssuerGated,
+  });
 
   const mcpUrl = useInternalMcpUrl(toolset);
   // Connect through the dev proxy origin (same-origin) so the AI SDK transport
@@ -63,7 +61,7 @@ export function usePlaygroundIssuerConnection(
   // unauthenticated request 401s and caches a spurious `needsAuth`.
   const probeEnabled = isIssuerGated && !!accessToken;
 
-  const { tools, isLoading, needsAuth, refetch } = useRemoteMcpTools(
+  const { tools, isLoading, needsAuth, refetch } = useProxiedMcpTools(
     connectUrl,
     {
       headers,

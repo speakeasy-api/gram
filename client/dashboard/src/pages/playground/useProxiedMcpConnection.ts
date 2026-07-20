@@ -2,7 +2,7 @@ import {
   useProxiedMcpTools,
   type ProxiedMcpTool,
 } from "@/hooks/useProxiedMcpTools";
-import { useProxiedMcpUserSessionToken } from "@/hooks/useProxiedMcpUserSessionToken";
+import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import {
   firstPartyConnectUrl,
   getServerURL,
@@ -68,8 +68,10 @@ export function useProxiedMcpConnection(
     return endpoint ? `${getServerURL()}/mcp/${endpoint.slug}` : undefined;
   }, [endpointsData]);
 
-  const { accessToken, isLoading: isTokenLoading } =
-    useProxiedMcpUserSessionToken({ mcpServerId, isIssuerGated });
+  const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
+    target: { kind: "mcpServer", id: mcpServerId },
+    isIssuerGated,
+  });
 
   const headers = useMemo(
     () =>
