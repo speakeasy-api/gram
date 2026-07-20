@@ -3559,13 +3559,26 @@ async function seedObservabilityData(init: {
         BigInt(dayStartMs + Math.floor((8 + r() * 10) * 3_600_000)) *
         BigInt(1_000_000);
 
+      // A slice of sessions comes from devices without an enrolled identity
+      // (no user.email / directory attributes — only the consuming surface):
+      // the company-credential population, since Claude Code on an API
+      // key/gateway emits no user identity (POC-282). Heavier than an
+      // attributed session on average so the pooled bucket — rendered as
+      // "Team-wide account" on the user breakdown, and feeding the "tokens
+      // without user attribution" metric — ranks among the top spenders,
+      // mirroring how a gateway-authenticated org looks in production.
+      const anonymous = r() < 0.12;
+      const anonBoost = anonymous ? 4 : 1;
+
       // Cache-heavy token mix (agent sessions replay large cached prompts);
       // ~15% are light API-style calls with little cache traffic.
       const cacheDiv = r() < 0.15 ? 10 : 1;
-      const inputTokens = 800 + Math.floor(r() * 7_000);
-      const outputTokens = 300 + Math.floor(r() * 3_500);
-      const cacheReadTokens = Math.floor((8_000 + r() * 80_000) / cacheDiv);
-      const cacheCreationTokens = Math.floor((1_500 + r() * 18_000) / cacheDiv);
+      const inputTokens = (800 + Math.floor(r() * 7_000)) * anonBoost;
+      const outputTokens = (300 + Math.floor(r() * 3_500)) * anonBoost;
+      const cacheReadTokens =
+        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost;
+      const cacheCreationTokens =
+        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost;
       const totalTokens =
         inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
       const [pIn, pOut, pRead, pWrite] = HISTORY_PRICING[model] ?? [
@@ -3579,10 +3592,6 @@ async function seedObservabilityData(init: {
         1_000_000
       ).toFixed(6);
 
-      // A small slice of sessions comes from devices without an enrolled
-      // identity (no user.email / directory attributes — only the consuming
-      // surface), populating the "tokens without user attribution" metric.
-      const anonymous = r() < 0.06;
       const uaFrag = anonymous
         ? `"gram.hook.source": "${hookSource}"`
         : userAttrsJSONFragment(userIndex, hookSource);

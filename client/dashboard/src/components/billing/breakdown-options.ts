@@ -1,3 +1,4 @@
+import { unsetLabel } from "@/components/observe/account-display-utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import {
   BadgeCheck,
@@ -133,14 +134,15 @@ export function breakdownLabel(value: string): string {
 }
 
 // Display label for one breakdown row value: "" is observed traffic that
-// lacks the attribute, and project_id values are UUIDs mapped to project
-// names (a deleted project falls back to its raw id).
+// lacks the attribute ("(unset)", or "Team-wide account" on the user
+// dimension — see unsetLabel), and project_id values are UUIDs mapped to
+// project names (a deleted project falls back to its raw id).
 export function breakdownValueLabel(
   dimension: string,
   value: string,
   projectNames: Map<string, string>,
 ): string {
-  if (value === "") return "(unset)";
+  if (value === "") return unsetLabel(dimension as Dimension);
   if (dimension === Dimension.ProjectId) {
     return projectNames.get(value) ?? value;
   }

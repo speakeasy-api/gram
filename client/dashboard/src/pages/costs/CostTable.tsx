@@ -24,7 +24,7 @@ import {
   ESTIMATED_COST_TOOLTIP,
   isMeteredBilling,
 } from "@/components/estimated-cost-utils";
-import { isAttributionDim } from "./taxonomy";
+import { isAttributionDim, unsetLabel } from "./taxonomy";
 
 function formatCost(value: number): string {
   return `$${value.toLocaleString(undefined, {
@@ -102,8 +102,8 @@ const GREEN = "#10b981";
 const RED = "#f43f5e";
 const GREY = "#94a3b8";
 
-function displayValue(groupValue: string): string {
-  return groupValue === "" ? "(unset)" : groupValue;
+function displayValue(groupBy: Dimension, groupValue: string): string {
+  return groupValue === "" ? unsetLabel(groupBy) : groupValue;
 }
 
 // "" is the "(unset)" bucket — a real slice (everyone missing this attribute),
@@ -158,11 +158,12 @@ type Sort = { key: SortKey; dir: SortDir };
 function sortValue(
   row: QueryRow,
   key: SortKey,
+  groupBy: Dimension,
   seriesByGroup: Map<string, number[]>,
 ): number | string {
   switch (key) {
     case "name":
-      return displayValue(row.groupValue).toLowerCase();
+      return displayValue(groupBy, row.groupValue).toLowerCase();
     case "cost":
     // Share is cost ÷ a constant total, so it sorts identically to cost.
     case "share":
@@ -259,8 +260,8 @@ export function CostTable({
     const main = rows.filter((r) => r.groupValue !== "Other");
     const other = rows.filter((r) => r.groupValue === "Other");
     main.sort((a, b) => {
-      const av = sortValue(a, sort.key, seriesByGroup);
-      const bv = sortValue(b, sort.key, seriesByGroup);
+      const av = sortValue(a, sort.key, groupBy, seriesByGroup);
+      const bv = sortValue(b, sort.key, groupBy, seriesByGroup);
       const cmp =
         typeof av === "string"
           ? av.localeCompare(bv as string)
@@ -268,7 +269,7 @@ export function CostTable({
       return sort.dir === "asc" ? cmp : -cmp;
     });
     return [...main, ...other];
-  }, [rows, sort, seriesByGroup]);
+  }, [rows, sort, groupBy, seriesByGroup]);
 
   if (isLoading) return <SkeletonTable />;
 
@@ -448,7 +449,7 @@ export function CostTable({
                   />
                 )}
                 <span className="truncate font-medium">
-                  {displayValue(row.groupValue)}
+                  {displayValue(groupBy, row.groupValue)}
                 </span>
                 {drillable && (
                   <ChevronRight className="text-muted-foreground size-4 shrink-0" />
