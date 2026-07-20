@@ -88,6 +88,40 @@ func TestDrainReplaysOldestFirstWithStoredKeys(t *testing.T) {
 	}
 }
 
+func TestDrainReplaysEnrichedSkillMetadataWithoutUploadingContent(t *testing.T) {
+	drainEnv(t)
+	content := []byte("# Offline skill\n")
+	rawSHA256 := sha256Hex(content)
+	path := filepath.Join(t.TempDir(), ".claude", "skills", "offline", "SKILL.md")
+	capturedTasks := captureSkillUploadTasks(t)
+	fs := newFakeServer(t, nil)
+	fs.effects = requestedSkillCaptureEffects(true)
+	seedSpoolEntry(t, fs.URL, time.Hour, "sess-offline")
+
+	spoolPath := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gram", "hooks", "spool", spoolFiles(t)[0])
+	data, err := os.ReadFile(spoolPath)
+	require.NoError(t, err)
+	entry, err := decodeSpoolEntry(data)
+	require.NoError(t, err)
+	entry.Envelope.Data = activatedSkillPayload("offline").Data
+	entry.Envelope.Data.Skill.SourceLevel = new("project")
+	entry.Envelope.Data.Skill.SourcePath = new(path)
+	entry.Envelope.Data.Skill.RawSha256 = new(rawSHA256)
+	data, err = json.Marshal(entry)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(spoolPath, data, 0o600))
+
+	summary := Drain(t.Context())
+
+	require.Equal(t, 1, summary.Replayed)
+	require.Empty(t, capturedTasks())
+	replayed := fs.last().Data.Skill
+	require.Equal(t, "offline", replayed.Name)
+	require.Equal(t, "project", *replayed.SourceLevel)
+	require.Equal(t, path, *replayed.SourcePath)
+	require.Equal(t, rawSHA256, *replayed.RawSha256)
+}
+
 // TestDrainAbortsWhenServerStillDown pins backpressure: the first unsent
 // exchange stops the run and the backlog survives untouched.
 func TestDrainAbortsWhenServerStillDown(t *testing.T) {
