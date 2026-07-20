@@ -31,7 +31,13 @@ export function parseDotEnv(contents: string): DotEnvParseResult {
       continue;
     }
 
-    const [, key, rawValue] = assignment;
+    const key = assignment[1];
+    const rawValue = assignment[2];
+    if (key === undefined || rawValue === undefined) {
+      invalidLineNumbers.push(index + 1);
+      continue;
+    }
+
     const value = parseDotEnvValue(rawValue);
     if (value === null) {
       invalidLineNumbers.push(index + 1);
@@ -52,7 +58,10 @@ function parseDotEnvValue(rawValue: string): string | null {
     const quoted = trimmed.match(QUOTED_VALUE);
     if (!quoted) return null;
 
-    const [, quote, value] = quoted;
+    const quote = quoted[1];
+    const value = quoted[2];
+    if (quote === undefined || value === undefined) return null;
+
     return quote === '"'
       ? value.replaceAll("\\n", "\n").replaceAll("\\r", "\r")
       : value;
