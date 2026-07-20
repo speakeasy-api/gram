@@ -11,7 +11,7 @@ export type GetAgentPluginsSecurity = {
 
 export type GetAgentPluginsRequest = {
   /**
-   * Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+   * Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
    */
   email: string;
   /**

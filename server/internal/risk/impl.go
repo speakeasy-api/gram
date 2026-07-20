@@ -1307,12 +1307,22 @@ func redactMatch(source string, match *string, orgID string) string {
 	if source == shadowmcp.SourceShadowMCP || source == ra.SourceAccountIdentity {
 		return *match
 	}
+	return fingerprintRedactedMatch(orgID, *match)
+}
+
+// fingerprintRedactedMatch encodes match as `<redacted len=N sha=XXXXXXXX>`.
+// Unlike redactMatch it applies to every source with no shadow_mcp/
+// account_identity passthrough, so the ClickHouse writer can store a display
+// string without ever persisting a plaintext match or PII. The hash is salted
+// by orgID with a NUL separator so two orgs holding the same secret produce
+// different fingerprints, while staying deterministic within an org.
+func fingerprintRedactedMatch(orgID, match string) string {
 	var buf []byte
 	buf = append(buf, orgID...)
 	buf = append(buf, 0x00)
-	buf = append(buf, *match...)
+	buf = append(buf, match...)
 	sum := sha256.Sum256(buf)
-	return fmt.Sprintf("<redacted len=%d sha=%s>", len(*match), hex.EncodeToString(sum[:4]))
+	return fmt.Sprintf("<redacted len=%d sha=%s>", len(match), hex.EncodeToString(sum[:4]))
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
