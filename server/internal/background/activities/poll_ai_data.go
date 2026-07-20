@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -95,22 +97,93 @@ type PollAIDataInput struct {
 	EndTime  time.Time `json:"end_time"`
 }
 
+const PollAIDataInputPrefix = "urn:gram:ai-usage-poller:v1:"
+
+func EncodePollAIDataInput(configID uuid.UUID, schedule string, endTime time.Time) string {
+	return fmt.Sprintf("%s%s:%s:%d", PollAIDataInputPrefix, configID.String(), schedule, endTime.UTC().UnixNano())
+}
+
+func DecodePollAIDataInput(input string, workflowID string, fallbackEndTime time.Time) (PollAIDataInput, error) {
+	if !strings.HasPrefix(input, PollAIDataInputPrefix) {
+		if _, err := uuid.Parse(input); err != nil {
+			return PollAIDataInput{}, fmt.Errorf("parse legacy poll ai data config id: %w", err)
+		}
+		schedule, err := legacyScheduleFromWorkflowID(workflowID)
+		if err != nil {
+			return PollAIDataInput{}, err
+		}
+		return PollAIDataInput{
+			ConfigID: input,
+			Schedule: schedule,
+			EndTime:  fallbackEndTime.UTC(),
+		}, nil
+	}
+
+	parts := strings.Split(strings.TrimPrefix(input, PollAIDataInputPrefix), ":")
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return PollAIDataInput{}, fmt.Errorf("parse poll ai data input urn: invalid format")
+	}
+	if _, err := uuid.Parse(parts[0]); err != nil {
+		return PollAIDataInput{}, fmt.Errorf("parse poll ai data input config id: %w", err)
+	}
+	if err := validatePollAIDataSchedule(parts[1]); err != nil {
+		return PollAIDataInput{}, err
+	}
+	endTimeNanos, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		return PollAIDataInput{}, fmt.Errorf("parse poll ai data input end time: %w", err)
+	}
+	return PollAIDataInput{
+		ConfigID: parts[0],
+		Schedule: parts[1],
+		EndTime:  time.Unix(0, endTimeNanos).UTC(),
+	}, nil
+}
+
+func legacyScheduleFromWorkflowID(workflowID string) (string, error) {
+	parts := strings.Split(strings.TrimPrefix(workflowID, "v1:ai-usage-poller:"), ":")
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return "", fmt.Errorf("parse legacy poll ai data workflow id: invalid format")
+	}
+	if _, err := uuid.Parse(parts[1]); err != nil {
+		return "", fmt.Errorf("parse legacy poll ai data workflow id config id: %w", err)
+	}
+	if err := validatePollAIDataSchedule(parts[2]); err != nil {
+		return "", err
+	}
+	return parts[2], nil
+}
+
+func validatePollAIDataSchedule(schedule string) error {
+	switch schedule {
+	case aiintegrations.ScheduleCursor, aiintegrations.ScheduleAnthropicCompliance, aiintegrations.ScheduleAnthropicAnalyticsUsage, aiintegrations.ScheduleAnthropicAnalyticsCost:
+		return nil
+	default:
+		return fmt.Errorf("parse poll ai data input schedule: unsupported schedule %q", schedule)
+	}
+}
+
 // Do runs exactly one sync schedule. Temporal gives every schedule its own
 // workflow and retry budget, so a slow or failing schedule cannot block the
 // other schedules attached to the same integration config.
-func (p *PollAIData) Do(ctx context.Context, input PollAIDataInput) (err error) {
-	id, err := uuid.Parse(input.ConfigID)
+func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
+	decoded, err := DecodePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, time.Now().UTC())
+	if err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid ai integration usage poll input")
+	}
+
+	id, err := uuid.Parse(decoded.ConfigID)
 	if err != nil {
 		return oops.E(oops.CodeInvalid, err, "invalid ai integration config id")
 	}
-	if input.Schedule == "" {
+	if decoded.Schedule == "" {
 		return oops.E(oops.CodeInvalid, nil, "ai integration sync schedule is required")
 	}
-	if input.EndTime.IsZero() {
+	if decoded.EndTime.IsZero() {
 		return oops.E(oops.CodeInvalid, nil, "ai integration sync end time is required")
 	}
 
-	endTime := input.EndTime.UTC()
+	endTime := decoded.EndTime.UTC()
 	var cfg aiintegrations.Config
 	defer func() {
 		if err == nil {
@@ -128,7 +201,7 @@ func (p *PollAIData) Do(ctx context.Context, input PollAIDataInput) (err error) 
 			recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cancel()
 
-			if recordErr := p.integrations.RecordSchedulePollFailure(recordCtx, id, input.Schedule, endTime, err); recordErr != nil {
+			if recordErr := p.integrations.RecordSchedulePollFailure(recordCtx, id, decoded.Schedule, endTime, err); recordErr != nil {
 				err = errors.Join(err, fmt.Errorf("record ai integration schedule failure: %w", recordErr))
 			}
 		}
@@ -136,12 +209,12 @@ func (p *PollAIData) Do(ctx context.Context, input PollAIDataInput) (err error) 
 		err = newPollFailureError(id, cfg.Provider, attempt, nonRetryable, err)
 	}()
 
-	cfg, err = p.integrations.GetUsagePollConfig(ctx, id, input.Schedule)
+	cfg, err = p.integrations.GetUsagePollConfig(ctx, id, decoded.Schedule)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load ai integration configuration")
 	}
 
-	switch input.Schedule {
+	switch decoded.Schedule {
 	case aiintegrations.ScheduleCursor:
 		if cfg.Provider != aiintegrations.ProviderCursor {
 			return oops.E(oops.CodeInvalid, nil, "cursor schedule cannot run for provider %s", cfg.Provider)
@@ -153,7 +226,7 @@ func (p *PollAIData) Do(ctx context.Context, input PollAIDataInput) (err error) 
 			}
 			return oops.E(oops.CodeUnexpected, err, "fetch cursor usage window")
 		}
-		if err := p.integrations.RecordSchedulePollSuccess(ctx, id, input.Schedule, endTime); err != nil {
+		if err := p.integrations.RecordSchedulePollSuccess(ctx, id, decoded.Schedule, endTime); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "record cursor schedule success")
 		}
 	case aiintegrations.ScheduleAnthropicCompliance:
@@ -173,25 +246,25 @@ func (p *PollAIData) Do(ctx context.Context, input PollAIDataInput) (err error) 
 			}
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic compliance data")
 		}
-		if err := p.integrations.RecordUsagePollSuccess(ctx, id, input.Schedule, endTime, nextCursor); err != nil {
+		if err := p.integrations.RecordUsagePollSuccess(ctx, id, decoded.Schedule, endTime, nextCursor); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "record anthropic compliance schedule success")
 		}
 	case aiintegrations.ScheduleAnthropicAnalyticsUsage:
 		if err := p.analyticsUsagePoller.Sync(ctx, cfg, endTime); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic analytics usage")
 		}
-		if err := p.integrations.RecordSchedulePollSuccess(ctx, id, input.Schedule, endTime); err != nil {
+		if err := p.integrations.RecordSchedulePollSuccess(ctx, id, decoded.Schedule, endTime); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "record anthropic analytics usage success")
 		}
 	case aiintegrations.ScheduleAnthropicAnalyticsCost:
 		if err := p.analyticsCostPoller.Sync(ctx, cfg, endTime); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic analytics cost")
 		}
-		if err := p.integrations.RecordSchedulePollSuccess(ctx, id, input.Schedule, endTime); err != nil {
+		if err := p.integrations.RecordSchedulePollSuccess(ctx, id, decoded.Schedule, endTime); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "record anthropic analytics cost success")
 		}
 	default:
-		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration sync schedule: %s", input.Schedule)
+		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration sync schedule: %s", decoded.Schedule)
 	}
 	return nil
 }

@@ -328,7 +328,7 @@ func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input acti
 	return candidates, nil
 }
 
-func (a *Activities) PollAIData(ctx context.Context, input activities.PollAIDataInput) error {
+func (a *Activities) PollAIData(ctx context.Context, input string) error {
 	return a.pollAIData.Do(ctx, input)
 }
 

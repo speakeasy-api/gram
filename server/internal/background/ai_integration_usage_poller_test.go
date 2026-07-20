@@ -38,7 +38,7 @@ func TestAIUsagePollerCadenceAndRetryConfig(t *testing.T) {
 	require.Equal(t, 5, activities.PollUsageMaxAttempts)
 }
 
-func TestAIUsagePollerWorkflowAcceptsObjectInput(t *testing.T) {
+func TestAIUsagePollerWorkflowAcceptsEncodedStringInput(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
@@ -56,17 +56,54 @@ func TestAIUsagePollerWorkflowAcceptsObjectInput(t *testing.T) {
 
 	var actual activities.PollAIDataInput
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input activities.PollAIDataInput) error {
-			actual = input
+		func(ctx context.Context, input string) error {
+			decoded, err := activities.DecodePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, time.Time{})
+			require.NoError(t, err)
+			actual = decoded
 			return nil
 		},
 		activity.RegisterOptions{Name: "PollAIData"},
 	)
 
-	env.ExecuteWorkflow("AIUsagePollerWorkflow", AIUsagePollerWorkflowInput{
+	env.ExecuteWorkflow("AIUsagePollerWorkflow", activities.EncodePollAIDataInput(configID, schedule, start))
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, activities.PollAIDataInput{
 		ConfigID: configID.String(),
 		Schedule: schedule,
+		EndTime:  start,
+	}, actual)
+}
+
+func TestAIUsagePollerWorkflowAcceptsLegacyStringInput(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	start := time.Date(2026, 7, 16, 20, 0, 0, 0, time.UTC)
+	env.SetStartTime(start)
+
+	configID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	schedule := aiintegrations.ScheduleAnthropicCompliance
+	env.SetStartWorkflowOptions(client.StartWorkflowOptions{
+		ID:        buildAIUsagePollerWorkflowID("acme", configID, schedule),
+		TaskQueue: "test-task-queue",
 	})
+	env.RegisterWorkflow(AIUsagePollerWorkflow)
+
+	var actual activities.PollAIDataInput
+	env.RegisterActivityWithOptions(
+		func(ctx context.Context, input string) error {
+			decoded, err := activities.DecodePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, start)
+			require.NoError(t, err)
+			actual = decoded
+			return nil
+		},
+		activity.RegisterOptions{Name: "PollAIData"},
+	)
+
+	env.ExecuteWorkflow("AIUsagePollerWorkflow", configID.String())
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
@@ -169,10 +206,12 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 
 	var synced []string
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input activities.PollAIDataInput) error {
-			require.Equal(t, aiintegrations.ScheduleCursor, input.Schedule)
-			require.Equal(t, start, input.EndTime)
-			synced = append(synced, input.ConfigID)
+		func(ctx context.Context, input string) error {
+			decoded, err := activities.DecodePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, time.Time{})
+			require.NoError(t, err)
+			require.Equal(t, aiintegrations.ScheduleCursor, decoded.Schedule)
+			require.Equal(t, start, decoded.EndTime)
+			synced = append(synced, decoded.ConfigID)
 			return nil
 		},
 		activity.RegisterOptions{Name: "PollAIData"},
@@ -245,12 +284,14 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 	attemptsByConfigID := map[string]int{}
 	var synced []string
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input activities.PollAIDataInput) error {
-			attemptsByConfigID[input.ConfigID]++
-			if input.ConfigID == failedCandidate.ID.String() {
+		func(ctx context.Context, input string) error {
+			decoded, err := activities.DecodePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, time.Time{})
+			require.NoError(t, err)
+			attemptsByConfigID[decoded.ConfigID]++
+			if decoded.ConfigID == failedCandidate.ID.String() {
 				return errors.New("cursor API unavailable")
 			}
-			synced = append(synced, input.ConfigID)
+			synced = append(synced, decoded.ConfigID)
 			return nil
 		},
 		activity.RegisterOptions{Name: "PollAIData"},
@@ -308,8 +349,10 @@ func TestAIUsagePollerCoordinatorStartsIndependentWorkflowsForConfigSchedules(t 
 
 	var schedules []string
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input activities.PollAIDataInput) error {
-			schedules = append(schedules, input.Schedule)
+		func(ctx context.Context, input string) error {
+			decoded, err := activities.DecodePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, time.Time{})
+			require.NoError(t, err)
+			schedules = append(schedules, decoded.Schedule)
 			return nil
 		},
 		activity.RegisterOptions{Name: "PollAIData"},

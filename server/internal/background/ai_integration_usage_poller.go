@@ -95,10 +95,7 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 				WaitForCancellation:   true,
 			})
 
-			child := workflow.ExecuteChildWorkflow(childCtx, AIUsagePollerWorkflow, AIUsagePollerWorkflowInput{
-				ConfigID: candidate.ID.String(),
-				Schedule: candidate.Schedule,
-			})
+			child := workflow.ExecuteChildWorkflow(childCtx, AIUsagePollerWorkflow, activities.EncodePollAIDataInput(candidate.ID, candidate.Schedule, workflow.Now(ctx).UTC()))
 			if err := child.GetChildWorkflowExecution().Get(ctx, nil); err != nil {
 				if !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
 					return fmt.Errorf("start poller child: %w", err)
@@ -132,12 +129,7 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 	return nil
 }
 
-type AIUsagePollerWorkflowInput struct {
-	ConfigID string `json:"ConfigID"`
-	Schedule string `json:"Schedule"`
-}
-
-func AIUsagePollerWorkflow(ctx workflow.Context, input AIUsagePollerWorkflowInput) error {
+func AIUsagePollerWorkflow(ctx workflow.Context, input string) error {
 	taskQueue := AIUsagePollerTaskQueue(tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName))
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		TaskQueue:              taskQueue,
@@ -153,12 +145,8 @@ func AIUsagePollerWorkflow(ctx workflow.Context, input AIUsagePollerWorkflowInpu
 	})
 
 	var a *Activities
-	if err := workflow.ExecuteActivity(ctx, a.PollAIData, activities.PollAIDataInput{
-		ConfigID: input.ConfigID,
-		Schedule: input.Schedule,
-		EndTime:  workflow.Now(ctx).UTC(),
-	}).Get(ctx, nil); err != nil {
-		return fmt.Errorf("poll and persist ai integration schedule %s: %w", input.Schedule, err)
+	if err := workflow.ExecuteActivity(ctx, a.PollAIData, input).Get(ctx, nil); err != nil {
+		return fmt.Errorf("poll and persist ai integration usage: %w", err)
 	}
 
 	return nil
@@ -177,10 +165,7 @@ func (p *TemporalAIUsagePoller) Poll(ctx context.Context, organizationSlug strin
 		ID:                    buildAIUsagePollerWorkflowID(organizationSlug, configID, schedule),
 		TaskQueue:             string(p.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-	}, AIUsagePollerWorkflow, AIUsagePollerWorkflowInput{
-		ConfigID: configID.String(),
-		Schedule: schedule,
-	})
+	}, AIUsagePollerWorkflow, activities.EncodePollAIDataInput(configID, schedule, time.Now().UTC()))
 	return err
 }
 
