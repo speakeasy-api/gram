@@ -1,0 +1,95 @@
+client/dashboard/src/pages/security/cel-highlight.tsx
+  s_09e46b15ddbad6::t_0daefa1cb68c7b 1-2,6
+client/dashboard/src/pages/security/DetectionRules.tsx
+  s_09e46b15ddbad6::t_7cc7f4dd18f317 55
+  s_09e46b15ddbad6::t_468007150c8a23 56
+  s_09e46b15ddbad6::t_77ec484a50ffdc 593
+  s_09e46b15ddbad6::t_688934592c4af3 1436-1438
+  s_09e46b15ddbad6::t_8c1f76d57718a9 584-587
+  s_09e46b15ddbad6::t_f63466d010f136 1425-1430
+  s_09e46b15ddbad6::t_8e2755b158138a 1439
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_09e46b15ddbad6::t_4e01ea457ea17b 1507,1513-1515,1523-1526,1528,1530-1535,1537,1542-1543,1548,1553,1561,1573-1584
+  s_09e46b15ddbad6::t_fcd9abc233cf06 1479
+  s_09e46b15ddbad6::t_a1d652f8001c0f 50
+  s_09e46b15ddbad6::t_2d03eee949249b 1415-1429
+  s_09e46b15ddbad6::t_9e4842df0dbf44 1326-1327
+  s_09e46b15ddbad6::t_26ff6f3ad06613 1408
+  s_09e46b15ddbad6::t_cea558f7fe660f 1140-1146
+  s_09e46b15ddbad6::t_1a445ed3a53d32 1480
+  s_09e46b15ddbad6::t_7819809fb5fa02 1211-1273,1296,1491
+  s_09e46b15ddbad6::t_8c764322fb2ce9 1147,1487,1503-1506,1508-1512,1516-1522,1527,1529,1536,1538-1541,1544-1547,1549-1552,1554-1560,1562-1572
+  s_09e46b15ddbad6::t_a0a1bf2133fb5f 99
+  s_09e46b15ddbad6::t_d4ccce87e59d53 98
+  s_09e46b15ddbad6::t_554623c2417326 100-101
+  s_09e46b15ddbad6::t_30310e807c886a 1433,1437-1439,1441,1443
+  s_09e46b15ddbad6::t_60ffc73f01e674 1434-1436,1440,1444-1446
+  s_09e46b15ddbad6::t_e3ae0bf6460460 1274-1295
+  s_09e46b15ddbad6::t_8376d847a11803 1474-1478,1481-1484
+  s_09e46b15ddbad6::t_87accf114ab4bf 1148,1297,1351-1352,1394,1449-1451,1463,1485,1488-1490,1492-1502
+client/dashboard/src/pages/security/cel-examples.json
+  s_09e46b15ddbad6::t_0410446fe2be7c 1-45
+client/dashboard/tsconfig.app.json
+  s_09e46b15ddbad6::t_3787dd448a67f0 13
+client/dashboard/src/pages/security/cel-sample.ts
+  s_09e46b15ddbad6::t_ba0bd559199c31 54-66
+  s_09e46b15ddbad6::t_8afe5ee5235d79 1-53,67-127
+client/dashboard/src/pages/security/policy-form.ts
+  s_09e46b15ddbad6::t_273121cf9775d7 222-225,229-230
+  s_09e46b15ddbad6::t_fdaadd8502357b 1
+client/dashboard/src/pages/security/cel-reference.tsx
+  s_09e46b15ddbad6::t_5263402a1cad90 1-8,10-16,18-22,29-30,32-137
+  s_09e46b15ddbad6::t_335b180700bd93 17,23-28,31
+  s_09e46b15ddbad6::t_da1eb642ec0690 9
+client/dashboard/src/pages/security/cel-traffic-preview.tsx
+  s_09e46b15ddbad6::t_e9c259146f5812 295-297
+  s_09e46b15ddbad6::t_ec8f4abd039fad 102,109-110
+  s_09e46b15ddbad6::t_76d6d8d2784cc1 45,47-50
+  s_09e46b15ddbad6::t_819159b6771c3a 1,8-9,11-14,16,18-22,25-39,42-43,46,51,56,60,65,68-75,77-98,106-108,111-117,120,125,130,132-135,147-148,167-168,170,173,216,246,249-250,255,267-268,271-272,274-275,277,281-282,284,286-290,300-303,307,309-312,356,360-362,375
+  s_09e46b15ddbad6::t_aba653ce571792 2-7,15,52-55,76,136,169,174-178,180-206,208-215,217-227,234,236-245,247-248,251-254,278,291
+  s_09e46b15ddbad6::t_1071c4e6b8ca71 99-101,103-105,118-119
+  s_09e46b15ddbad6::t_417973ed762749 207
+  s_09e46b15ddbad6::t_3daa6525e2f5b9 10,283
+  s_09e46b15ddbad6::t_119e269843143e 179
+  s_09e46b15ddbad6::t_9cd9bad8cac714 23-24,40-41,44,57-59,61-64,66-67,121-124,126-129,131,137-146,149-150,152-155,157-165,171-172,256-266,273,276,292,304-306,308,322-323,348,354-355,357-359,363-374
+  s_09e46b15ddbad6::t_bb2a470ca8148e 269-270,279-280,285,293-294,298-299,313-321,324-347,349-353
+  s_09e46b15ddbad6::t_8f5cc55ed6c163 228-233,235
+  s_09e46b15ddbad6::t_83c6abe17966bb 151,156,166
+  s_09e46b15ddbad6::t_f9c18fe1ebf085 17
+server/internal/risk/celenv/dashboard_examples_test.go
+  s_09e46b15ddbad6::t_c448f4d020c501 46,49,52
+  s_09e46b15ddbad6::t_a166b1475432e7 1-45,47-48,50-51,53-55,58-59
+  s_09e46b15ddbad6::t_31502b198fb4b0 56-57
+client/dashboard/src/pages/security/detection-rules-data.ts
+  s_09e46b15ddbad6::t_5e00e21086d8f1 9
+  s_09e46b15ddbad6::t_846484bdb1190c 317-321
+client/dashboard/src/pages/security/cel-field.tsx
+  s_09e46b15ddbad6::t_2a7107c1d7c233 85-86
+  s_09e46b15ddbad6::t_f192a6bf480415 1-2
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_09e46b15ddbad6::t_d1b7f9b309efe2 825
+client/dashboard/src/sdk/src/models/components/createriskpolicyrequestbody.ts
+  s_09e46b15ddbad6::t_5b2a6cf10ee578 8-12,82,84,161,190,213
+client/dashboard/src/sdk/src/models/components/riskdetectionscope.ts
+  s_09e46b15ddbad6::t_bd6f652f736d55 1-83
+client/dashboard/src/sdk/src/models/components/riskpolicy.ts
+  s_09e46b15ddbad6::t_48ba35b7143365 11-14,87,89,201,234
+client/dashboard/src/sdk/src/models/components/updateriskpolicyrequestbody.ts
+  s_09e46b15ddbad6::t_4116746b5f3fbc 8-12,74,76,151,182,205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "ea9d99b9b51293d6bf952abc4236978b5410fbad",
+  "prompts": {},
+  "sessions": {
+    "s_09e46b15ddbad6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ac4e8538-3450-4bb8-926b-387012d62634",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
