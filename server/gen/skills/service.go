@@ -42,12 +42,12 @@ type Service interface {
 	// feature and skill write scope. Repeated requests for the same skill succeed
 	// without creating another state transition.
 	Archive(context.Context, *ArchivePayload) (err error)
-	// Create or update the active distribution of a skill to a plugin. Repeating
-	// the request for the same skill and plugin updates the version pin or is a
-	// no-op.
+	// Create or update the active distribution of a skill to exactly one plugin or
+	// assistant. Repeating the request for the same target updates the version pin
+	// or is a no-op.
 	Distribute(context.Context, *DistributePayload) (res *types.SkillDistribution, err error)
-	// Revoke a skill's active distribution to a plugin. Repeated requests are a
-	// no-op.
+	// Revoke a skill's active distribution to exactly one plugin or assistant.
+	// Repeated requests are a no-op.
 	Undistribute(context.Context, *UndistributePayload) (err error)
 	// List active plugin skill distributions for the current project.
 	ListDistributions(context.Context, *ListDistributionsPayload) (res *ListSkillDistributionsResult, err error)
@@ -113,7 +113,9 @@ type DistributePayload struct {
 	// The skill ID.
 	ID string
 	// The plugin that carries the skill.
-	PluginID string
+	PluginID *string
+	// The assistant that carries the skill.
+	AssistantID *string
 	// An optional valid version to pin instead of tracking the latest valid
 	// version.
 	PinnedVersionID  *string
@@ -143,6 +145,8 @@ type GetSkillResult struct {
 	SightingTimeline []*SkillSightingTimelinePoint
 	// Active-machine version convergence.
 	Drift *SkillDrift
+	// The number of active, non-deleted assistants using the skill.
+	AssistantCount int64
 }
 
 // ListDistributionsPayload is the payload type of the skills service
@@ -175,8 +179,8 @@ type ListPayload struct {
 // ListSkillDistributionsResult is the result type of the skills service
 // listDistributions method.
 type ListSkillDistributionsResult struct {
-	// The active skill distributions in this page.
-	Distributions []*types.SkillDistribution
+	// The active plugin skill distributions in this page.
+	Distributions []*types.PluginSkillDistribution
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string
 }
@@ -294,7 +298,9 @@ type UndistributePayload struct {
 	// The skill ID.
 	ID string
 	// The plugin the skill was distributed to.
-	PluginID         string
+	PluginID *string
+	// The assistant the skill was distributed to.
+	AssistantID      *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

@@ -14492,8 +14492,8 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-unknown-activations: List terminal skill activations that could not be attributed to a skill version.`)
 	fmt.Fprintln(os.Stderr, `    list-versions: List immutable versions of an active skill, newest first. The implementation requires the skills product feature and skill read scope.`)
 	fmt.Fprintln(os.Stderr, `    archive: Idempotently archive a skill. The implementation requires the skills product feature and skill write scope. Repeated requests for the same skill succeed without creating another state transition.`)
-	fmt.Fprintln(os.Stderr, `    distribute: Create or update the active distribution of a skill to a plugin. Repeating the request for the same skill and plugin updates the version pin or is a no-op.`)
-	fmt.Fprintln(os.Stderr, `    undistribute: Revoke a skill's active distribution to a plugin. Repeated requests are a no-op.`)
+	fmt.Fprintln(os.Stderr, `    distribute: Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.`)
+	fmt.Fprintln(os.Stderr, `    undistribute: Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.`)
 	fmt.Fprintln(os.Stderr, `    list-distributions: List active plugin skill distributions for the current project.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -14686,7 +14686,7 @@ func skillsDistributeUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create or update the active distribution of a skill to a plugin. Repeating the request for the same skill and plugin updates the version pin or is a no-op.`)
+	fmt.Fprintln(os.Stderr, `Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -14696,7 +14696,7 @@ func skillsDistributeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills distribute --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"pinned_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills distribute --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440001\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsUndistributeUsage() {
@@ -14710,7 +14710,7 @@ func skillsUndistributeUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Revoke a skill's active distribution to a plugin. Repeated requests are a no-op.`)
+	fmt.Fprintln(os.Stderr, `Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -14720,7 +14720,7 @@ func skillsUndistributeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills undistribute --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills undistribute --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440001\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsListDistributionsUsage() {

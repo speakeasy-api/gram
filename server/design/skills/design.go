@@ -233,13 +233,14 @@ var _ = Service("skills", func() {
 	})
 
 	Method("distribute", func() {
-		Description("Create or update the active distribution of a skill to a plugin. Repeating the request for the same skill and plugin updates the version pin or is a no-op.")
+		Description("Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.")
 
 		Payload(func() {
 			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
 			Attribute("plugin_id", String, "The plugin that carries the skill.", func() { Format(FormatUUID) })
+			Attribute("assistant_id", String, "The assistant that carries the skill.", func() { Format(FormatUUID) })
 			Attribute("pinned_version_id", String, "An optional valid version to pin instead of tracking the latest valid version.", func() { Format(FormatUUID) })
-			Required("id", "plugin_id")
+			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -262,12 +263,13 @@ var _ = Service("skills", func() {
 	})
 
 	Method("undistribute", func() {
-		Description("Revoke a skill's active distribution to a plugin. Repeated requests are a no-op.")
+		Description("Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.")
 
 		Payload(func() {
 			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
 			Attribute("plugin_id", String, "The plugin the skill was distributed to.", func() { Format(FormatUUID) })
-			Required("id", "plugin_id")
+			Attribute("assistant_id", String, "The assistant the skill was distributed to.", func() { Format(FormatUUID) })
+			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -356,8 +358,13 @@ var DistributeSkillRequestBody = Type("DistributeSkillRequestBody", func() {
 
 	Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
 	Attribute("plugin_id", String, "The plugin that carries the skill.", func() { Format(FormatUUID) })
+	Attribute("assistant_id", String, "The assistant that carries the skill.", func() { Format(FormatUUID) })
 	Attribute("pinned_version_id", String, "An optional valid version to pin instead of tracking the latest valid version.", func() { Format(FormatUUID) })
-	Required("id", "plugin_id")
+	Required("id")
+	Example(Val{
+		"id":        "550e8400-e29b-41d4-a716-446655440000",
+		"plugin_id": "550e8400-e29b-41d4-a716-446655440001",
+	})
 })
 
 var UndistributeSkillRequestBody = Type("UndistributeSkillRequestBody", func() {
@@ -365,7 +372,12 @@ var UndistributeSkillRequestBody = Type("UndistributeSkillRequestBody", func() {
 
 	Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
 	Attribute("plugin_id", String, "The plugin the skill was distributed to.", func() { Format(FormatUUID) })
-	Required("id", "plugin_id")
+	Attribute("assistant_id", String, "The assistant the skill was distributed to.", func() { Format(FormatUUID) })
+	Required("id")
+	Example(Val{
+		"id":        "550e8400-e29b-41d4-a716-446655440000",
+		"plugin_id": "550e8400-e29b-41d4-a716-446655440001",
+	})
 })
 
 var SkillValidationError = Type("SkillValidationError", func() {
@@ -486,6 +498,29 @@ var UnknownSkillActivation = Type("UnknownSkillActivation", func() {
 
 var SkillDistribution = Type("SkillDistribution", func() {
 	Meta("struct:pkg:path", "types")
+	Description("An active plugin or assistant distribution of a project skill.")
+
+	Attribute("id", String, "The distribution ID.", func() { Format(FormatUUID) })
+	Attribute("project_id", String, "The project that owns the distribution.", func() { Format(FormatUUID) })
+	Attribute("skill_id", String, "The distributed skill ID.", func() { Format(FormatUUID) })
+	Attribute("skill_name", String, "The canonical name of the distributed skill.")
+	Attribute("skill_display_name", String, "The display name of the distributed skill.")
+	Attribute("plugin_id", String, "The plugin that carries the skill.", func() { Format(FormatUUID) })
+	Attribute("plugin_name", String, "The name of the plugin that carries the skill.")
+	Attribute("assistant_id", String, "The assistant that carries the skill.", func() { Format(FormatUUID) })
+	Attribute("assistant_name", String, "The name of the assistant that carries the skill.")
+	Attribute("pinned_version_id", String, "The pinned version, absent when tracking the latest valid version.", func() { Format(FormatUUID) })
+	Attribute("resolved_version_id", String, "The version currently targeted by this distribution.", func() { Format(FormatUUID) })
+	Attribute("channel", String, "The distribution channel.", func() { Enum("plugin", "assistant") })
+	Attribute("created_by_user_id", String, "The user that created the distribution.")
+	Attribute("created_at", String, "When the distribution was created.", func() { Format(FormatDateTime) })
+	Attribute("updated_at", String, "When the distribution configuration last changed.", func() { Format(FormatDateTime) })
+
+	Required("id", "project_id", "skill_id", "skill_name", "skill_display_name", "resolved_version_id", "channel", "created_by_user_id", "created_at", "updated_at")
+})
+
+var PluginSkillDistribution = Type("PluginSkillDistribution", func() {
+	Meta("struct:pkg:path", "types")
 	Description("An active plugin distribution of a project skill.")
 
 	Attribute("id", String, "The distribution ID.", func() { Format(FormatUUID) })
@@ -508,7 +543,7 @@ var SkillDistribution = Type("SkillDistribution", func() {
 var ListSkillDistributionsResult = Type("ListSkillDistributionsResult", func() {
 	Description("A page of active plugin skill distributions for the current project.")
 
-	Attribute("distributions", ArrayOf(SkillDistribution), "The active skill distributions in this page.")
+	Attribute("distributions", ArrayOf(PluginSkillDistribution), "The active plugin skill distributions in this page.")
 	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
 	Required("distributions")
 })
@@ -531,7 +566,8 @@ var GetSkillResult = Type("GetSkillResult", func() {
 	Attribute("adoption", SkillAdoption, "Activation adoption metrics.")
 	Attribute("sighting_timeline", ArrayOf(SkillSightingTimelinePoint), "Daily activations in the adoption window.")
 	Attribute("drift", SkillDrift, "Active-machine version convergence.")
-	Required("skill", "adoption", "sighting_timeline", "drift")
+	Attribute("assistant_count", Int64, "The number of active, non-deleted assistants using the skill.")
+	Required("skill", "adoption", "sighting_timeline", "drift", "assistant_count")
 })
 
 var ListSkillsResult = Type("ListSkillsResult", func() {

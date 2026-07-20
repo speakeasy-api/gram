@@ -32290,7 +32290,7 @@ paths:
                 name: CreateSkill
     /rpc/skills.distribute:
         post:
-            description: Create or update the active distribution of a skill to a plugin. Repeating the request for the same skill and plugin updates the version pin or is a no-op.
+            description: Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.
             operationId: distributeSkill
             parameters:
                 - allowEmptyValue: true
@@ -32317,6 +32317,9 @@ paths:
             requestBody:
                 content:
                     application/json:
+                        example:
+                            id: 550e8400-e29b-41d4-a716-446655440000
+                            plugin_id: 550e8400-e29b-41d4-a716-446655440001
                         schema:
                             $ref: '#/components/schemas/DistributeSkillRequestBody'
                 required: true
@@ -33022,7 +33025,7 @@ paths:
                 name: SkillVersions
     /rpc/skills.undistribute:
         post:
-            description: Revoke a skill's active distribution to a plugin. Repeated requests are a no-op.
+            description: Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.
             operationId: undistributeSkill
             parameters:
                 - allowEmptyValue: true
@@ -33049,6 +33052,9 @@ paths:
             requestBody:
                 content:
                     application/json:
+                        example:
+                            id: 550e8400-e29b-41d4-a716-446655440000
+                            plugin_id: 550e8400-e29b-41d4-a716-446655440001
                         schema:
                             $ref: '#/components/schemas/UndistributeSkillRequestBody'
                 required: true
@@ -42845,6 +42851,11 @@ components:
                     type: string
                     description: The project ID owning the assistant.
                     format: uuid
+                skills:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AssistantSkillRef'
+                    description: Skills attached to the assistant.
                 status:
                     type: string
                     description: The assistant status.
@@ -42872,6 +42883,7 @@ components:
                 - instructions
                 - toolsets
                 - mcp_servers
+                - skills
                 - warm_ttl_seconds
                 - max_concurrency
                 - status
@@ -42947,6 +42959,24 @@ components:
                 - updated_at
                 - last_access
                 - valid_at
+        AssistantSkillRef:
+            type: object
+            properties:
+                pinned_version_id:
+                    type: string
+                    description: The pinned version, absent when tracking latest valid.
+                    format: uuid
+                resolved_version_id:
+                    type: string
+                    description: The currently resolved valid version.
+                    format: uuid
+                skill_id:
+                    type: string
+                    description: The attached skill ID.
+                    format: uuid
+            required:
+                - skill_id
+                - resolved_version_id
         AssistantToolsetRef:
             type: object
             properties:
@@ -46194,6 +46224,10 @@ components:
         DistributeSkillRequestBody:
             type: object
             properties:
+                assistant_id:
+                    type: string
+                    description: The assistant that carries the skill.
+                    format: uuid
                 id:
                     type: string
                     description: The skill ID.
@@ -46206,9 +46240,11 @@ components:
                     type: string
                     description: The plugin that carries the skill.
                     format: uuid
+            example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                plugin_id: 550e8400-e29b-41d4-a716-446655440001
             required:
                 - id
-                - plugin_id
         EmployeeDataFlowEdge:
             type: object
             properties:
@@ -47929,6 +47965,10 @@ components:
             properties:
                 adoption:
                     $ref: '#/components/schemas/SkillAdoption'
+                assistant_count:
+                    type: integer
+                    description: The number of active, non-deleted assistants using the skill.
+                    format: int64
                 drift:
                     $ref: '#/components/schemas/SkillDrift'
                 latest_version:
@@ -47946,6 +47986,7 @@ components:
                 - adoption
                 - sighting_timeline
                 - drift
+                - assistant_count
         GetToolUsageFilterOptionsPayload:
             type: object
             properties:
@@ -49876,8 +49917,8 @@ components:
                 distributions:
                     type: array
                     items:
-                        $ref: '#/components/schemas/SkillDistribution'
-                    description: The active skill distributions in this page.
+                        $ref: '#/components/schemas/PluginSkillDistribution'
+                    description: The active plugin skill distributions in this page.
                 next_cursor:
                     type: string
                     description: Cursor for the next page; absent when exhausted.
@@ -51983,6 +52024,72 @@ components:
                 - policy
                 - sort_order
                 - created_at
+        PluginSkillDistribution:
+            type: object
+            properties:
+                channel:
+                    type: string
+                    description: The distribution channel.
+                    enum:
+                        - plugin
+                created_at:
+                    type: string
+                    description: When the distribution was created.
+                    format: date-time
+                created_by_user_id:
+                    type: string
+                    description: The user that created the distribution.
+                id:
+                    type: string
+                    description: The distribution ID.
+                    format: uuid
+                pinned_version_id:
+                    type: string
+                    description: The pinned version, absent when tracking the latest valid version.
+                    format: uuid
+                plugin_id:
+                    type: string
+                    description: The plugin that carries the skill.
+                    format: uuid
+                plugin_name:
+                    type: string
+                    description: The name of the plugin that carries the skill.
+                project_id:
+                    type: string
+                    description: The project that owns the distribution.
+                    format: uuid
+                resolved_version_id:
+                    type: string
+                    description: The version currently targeted by this distribution.
+                    format: uuid
+                skill_display_name:
+                    type: string
+                    description: The display name of the distributed skill.
+                skill_id:
+                    type: string
+                    description: The distributed skill ID.
+                    format: uuid
+                skill_name:
+                    type: string
+                    description: The canonical name of the distributed skill.
+                updated_at:
+                    type: string
+                    description: When the distribution configuration last changed.
+                    format: date-time
+            description: An active plugin distribution of a project skill.
+            required:
+                - id
+                - project_id
+                - skill_id
+                - skill_name
+                - skill_display_name
+                - plugin_id
+                - plugin_name
+                - resolved_version_id
+                - channel
+                - created_by_user_id
+                - created_at
+                - updated_at
         Project:
             type: object
             properties:
@@ -56124,11 +56231,19 @@ components:
         SkillDistribution:
             type: object
             properties:
+                assistant_id:
+                    type: string
+                    description: The assistant that carries the skill.
+                    format: uuid
+                assistant_name:
+                    type: string
+                    description: The name of the assistant that carries the skill.
                 channel:
                     type: string
                     description: The distribution channel.
                     enum:
                         - plugin
+                        - assistant
                 created_at:
                     type: string
                     description: When the distribution was created.
@@ -56173,15 +56288,13 @@ components:
                     type: string
                     description: When the distribution configuration last changed.
                     format: date-time
-            description: An active plugin distribution of a project skill.
+            description: An active plugin or assistant distribution of a project skill.
             required:
                 - id
                 - project_id
                 - skill_id
                 - skill_name
                 - skill_display_name
-                - plugin_id
-                - plugin_name
                 - resolved_version_id
                 - channel
                 - created_by_user_id
@@ -58508,6 +58621,10 @@ components:
         UndistributeSkillRequestBody:
             type: object
             properties:
+                assistant_id:
+                    type: string
+                    description: The assistant the skill was distributed to.
+                    format: uuid
                 id:
                     type: string
                     description: The skill ID.
@@ -58516,9 +58633,11 @@ components:
                     type: string
                     description: The plugin the skill was distributed to.
                     format: uuid
+            example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                plugin_id: 550e8400-e29b-41d4-a716-446655440001
             required:
                 - id
-                - plugin_id
         UnknownSkillActivation:
             type: object
             properties:

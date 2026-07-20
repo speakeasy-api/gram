@@ -117,6 +117,13 @@ func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool
 	}
 }
 
+// AssistantSkillTools returns the always-on attached-skill loader.
+func AssistantSkillTools(db *pgxpool.Pool) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformskills.NewLoadTool(db), RequiredFeature: ""},
+	}
+}
+
 // TriggerExternalTools returns the assistant self-config trigger tools
 // (list + configure). Both variants pin target_kind/target_ref to the calling
 // assistant principal and strip those fields from the schema so the LLM

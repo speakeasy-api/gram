@@ -43,6 +43,7 @@ type SkillDistributionSnapshot struct {
 	ProjectID         string
 	SkillID           string
 	PluginID          *string
+	AssistantID       *string
 	PinnedVersionID   *string
 	ResolvedVersionID string
 	Channel           string
