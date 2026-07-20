@@ -1,0 +1,22 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+message PromptPolicyAnalyzer {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.risk.v1.PromptPolicyAnalysis"
+    ack_deadline: {seconds: 60}
+    retention: {
+      seconds: 604800 /* 7 days */
+    }
+    retain_acked_messages: true
+    retry_policy: {
+      minimum_backoff: {seconds: 10}
+      maximum_backoff: {seconds: 600}
+    }
+  };
+}

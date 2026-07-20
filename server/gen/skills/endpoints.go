@@ -91,7 +91,7 @@ func NewCreateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -150,7 +150,7 @@ func NewAddVersionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -209,7 +209,7 @@ func NewListEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -268,7 +268,7 @@ func NewGetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoin
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -327,7 +327,7 @@ func NewListUnknownActivationsEndpoint(s Service, authAPIKeyFn security.AuthAPIK
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -386,7 +386,7 @@ func NewListVersionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -445,7 +445,7 @@ func NewArchiveEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -504,7 +504,7 @@ func NewDistributeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -563,7 +563,7 @@ func NewUndistributeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -622,7 +622,7 @@ func NewListDistributionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
