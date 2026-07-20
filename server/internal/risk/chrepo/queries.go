@@ -48,6 +48,18 @@ type RiskFindingRow struct {
 	ExclusionID *uuid.UUID `ch:"exclusion_id"`
 }
 
+// chNullable maps a nil pointer to an untyped nil interface so a Nullable
+// ClickHouse column binds as NULL. Passing a typed-nil pointer straight through
+// would reach the driver as a non-nil interface, and for types implementing
+// driver.Valuer (e.g. uuid.UUID) the driver would call Value() on the nil
+// pointer and panic. A non-nil pointer binds as its dereferenced value.
+func chNullable[T any](p *T) any {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
 // InsertRiskFindings writes findings using a server-side async insert
 // (async_insert=1, wait_for_async_insert=0). The call is fire-and-forget from
 // CH's perspective: it acks once the rows are queued in CH's async insert
@@ -115,8 +127,13 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			row.FingerprintPepperVersion,
 			row.FingerprintGlobalHS256,
 			row.FingerprintTenantHS256,
-			row.ExcludedAt,
-			row.ExclusionID,
+			// Bind the Nullable columns as untyped nil when absent. A typed-nil
+			// pointer (e.g. (*uuid.UUID)(nil)) reaches the driver as a non-nil
+			// interface, and the driver calls Value() on it — which panics for
+			// uuid.UUID. chNullable collapses a nil pointer to a nil interface so
+			// the column binds as NULL.
+			chNullable(row.ExcludedAt),
+			chNullable(row.ExclusionID),
 		)
 	}
 
