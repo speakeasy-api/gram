@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -442,6 +443,131 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.Empty(t, totalResult.Table[0].GroupValue)
 	require.InDelta(t, 0.85, totalResult.Table[0].Measures.TotalCost, 1e-9)
 	require.Len(t, totalResult.Timeseries, 1)
+}
+
+// insertAttributeClaudeAPIRequestLogWithHostname inserts a Claude api_request
+// row whose identity is only what the caller supplies: email and/or the device
+// hostname (gram.hook.hostname), either of which may be empty. Exercises the
+// email dimension's hostname fallback.
+func insertAttributeClaudeAPIRequestLogWithHostname(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, email, hostname string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gen_ai.conversation.id": chatID,
+		"prompt.id":              uuid.NewString(),
+		"event.name":             "api_request",
+		"input_tokens":           10,
+		"output_tokens":          5,
+		"cost_usd":               cost,
+		"model":                  "opus",
+		"gram.hook.source":       "claude-code",
+		"gram.provider":          "anthropic",
+		"gram.account_type":      "team",
+	}
+	if email != "" {
+		attributes["user.email"] = email
+	}
+	if hostname != "" {
+		attributes["gram.hook.hostname"] = hostname
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "claude_code.api_request",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, "claude-code:otel:logs", "claude-code")
+	require.NoError(t, err)
+}
+
+func TestQuery_EmailFallsBackToHostname(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+
+	// An identified user (email wins over their hostname), a company-credential
+	// session with hooks (hostname only), and a session with no identity at all.
+	insertAttributeClaudeAPIRequestLogWithHostname(t, ctx, projectID, ts, uuid.NewString(), 0.25, "a@x.com", "daves-mbp.local")
+	insertAttributeClaudeAPIRequestLogWithHostname(t, ctx, projectID, ts, uuid.NewString(), 0.40, "", "ci-runner-1")
+	insertAttributeClaudeAPIRequestLogWithHostname(t, ctx, projectID, ts, uuid.NewString(), 0.10, "", "")
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// The MV materializes synchronously with the insert; only the async insert
+	// queue needs draining for the rows to become visible deterministically.
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// Group by email: the identified user keeps their address, the emailless
+	// session surfaces under its hostname, and only the identity-less row
+	// remains in the '' bucket.
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("email"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Table, 3)
+
+	cost := tableCostByGroup(result.Table)
+	require.InDelta(t, 0.25, cost["a@x.com"], 1e-9)
+	require.InDelta(t, 0.40, cost["ci-runner-1"], 1e-9)
+	require.InDelta(t, 0.10, cost[""], 1e-9)
+
+	// A hostname bucket is drillable: filtering the email dimension on the
+	// hostname value narrows to that device's spend.
+	drill, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{"ci-runner-1"}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, drill.Table, 1)
+	require.InDelta(t, 0.40, drill.Table[0].Measures.TotalCost, 1e-9)
+
+	// The standalone Device dimension groups by hostname alone — here the
+	// identified user's spend surfaces under their machine too, unlike the
+	// email dimension where the address wins.
+	byHost, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("hostname"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	hostCost := tableCostByGroup(byHost.Table)
+	require.InDelta(t, 0.25, hostCost["daves-mbp.local"], 1e-9)
+	require.InDelta(t, 0.40, hostCost["ci-runner-1"], 1e-9)
+	require.InDelta(t, 0.10, hostCost[""], 1e-9)
 }
 
 func TestQuery_DefaultSortByAndTopN(t *testing.T) {

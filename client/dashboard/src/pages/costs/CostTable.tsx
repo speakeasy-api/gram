@@ -24,7 +24,7 @@ import {
   ESTIMATED_COST_TOOLTIP,
   isMeteredBilling,
 } from "@/components/estimated-cost-utils";
-import { isAttributionDim } from "./taxonomy";
+import { isAttributionDim, unsetLabel } from "./taxonomy";
 
 function formatCost(value: number): string {
   return `$${value.toLocaleString(undefined, {
@@ -83,15 +83,23 @@ function LegendTooltip({
   );
 }
 
-// A plain info icon + tooltip for explaining a column header.
+// A plain info icon + tooltip for explaining a column header or a special row.
+// The trigger is a span (not the Radix default button) so it can also render
+// inside the row drill buttons without nesting interactive elements.
 function InfoTooltip({ text }: { text: string }): JSX.Element {
   return (
     <Tooltip>
-      <TooltipTrigger
-        aria-label={text}
-        className="text-muted-foreground inline-flex cursor-help"
-      >
-        <Info className="size-3.5" />
+      <TooltipTrigger asChild>
+        {/* stopPropagation keeps a click on the icon from activating the
+            surrounding row drill button. */}
+        <span
+          tabIndex={0}
+          aria-label={text}
+          onClick={(event) => event.stopPropagation()}
+          className="text-muted-foreground inline-flex shrink-0 cursor-help"
+        >
+          <Info className="size-3.5" />
+        </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-56">{text}</TooltipContent>
     </Tooltip>
@@ -102,9 +110,16 @@ const GREEN = "#10b981";
 const RED = "#f43f5e";
 const GREY = "#94a3b8";
 
-function displayValue(groupValue: string): string {
-  return groupValue === "" ? "(unset)" : groupValue;
+function displayValue(groupBy: Dimension, groupValue: string): string {
+  return groupValue === "" ? unsetLabel(groupBy) : groupValue;
 }
+
+// Why the Team-wide API Usage row exists, surfaced as an info tooltip on the
+// user breakdown's empty-identity bucket.
+const TEAM_WIDE_USAGE_TOOLTIP =
+  "Sessions authenticated with a shared company credential (an API key or " +
+  "gateway) carry no user identity, so their usage can't be attributed to an " +
+  "individual and is grouped here.";
 
 // "" is the "(unset)" bucket — a real slice (everyone missing this attribute),
 // so it stays drillable. Only "Other" — the synthetic top-N overflow rollup of
@@ -158,11 +173,12 @@ type Sort = { key: SortKey; dir: SortDir };
 function sortValue(
   row: QueryRow,
   key: SortKey,
+  groupBy: Dimension,
   seriesByGroup: Map<string, number[]>,
 ): number | string {
   switch (key) {
     case "name":
-      return displayValue(row.groupValue).toLowerCase();
+      return displayValue(groupBy, row.groupValue).toLowerCase();
     case "cost":
     // Share is cost ÷ a constant total, so it sorts identically to cost.
     case "share":
@@ -259,8 +275,8 @@ export function CostTable({
     const main = rows.filter((r) => r.groupValue !== "Other");
     const other = rows.filter((r) => r.groupValue === "Other");
     main.sort((a, b) => {
-      const av = sortValue(a, sort.key, seriesByGroup);
-      const bv = sortValue(b, sort.key, seriesByGroup);
+      const av = sortValue(a, sort.key, groupBy, seriesByGroup);
+      const bv = sortValue(b, sort.key, groupBy, seriesByGroup);
       const cmp =
         typeof av === "string"
           ? av.localeCompare(bv as string)
@@ -268,7 +284,7 @@ export function CostTable({
       return sort.dir === "asc" ? cmp : -cmp;
     });
     return [...main, ...other];
-  }, [rows, sort, seriesByGroup]);
+  }, [rows, sort, groupBy, seriesByGroup]);
 
   if (isLoading) return <SkeletonTable />;
 
@@ -448,8 +464,11 @@ export function CostTable({
                   />
                 )}
                 <span className="truncate font-medium">
-                  {displayValue(row.groupValue)}
+                  {displayValue(groupBy, row.groupValue)}
                 </span>
+                {groupBy === Dimension.Email && row.groupValue === "" && (
+                  <InfoTooltip text={TEAM_WIDE_USAGE_TOOLTIP} />
+                )}
                 {drillable && (
                   <ChevronRight className="text-muted-foreground size-4 shrink-0" />
                 )}
