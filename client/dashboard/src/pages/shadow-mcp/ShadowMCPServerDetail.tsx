@@ -264,6 +264,8 @@ function DetailActionButtons({
   const primaryMode = actionModeForServer(server);
   const primaryRequiresAllowRule =
     primaryMode === "add" || primaryMode === "edit";
+  const hasVisibleAllowRuleAction =
+    primaryRequiresAllowRule || server.access === "allowed";
   const primaryDisabled =
     disabled || (primaryRequiresAllowRule && !canManageAllowRules);
 
@@ -299,7 +301,7 @@ function DetailActionButtons({
           </Button>
         )}
       </div>
-      {primaryRequiresAllowRule && !canManageAllowRules && (
+      {hasVisibleAllowRuleAction && !canManageAllowRules && (
         <Type muted small>
           {ALLOW_RULE_POLICY_REQUIRED}
         </Type>

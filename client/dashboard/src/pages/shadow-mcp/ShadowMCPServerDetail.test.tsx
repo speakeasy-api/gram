@@ -890,4 +890,66 @@ describe("ShadowMCPServerDetail", () => {
       screen.getByText("An enabled blocking Shadow MCP policy is required."),
     ).toBeTruthy();
   });
+
+  it("explains why edit is disabled while review and delete remain available", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            action: "flag",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "flag-policy",
+            name: "Flag policy",
+            sources: ["shadow_mcp"],
+          },
+        ],
+      },
+      isError: false,
+      isLoading: false,
+    });
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({
+        access: "allowed",
+        latestRequest: {
+          id: "request-1",
+          policyId: "inactive-policy",
+          requestedAt: new Date("2026-01-04T11:30:00Z"),
+          requesterEmail: "requester@example.com",
+          requesterUserId: "user-1",
+        },
+        requestCount: 1,
+      }),
+      error: null,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Review Request",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Edit Rule",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Delete Rule",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+    expect(
+      screen.getByText("An enabled blocking Shadow MCP policy is required."),
+    ).toBeTruthy();
+  });
 });
