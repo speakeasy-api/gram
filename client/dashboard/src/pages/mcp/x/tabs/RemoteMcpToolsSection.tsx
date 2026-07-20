@@ -21,6 +21,9 @@ import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
+import { ToolMetadataDriftPanel } from "./ToolMetadataDriftPanel";
+import { computeDrift } from "./toolMetadataSync";
+import { useSyncToolMetadata } from "./useSyncToolMetadata";
 import { useToolMetadata, type ToolMetadataByName } from "./useToolMetadata";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
@@ -176,7 +179,7 @@ function RemoteMcpToolsSectionInner({
     userSessionIssuerId,
   });
 
-  // Gram's stored annotation overrides for this server's tools. Toolset-backed
+  // Speakeasy's stored annotation overrides for this server's tools. Toolset-backed
   // servers don't carry any, so skip the request entirely for them.
   const { metadataByTool, isLoading: isMetadataLoading } = useToolMetadata(
     mcpServerId,
@@ -227,8 +230,31 @@ function RemoteMcpToolsSectionInner({
   const loading =
     isResolvingUrl || isTokenLoading || isLoading || isMetadataLoading;
 
+  // Only remote-backed servers carry tool metadata, and there is nothing to
+  // reconcile until both the session and the stored set have loaded.
+  const tracksMetadata = !!remoteMcpServerId;
+  const { sync, isSyncing } = useSyncToolMetadata({
+    mcpServerId,
+    live: tools,
+    stored: metadataByTool,
+    enabled: tracksMetadata && !loading && !!tools,
+  });
+
+  const drift = useMemo(
+    () => (tracksMetadata && tools ? computeDrift(tools, metadataByTool) : []),
+    [tracksMetadata, tools, metadataByTool],
+  );
+
   return (
     <ToolsSectionShell>
+      {!loading && drift.length > 0 ? (
+        <ToolMetadataDriftPanel
+          drift={drift}
+          mcpServerId={mcpServerId}
+          onSync={sync}
+          isSyncing={isSyncing}
+        />
+      ) : null}
       <RemoteMcpToolsBody
         loading={loading}
         needsAuth={needsAuth}
@@ -420,7 +446,7 @@ function RemoteToolDetails({
             {...resolveAnnotations(tool.annotations, stored)}
           />
         </div>
-        {stored?.title ?? tool.annotations?.title ? (
+        {(stored?.title ?? tool.annotations?.title) ? (
           <Type muted small as="p">
             {stored?.title ?? tool.annotations?.title}
           </Type>
@@ -552,7 +578,7 @@ function RemoteMcpToolsConnectPrompt({
 }
 
 /**
- * Resolve the hints to display for a tool: Gram's stored metadata wins over
+ * Resolve the hints to display for a tool: Speakeasy's stored metadata wins over
  * whatever the server advertised, and an unset stored hint falls through to the
  * advertised value. Same `override ?? base` precedence AnnotationBadges applies
  * to tool variations — stored hints are tri-state, so `false` is a real
