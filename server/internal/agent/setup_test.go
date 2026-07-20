@@ -76,6 +76,11 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	// The device agent authenticates with an org-scoped key, so the default
+	// context represents the org install key (`agent` scope) — getPlugins treats
+	// the vouched `email` param as authoritative on this path. Per-user-key
+	// behavior is exercised explicitly via withPerUserKeyAuth.
+	authCtx.APIKeyScopes = []string{"agent", "agent_user"}
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -89,6 +94,22 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 		orgID:     authCtx.ActiveOrganizationID,
 		projectID: *authCtx.ProjectID,
 	}
+}
+
+// withPerUserKeyAuth rewrites the request's auth context to look like a per-user
+// device-agent key (minted by token-exchange or manual enrollment): it carries
+// only the `agent_user` scope, and its owner email IS the enrolled developer.
+// getPlugins must therefore attribute to the key owner and ignore any vouched
+// `email` param.
+func withPerUserKeyAuth(t *testing.T, ctx context.Context, ownerEmail string) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.Email = &ownerEmail
+	clone.APIKeyScopes = []string{"agent_user"}
+	clone.SessionID = nil
+	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
 // publishMarketplace gives a project a marketplace_token, which is what makes

@@ -443,39 +443,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_is_default_key
 
 COMMENT ON COLUMN plugins.is_default IS 'Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).';
 
-CREATE TABLE IF NOT EXISTS skill_distributions (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
-  skill_id uuid NOT NULL,
-  pinned_version_id uuid,
-  plugin_id uuid,
-
-  channel TEXT NOT NULL,
-  created_by_user_id TEXT NOT NULL,
-  revoked_at timestamptz,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT skill_distributions_pkey PRIMARY KEY (id),
-  CONSTRAINT skill_distributions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT skill_distributions_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
-  CONSTRAINT skill_distributions_skill_id_pinned_version_id_fkey FOREIGN KEY (skill_id, pinned_version_id) REFERENCES skill_versions (skill_id, id),
-  -- NULL plugin_id targets the whole project; otherwise targeting is delegated
-  -- to the plugin's own assignment mechanism.
-  CONSTRAINT skill_distributions_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id)
-);
-
--- NULLS NOT DISTINCT so at most one active direct (plugin_id IS NULL)
--- distribution exists per skill and channel alongside per-plugin ones.
-CREATE UNIQUE INDEX IF NOT EXISTS skill_distributions_project_id_skill_id_channel_plugin_id_key
-ON skill_distributions (project_id, skill_id, channel, plugin_id) NULLS NOT DISTINCT
-WHERE revoked_at IS NULL;
-
-CREATE INDEX IF NOT EXISTS skill_distributions_project_id_idx ON skill_distributions (project_id);
-CREATE INDEX IF NOT EXISTS skill_distributions_skill_id_pinned_version_id_idx ON skill_distributions (skill_id, pinned_version_id);
-CREATE INDEX IF NOT EXISTS skill_distributions_plugin_id_idx ON skill_distributions (plugin_id);
-
 CREATE TABLE IF NOT EXISTS skill_sync_receipts (
   project_id uuid NOT NULL,
   skill_id uuid NOT NULL,
@@ -1587,6 +1554,42 @@ CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
 ON assistants (project_id, name)
 WHERE deleted IS FALSE;
 
+CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_id_key ON assistants (project_id, id);
+
+CREATE TABLE IF NOT EXISTS skill_distributions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  pinned_version_id uuid,
+  plugin_id uuid,
+  assistant_id uuid,
+
+  channel TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_distributions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_distributions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_distributions_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_distributions_skill_id_pinned_version_id_fkey FOREIGN KEY (skill_id, pinned_version_id) REFERENCES skill_versions (skill_id, id),
+  CONSTRAINT skill_distributions_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id),
+  CONSTRAINT skill_distributions_project_id_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id)
+);
+
+-- Active distributions target either a plugin or an assistant. NULLS NOT
+-- DISTINCT preserves one active row per complete target tuple.
+CREATE UNIQUE INDEX IF NOT EXISTS skill_distributions_active_target_key
+ON skill_distributions (project_id, skill_id, channel, plugin_id, assistant_id) NULLS NOT DISTINCT
+WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_distributions_project_id_idx ON skill_distributions (project_id);
+CREATE INDEX IF NOT EXISTS skill_distributions_skill_id_pinned_version_id_idx ON skill_distributions (skill_id, pinned_version_id);
+CREATE INDEX IF NOT EXISTS skill_distributions_plugin_id_idx ON skill_distributions (plugin_id);
+CREATE INDEX IF NOT EXISTS skill_distributions_assistant_id_idx ON skill_distributions (assistant_id);
+
 -- project_managed_assistants maps a project to its single platform-managed
 -- assistant (the one powering the AI Insights sidebar). Kept in its own table
 -- rather than a flag on assistants/projects so the relation has an explicit
@@ -1664,6 +1667,8 @@ CREATE TABLE IF NOT EXISTS assistant_threads (
   chat_id uuid NOT NULL,
   source_kind TEXT NOT NULL CHECK (source_kind <> '' AND CHAR_LENGTH(source_kind) <= 50),
   source_ref_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- Versioned delivered skill-set document. NULL means no delivered baseline.
+  skill_set_snapshot JSONB,
   last_event_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

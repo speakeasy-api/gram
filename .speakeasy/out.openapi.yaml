@@ -3860,13 +3860,13 @@ paths:
       operationId: getAgentPlugins
       parameters:
         - allowEmptyValue: true
-          description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+          description: Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
           example: dev@acme.corp
           in: query
           name: email
           required: true
           schema:
-            description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+            description: Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
             example: dev@acme.corp
             type: string
         - allowEmptyValue: true
@@ -33106,6 +33106,112 @@ paths:
       x-speakeasy-react-hook:
         name: GetHooksSummary
         type: query
+  /rpc/telemetry.getMcpServerActivity:
+    post:
+      description: Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.
+      operationId: getMcpServerActivity
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetMcpServerActivityPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMcpServerActivityResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getMcpServerActivity telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getMcpServerActivity
+      x-speakeasy-react-hook:
+        name: GetMcpServerActivity
+        type: query
   /rpc/telemetry.getObservabilityOverview:
     post:
       description: Get observability overview metrics including time series, tool breakdowns, and summary stats
@@ -35612,6 +35718,92 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateTemplate
+  /rpc/tokenExchange.exchange:
+    post:
+      description: Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent_user' scope. Authenticated with an org-scoped API key carrying the 'agent' scope — deliberately broader than the 'agent_user' scope the minted per-user keys carry, so a leaked per-user key cannot re-enter this endpoint to forge another user's key. The raw key is returned exactly once.
+      operationId: tokenExchange
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExchangeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: exchange tokenExchange
+      tags:
+        - tokenExchange
+      x-speakeasy-name-override: exchange
   /rpc/tools.list:
     get:
       description: List all tools for a project
@@ -44177,6 +44369,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
+        client_setup_documentation_url:
+          type: string
+          description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
         grant_types_supported:
           type: array
           items:
@@ -44565,6 +44760,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
+        client_setup_documentation_url:
+          type: string
+          description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
         grant_types_supported:
           type: array
           items:
@@ -46034,6 +46232,15 @@ components:
       properties:
         deployment:
           $ref: '#/components/schemas/Deployment'
+    ExchangeRequestBody:
+      type: object
+      properties:
+        email:
+          type: string
+          description: Email address of the enrolled user to mint a per-user key for. Resolved to a user within the authenticated org.
+          example: dev@acme.corp
+      required:
+        - email
     ExportMcpMetadataRequestBody:
       type: object
       properties:
@@ -47154,6 +47361,38 @@ components:
       properties:
         metadata:
           $ref: '#/components/schemas/McpMetadata'
+    GetMcpServerActivityPayload:
+      type: object
+      properties:
+        recent_window_days:
+          type: integer
+          description: Size of the recent-activity window in days. A server with tool calls in the overall lookback window but none inside this window is flagged as stale. Defaults to 14.
+          default: 14
+          format: int64
+          minimum: 1
+          maximum: 90
+      description: Payload for per-MCP-server tool-call activity used by the Distribute MCP listing indicators
+    GetMcpServerActivityResult:
+      type: object
+      properties:
+        activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpServerActivity'
+          description: One entry per MCP server (hosted or tunneled) that has received at least one tool call within the lookback window
+        lookback_days:
+          type: integer
+          description: The overall lookback window size in days (bounded by telemetry retention)
+          format: int64
+        recent_window_days:
+          type: integer
+          description: The recent-activity window size in days that was applied
+          format: int64
+      description: Per-MCP-server tool-call activity. Only servers with at least one tool call inside the lookback window are returned; a server absent from the list has never received a tool call (within the telemetry retention window).
+      required:
+        - activity
+        - recent_window_days
+        - lookback_days
     GetMetricsSummaryResult:
       type: object
       properties:
@@ -50165,6 +50404,40 @@ components:
         - visibility
         - created_at
         - updated_at
+    McpServerActivity:
+      type: object
+      properties:
+        last_tool_call_at:
+          type: string
+          description: ISO 8601 timestamp of the most recent tool call
+          format: date-time
+        recent_tool_calls:
+          type: integer
+          description: Number of tool calls observed inside the recent-activity window
+          format: int64
+        target_id:
+          type: string
+          description: 'Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers'
+        target_label:
+          type: string
+          description: User-facing label for the target
+        target_type:
+          type: string
+          description: MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
+          enum:
+            - hosted_mcp_server
+            - tunneled_mcp_server
+        total_tool_calls:
+          type: integer
+          description: Number of tool calls observed across the whole lookback window
+          format: int64
+      description: Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers)
+      required:
+        - target_type
+        - target_id
+        - target_label
+        - total_tool_calls
+        - recent_tool_calls
     MigrateLegacyGramRegistrationsForm:
       type: object
       properties:
@@ -52590,6 +52863,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+        client_setup_documentation_url:
+          type: string
+          description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.
         created_at:
           type: string
           format: date-time
@@ -56352,6 +56628,28 @@ components:
         - failed_tool_calls
         - avg_tool_latency_ms
         - avg_session_duration_ms
+    TokenResult:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: The raw per-user API key (carries the `agent_user` scope). Returned exactly once; store it securely. Presented as the Gram-Key on downstream user-scoped endpoints.
+        expires_in:
+          type: integer
+          description: Always zero. The minted key has no expiry (api_keys has no TTL).
+          format: int64
+        refresh_token:
+          type: string
+          description: Always empty. The minted key is long-lived and does not refresh; its lifecycle lever is revocation.
+        user_email:
+          type: string
+          description: Email the key was minted for.
+      description: A minted per-user API key for the device agent.
+      required:
+        - access_token
+        - refresh_token
+        - expires_in
+        - user_email
     TokensUnderManagement:
       type: object
       properties:
@@ -58527,6 +58825,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+        client_setup_documentation_url:
+          type: string
+          description: Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
         grant_types_supported:
           type: array
           items:
@@ -59877,7 +60178,7 @@ tags:
   - name: admin
     description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: agent
-    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.
+    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
   - name: assets
@@ -59966,6 +60267,8 @@ tags:
     description: Fetch telemetry data for tools in Gram.
   - name: templates
     description: Manages re-usable prompt templates and higher-order tools for a project.
+  - name: tokenExchange
+    description: 'Device-agent token exchange: trade an org-scoped install credential (an API key with the ''agent'' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.'
   - name: tools
     description: Dashboard API for interacting with tools.
   - name: toolsets

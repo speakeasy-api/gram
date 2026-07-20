@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -45,6 +46,7 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
+// NewService constructs the agent service.
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -80,29 +82,53 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 // GetPlugins returns every plugin assigned to the device user's resolved
-// principal set within the caller's org, marketplace-first. The device agent
-// authenticates with a shared org-scoped API key, so the polling user is
-// identified by the reported email (not authCtx.UserID, which is the key's
-// creator): email → user_id, then RBAC role membership, produce the user:<id>,
-// user:all, and role:<...> principals. The email principal and the org wildcard
-// are always included so email- and everyone-scoped assignments still deliver.
+// principal set within the caller's org, marketplace-first. From the polling
+// user's email it resolves email → user_id, then RBAC role membership, to
+// produce the user:<id>, user:all, and role:<...> principals; the email
+// principal and the org wildcard are always included so email- and
+// everyone-scoped assignments still deliver.
 //
-// SECURITY (known limitation): the polling identity is the caller-supplied
-// payload.Email, which is NOT bound to the authenticated principal. Any holder
-// of an agent-scoped key for the org can therefore claim another member's email
-// and receive that member's role-/user-scoped plugins. This is accepted for now
-// because the device fleet shares a single org key (no genuine per-user device
-// credential exists yet — cliauth mints one org-wide "device-agent" key), so
-// the reported email is the only per-user signal available. Binding delivery to
-// an authenticated per-user identity is tracked separately and requires cliauth
-// to mint true per-user device keys first.
+// The polling identity is resolved by credential type (DNO-383), because who
+// the key belongs to differs:
+//   - Per-user key (`agent_user`): the key owner IS the enrolled developer
+//     (minted by token-exchange or manual enrollment), so the polling identity
+//     is the authenticated key owner (authCtx.Email) and the vouched `email`
+//     param is ignored. Delivery is bound to the authenticated principal.
+//   - Org install key (`agent` scope): the key owner is whoever minted the org
+//     token in the dashboard (an admin), NOT the developer. The polling identity
+//     is the vouched `email` param the MDM profile supplies — required here.
+//     This is the zero-touch MDM path where the developer never signs in.
+//
+// SECURITY: a per-user `agent_user` key's polling identity is the authenticated
+// key owner, so it cannot claim another member's user-/role-scoped plugins. An
+// org `agent` install key still trusts the caller-supplied payload.Email (not
+// bound to the authenticated principal): any holder of the shared org key can
+// claim another member's email. That is the accepted shared-org-key limitation,
+// and it closes for each device as it migrates to a per-user key.
 func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload) (*gen.GetPluginsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	email := conv.NormalizeEmail(payload.Email)
+	// Resolve the polling identity by credential type. An org install key carries
+	// the `agent` scope; a per-user key carries only `agent_user` (agent implies
+	// agent_user, never the reverse — see auth.effectiveScopes), so the presence
+	// of `agent` distinguishes them.
+	isInstallKey := slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeAgent.String())
+
+	var email string
+	if isInstallKey {
+		// Org key: the owner is an admin, not the developer, so we must be vouched
+		// an email — the MDM profile supplies it.
+		email = conv.NormalizeEmail(payload.Email)
+		if email == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "email is required when authenticating with an org-scoped agent install key")
+		}
+	} else if authCtx.Email != nil {
+		// Per-user key: the owner is the enrolled developer, bound to the token.
+		email = conv.NormalizeEmail(*authCtx.Email)
+	}
 	emailPrincipal, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid email")

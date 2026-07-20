@@ -5,6 +5,7 @@
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
 import { telemetryGetEmployeeDataFlowGraph } from "../funcs/telemetryGetEmployeeDataFlowGraph.js";
 import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
+import { telemetryGetMcpServerActivity } from "../funcs/telemetryGetMcpServerActivity.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
@@ -26,6 +27,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { GetEmployeeDataFlowGraphResult } from "../models/components/getemployeedataflowgraphresult.js";
 import { GetHooksSummaryResult } from "../models/components/gethookssummaryresult.js";
+import { GetMcpServerActivityResult } from "../models/components/getmcpserveractivityresult.js";
 import { GetMetricsSummaryResult } from "../models/components/getmetricssummaryresult.js";
 import { GetObservabilityOverviewResult } from "../models/components/getobservabilityoverviewresult.js";
 import { GetProjectOverviewResult } from "../models/components/getprojectoverviewresult.js";
@@ -55,6 +57,10 @@ import {
   GetHooksSummaryRequest,
   GetHooksSummarySecurity,
 } from "../models/operations/gethookssummary.js";
+import {
+  GetMcpServerActivityRequest,
+  GetMcpServerActivitySecurity,
+} from "../models/operations/getmcpserveractivity.js";
 import {
   GetObservabilityOverviewRequest,
   GetObservabilityOverviewSecurity,
@@ -173,6 +179,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetHooksSummaryResult> {
     return unwrapAsync(telemetryGetHooksSummary(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getMcpServerActivity telemetry
+   *
+   * @remarks
+   * Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.
+   */
+  async getMcpServerActivity(
+    request: GetMcpServerActivityRequest,
+    security?: GetMcpServerActivitySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetMcpServerActivityResult> {
+    return unwrapAsync(telemetryGetMcpServerActivity(
       this,
       request,
       security,
