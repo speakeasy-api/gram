@@ -31,6 +31,7 @@ type SkillDistribution struct {
 	SkillID         uuid.UUID
 	PinnedVersionID uuid.NullUUID
 	PluginID        uuid.NullUUID
+	AssistantID     uuid.NullUUID
 	Channel         string
 	CreatedByUserID string
 	RevokedAt       pgtype.Timestamptz

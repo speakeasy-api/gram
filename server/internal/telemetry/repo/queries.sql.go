@@ -3065,6 +3065,27 @@ type ToolUsageFilterOptions struct {
 	Users         []ToolUsageUserFilterOptionRow
 }
 
+// GetMcpServerActivityParams defines the parameters for per-MCP-server tool-call
+// activity used by the Distribute MCP listing indicators.
+type GetMcpServerActivityParams struct {
+	GramProjectID     string
+	TimeStart         int64 // Start of the overall lookback window (unix nanos)
+	TimeEnd           int64 // End of the overall lookback window (unix nanos)
+	RecentThresholdNs int64 // Tool calls at or after this time count as recent
+	HostedMCPMatchers []HostedMCPMatcher
+	MCPServerMatchers []MCPServerMatcher
+}
+
+// McpServerActivityRow is one aggregated per-server activity row.
+type McpServerActivityRow struct {
+	TargetType           string `ch:"target_type"`
+	TargetID             string `ch:"target_id"`
+	TargetLabel          string `ch:"target_label"`
+	TotalToolCalls       uint64 `ch:"total_tool_calls"`
+	RecentToolCalls      uint64 `ch:"recent_tool_calls"`
+	LastToolCallUnixNano int64  `ch:"last_tool_call_unix_nano"`
+}
+
 type ToolUsageHostedServerFilterOptionRow struct {
 	ToolsetSlug string `ch:"toolset_slug"`
 	EventCount  uint64 `ch:"event_count"`
@@ -3471,6 +3492,83 @@ func (q *Queries) getToolUsageTargets(ctx context.Context, arg GetToolUsageSumma
 		var row ToolUsageTargetSummaryRow
 		if err = rows.ScanStruct(&row); err != nil {
 			return nil, fmt.Errorf("scan tool usage target row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetMcpServerActivity returns one row per MCP server (hosted or tunneled) that
+// has received at least one tool call inside the lookback window. It reuses the
+// same target-attribution pipeline as the tool usage summary (normalized_events)
+// so target_id matches the toolset slug (hosted) or MCP server slug (tunneled)
+// the caller already holds. Unlike the summary, it is not top-N limited: the
+// listing needs every server so absence from the result reliably means "never
+// received a tool call" within the retention window.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActivityParams) ([]McpServerActivityRow, error) {
+	// Only MCP server targets matter for the listing. Restricting target_type
+	// here also lets normalized_events prune local_tool/skill/shadow rows early.
+	filterArg := GetToolUsageSummaryParams{
+		GramProjectID:      arg.GramProjectID,
+		TimeStart:          arg.TimeStart,
+		TimeEnd:            arg.TimeEnd,
+		BucketSizeNs:       0,
+		HostedMCPMatchers:  arg.HostedMCPMatchers,
+		MCPServerMatchers:  arg.MCPServerMatchers,
+		TargetTypes:        []string{ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP},
+		HostedToolsetSlugs: nil,
+		ShadowServerNames:  nil,
+		UserFilters:        nil,
+		HookSources:        nil,
+		AccountType:        "",
+		TargetLimit:        0,
+		UserLimit:          0,
+		UsersByTargetLimit: 0,
+		TargetToolRowLimit: 0,
+		TimeSeriesRowLimit: 0,
+		UserSeriesRowLimit: 0,
+	}
+
+	// RecentThresholdNs is a server-computed epoch value, so inlining it as a
+	// literal is safe and keeps it out of the CTE's positional-argument stream.
+	recentExpr := fmt.Sprintf("countIf(event_time_ns >= %d) AS recent_tool_calls", arg.RecentThresholdNs)
+
+	sb, err := toolUsageFilteredSelect(filterArg,
+		"target_type",
+		"target_id",
+		"target_label",
+		"count() AS total_tool_calls",
+		recentExpr,
+		"max(event_time_ns) AS last_tool_call_unix_nano",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building mcp server activity source: %w", err)
+	}
+	sb = sb.
+		GroupBy("target_type", "target_id", "target_label").
+		OrderBy("total_tool_calls DESC", "target_label ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building mcp server activity query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []McpServerActivityRow{}
+	for rows.Next() {
+		var row McpServerActivityRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan mcp server activity row: %w", err)
 		}
 		result = append(result, row)
 	}
