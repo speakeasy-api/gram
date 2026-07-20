@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -193,24 +192,10 @@ func TestListToolMetadata_RejectsToolsetBackedServer(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
+	serverID := createToolsetBackedMcpServer(t, ctx, ti)
 
-	toolsetID := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID).ID.String()
-	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		Name:              "toolset backed server " + uuid.NewString(),
-		EnvironmentID:     nil,
-		RemoteMcpServerID: nil,
-		ToolsetID:         &toolsetID,
-		Visibility:        types.McpServerVisibility("disabled"),
-	})
-	require.NoError(t, err)
-
-	_, err = ti.service.ListToolMetadata(ctx, &gen.ListToolMetadataPayload{
-		McpServerID:      created.ID,
+	_, err := ti.service.ListToolMetadata(ctx, &gen.ListToolMetadataPayload{
+		McpServerID:      serverID,
 		IncludeDeleted:   nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,

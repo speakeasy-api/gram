@@ -168,13 +168,6 @@ func (s *Service) SetToolMetadataBatch(ctx context.Context, payload *gen.SetTool
 		return nil, err
 	}
 
-	// Tool metadata backs disposition-aware RBAC for remote-backed servers.
-	// Toolset-backed servers already persist annotation hints on their tool
-	// definition tables, so storing a second copy here is disallowed.
-	if !server.RemoteMcpServerID.Valid {
-		return nil, oops.E(oops.CodeInvalid, nil, "tool metadata is only supported for MCP servers backed by a remote MCP server").LogError(ctx, logger)
-	}
-
 	before, err := listToolMetadataViews(ctx, txRepo, serverID, *authCtx.ProjectID, logger)
 	if err != nil {
 		return nil, err
@@ -272,13 +265,6 @@ func (s *Service) AddToolMetadataBatch(ctx context.Context, payload *gen.AddTool
 		return nil, err
 	}
 
-	// Tool metadata backs disposition-aware RBAC for remote-backed servers.
-	// Toolset-backed servers already persist annotation hints on their tool
-	// definition tables, so storing a second copy here is disallowed.
-	if !server.RemoteMcpServerID.Valid {
-		return nil, oops.E(oops.CodeInvalid, nil, "tool metadata is only supported for MCP servers backed by a remote MCP server").LogError(ctx, logger)
-	}
-
 	before, err := listToolMetadataViews(ctx, txRepo, serverID, *authCtx.ProjectID, logger)
 	if err != nil {
 		return nil, err
@@ -365,16 +351,8 @@ func (s *Service) ListToolMetadata(ctx context.Context, payload *gen.ListToolMet
 
 	r := repo.New(s.db)
 
-	server, err := loadMCPServerForToolMetadata(ctx, r, serverID, *authCtx.ProjectID, logger)
-	if err != nil {
+	if _, err := loadMCPServerForToolMetadata(ctx, r, serverID, *authCtx.ProjectID, logger); err != nil {
 		return nil, err
-	}
-
-	// Rejected on the same terms as the writes. A toolset-backed server can
-	// never hold tool metadata, so answering 200 with an empty list would read
-	// as "none recorded yet" and invite a write that is itself rejected.
-	if !server.RemoteMcpServerID.Valid {
-		return nil, oops.E(oops.CodeInvalid, nil, "tool metadata is only supported for MCP servers backed by a remote MCP server").LogError(ctx, logger)
 	}
 
 	rows, err := r.ListMCPServerToolMetadata(ctx, repo.ListMCPServerToolMetadataParams{
@@ -563,6 +541,17 @@ func (s *Service) logToolMetadataChange(
 	return nil
 }
 
+// loadMCPServerForToolMetadata resolves the server every tool metadata method
+// operates on, and rejects the ones that can never hold metadata.
+//
+// Tool metadata backs disposition-aware RBAC for remote-backed servers.
+// Toolset-backed servers already persist annotation hints on their tool
+// definition tables, so storing a second copy here is disallowed. Reads are
+// rejected on the same terms: answering 200 with an empty list would read as
+// "none recorded yet" and invite a write that is itself rejected.
+//
+// The check lives here rather than at each call site because all five methods
+// need it, and pasting it five times is how two of them came to be missing it.
 func loadMCPServerForToolMetadata(
 	ctx context.Context,
 	r *repo.Queries,
@@ -579,6 +568,10 @@ func loadMCPServerForToolMetadata(
 			return repo.McpServer{}, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
 		return repo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
+	}
+
+	if !server.RemoteMcpServerID.Valid {
+		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "tool metadata is only supported for MCP servers backed by a remote MCP server").LogError(ctx, logger)
 	}
 
 	return server, nil

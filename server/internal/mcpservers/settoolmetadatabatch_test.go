@@ -40,6 +40,30 @@ func createRemoteBackedMcpServer(t *testing.T, ctx context.Context, ti *testInst
 	return created.ID
 }
 
+// createToolsetBackedMcpServer creates the kind of server that can never hold
+// tool metadata, so every method can assert it is turned away.
+func createToolsetBackedMcpServer(t *testing.T, ctx context.Context, ti *testInstance) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolsetID := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID).ID.String()
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "toolset backed server " + uuid.NewString(),
+		EnvironmentID:     nil,
+		RemoteMcpServerID: nil,
+		ToolsetID:         &toolsetID,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	return created.ID
+}
+
 func TestSetToolMetadataBatch(t *testing.T) {
 	t.Parallel()
 
@@ -288,24 +312,10 @@ func TestSetToolMetadataBatch_RejectsToolsetBackedServer(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
+	serverID := createToolsetBackedMcpServer(t, ctx, ti)
 
-	toolsetID := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID).ID.String()
-	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		Name:              "toolset backed server",
-		EnvironmentID:     nil,
-		RemoteMcpServerID: nil,
-		ToolsetID:         &toolsetID,
-		Visibility:        types.McpServerVisibility("disabled"),
-	})
-	require.NoError(t, err)
-
-	_, err = ti.service.SetToolMetadataBatch(ctx, &gen.SetToolMetadataBatchPayload{
-		McpServerID: created.ID,
+	_, err := ti.service.SetToolMetadataBatch(ctx, &gen.SetToolMetadataBatchPayload{
+		McpServerID: serverID,
 		Tools: []*gen.ToolMetadataForm{
 			{ToolName: "alpha", Title: nil, ReadOnlyHint: new(true), DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
 		},

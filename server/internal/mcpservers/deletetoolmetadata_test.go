@@ -168,3 +168,20 @@ func TestDeleteToolMetadata_RejectsEmptyToolName(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
+
+func TestDeleteToolMetadata_RejectsToolsetBackedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	serverID := createToolsetBackedMcpServer(t, ctx, ti)
+
+	err := ti.service.DeleteToolMetadata(ctx, &gen.DeleteToolMetadataPayload{
+		McpServerID:      serverID,
+		ToolName:         "alpha",
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}

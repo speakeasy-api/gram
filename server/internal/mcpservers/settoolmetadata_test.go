@@ -138,3 +138,25 @@ func TestSetToolMetadata_RBAC_DeniedWithoutGrant(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestSetToolMetadata_RejectsToolsetBackedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	serverID := createToolsetBackedMcpServer(t, ctx, ti)
+
+	_, err := ti.service.SetToolMetadata(ctx, &gen.SetToolMetadataPayload{
+		McpServerID:      serverID,
+		ToolName:         "alpha",
+		Title:            nil,
+		ReadOnlyHint:     new(true),
+		DestructiveHint:  nil,
+		IdempotentHint:   nil,
+		OpenWorldHint:    nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
