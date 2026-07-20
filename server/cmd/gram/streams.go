@@ -307,17 +307,6 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 
-			bqClient, shutdown, err := newBigQueryClient(ctx, c, logger)
-			shutdownFuncs = append(shutdownFuncs, shutdown)
-			if err != nil {
-				return fmt.Errorf("failed to create bigquery client: %w", err)
-			}
-
-			riskFindingsTable, err := bqTableFromSpec(bqClient, c.String("bq-risk-findings"))
-			if err != nil {
-				return fmt.Errorf("failed to parse BigQuery table spec: %w", err)
-			}
-
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
 			if err != nil {
 				return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
@@ -422,12 +411,6 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
-
-				mustReceiveBatch(
-					rg, &riskv1.Finding{}, &riskv1.FindingBQWriter{},
-					gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
-					risk.NewFindingBQWriter(logger, meterProvider, riskFindingsTable, featureFlags, riskFingerprinter),
-				)
 
 				if enableCHRiskWrites {
 					mustReceiveBatch(

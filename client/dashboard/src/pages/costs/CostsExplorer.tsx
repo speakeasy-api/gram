@@ -716,11 +716,14 @@ export function CostsExplorer(): JSX.Element {
     const out: CardSpec[] = [];
     // Mix cards are compact "spend by X" rankings, so drop the "" bucket
     // entirely — an "(unset)" row is noise here (e.g. the $0 tool-row model
-    // bucket). The full breakdown table still surfaces it for non-attribution
-    // dims where "unset" is a real, drillable slice.
-    const toRows = (t: QueryRow[]) =>
+    // bucket). The user dimension is the exception: its "" bucket is the
+    // Team-wide API Usage (company-credential sessions carry no user identity),
+    // a real ranked spender the card must show. The full breakdown table
+    // still surfaces "" for non-attribution dims where it is a real,
+    // drillable slice.
+    const toRows = (t: QueryRow[], dim: Dimension) =>
       t
-        .filter((r) => r.groupValue !== "")
+        .filter((r) => r.groupValue !== "" || dim === Dimension.Email)
         .map((r) => ({ label: r.groupValue, cost: r.measures.totalCost ?? 0 }));
     const cardTitle = (dim: Dimension) =>
       dim === Dimension.Email
@@ -742,7 +745,7 @@ export function CostsExplorer(): JSX.Element {
         title: "Top spenders",
         dim: Dimension.Email,
         drillable: drillableDim(Dimension.Email),
-        rows: toRows(userRows),
+        rows: toRows(userRows, Dimension.Email),
         loading: loadingSlice,
       });
     }
@@ -752,7 +755,7 @@ export function CostsExplorer(): JSX.Element {
         title: cardTitle(mixDimA),
         dim: mixDimA,
         drillable: drillableDim(mixDimA),
-        rows: toRows(mixDataA?.table ?? []),
+        rows: toRows(mixDataA?.table ?? [], mixDimA),
         loading: mixLoadingA,
       });
     }
@@ -762,7 +765,7 @@ export function CostsExplorer(): JSX.Element {
         title: cardTitle(mixDimB),
         dim: mixDimB,
         drillable: drillableDim(mixDimB),
-        rows: toRows(mixDataB?.table ?? []),
+        rows: toRows(mixDataB?.table ?? [], mixDimB),
         loading: mixLoadingB,
       });
     }

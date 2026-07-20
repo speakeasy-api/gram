@@ -6,7 +6,13 @@ import "gcp/pubsub/v1/options.proto";
 
 option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
 
+// Deprecated: the BigQuery risk_findings writer has been decommissioned in
+// favor of the ClickHouse writer (FindingCHWriter). This subscription is
+// retained but marked deprecated so cc-gen labels the GCP resource
+// `deprecated` rather than deleting it (avoids abrupt teardown / message loss).
 message FindingBQWriter {
+  option deprecated = true;
+
   option (gcp.pubsub.v1.subscription) = {
     topic: "gram.risk.v1.Finding"
     ack_deadline: {seconds: 60}
