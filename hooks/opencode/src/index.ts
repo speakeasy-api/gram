@@ -20,10 +20,18 @@ export const GramObservability: Plugin = async ({ directory, client }) => {
     fallbackSession: crypto.randomUUID(),
     adapterVersion: PLUGIN_VERSION,
     userEmail: process.env.GRAM_USER_EMAIL,
-    // Resolved once at startup; opencode reloads plugins on config change, so
-    // the MCP server set is stable for the life of this instance.
-    mcpServers: await loadMcpServerNames(client, directory),
+    mcpServers: [],
   };
+
+  // Resolve the MCP server list in the background and fill it in when ready.
+  // Never await here: this plugin factory runs during opencode bootstrap, and
+  // client.mcp.status() hits opencode's own server API — which isn't serving
+  // yet — so awaiting it deadlocks startup (blank screen). Tool calls only
+  // happen well after startup, by which point this has resolved; until then
+  // mcpServers is empty and names pass through un-normalized (fail-open).
+  void loadMcpServerNames(client, directory).then((names) => {
+    ctx.mcpServers = names;
+  });
 
   // Assistant text streams in over several message.part.updated events
   // before the message is marked complete; buffer the latest full text per
