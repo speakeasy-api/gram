@@ -55,9 +55,11 @@ import (
 )
 
 type Publishers struct {
-	PresidioAnalysis    gcp.Publisher[*riskv1.PresidioAnalysis]
-	GitleaksAnalysis    gcp.Publisher[*riskv1.GitleaksAnalysis]
-	CustomRulesAnalysis gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	PresidioAnalysis        gcp.Publisher[*riskv1.PresidioAnalysis]
+	GitleaksAnalysis        gcp.Publisher[*riskv1.GitleaksAnalysis]
+	PromptInjectionAnalysis gcp.Publisher[*riskv1.PromptInjectionAnalysis]
+	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
+	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
 }
 
 type Activities struct {
@@ -68,6 +70,7 @@ type Activities struct {
 	customDomainIngress             *activities.CustomDomainIngress
 	defaultCustomDomainProvisioner  k8s.ProvisionerKind
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
+	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	correlateClaudePrompts          *activities.CorrelateClaudePrompts
 	promoteStagedTelemetry          *activities.PromoteStagedTelemetry
@@ -173,6 +176,7 @@ func NewActivities(
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
 		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
+		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
 		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter),
@@ -199,7 +203,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate, features, publishers.PresidioAnalysis, publishers.GitleaksAnalysis, publishers.CustomRulesAnalysis, customRuleScanner, celEng, builtinPresets),
+		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate, features, publishers.PresidioAnalysis, publishers.GitleaksAnalysis, publishers.PromptInjectionAnalysis, publishers.PromptPolicyAnalysis, publishers.CustomRulesAnalysis, customRuleScanner, celEng, builtinPresets),
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
@@ -284,6 +288,10 @@ func (a *Activities) CollectOpenRouterCreditsMetrics(ctx context.Context, args a
 
 func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {
 	return a.fireOpenRouterCreditsMetrics.Do(ctx, metrics)
+}
+
+func (a *Activities) MaybeSendOpenRouterCreditsAlerts(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {
+	return a.sendOpenRouterCreditsAlerts.Do(ctx, metrics)
 }
 
 func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {

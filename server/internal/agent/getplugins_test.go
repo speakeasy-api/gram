@@ -325,6 +325,25 @@ func TestGetPlugins_InvalidEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 
+	// The default context is an org install key, so the vouched email is
+	// authoritative and an empty one is rejected.
 	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: ""})
 	require.Error(t, err, "empty email must be rejected")
+}
+
+// TestGetPlugins_PerUserKeyBindsToOwner pins the DNO-383 scope-aware attribution:
+// a per-user `agent_user` key resolves the polling identity from the
+// authenticated key owner, so a vouched `email` param is ignored — a leaked
+// per-user key cannot claim another member's plugins.
+func TestGetPlugins_PerUserKeyBindsToOwner(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	// A per-user key owned by the mock member; the vouched email below differs.
+	ctx = withPerUserKeyAuth(t, ctx, mockidp.MockUserEmail)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "someone-else@example.com"})
+	require.NoError(t, err, "per-user key ignores the vouched email and uses its owner")
+	require.Len(t, res.Marketplaces, 1)
 }

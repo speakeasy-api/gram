@@ -148,9 +148,11 @@ func ForDeploymentProcessing(
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
 		Publishers: &Publishers{
-			PresidioAnalysis:    gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
-			GitleaksAnalysis:    gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
-			CustomRulesAnalysis: gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+			PresidioAnalysis:        gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
+			GitleaksAnalysis:        gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+			PromptInjectionAnalysis: gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
+			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
+			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 		},
 	}
 }
@@ -335,6 +337,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
+	temporalWorker.RegisterActivity(activities.MaybeSendOpenRouterCreditsAlerts)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)

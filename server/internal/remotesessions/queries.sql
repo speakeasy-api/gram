@@ -12,6 +12,7 @@ INSERT INTO remote_session_issuers (
     issuer,
     name,
     logo_asset_id,
+    client_setup_documentation_url,
     authorization_endpoint,
     token_endpoint,
     registration_endpoint,
@@ -34,6 +35,7 @@ VALUES (
     @issuer,
     @name,
     @logo_asset_id,
+    @client_setup_documentation_url,
     @authorization_endpoint,
     @token_endpoint,
     @registration_endpoint,
@@ -95,6 +97,10 @@ SET
         ELSE COALESCE(sqlc.narg('name'), name)
     END,
     logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
+    client_setup_documentation_url = CASE
+        WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)
+    END,
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
@@ -657,6 +663,10 @@ SET
         ELSE COALESCE(sqlc.narg('name'), name)
     END,
     logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
+    client_setup_documentation_url = CASE
+        WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)
+    END,
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
@@ -958,6 +968,10 @@ SET
         ELSE COALESCE(sqlc.narg('name'), name)
     END,
     logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
+    client_setup_documentation_url = CASE
+        WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)
+    END,
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)

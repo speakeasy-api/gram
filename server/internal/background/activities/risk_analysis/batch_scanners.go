@@ -65,7 +65,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	if sources.Has(SourcePromptInjection) {
 		wg.Go(func() {
-			promptInjectionFindings = a.scanPromptInjection(ctx, args, messages, contents)
+			promptInjectionFindings = a.scanPromptInjection(ctx, args, requestID, messages, contents)
 		})
 	}
 
