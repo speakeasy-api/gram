@@ -1923,6 +1923,9 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 				preps[i] = rowPrep{jsonData: nil, path: "", err: fmt.Errorf("marshal message content: %w", err)}
 				return nil
 			}
+			// Sanitize before hashing so the asset path (and the dedup key
+			// derived from it) addresses the bytes actually stored.
+			jsonData = sanitizeContentJSON(jsonData)
 			hash := sha256.Sum256(jsonData)
 			hashHex := hex.EncodeToString(hash[:])
 			assetPath := path.Join(row.projectID.String(), "chats", row.chatID.String(), hashHex+".json")
