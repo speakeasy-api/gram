@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -191,4 +192,48 @@ func TestUserCostRowAmountUSDEmptyAmount(t *testing.T) {
 	amountUSD, err := row.AmountUSD()
 	require.NoError(t, err)
 	require.Zero(t, amountUSD)
+}
+
+// The cents-to-dollars shift must round exactly once, onto float64. This
+// amount is a counterexample to the ParseFloat-then-divide approach: parsing
+// "575398922.098702" to float64 and dividing by 100 lands one ULP below the
+// correctly rounded value (5753989.220987019... instead of
+// 5753989.22098702).
+func TestUserCostRowAmountUSDRoundsOnce(t *testing.T) {
+	t.Parallel()
+
+	row := UserCostRow{
+		Actor:      AnalyticsActor{UserID: "user_1", Email: nil, Name: nil, Deleted: false},
+		StartingAt: "",
+		EndingAt:   "",
+		Model:      "",
+		Product:    "",
+		Amount:     "575398922.098702",
+		ListAmount: "",
+		Currency:   "USD",
+		Requests:   0,
+	}
+	amountUSD, err := row.AmountUSD()
+	require.NoError(t, err)
+	// Bit-exact comparison on purpose: a 1-ULP drift is precisely the bug
+	// this test guards against, so approximate float assertions cannot.
+	require.Equal(t, math.Float64bits(5753989.22098702), math.Float64bits(amountUSD))
+}
+
+func TestUserCostRowAmountUSDInvalidAmount(t *testing.T) {
+	t.Parallel()
+
+	row := UserCostRow{
+		Actor:      AnalyticsActor{UserID: "user_1", Email: nil, Name: nil, Deleted: false},
+		StartingAt: "",
+		EndingAt:   "",
+		Model:      "",
+		Product:    "",
+		Amount:     "not-a-number",
+		ListAmount: "",
+		Currency:   "USD",
+		Requests:   0,
+	}
+	_, err := row.AmountUSD()
+	require.ErrorContains(t, err, "parse cost row amount")
 }

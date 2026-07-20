@@ -3,6 +3,7 @@ package anthropic
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -66,16 +67,21 @@ type UserCostRow struct {
 	Requests   int64          `json:"requests"`
 }
 
-// AmountUSD converts the fractional-cents amount to US dollars.
+// AmountUSD converts the fractional-cents amount to US dollars. The API
+// reports fixed-point decimal strings, so the cents-to-dollars shift happens
+// in exact decimal arithmetic and the value is rounded exactly once — onto
+// float64, the telemetry storage type. Parsing into binary floating point
+// first and then dividing would round twice, drifting up to an extra ULP.
 func (r UserCostRow) AmountUSD() (float64, error) {
 	if r.Amount == "" {
 		return 0, nil
 	}
-	cents, err := strconv.ParseFloat(r.Amount, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse cost row amount: %w", err)
+	cents, ok := new(big.Rat).SetString(r.Amount)
+	if !ok {
+		return 0, fmt.Errorf("parse cost row amount: %q", r.Amount)
 	}
-	return cents / 100, nil
+	usd, _ := cents.Quo(cents, big.NewRat(100, 1)).Float64()
+	return usd, nil
 }
 
 type UserUsageReportPage struct {
