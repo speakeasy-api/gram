@@ -25,8 +25,8 @@ import (
 // HandleIDPCallback enforces access once the IDP identifies the user).
 //
 // No ClientID/RedirectURI: a first-party challenge has no MCP client to grant
-// to or redirect back to. Once the user links the cards on the consent page,
-// the flow is terminal (they close the tab).
+// to or redirect back to. Once the user links every card on the consent page,
+// the flow is terminal and the page closes its dashboard-opened tab.
 func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)

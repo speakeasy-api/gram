@@ -18,6 +18,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // managedAssistantInstructions is the system prompt for the platform-managed
@@ -115,7 +116,7 @@ func (s *ServiceCore) EnableManagedAssistant(
 }
 
 // GetManagedAssistant resolves a project's managed assistant and hydrates its
-// tool sources. Returns pgx.ErrNoRows when the feature isn't enabled for the project.
+// management read model. Returns pgx.ErrNoRows when the feature isn't enabled for the project.
 func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UUID) (assistantRecord, error) {
 	row, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, projectID)
 	if err != nil {
@@ -125,13 +126,16 @@ func (s *ServiceCore) GetManagedAssistant(ctx context.Context, projectID uuid.UU
 	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
+	if err := s.hydrateAssistantSkills(ctx, projectID, &record); err != nil {
+		return assistantRecord{}, err
+	}
 	return record, nil
 }
 
 // DisableManagedAssistant turns the managed assistant off for a project: it
 // removes the mapping and soft-deletes the assistant. No-op when the project
 // has no managed assistant.
-func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uuid.UUID) error {
+func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uuid.UUID, actor urn.Principal, actorDisplayName *string) error {
 	row, err := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -155,6 +159,9 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 		ProjectID:   projectID,
 	}); err != nil {
 		return fmt.Errorf("soft-delete managed assistant: %w", err)
+	}
+	if err := s.revokeAssistantSkillDistributions(ctx, tx, projectID, row.ID, actor, actorDisplayName); err != nil {
+		return err
 	}
 
 	triggerQueries := triggerrepo.New(tx)
@@ -282,6 +289,7 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,

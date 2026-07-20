@@ -301,6 +301,9 @@ const (
 	RiskScanMaxAttemptsKey            = attribute.Key("gram.risk.scan.max_attempts")
 	RiskScanBatchIndexKey             = attribute.Key("gram.risk.scan.batch_index")
 	RiskScanTextSizeKey               = attribute.Key("gram.risk.scan.text_size_bytes")
+	RiskScanRequestIDKey              = attribute.Key("gram.risk.scan.request_id")
+	RiskScanEngineKey                 = attribute.Key("gram.risk.scan.engine")
+	RiskScanGateReasonKey             = attribute.Key("gram.risk.scan.gate_reason")
 	SecretNameKey                     = attribute.Key("gram.secret.name")
 	SecurityPlacementKey              = attribute.Key("gram.security.placement")
 	SecuritySchemeKey                 = attribute.Key("gram.security.scheme")
@@ -1336,6 +1339,21 @@ func SlogRiskScanBatchIndex(v int) slog.Attr      { return slog.Int(string(RiskS
 
 func RiskScanTextSize(v int) attribute.KeyValue { return RiskScanTextSizeKey.Int(v) }
 func SlogRiskScanTextSize(v int) slog.Attr      { return slog.Int(string(RiskScanTextSizeKey), v) }
+
+func RiskScanRequestID(v string) attribute.KeyValue { return RiskScanRequestIDKey.String(v) }
+func SlogRiskScanRequestID(v string) slog.Attr {
+	return slog.String(string(RiskScanRequestIDKey), v)
+}
+
+func RiskScanEngine(v string) attribute.KeyValue { return RiskScanEngineKey.String(v) }
+func SlogRiskScanEngine(v string) slog.Attr      { return slog.String(string(RiskScanEngineKey), v) }
+
+func RiskScanGateReason[V ~string](v V) attribute.KeyValue {
+	return RiskScanGateReasonKey.String(string(v))
+}
+func SlogRiskScanGateReason(v string) slog.Attr {
+	return slog.String(string(RiskScanGateReasonKey), v)
+}
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }

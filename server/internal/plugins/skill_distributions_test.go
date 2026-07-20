@@ -51,8 +51,10 @@ func TestPluginsService_DeletePluginRevokesSkillDistributions(t *testing.T) {
 	require.NoError(t, err)
 	for _, plugin := range []string{doomed.ID, kept.ID} {
 		_, err = skills.CreateSkillDistribution(ctx, skillsrepo.CreateSkillDistributionParams{
-			PluginID:        uuid.MustParse(plugin),
+			PluginID:        uuid.NullUUID{UUID: uuid.MustParse(plugin), Valid: true},
+			AssistantID:     uuid.NullUUID{},
 			PinnedVersionID: uuid.NullUUID{},
+			Channel:         "plugin",
 			CreatedByUserID: authCtx.UserID,
 			ProjectID:       projectID,
 			SkillID:         skill.ID,
@@ -120,8 +122,10 @@ func TestListPluginSkillsForProjectResolvesContent(t *testing.T) {
 	}
 	distribute := func(skillID uuid.UUID, pinned uuid.NullUUID) {
 		_, err := skills.CreateSkillDistribution(ctx, skillsrepo.CreateSkillDistributionParams{
-			PluginID:        pluginID,
+			PluginID:        uuid.NullUUID{UUID: pluginID, Valid: true},
+			AssistantID:     uuid.NullUUID{},
 			PinnedVersionID: pinned,
+			Channel:         "plugin",
 			CreatedByUserID: authCtx.UserID,
 			ProjectID:       projectID,
 			SkillID:         skillID,
@@ -151,9 +155,11 @@ func TestListPluginSkillsForProjectResolvesContent(t *testing.T) {
 	makeVersion(revoked.ID, "revoked-v1", true)
 	distribute(revoked.ID, uuid.NullUUID{})
 	_, err = skills.RevokeActiveSkillDistribution(ctx, skillsrepo.RevokeActiveSkillDistributionParams{
-		ProjectID: projectID,
-		SkillID:   revoked.ID,
-		PluginID:  uuid.NullUUID{UUID: pluginID, Valid: true},
+		ProjectID:   projectID,
+		SkillID:     revoked.ID,
+		PluginID:    uuid.NullUUID{UUID: pluginID, Valid: true},
+		AssistantID: uuid.NullUUID{},
+		Channel:     "plugin",
 	})
 	require.NoError(t, err)
 
@@ -166,4 +172,16 @@ func TestListPluginSkillsForProjectResolvesContent(t *testing.T) {
 	require.Equal(t, "tracked-v2", rows[1].SkillContent)
 	require.Equal(t, pluginID, rows[0].PluginID)
 	require.Equal(t, plugin.Slug, rows[0].PluginSlug)
+
+	listed, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
+	require.NoError(t, err)
+	var skillCount *int64
+	for _, listedPlugin := range listed.Plugins {
+		if listedPlugin.ID == plugin.ID {
+			skillCount = listedPlugin.SkillCount
+			break
+		}
+	}
+	require.NotNil(t, skillCount)
+	require.EqualValues(t, 2, *skillCount)
 }

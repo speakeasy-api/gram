@@ -1251,6 +1251,51 @@ func BuildGetToolUsageFilterOptionsPayload(telemetryGetToolUsageFilterOptionsBod
 	return v, nil
 }
 
+// BuildGetMcpServerActivityPayload builds the payload for the telemetry
+// getMcpServerActivity endpoint from CLI flags.
+func BuildGetMcpServerActivityPayload(telemetryGetMcpServerActivityBody string, telemetryGetMcpServerActivityApikeyToken string, telemetryGetMcpServerActivitySessionToken string, telemetryGetMcpServerActivityProjectSlugInput string) (*telemetry.GetMcpServerActivityPayload, error) {
+	var err error
+	var body GetMcpServerActivityRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetMcpServerActivityBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"recent_window_days\": 2\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetMcpServerActivityApikeyToken != "" {
+			apikeyToken = &telemetryGetMcpServerActivityApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetMcpServerActivitySessionToken != "" {
+			sessionToken = &telemetryGetMcpServerActivitySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetMcpServerActivityProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetMcpServerActivityProjectSlugInput
+		}
+	}
+	v := &telemetry.GetMcpServerActivityPayload{
+		RecentWindowDays: body.RecentWindowDays,
+	}
+	{
+		var zero int
+		if v.RecentWindowDays == zero {
+			v.RecentWindowDays = 14
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListHooksTracesPayload builds the payload for the telemetry
 // listHooksTraces endpoint from CLI flags.
 func BuildListHooksTracesPayload(telemetryListHooksTracesBody string, telemetryListHooksTracesApikeyToken string, telemetryListHooksTracesSessionToken string, telemetryListHooksTracesProjectSlugInput string) (*telemetry.ListHooksTracesPayload, error) {

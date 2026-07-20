@@ -837,6 +837,8 @@ JOIN LATERAL (
 ) resolved ON TRUE
 WHERE sd.project_id = $1
   AND sd.channel = 'plugin'
+  AND sd.plugin_id IS NOT NULL
+  AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 ORDER BY p.slug ASC, s.name ASC
 `
@@ -887,6 +889,26 @@ const listPlugins = `-- name: ListPlugins :many
 SELECT
   p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.created_at, p.updated_at, p.deleted_at, p.deleted,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+  (
+    SELECT count(*)
+    FROM skill_distributions sd
+    JOIN skills s
+      ON s.id = sd.skill_id
+      AND s.project_id = sd.project_id
+      AND s.archived_at IS NULL
+    WHERE sd.plugin_id = p.id
+      AND sd.project_id = p.project_id
+      AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
+      AND sd.revoked_at IS NULL
+      AND EXISTS (
+        SELECT 1
+        FROM skill_versions sv
+        WHERE sv.skill_id = sd.skill_id
+          AND sv.spec_valid IS TRUE
+          AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+      )
+  ) AS skill_count,
   (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
 FROM plugins p
 WHERE p.organization_id = $1
@@ -913,6 +935,7 @@ type ListPluginsRow struct {
 	DeletedAt       pgtype.Timestamptz
 	Deleted         bool
 	ServerCount     int64
+	SkillCount      int64
 	AssignmentCount int64
 }
 
@@ -938,6 +961,7 @@ func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]Lis
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.ServerCount,
+			&i.SkillCount,
 			&i.AssignmentCount,
 		); err != nil {
 			return nil, err
@@ -1225,8 +1249,10 @@ JOIN LATERAL (
 WHERE prev.id = sd.id
   AND sd.project_id = $1
   AND sd.plugin_id = $2
+  AND sd.channel = 'plugin'
+  AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
-RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id, s.name AS skill_name, s.display_name AS skill_display_name
+RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id, s.name AS skill_name, s.display_name AS skill_display_name
 `
 
 type RevokeSkillDistributionsByPluginParams struct {
@@ -1240,6 +1266,7 @@ type RevokeSkillDistributionsByPluginRow struct {
 	SkillID           uuid.UUID
 	PinnedVersionID   uuid.NullUUID
 	PluginID          uuid.NullUUID
+	AssistantID       uuid.NullUUID
 	Channel           string
 	CreatedByUserID   string
 	RevokedAt         pgtype.Timestamptz
@@ -1269,6 +1296,7 @@ func (q *Queries) RevokeSkillDistributionsByPlugin(ctx context.Context, arg Revo
 			&i.SkillID,
 			&i.PinnedVersionID,
 			&i.PluginID,
+			&i.AssistantID,
 			&i.Channel,
 			&i.CreatedByUserID,
 			&i.RevokedAt,
