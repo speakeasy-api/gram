@@ -91,8 +91,11 @@ func buildInstructionToolEntry() *toolListEntry {
 		Description: instructionsToolDescription,
 		InputSchema: instructionToolInputSchema,
 		Annotations: &externalmcp.ToolAnnotations{
-			ReadOnlyHint:   &readOnly,
-			IdempotentHint: &idempotent,
+			Title:           "",
+			ReadOnlyHint:    &readOnly,
+			DestructiveHint: nil,
+			IdempotentHint:  &idempotent,
+			OpenWorldHint:   nil,
 		},
 		Meta: nil,
 	}
