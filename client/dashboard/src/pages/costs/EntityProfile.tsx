@@ -24,6 +24,7 @@ import {
   isAttributionDim,
   LABELS,
   type Measures,
+  pluralLabel,
 } from "./taxonomy";
 
 // ── Formatting helpers ──────────────────────────────────────────────────────
@@ -76,6 +77,15 @@ function buildCostCsv(
     ];
   });
   return toCsv(header, body);
+}
+
+// The search placeholder's noun: the axis plural sentence-cased — words
+// lowercase except acronyms ("Users" → "users", "MCP Servers" → "MCP servers").
+function searchNoun(label: string): string {
+  return label
+    .split(" ")
+    .map((word) => (word === word.toUpperCase() ? word : word.toLowerCase()))
+    .join(" ");
 }
 
 // A unique, deterministic colour identity for an entity, derived from its name
@@ -180,6 +190,10 @@ export type EntityProfileProps = {
   // beside the select (e.g. the root Skill cut excludes subagent-run skills).
   axisHint?: string;
   onAxisChange: (value: string) => void;
+  // Free-text filter over the visible table rows (dimension rows or sessions),
+  // owned by the explorer so it can filter both row sources consistently.
+  searchValue: string;
+  onSearchChange: (value: string) => void;
   // The child rows + drill handler.
   rows: QueryRow[];
   // The view's resolved billing mode; "metered" shows real cost instead of the
@@ -236,6 +250,8 @@ export function EntityProfile({
   axisOptions,
   axisHint,
   onAxisChange,
+  searchValue,
+  onSearchChange,
   rows,
   billingMode,
   onDrill,
@@ -301,6 +317,13 @@ export function EntityProfile({
           ),
       };
 
+  // Placeholder names what the search box narrows: the sessions list when the
+  // override table is on screen, otherwise the current axis's plural.
+  const searchPlaceholder = tableOverride
+    ? "Search sessions..."
+    : `Search ${searchNoun(pluralLabel(groupBy))}...`;
+  const searchActive = searchValue.trim().length > 0;
+
   // The default dimension table; replaced by `tableOverride` (the session list)
   // when one is supplied.
   const dimensionTable = isError ? (
@@ -315,6 +338,7 @@ export function EntityProfile({
       seriesByGroup={seriesByGroup}
       isLoading={isLoading}
       billingMode={billingMode}
+      emptyMessage={searchActive ? "No matches for your search." : undefined}
     />
   );
 
@@ -470,6 +494,9 @@ export function EntityProfile({
             axisOptions={axisOptions}
             axisHint={axisHint}
             onAxisChange={onAxisChange}
+            searchValue={searchValue}
+            onSearchChange={onSearchChange}
+            searchPlaceholder={searchPlaceholder}
             actions={
               <button
                 type="button"

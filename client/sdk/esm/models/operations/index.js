@@ -307,6 +307,7 @@ export * from "./submitriskblockfeedback.js";
 export * from "./suggestcustomdetectionrule.js";
 export * from "./switchauthscopes.js";
 export * from "./testdetectionrule.js";
+export * from "./tokenexchange.js";
 export * from "./triggerriskanalysis.js";
 export * from "./unmaskriskresult.js";
 export * from "./updateassistant.js";

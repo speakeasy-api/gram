@@ -58,6 +58,12 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
 	}
 
+	// Operator-supplied and later rendered as a link, so it is validated here.
+	// An empty value stays legal: the create query stores it as NULL.
+	if v := conv.PtrValOr(payload.ClientSetupDocumentationURL, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_setup_documentation_url must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+
 	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
@@ -114,6 +120,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		Issuer:                            payload.Issuer,
 		Name:                              conv.PtrToPGTextTrimmed(payload.Name),
 		LogoAssetID:                       logoAssetID,
+		ClientSetupDocumentationUrl:       conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
@@ -335,6 +342,13 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		return nil, err
 	}
 
+	// Operator-supplied and later rendered as a link, so it is validated here.
+	// An empty value stays legal: the update query reads it as the explicit
+	// "clear to NULL" sentinel.
+	if v := conv.PtrValOr(payload.ClientSetupDocumentationURL, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_setup_documentation_url must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -361,6 +375,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		Issuer:                            conv.PtrToPGText(payload.Issuer),
 		Name:                              conv.PtrToPGText(payload.Name),
 		LogoAssetID:                       logoAssetID,
+		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
