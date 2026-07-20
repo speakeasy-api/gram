@@ -36,7 +36,7 @@ func TestSkillInsightsReportsVersionAdoptionAndDrift(t *testing.T) {
 	require.NoError(t, err)
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "adoption-plugin")
 	_, err = ti.service.Distribute(ctx, &gen.DistributePayload{
-		ID: newVersion.SkillID.String(), PluginID: plugin.ID.String(), PinnedVersionID: conv.PtrEmpty(newVersion.SkillVersionID.String()),
+		ID: newVersion.SkillID.String(), PluginID: new(plugin.ID.String()), PinnedVersionID: conv.PtrEmpty(newVersion.SkillVersionID.String()),
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
