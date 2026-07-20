@@ -7,6 +7,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/google/uuid"
 )
 
 // DefaultSinkBatchSize is the number of rows accumulated before a flush when the
@@ -34,7 +35,8 @@ type Sink struct {
 	batchSize int
 	dryRun    bool
 
-	inserted int64
+	inserted      int64
+	lastCommitted uuid.UUID
 }
 
 // NewSink builds a ClickHouse sink. conn may be nil when dryRun is true, in which
@@ -48,11 +50,12 @@ func NewSink(conn clickhouse.Conn, bufferSize, batchSize int, dryRun bool) *Sink
 		batchSize = DefaultSinkBatchSize
 	}
 	return &Sink{
-		conn:      conn,
-		in:        make(chan FindingRow, bufferSize),
-		batchSize: batchSize,
-		dryRun:    dryRun,
-		inserted:  0,
+		conn:          conn,
+		in:            make(chan FindingRow, bufferSize),
+		batchSize:     batchSize,
+		dryRun:        dryRun,
+		inserted:      0,
+		lastCommitted: uuid.Nil,
 	}
 }
 
@@ -61,6 +64,12 @@ func (s *Sink) Input() chan<- FindingRow { return s.in }
 
 // Inserted returns the number of rows written (or, in dry-run, that would be).
 func (s *Sink) Inserted() int64 { return s.inserted }
+
+// LastCommitted returns the id of the last row in the last successfully flushed
+// batch. Because records flow through the pipeline in id order, everything up to
+// and including this id is durably written, so it is the safe cursor to resume a
+// later run from (unlike the source's read position, which runs ahead).
+func (s *Sink) LastCommitted() uuid.UUID { return s.lastCommitted }
 
 // Run implements pipeline.Sink. It drains the input channel, flushing whenever a
 // batch fills, and flushes the final partial batch when the channel closes.
@@ -75,7 +84,8 @@ func (s *Sink) Run(ctx context.Context) error {
 			return err
 		}
 		s.inserted += int64(len(buf))
-		log.Printf("sink: inserted batch=%d total=%d", len(buf), s.inserted)
+		s.lastCommitted = buf[len(buf)-1].ID
+		log.Printf("sink: committed batch=%d total=%d committed=%s", len(buf), s.inserted, s.lastCommitted)
 		buf = buf[:0]
 		return nil
 	}

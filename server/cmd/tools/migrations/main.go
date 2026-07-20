@@ -117,7 +117,10 @@ func run() int {
 		ctx, source, transformer, sink, cfg.criteria(), cfg.bufferSize,
 	)
 
-	printReport(cfg, source.Scanned(), sink.Inserted(), source.LastCursor())
+	// Resume from the sink's committed id, not the source read position: rows the
+	// source read but the sink had not yet flushed on interruption are not
+	// durable, and resuming from the read position would skip them.
+	printReport(cfg, source.Scanned(), sink.Inserted(), sink.LastCommitted())
 
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
 		log.Printf("migration failed: %v", runErr)

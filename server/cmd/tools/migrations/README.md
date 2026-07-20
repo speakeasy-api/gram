@@ -48,12 +48,20 @@ type Sink[T any] interface {
 
 `pipeline.Run` connects the stages with an `errgroup` and two channels:
 
-- The **source** publishes to `srcCh` and closes it when exhausted.
+- The **source** publishes to `srcCh`. It does **not** close `srcCh` — `Run`
+  owns that channel and closes it after `Source.Read` returns, so a `Read`
+  implementation must never close its `out` argument (doing so double-closes and
+  panics).
 - The **transform stage** is the sole producer to the sink's channel; it closes
   that channel once `srcCh` is drained, so the sink's `Run` finishes and flushes
   its final partial batch.
 - The first stage to error cancels the shared context so the others unwind
   promptly, and `Run` returns that error.
+
+Because records stay in order end-to-end (a single transform goroutine over FIFO
+channels), a resumable migration should take its **commit cursor from the sink**
+— the id of the last durably-written record — not from the source's read
+position, which runs ahead of what has actually been persisted.
 
 ```go
 err := pipeline.Run[SourceRow, DestRow](ctx, source, transformer, sink, criteria, bufferSize)

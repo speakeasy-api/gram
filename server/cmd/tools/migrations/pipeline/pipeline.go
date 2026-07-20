@@ -28,6 +28,9 @@ type Criteria map[string]any
 // Source scans an origin, honoring criteria, and publishes each record to out.
 // It returns once the origin is exhausted or ctx is cancelled. The implementation
 // owns checkpoint bookkeeping (e.g. logging the last processed cursor).
+//
+// Read must NOT close out: the pipeline owns out and closes it after Read
+// returns. Closing it from Read would double-close and panic.
 type Source[T any] interface {
 	Read(ctx context.Context, criteria Criteria, out chan<- T) error
 }

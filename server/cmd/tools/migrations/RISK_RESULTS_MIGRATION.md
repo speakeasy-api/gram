@@ -19,6 +19,13 @@ Implemented in the `riskfindings` package:
 
 ### What gets transformed
 
+**Only real findings are migrated.** The source filters `found IS TRUE AND
+rule_id IS NOT NULL`, mirroring the live outbox emission
+(`findingCreatedPayloads` in `risk_result_writer.go`). The "nothing found"
+`SourceNone` sentinel rows and dead-letter rows — which never reach ClickHouse
+through the live path — are excluded, so the backfill cannot inflate risk-event
+counts with non-findings.
+
 The Postgres and ClickHouse shapes differ — this is **not** a column-for-column
 copy:
 
@@ -112,8 +119,13 @@ will not join.
 ## Safety and caveats
 
 - **Dry run by default.** Nothing is written unless you pass `-dry-run=false`.
-- **Resumable.** The source scans by keyset over `id` and prints the last
-  processed id every page; an interrupted run resumes with `-cursor`.
+- **Resumable, from the committed cursor.** The final report's `last cursor` is
+  the **sink's** last durably-written id, not the source's read position (which
+  runs ahead). Resume an interrupted run by passing that value to `-cursor`; rows
+  that were read but not yet flushed on interruption are re-read, never skipped.
+- **Exact time bounds.** `-from`/`-to` are honored to full precision: the id
+  keyset window is only a coarse (millisecond) prune, and exact `created_at`
+  predicates enforce the requested sub-millisecond boundaries.
 - **No plaintext in ClickHouse.** Only length, redacted string, and fingerprints
   are written.
 - **Idempotency depends on the engine.** Each batch carries a deterministic
