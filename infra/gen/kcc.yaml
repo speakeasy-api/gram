@@ -219,6 +219,7 @@ pubsub:
       topicRef:
         name: gram-risk-v1-custom-rules-analysis
   - labels:
+      deprecated: "true"
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-finding-bq-writer
       topic_proto_message: gram-risk-v1-finding

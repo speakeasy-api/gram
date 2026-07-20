@@ -31,10 +31,10 @@ type RiskFindingInserter interface {
 }
 
 // FindingCHWriter consumes Finding messages off the shared Pub/Sub topic and
-// writes them to the ClickHouse risk_findings table. Unlike FindingBQWriter it
-// never stores the raw matched value: only its length, a redacted display
-// string, and one-way fingerprints. The verbatim value stays in Postgres for
-// the audited unmask path.
+// writes them to the ClickHouse risk_findings table. It never stores the raw
+// matched value: only its length, a redacted display string, and one-way
+// fingerprints. The verbatim value stays in Postgres for the audited unmask
+// path.
 type FindingCHWriter struct {
 	logger        *slog.Logger
 	metrics       *metrics
@@ -203,9 +203,8 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 
 	err := w.inserter.InsertRiskFindings(ctx, rows)
 	if err != nil {
-		// Log the error while in shadow mode rather than returning it, matching
-		// the BigQuery writer — a failed analytics insert must not nack and
-		// redrive the finding.
+		// Log the error rather than returning it: a failed analytics insert must
+		// not nack and redrive the finding.
 		logger.ErrorContext(ctx, "failed to insert batch into clickhouse", attr.SlogError(err))
 	}
 
