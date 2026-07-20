@@ -153,7 +153,7 @@ async function bundleFunction(
   );
 }
 
-async function createZipArchive(
+export async function createZipArchive(
   logger: Logger,
   artifacts: Artifacts,
 ): Promise<void> {
