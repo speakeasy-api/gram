@@ -43959,6 +43959,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
+        client_setup_documentation_url:
+          type: string
+          description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
         grant_types_supported:
           type: array
           items:
@@ -44347,6 +44350,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
+        client_setup_documentation_url:
+          type: string
+          description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
         grant_types_supported:
           type: array
           items:
@@ -52395,6 +52401,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+        client_setup_documentation_url:
+          type: string
+          description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.
         created_at:
           type: string
           format: date-time
@@ -58175,6 +58184,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+        client_setup_documentation_url:
+          type: string
+          description: Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
         grant_types_supported:
           type: array
           items:
