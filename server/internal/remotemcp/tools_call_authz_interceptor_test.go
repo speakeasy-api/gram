@@ -112,6 +112,7 @@ func TestToolsCallAuthzInterceptor_GrantsRejectNonMatchingTool(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Equal(t, "you do not have permission to use this MCP tool. Contact your organization's administrator to request access.", oopsErr.Error())
 }
 
 func TestToolsCallAuthzInterceptor_NoGrantsRejects(t *testing.T) {

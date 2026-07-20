@@ -764,6 +764,7 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Equal(t, "you do not have permission to use this MCP server. Contact your organization's administrator to request access.", oopsErr.Error())
 
 	select {
 	case <-upstreamHit:
