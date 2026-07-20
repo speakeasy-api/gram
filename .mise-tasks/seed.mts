@@ -3452,6 +3452,64 @@ async function seedObservabilityData(init: {
     }
   }
 
+  // ── DNO-425 regression slice: uniform-team division with unclassified mix ─
+  // The main-loop users spread personal + team + unclassified across every
+  // division, so each drilled division carries ≥2 distinct non-empty
+  // account_type values and the Account Type breakdown always survives
+  // pruning. This cohort reproduces the shape DNO-425 hid: a division whose
+  // spend mixes ONLY team/anthropic with unclassified ('') rows — no personal
+  // accounts — nested over a same-named department (the reported IDP shape,
+  // giving the Engineering / Engineering breadcrumb). Drilling into it must
+  // still offer the Account Type axis (Team + "(unset)"), which requires the
+  // server to surface the '' bucket in dimension_values for account_type.
+  const NESTED_ENG_NAME = "Engineering";
+  const NESTED_ENG_USERS = 6;
+  const NESTED_ENG_SESSIONS_PER_USER = 5;
+  for (let u = 0; u < NESTED_ENG_USERS; u++) {
+    const userAttrs =
+      `"user.email": "eng-div-user${u}@example.com", ` +
+      `"user.attributes.department_name": "${NESTED_ENG_NAME}", ` +
+      `"user.attributes.division_name": "${NESTED_ENG_NAME}", ` +
+      `"user.attributes.job_title": "${JOB_TITLES[u % JOB_TITLES.length]}", ` +
+      `"user.attributes.employee_type": "full_time", ` +
+      `"user.attributes.cost_center_name": "CC-1000", ` +
+      `"user.roles": ["developer"], "user.groups": ["platform"], ` +
+      `"gram.hook.source": "claude-code"`;
+    for (let s = 0; s < NESTED_ENG_SESSIONS_PER_USER; s++) {
+      const n = u * NESTED_ENG_SESSIONS_PER_USER + s;
+      const chatId = generateChatUUID(200_000 + n);
+      // Everything below is deterministic so the slice's numbers — and the
+      // account mix that makes it a regression fixture — are stable across
+      // re-seeds: every third session unclassified, the rest team.
+      const sessionTime = new Date(
+        now - (n % DAYS_BACK) * msPerDay - u * 3_600_000,
+      );
+      const timeNano = BigInt(sessionTime.getTime()) * BigInt(1_000_000);
+      const traceId = crypto.randomBytes(16).toString("hex");
+      const unclassified = n % 3 === 2;
+      const acctFrag = unclassified
+        ? ""
+        : `"gram.account_type": "team", "gram.provider": "anthropic", `;
+      const inputTokens = 1_000 + (n % 5) * 700;
+      const outputTokens = 300 + (n % 4) * 250;
+      const cacheReadTokens = 8_000 + (n % 6) * 4_000;
+      const cacheCreationTokens = 5_000 + (n % 3) * 1_500;
+      const totalTokens =
+        inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
+      const cost = (
+        (inputTokens * 3 +
+          outputTokens * 15 +
+          cacheReadTokens * 0.3 +
+          cacheCreationTokens * 3.75) /
+        1_000_000
+      ).toFixed(6);
+
+      chInserts.push(
+        `(${timeNano}, ${timeNano}, 'INFO', 'Chat completion', '${traceId}', '{${acctFrag}"gen_ai.operation.name": "chat", "gen_ai.conversation.id": "${chatId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.cache_read.input_tokens": ${cacheReadTokens}, "gen_ai.usage.cache_creation.input_tokens": ${cacheCreationTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "claude-sonnet-4-6", "gen_ai.provider.name": "anthropic", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", ${userAttrs}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+      );
+    }
+  }
+
   // ── Long-horizon token history (DNO-404 costs-page token usage panel) ─────
   // Dense token usage across ~7 billing cycles so the billing-cycle picker,
   // weekly/monthly granularities, and cumulative views chart real data.

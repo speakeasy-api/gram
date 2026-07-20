@@ -231,11 +231,16 @@ func attributeDimensionValuesExpr(groupBy string) string {
 			collected = "groupUniqArray(" + capStr + ")(" + dim.column + ")"
 		}
 		// Drop empty strings so absent attributes don't surface as a blank value.
-		// billing_mode is the exception: '' marks an unclassified contributor, and
-		// the cost view must see it so a scope mixing metered and unclassified
-		// spend is never presented as confidently metered (DNO-384).
+		// The account-classification trio is the exception: for those, '' marks an
+		// unclassified contributor rather than a missing attribute, and consumers
+		// need to see it — billing_mode so a scope mixing metered and unclassified
+		// spend is never presented as confidently metered (DNO-384), and
+		// account_type/provider so a slice mixing classified and unclassified
+		// spend still reads as divisible (the cost explorer prunes breakdown axes
+		// with fewer than two distinct values, which hid the Account Type cut on
+		// exactly the slices where the team/unclassified split matters, DNO-425).
 		valExpr := "arrayFilter(x -> x != '', " + collected + ")"
-		if k == "billing_mode" {
+		if k == "billing_mode" || k == "account_type" || k == "provider" {
 			valExpr = collected
 		}
 		parts = append(parts, "'"+k+"', "+valExpr)

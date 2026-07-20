@@ -895,9 +895,12 @@ export function CostsExplorer(): JSX.Element {
 
   // Offer a breakdown axis only if it can actually partition the current slice
   // into >1 row. `attributes` (the entity's distinct dimension values) tells us:
-  // a dim with ≤1 value collapses to a single row and is shown as a fact in the
-  // Profile grid instead. Always keep the active axis; show everything at the
-  // org root, where there's no slice to measure against yet.
+  // a dim with ≤1 value would collapse to a single row, so it's dropped. The
+  // server includes the "" (unset) bucket in the account-classification dims'
+  // values (account_type, provider, billing_mode) — there "" is a real,
+  // drillable slice, so e.g. team + unclassified spend counts as 2 values and
+  // keeps the axis (DNO-425). Always keep the active axis; show everything at
+  // the org root, where there's no slice to measure against yet.
   const filteredDims = new Set(path.map((c) => c.dim));
   const pivotOptions = datasetPivots(dataset).filter((p) => {
     if (filteredDims.has(p.dim)) return false;

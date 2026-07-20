@@ -394,6 +394,11 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	// billing_mode is the exception: unclassified rows surface as "" so a scope
 	// mixing metered and unclassified spend can never read as confidently metered.
 	require.ElementsMatch(t, []string{""}, eng.DimensionValues["billing_mode"])
+	// account_type and provider share that exception (DNO-425): Engineering mixes
+	// a classified Claude row (team/anthropic) with an unclassified cursor row, and
+	// the "" bucket must surface so the slice reads as divisible by these dims.
+	require.ElementsMatch(t, []string{"team", ""}, eng.DimensionValues["account_type"])
+	require.ElementsMatch(t, []string{"anthropic", ""}, eng.DimensionValues["provider"])
 
 	// Sales had a single role-less user; its email surfaces and role is empty.
 	sales := rowByGroup(t, deptResult.Table, "Sales")
