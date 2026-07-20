@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -183,4 +184,37 @@ func TestListToolMetadata_RBAC_AllowedWithProjectGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, result.Tools)
+}
+
+// Reads are rejected on the same terms as writes: a toolset-backed server can
+// never hold tool metadata.
+func TestListToolMetadata_RejectsToolsetBackedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolsetID := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID).ID.String()
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "toolset backed server " + uuid.NewString(),
+		EnvironmentID:     nil,
+		RemoteMcpServerID: nil,
+		ToolsetID:         &toolsetID,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.ListToolMetadata(ctx, &gen.ListToolMetadataPayload{
+		McpServerID:      created.ID,
+		IncludeDeleted:   nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
 }
