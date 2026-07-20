@@ -1,10 +1,6 @@
 import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
 import { describe, expect, it } from "vitest";
-import {
-  buildCollectionMcpJson,
-  buildOpencodeMcpJson,
-  formatMcpJson,
-} from "./mcp-json";
+import { buildCollectionMcpJson, formatMcpJson } from "./mcp-json";
 
 function makeServer(
   overrides: Partial<ExternalMCPServer> = {},
@@ -136,36 +132,6 @@ describe("buildCollectionMcpJson", () => {
 
     expect(result.config.mcpServers.Analytics!.headers).toEqual({
       "MCP-Service-API-Key": "${SERVICE_API_KEY}",
-    });
-  });
-});
-
-describe("buildOpencodeMcpJson", () => {
-  it("renders opencode's remote mcp shape", () => {
-    const result = buildOpencodeMcpJson([
-      makeServer({
-        title: "CRM",
-        remotes: [
-          {
-            transportType: "streamable-http",
-            url: "https://app.getgram.ai/mcp/crm",
-          },
-        ],
-      }),
-    ]);
-
-    expect(result).toEqual({
-      $schema: "https://opencode.ai/config.json",
-      mcp: {
-        CRM: {
-          type: "remote",
-          enabled: true,
-          url: "https://app.getgram.ai/mcp/crm",
-          headers: {
-            Authorization: "Bearer ${GRAM_API_KEY}",
-          },
-        },
-      },
     });
   });
 });

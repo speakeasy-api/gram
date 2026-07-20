@@ -58,42 +58,6 @@ export function formatMcpJson(config: CollectionMcpJsonConfig): string {
   return JSON.stringify(config, null, 2);
 }
 
-export type OpencodeMcpJsonConfig = {
-  $schema: string;
-  mcp: Record<
-    string,
-    {
-      type: "remote";
-      enabled: true;
-      url: string;
-      headers: Record<string, string>;
-    }
-  >;
-};
-
-/**
- * Renders opencode's `opencode.json` `mcp` shape from the same server data
- * `buildCollectionMcpJson` extracts — opencode uses `type: "remote"` (vs.
- * `"http"`) and requires an explicit `enabled: true` per entry.
- */
-export function buildOpencodeMcpJson(
-  servers: ExternalMCPServer[],
-): OpencodeMcpJsonConfig {
-  const { config } = buildCollectionMcpJson(servers);
-  const mcp: OpencodeMcpJsonConfig["mcp"] = {};
-
-  for (const [name, server] of Object.entries(config.mcpServers)) {
-    mcp[name] = {
-      type: "remote",
-      enabled: true,
-      url: server.url,
-      headers: server.headers,
-    };
-  }
-
-  return { $schema: "https://opencode.ai/config.json", mcp };
-}
-
 function getUsableRemote(server: ExternalMCPServer) {
   const remotes =
     server.remotes?.filter((remote) => remote.url.trim().length > 0) ?? [];
