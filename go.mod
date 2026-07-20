@@ -53,7 +53,7 @@ require (
 	github.com/moby/moby/client v0.4.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/oschwald/maxminddb-golang v1.13.1
-	github.com/pgvector/pgvector-go v0.3.0
+	github.com/pgvector/pgvector-go v0.4.0
 	github.com/pgx-contrib/pgxotel v0.0.0-20250908221444-24ae56d05ec0
 	github.com/polarsource/polar-go v0.16.0
 	github.com/posthog/posthog-go v1.11.2
