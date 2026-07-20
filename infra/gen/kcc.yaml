@@ -220,20 +220,6 @@ pubsub:
         name: gram-risk-v1-custom-rules-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
-      proto_message: gram-risk-v1-finding-bq-writer
-      topic_proto_message: gram-risk-v1-finding
-    name: gram-risk-v1-finding-bq-writer
-    spec:
-      ackDeadlineSeconds: 60
-      messageRetentionDuration: 604800s
-      retainAckedMessages: true
-      retryPolicy:
-        maximumBackoff: 600s
-        minimumBackoff: 10s
-      topicRef:
-        name: gram-risk-v1-finding
-  - labels:
-      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-finding-ch-writer
       topic_proto_message: gram-risk-v1-finding
     name: gram-risk-v1-finding-ch-writer
