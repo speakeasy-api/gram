@@ -2,12 +2,9 @@ package aiintegrations
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -163,18 +160,15 @@ func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.Usa
 }
 
 func generateCursorUsageEventHash(event cursorapi.UsageEvent) string {
-	fields := []string{
-		strconv.FormatInt(event.Timestamp.UTC().UnixMilli(), 10),
+	return eventKey{
+		event.Timestamp,
 		conv.NormalizeEmail(event.UserEmail),
 		event.Model,
 		event.Kind,
-		strconv.FormatFloat(event.ChargedCents, 'f', -1, 64),
-		strconv.FormatInt(event.TokenUsage.InputTokens, 10),
-		strconv.FormatInt(event.TokenUsage.OutputTokens, 10),
-		strconv.FormatInt(event.TokenUsage.CacheReadTokens, 10),
-		strconv.FormatInt(event.TokenUsage.CacheWriteTokens, 10),
-	}
-
-	sum := sha256.Sum256([]byte(strings.Join(fields, "|")))
-	return hex.EncodeToString(sum[:])
+		event.ChargedCents,
+		event.TokenUsage.InputTokens,
+		event.TokenUsage.OutputTokens,
+		event.TokenUsage.CacheReadTokens,
+		event.TokenUsage.CacheWriteTokens,
+	}.hash()
 }

@@ -2,13 +2,9 @@ package aiintegrations
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -329,34 +325,29 @@ func buildClaudeChatCostRows(cfg Config, rows []anthropicapi.UserCostRow) ([]tel
 }
 
 // Report rows carry no upstream identifier, but a finalized 1m bucket is
-// deterministic: re-fetching the same window yields byte-identical rows. The
-// hashes below fingerprint a row's aggregation key and values so consumers
-// needing exact-once sums can dedupe by (gram_project_id,
-// claude_chat.event_hash) — the same insurance cursor.event_hash provides —
-// covering the crash window between the ClickHouse write and the watermark
-// advance, where one window can be re-ingested.
+// deterministic — re-fetching the same window yields byte-identical rows —
+// so the aggregation key and values form a stable row identity. The leading
+// kind literal keeps a usage row and a cost row for the same (bucket, user,
+// model) from colliding.
 
 func generateClaudeChatUsageRowHash(row anthropicapi.UserUsageRow) string {
-	fields := []string{
+	return eventKey{
 		"usage",
 		row.StartingAt,
 		row.Actor.UserID,
 		row.Model,
 		row.Product,
-		strconv.FormatInt(row.UncachedInputTokens, 10),
-		strconv.FormatInt(row.OutputTokens, 10),
-		strconv.FormatInt(row.CacheReadInputTokens, 10),
-		strconv.FormatInt(row.CacheCreation.Ephemeral1hInputTokens, 10),
-		strconv.FormatInt(row.CacheCreation.Ephemeral5mInputTokens, 10),
-		strconv.FormatInt(row.Requests, 10),
-	}
-
-	sum := sha256.Sum256([]byte(strings.Join(fields, "|")))
-	return hex.EncodeToString(sum[:])
+		row.UncachedInputTokens,
+		row.OutputTokens,
+		row.CacheReadInputTokens,
+		row.CacheCreation.Ephemeral1hInputTokens,
+		row.CacheCreation.Ephemeral5mInputTokens,
+		row.Requests,
+	}.hash()
 }
 
 func generateClaudeChatCostRowHash(row anthropicapi.UserCostRow) string {
-	fields := []string{
+	return eventKey{
 		"cost",
 		row.StartingAt,
 		row.Actor.UserID,
@@ -364,11 +355,8 @@ func generateClaudeChatCostRowHash(row anthropicapi.UserCostRow) string {
 		row.Product,
 		row.Amount,
 		row.Currency,
-		strconv.FormatInt(row.Requests, 10),
-	}
-
-	sum := sha256.Sum256([]byte(strings.Join(fields, "|")))
-	return hex.EncodeToString(sum[:])
+		row.Requests,
+	}.hash()
 }
 
 // newClaudeChatLogParams stamps the provenance shared by usage and cost rows:
