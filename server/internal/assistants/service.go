@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -212,7 +213,9 @@ type assistantMCPServerRow struct {
 type assistantSkillRow struct {
 	SkillID           uuid.UUID
 	PinnedVersionID   uuid.NullUUID
+	Name              string
 	ResolvedVersionID uuid.UUID
+	Description       string
 }
 
 func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistantRecord {
@@ -983,7 +986,11 @@ func (s *ServiceCore) loadAssistantSkills(ctx context.Context, projectID uuid.UU
 			continue
 		}
 		out[row.AssistantID.UUID] = append(out[row.AssistantID.UUID], assistantSkillRow{
-			SkillID: row.SkillID, PinnedVersionID: row.PinnedVersionID, ResolvedVersionID: row.ResolvedVersionID,
+			SkillID:           row.SkillID,
+			PinnedVersionID:   row.PinnedVersionID,
+			Name:              row.Name,
+			ResolvedVersionID: row.ResolvedVersionID,
+			Description:       conv.FromPGTextOrEmpty[string](row.Description),
 		})
 	}
 	return out, nil
@@ -2870,6 +2877,9 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
 	}
+	if err := s.hydrateAssistantSkills(ctx, assistant.ProjectID, &assistant); err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant skills").LogError(ctx, s.logger, logAttrs...)
+	}
 
 	runtimeServerURL := s.runtime.ServerURL()
 	if runtimeServerURL == nil {
@@ -2890,7 +2900,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// assistant can tell the user which integration is broken.
 	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
 
-	instructions, err := composeInstructions(assistant.Instructions, thread)
+	instructions, err := composeInstructions(assistant.Instructions, thread, assistant.Skills)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -2944,7 +2954,7 @@ Two MCP auth events may appear in thread, each as <message-context> block with E
 
 - EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
-func composeInstructions(base string, thread assistantThreadRecord) (string, error) {
+func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillRow) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
 	if err != nil {
 		return "", err
@@ -2956,6 +2966,16 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	parts := make([]string, 0, 4)
 	if base != "" {
 		parts = append(parts, base)
+	}
+	if len(skills) > 0 {
+		lines := make([]string, 0, len(skills)+1)
+		lines = append(lines, "## Skills")
+		for _, skill := range skills {
+			name := strings.Join(strings.Fields(skill.Name), " ")
+			description := conv.TruncateString(strings.Join(strings.Fields(skill.Description), " "), 200)
+			lines = append(lines, "- Name: "+strconv.Quote(name)+"; description: "+strconv.Quote(description)+". Call mcp__p-assistants_skills_load with name "+strconv.Quote(name)+" before relying on this skill.")
+		}
+		parts = append(parts, strings.Join(lines, "\n"))
 	}
 	parts = append(parts, mcpAuthAddendum)
 	if guidance := adapter.OutputChannelGuidance(); guidance != "" {

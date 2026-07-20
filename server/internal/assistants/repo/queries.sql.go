@@ -1799,7 +1799,9 @@ SELECT
   sd.assistant_id,
   sd.skill_id,
   sd.pinned_version_id,
-  resolved.id AS resolved_version_id
+  s.name,
+  resolved.id AS resolved_version_id,
+  resolved.description
 FROM skill_distributions sd
 JOIN assistants a
   ON a.id = sd.assistant_id
@@ -1810,7 +1812,7 @@ JOIN skills s
   AND s.project_id = sd.project_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.id
+  SELECT sv.id, sv.description
   FROM skill_versions sv
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
@@ -1836,9 +1838,13 @@ type LoadAssistantSkillsRow struct {
 	AssistantID       uuid.NullUUID
 	SkillID           uuid.UUID
 	PinnedVersionID   uuid.NullUUID
+	Name              string
 	ResolvedVersionID uuid.UUID
+	Description       pgtype.Text
 }
 
+// The active/resolvable predicates in LoadAssistantSkills and
+// LoadAttachedAssistantSkill must stay identical.
 func (q *Queries) LoadAssistantSkills(ctx context.Context, arg LoadAssistantSkillsParams) ([]LoadAssistantSkillsRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantSkills, arg.AssistantIds, arg.ProjectID)
 	if err != nil {
@@ -1852,7 +1858,9 @@ func (q *Queries) LoadAssistantSkills(ctx context.Context, arg LoadAssistantSkil
 			&i.AssistantID,
 			&i.SkillID,
 			&i.PinnedVersionID,
+			&i.Name,
 			&i.ResolvedVersionID,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}
@@ -2005,6 +2013,48 @@ func (q *Queries) LoadAssistantToolsets(ctx context.Context, arg LoadAssistantTo
 		return nil, err
 	}
 	return items, nil
+}
+
+const loadAttachedAssistantSkill = `-- name: LoadAttachedAssistantSkill :one
+SELECT resolved.content
+FROM skill_distributions sd
+JOIN assistants a
+  ON a.id = sd.assistant_id
+  AND a.project_id = sd.project_id
+  AND a.deleted IS FALSE
+JOIN skills s
+  ON s.id = sd.skill_id
+  AND s.project_id = sd.project_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id, sv.content
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.assistant_id = $1
+  AND sd.project_id = $2
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.assistant_id IS NOT NULL
+  AND sd.revoked_at IS NULL
+  AND s.name = $3
+`
+
+type LoadAttachedAssistantSkillParams struct {
+	AssistantID uuid.NullUUID
+	ProjectID   uuid.UUID
+	Name        string
+}
+
+func (q *Queries) LoadAttachedAssistantSkill(ctx context.Context, arg LoadAttachedAssistantSkillParams) (string, error) {
+	row := q.db.QueryRow(ctx, loadAttachedAssistantSkill, arg.AssistantID, arg.ProjectID, arg.Name)
+	var content string
+	err := row.Scan(&content)
+	return content, err
 }
 
 const loadThreadContext = `-- name: LoadThreadContext :one

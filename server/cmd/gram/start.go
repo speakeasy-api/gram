@@ -769,6 +769,7 @@ func newStartCommand() *cli.Command {
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+			skillTools := platformtoolsruntime.AssistantSkillTools(db)
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
 			// mcpService captures this map by reference now; the remaining
 			// insights tools (chat/orgs/risk/deployments/skills) are merged in once
@@ -778,6 +779,7 @@ func newStartCommand() *cli.Command {
 			// Runner-callable platform tools the runtime must be able to execute
 			// (trigger tools are wired separately via WithTriggerTools).
 			assistantPlatformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
+			assistantPlatformExtras = append(assistantPlatformExtras, skillTools...)
 
 			platformSvc := platformtoolsruntime.NewService(
 				logger,
@@ -1217,6 +1219,7 @@ func newStartCommand() *cli.Command {
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChangelogTools(changelogClient)...)
 			maps.Copy(platformToolsets, platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 				AssistantMemoryTools:          memoryTools,
+				AssistantSkillTools:           skillTools,
 				AssistantTriggerTools:         triggerTools,
 				ManagedAssistantInsightsTools: managedInsightsTools,
 			}))
