@@ -248,22 +248,26 @@ export function ChatLogsTable({
                     {/* Metadata row */}
                     <div className="text-muted-foreground flex items-center gap-4 text-sm">
                       <span className="flex items-center gap-1.5">
-                        <AccountTypeIcon accountType={chat.accountType} />
-                        <span className="max-w-[120px] truncate">
-                          {chat.assistantName ? (
-                            <span className="inline-flex items-center gap-1">
-                              <Icon name="bot" className="size-3.5" />
+                        {chat.assistantName ? (
+                          <>
+                            <Icon name="bot" className="size-4 opacity-60" />
+                            <span className="max-w-[120px] truncate">
                               {chat.assistantName}
                             </span>
-                          ) : (
-                            chatOwnerLabel(
-                              membersData?.members,
-                              chat,
-                              user,
-                              personalAccountEmail(chat),
-                            )
-                          )}
-                        </span>
+                          </>
+                        ) : (
+                          <>
+                            <AccountTypeIcon accountType={chat.accountType} />
+                            <span className="max-w-[120px] truncate">
+                              {chatOwnerLabel(
+                                membersData?.members,
+                                chat,
+                                user,
+                                personalAccountEmail(chat),
+                              )}
+                            </span>
+                          </>
+                        )}
                       </span>
                       {source && (
                         <span className="flex items-center gap-1.5">
