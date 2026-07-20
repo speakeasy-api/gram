@@ -11,11 +11,11 @@ export interface UseToolMetadataResult {
 }
 
 /**
- * Loads Gram's stored annotation metadata for an MCP server's tools.
+ * Loads Speakeasy's stored annotation metadata for an MCP server's tools.
  *
  * This is the admin-authoritative side of the Inspect tab: the remote server
  * advertises its own annotation hints over the live MCP session, and these
- * stored entries are what Gram asserts on top of them (read by the runtime
+ * stored entries are what Speakeasy asserts on top of them (read by the runtime
  * proxy to fill the disposition dimension of RBAC checks).
  *
  * Only servers backed by a remote MCP server carry tool metadata — the API
