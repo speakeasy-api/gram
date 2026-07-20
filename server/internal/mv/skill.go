@@ -90,15 +90,17 @@ func BuildSkillVersionListView(rows []repo.SkillVersion, frontmatter func(conten
 	return result, nil
 }
 
-func BuildSkillDistributionView(distribution repo.SkillDistribution, skillName string, skillDisplayName string, pluginName string, resolvedVersionID uuid.UUID) *types.SkillDistribution {
+func BuildSkillDistributionView(distribution repo.SkillDistribution, skillName, skillDisplayName string, pluginName, assistantName *string, resolvedVersionID uuid.UUID) *types.SkillDistribution {
 	return &types.SkillDistribution{
 		ID:                distribution.ID.String(),
 		ProjectID:         distribution.ProjectID.String(),
 		SkillID:           distribution.SkillID.String(),
 		SkillName:         skillName,
 		SkillDisplayName:  skillDisplayName,
-		PluginID:          distribution.PluginID.UUID.String(),
+		PluginID:          conv.FromNullableUUID(distribution.PluginID),
 		PluginName:        pluginName,
+		AssistantID:       conv.FromNullableUUID(distribution.AssistantID),
+		AssistantName:     assistantName,
 		PinnedVersionID:   conv.FromNullableUUID(distribution.PinnedVersionID),
 		ResolvedVersionID: resolvedVersionID.String(),
 		Channel:           distribution.Channel,
@@ -108,10 +110,17 @@ func BuildSkillDistributionView(distribution repo.SkillDistribution, skillName s
 	}
 }
 
-func BuildSkillDistributionListView(rows []repo.ListActiveSkillDistributionsRow) []*types.SkillDistribution {
-	result := make([]*types.SkillDistribution, len(rows))
+func BuildSkillDistributionListView(rows []repo.ListActiveSkillDistributionsRow) []*types.PluginSkillDistribution {
+	result := make([]*types.PluginSkillDistribution, len(rows))
 	for i, row := range rows {
-		result[i] = BuildSkillDistributionView(row.SkillDistribution, row.SkillName, row.SkillDisplayName, row.PluginName, row.ResolvedVersionID)
+		result[i] = &types.PluginSkillDistribution{
+			ID: row.SkillDistribution.ID.String(), ProjectID: row.SkillDistribution.ProjectID.String(),
+			SkillID: row.SkillDistribution.SkillID.String(), SkillName: row.SkillName, SkillDisplayName: row.SkillDisplayName,
+			PluginID: row.SkillDistribution.PluginID.UUID.String(), PluginName: row.PluginName,
+			PinnedVersionID: conv.FromNullableUUID(row.SkillDistribution.PinnedVersionID), ResolvedVersionID: row.ResolvedVersionID.String(),
+			Channel: row.SkillDistribution.Channel, CreatedByUserID: row.SkillDistribution.CreatedByUserID,
+			CreatedAt: conv.FromPGTimestamptz(row.SkillDistribution.CreatedAt), UpdatedAt: conv.FromPGTimestamptz(row.SkillDistribution.UpdatedAt),
+		}
 	}
 
 	return result
