@@ -235,6 +235,10 @@ export function SkillManifestDialog({
           <GitHubSkillImport
             onBack={() => setCreateSource(null)}
             onCancel={() => handleOpenChange(false)}
+            onComplete={() => {
+              reset();
+              onOpenChange(false);
+            }}
             onPendingChange={setImportPending}
           />
         )}

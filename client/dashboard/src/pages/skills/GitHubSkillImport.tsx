@@ -47,10 +47,12 @@ function primaryLabel(
 export function GitHubSkillImport({
   onBack,
   onCancel,
+  onComplete,
   onPendingChange,
 }: {
   onBack: () => void;
   onCancel: () => void;
+  onComplete: () => void;
   onPendingChange: (pending: boolean) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
@@ -113,7 +115,7 @@ export function GitHubSkillImport({
         imported.add(skill.path);
       }
       await invalidateSkillQueries(queryClient);
-      onCancel();
+      onComplete();
     } catch (caught) {
       if (imported.size > 0) {
         setSelected((current) => {
