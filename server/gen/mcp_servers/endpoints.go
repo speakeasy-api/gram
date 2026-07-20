@@ -22,6 +22,11 @@ type Endpoints struct {
 	ListMcpServersForOrg goa.Endpoint
 	UpdateMcpServer      goa.Endpoint
 	ListToolFilters      goa.Endpoint
+	SetToolMetadataBatch goa.Endpoint
+	AddToolMetadataBatch goa.Endpoint
+	ListToolMetadata     goa.Endpoint
+	SetToolMetadata      goa.Endpoint
+	DeleteToolMetadata   goa.Endpoint
 	DeleteMcpServer      goa.Endpoint
 }
 
@@ -36,6 +41,11 @@ func NewEndpoints(s Service) *Endpoints {
 		ListMcpServersForOrg: NewListMcpServersForOrgEndpoint(s, a.APIKeyAuth),
 		UpdateMcpServer:      NewUpdateMcpServerEndpoint(s, a.APIKeyAuth),
 		ListToolFilters:      NewListToolFiltersEndpoint(s, a.APIKeyAuth),
+		SetToolMetadataBatch: NewSetToolMetadataBatchEndpoint(s, a.APIKeyAuth),
+		AddToolMetadataBatch: NewAddToolMetadataBatchEndpoint(s, a.APIKeyAuth),
+		ListToolMetadata:     NewListToolMetadataEndpoint(s, a.APIKeyAuth),
+		SetToolMetadata:      NewSetToolMetadataEndpoint(s, a.APIKeyAuth),
+		DeleteToolMetadata:   NewDeleteToolMetadataEndpoint(s, a.APIKeyAuth),
 		DeleteMcpServer:      NewDeleteMcpServerEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -48,6 +58,11 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListMcpServersForOrg = m(e.ListMcpServersForOrg)
 	e.UpdateMcpServer = m(e.UpdateMcpServer)
 	e.ListToolFilters = m(e.ListToolFilters)
+	e.SetToolMetadataBatch = m(e.SetToolMetadataBatch)
+	e.AddToolMetadataBatch = m(e.AddToolMetadataBatch)
+	e.ListToolMetadata = m(e.ListToolMetadata)
+	e.SetToolMetadata = m(e.SetToolMetadata)
+	e.DeleteToolMetadata = m(e.DeleteToolMetadata)
 	e.DeleteMcpServer = m(e.DeleteMcpServer)
 }
 
@@ -366,6 +381,301 @@ func NewListToolFiltersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.ListToolFilters(ctx, p)
+	}
+}
+
+// NewSetToolMetadataBatchEndpoint returns an endpoint function that calls the
+// method "setToolMetadataBatch" of service "mcpServers".
+func NewSetToolMetadataBatchEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetToolMetadataBatchPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetToolMetadataBatch(ctx, p)
+	}
+}
+
+// NewAddToolMetadataBatchEndpoint returns an endpoint function that calls the
+// method "addToolMetadataBatch" of service "mcpServers".
+func NewAddToolMetadataBatchEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AddToolMetadataBatchPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.AddToolMetadataBatch(ctx, p)
+	}
+}
+
+// NewListToolMetadataEndpoint returns an endpoint function that calls the
+// method "listToolMetadata" of service "mcpServers".
+func NewListToolMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListToolMetadataPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListToolMetadata(ctx, p)
+	}
+}
+
+// NewSetToolMetadataEndpoint returns an endpoint function that calls the
+// method "setToolMetadata" of service "mcpServers".
+func NewSetToolMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetToolMetadataPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetToolMetadata(ctx, p)
+	}
+}
+
+// NewDeleteToolMetadataEndpoint returns an endpoint function that calls the
+// method "deleteToolMetadata" of service "mcpServers".
+func NewDeleteToolMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteToolMetadataPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteToolMetadata(ctx, p)
 	}
 }
 

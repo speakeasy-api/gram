@@ -208,12 +208,17 @@ trackedFiles:
   src/funcs/mcpRegistriesGetServerDetails.ts: {}
   src/funcs/mcpRegistriesListCatalog.ts: {}
   src/funcs/mcpRegistriesListRegistries.ts: {}
+  src/funcs/mcpServersAddToolMetadataBatch.ts: {}
   src/funcs/mcpServersCreate.ts: {}
   src/funcs/mcpServersDelete.ts: {}
+  src/funcs/mcpServersDeleteToolMetadata.ts: {}
   src/funcs/mcpServersGet.ts: {}
   src/funcs/mcpServersList.ts: {}
   src/funcs/mcpServersListForOrg.ts: {}
   src/funcs/mcpServersListToolFilters.ts: {}
+  src/funcs/mcpServersListToolMetadata.ts: {}
+  src/funcs/mcpServersSetToolMetadata.ts: {}
+  src/funcs/mcpServersSetToolMetadataBatch.ts: {}
   src/funcs/mcpServersUpdate.ts: {}
   src/funcs/modelKeysDeleteKey.ts: {}
   src/funcs/modelKeysListKeys.ts: {}
@@ -500,6 +505,7 @@ trackedFiles:
   src/models/components/addpackageform.ts: {}
   src/models/components/addpluginserverform.ts: {}
   src/models/components/addskillversionrequestbody.ts: {}
+  src/models/components/addtoolmetadatabatchresult.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentplugin.ts: {}
   src/models/components/agentusage.ts: {}
@@ -779,6 +785,7 @@ trackedFiles:
   src/models/components/listsourcesresult.ts: {}
   src/models/components/listsyncedusersresult.ts: {}
   src/models/components/listtoolfiltersresult.ts: {}
+  src/models/components/listtoolmetadataresult.ts: {}
   src/models/components/listtoolsetsresult.ts: {}
   src/models/components/listtoolsetsummariesresult.ts: {}
   src/models/components/listtoolsresult.ts: {}
@@ -986,6 +993,9 @@ trackedFiles:
   src/models/components/setprojectlogoresult.ts: {}
   src/models/components/setscheduleenabledrequestbody.ts: {}
   src/models/components/setsourceenvironmentlinkrequestbody.ts: {}
+  src/models/components/settoolmetadatabatchrequestbody.ts: {}
+  src/models/components/settoolmetadatabatchresult.ts: {}
+  src/models/components/settoolmetadatarequestbody.ts: {}
   src/models/components/settoolsetenvironmentlinkrequestbody.ts: {}
   src/models/components/settoolvariationsgrouprequestbody.ts: {}
   src/models/components/setusersessionissuerrequestbody.ts: {}
@@ -1041,6 +1051,8 @@ trackedFiles:
   src/models/components/toolentry.ts: {}
   src/models/components/toolfilterscope.ts: {}
   src/models/components/toolfiltertool.ts: {}
+  src/models/components/toolmetadata.ts: {}
+  src/models/components/toolmetadataform.ts: {}
   src/models/components/toolmetric.ts: {}
   src/models/components/toolset.ts: {}
   src/models/components/toolsetentry.ts: {}
@@ -1158,6 +1170,7 @@ trackedFiles:
   src/models/errors/serviceerror.ts: {}
   src/models/operations/acknowledgeriskpolicychallenge.ts: {}
   src/models/operations/addexternaloauthserver.ts: {}
+  src/models/operations/addmcpservertoolmetadatabatch.ts: {}
   src/models/operations/addoauthproxyserver.ts: {}
   src/models/operations/addpluginserver.ts: {}
   src/models/operations/addskillversion.ts: {}
@@ -1240,6 +1253,7 @@ trackedFiles:
   src/models/operations/deleteglobalvariation.ts: {}
   src/models/operations/deletemcpendpoint.ts: {}
   src/models/operations/deletemcpserver.ts: {}
+  src/models/operations/deletemcpservertoolmetadata.ts: {}
   src/models/operations/deletemodelproviderkey.ts: {}
   src/models/operations/deleteorganizationremotesessionclient.ts: {}
   src/models/operations/deleteorganizationremotesessionissuer.ts: {}
@@ -1410,6 +1424,7 @@ trackedFiles:
   src/models/operations/listmcpservers.ts: {}
   src/models/operations/listmcpserversfororg.ts: {}
   src/models/operations/listmcpservertoolfilters.ts: {}
+  src/models/operations/listmcpservertoolmetadata.ts: {}
   src/models/operations/listmembers.ts: {}
   src/models/operations/listmodelproviderkeys.ts: {}
   src/models/operations/listorganizationremotesessionclientmcpservers.ts: {}
@@ -1520,6 +1535,8 @@ trackedFiles:
   src/models/operations/setbillingmetadata.ts: {}
   src/models/operations/setchatpinned.ts: {}
   src/models/operations/setmcpmetadata.ts: {}
+  src/models/operations/setmcpservertoolmetadata.ts: {}
+  src/models/operations/setmcpservertoolmetadatabatch.ts: {}
   src/models/operations/setmodelproviderkeyenabled.ts: {}
   src/models/operations/setorganizationwhitelist.ts: {}
   src/models/operations/setpluginassignments.ts: {}
@@ -1599,6 +1616,7 @@ trackedFiles:
   src/react-query/activeDeployment.core.ts: {}
   src/react-query/activeDeployment.ts: {}
   src/react-query/addExternalOAuthServer.ts: {}
+  src/react-query/addMcpServerToolMetadataBatch.ts: {}
   src/react-query/addOAuthProxyServer.ts: {}
   src/react-query/addPluginServer.ts: {}
   src/react-query/addSkillVersion.ts: {}
@@ -1704,6 +1722,7 @@ trackedFiles:
   src/react-query/deleteGlobalVariation.ts: {}
   src/react-query/deleteMcpEndpoint.ts: {}
   src/react-query/deleteMcpServer.ts: {}
+  src/react-query/deleteMcpServerToolMetadata.ts: {}
   src/react-query/deleteModelProviderKey.ts: {}
   src/react-query/deleteOrganizationRemoteSessionClient.ts: {}
   src/react-query/deleteOrganizationRemoteSessionIssuer.ts: {}
@@ -1889,6 +1908,8 @@ trackedFiles:
   src/react-query/listMCPRegistries.ts: {}
   src/react-query/listMcpServerToolFilters.core.ts: {}
   src/react-query/listMcpServerToolFilters.ts: {}
+  src/react-query/listMcpServerToolMetadata.core.ts: {}
+  src/react-query/listMcpServerToolMetadata.ts: {}
   src/react-query/listMcpServersForOrg.core.ts: {}
   src/react-query/listMcpServersForOrg.ts: {}
   src/react-query/listOrganizationUsers.core.ts: {}
@@ -2110,6 +2131,8 @@ trackedFiles:
   src/react-query/sessionInfo.ts: {}
   src/react-query/setAIIntegrationScheduleEnabled.ts: {}
   src/react-query/setBillingMetadata.ts: {}
+  src/react-query/setMcpServerToolMetadata.ts: {}
+  src/react-query/setMcpServerToolMetadataBatch.ts: {}
   src/react-query/setModelProviderKeyEnabled.ts: {}
   src/react-query/setPluginAssignments.ts: {}
   src/react-query/setProjectLogo.ts: {}
@@ -2340,6 +2363,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  addMcpServerToolMetadataBatch:
+    speakeasy-default-add-mcp-server-tool-metadata-batch:
+      requestBody:
+        application/json: {"mcp_server_id": "6bd41d27-b2f0-455c-b0b8-0adf5ec10c2b", "tools": [{"tool_name": "<value>"}]}
+      responses:
+        "200":
+          application/json: {"tools": [{"created_at": "2024-12-06T18:28:59.938Z", "mcp_server_id": "f63917fb-db89-49e8-966e-dfd1206e5862", "tool_name": "<value>", "updated_at": "2025-04-08T11:05:27.175Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   addOAuthProxyServer:
     speakeasy-default-add-O-auth-proxy-server:
       parameters:
@@ -3259,6 +3293,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  deleteMcpServerToolMetadata:
+    speakeasy-default-delete-mcp-server-tool-metadata:
+      parameters:
+        query:
+          mcp_server_id: "d37cb7a1-e0e3-4157-af4c-11c799f02ea4"
+          tool_name: "<value>"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   deleteModelProviderKey:
     speakeasy-default-delete-model-provider-key:
       parameters:
@@ -5069,6 +5114,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listMcpServerToolMetadata:
+    speakeasy-default-list-mcp-server-tool-metadata:
+      parameters:
+        query:
+          mcp_server_id: "ba5a3789-4c41-40a0-8b3d-45c1035f7587"
+      responses:
+        "200":
+          application/json: {"tools": [{"created_at": "2026-03-08T18:11:32.480Z", "mcp_server_id": "5bb6ca36-a78e-40e0-aa3a-191411be68de", "tool_name": "<value>", "updated_at": "2025-02-04T16:36:56.376Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listMcpServers:
     speakeasy-default-list-mcp-servers:
       responses:
@@ -6298,6 +6355,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setMcpServerToolMetadata:
+    speakeasy-default-set-mcp-server-tool-metadata:
+      requestBody:
+        application/json: {"mcp_server_id": "792cdc3b-5836-4d2d-aaea-a83930792656", "tool_name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-08-31T00:53:49.213Z", "mcp_server_id": "90ad4cf4-18bb-4958-80a6-7a9c30d1f405", "tool_name": "<value>", "updated_at": "2026-02-06T13:39:44.950Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setMcpServerToolMetadataBatch:
+    speakeasy-default-set-mcp-server-tool-metadata-batch:
+      requestBody:
+        application/json: {"mcp_server_id": "3e832775-762e-4b37-b211-0b8ad619a1e4", "tools": []}
+      responses:
+        "200":
+          application/json: {"deleted": 214975, "tools": [{"created_at": "2025-12-23T08:01:29.677Z", "mcp_server_id": "2252fa7f-0fa9-42ea-aa73-f632f91f0be4", "tool_name": "<value>", "updated_at": "2026-09-24T09:02:48.001Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   setModelProviderKeyEnabled:
     speakeasy-default-set-model-provider-key-enabled:
       requestBody:
