@@ -54,6 +54,12 @@ export function useSyncToolMetadata({
       refetchType: "all",
     });
 
+  // Guard the automatic pass so a re-render (or the refetch the write itself
+  // triggers) can't fire it twice for the same server. Released whenever the
+  // write fails, so a transient error doesn't leave the tools unrecorded until
+  // the page is remounted — the next refetch gets to try again.
+  const autoWrittenFor = useRef<string | null>(null);
+
   // Records tools with no stored entry. Strictly additive: it rejects the whole
   // batch if any tool already has one, so a 409 means our stored snapshot was
   // stale rather than that anything went wrong. This pass is invisible, so that
@@ -61,6 +67,7 @@ export function useSyncToolMetadata({
   const add = useAddMcpServerToolMetadataBatchMutation({
     onSuccess: refresh,
     onError: async (error) => {
+      autoWrittenFor.current = null;
       if (error instanceof GramError && error.statusCode === 409) {
         await refresh();
         return;
@@ -77,10 +84,6 @@ export function useSyncToolMetadata({
     },
     onError: (error) => handleAPIError(error, "Failed to sync tool metadata"),
   });
-
-  // Guard the automatic pass so a re-render (or the refetch the write itself
-  // triggers) can't fire it twice for the same server.
-  const autoWrittenFor = useRef<string | null>(null);
 
   useEffect(() => {
     if (!enabled || !canWrite || !mcpServerId || !live) return;
