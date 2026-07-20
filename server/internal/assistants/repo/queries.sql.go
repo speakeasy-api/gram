@@ -169,15 +169,19 @@ func (q *Queries) CallerOwnsDashboardChat(ctx context.Context, arg CallerOwnsDas
 
 const claimNextPendingEvent = `-- name: ClaimNextPendingEvent :one
 WITH next_event AS (
-  SELECT e.id
+  SELECT e.id, t.skill_set_snapshot
   FROM assistant_thread_events e
+  JOIN assistant_threads t
+    ON t.id = e.assistant_thread_id
+    AND t.project_id = e.project_id
   WHERE e.project_id = $2
     AND e.assistant_thread_id = $3
     AND e.deleted IS FALSE
     AND e.status = $4
+    AND t.deleted IS FALSE
   ORDER BY e.created_at ASC
   LIMIT 1
-  FOR UPDATE SKIP LOCKED
+  FOR UPDATE OF e SKIP LOCKED
 )
 UPDATE assistant_thread_events e
 SET
@@ -186,7 +190,8 @@ SET
   updated_at = clock_timestamp()
 FROM next_event
 WHERE e.id = next_event.id
-RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at
+  AND e.project_id = $2
+RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at, next_event.skill_set_snapshot
 `
 
 type ClaimNextPendingEventParams struct {
@@ -210,6 +215,7 @@ type ClaimNextPendingEventRow struct {
 	Attempts              int64
 	LastError             pgtype.Text
 	CreatedAt             pgtype.Timestamptz
+	SkillSetSnapshot      []byte
 }
 
 func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendingEventParams) (ClaimNextPendingEventRow, error) {
@@ -234,6 +240,7 @@ func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendin
 		&i.Attempts,
 		&i.LastError,
 		&i.CreatedAt,
+		&i.SkillSetSnapshot,
 	)
 	return i, err
 }
@@ -270,26 +277,62 @@ func (q *Queries) ClearAssistantToolsets(ctx context.Context, arg ClearAssistant
 	return err
 }
 
-const completeAssistantThreadEvent = `-- name: CompleteAssistantThreadEvent :exec
-UPDATE assistant_thread_events
-SET
-  status = $1,
-  processed_at = clock_timestamp(),
-  last_error = NULL,
-  updated_at = clock_timestamp()
-WHERE id = $2
-  AND project_id = $3
+const completeAssistantThreadEventAndAdvanceSkillSnapshot = `-- name: CompleteAssistantThreadEventAndAdvanceSkillSnapshot :one
+WITH completed_event AS (
+  UPDATE assistant_thread_events event
+  SET
+    status = $1,
+    processed_at = clock_timestamp(),
+    last_error = NULL,
+    updated_at = clock_timestamp()
+  WHERE event.id = $2
+    AND event.project_id = $3
+    AND event.status = $4
+    AND event.attempts = $5
+  RETURNING event.assistant_thread_id
+), advanced_snapshot AS (
+  UPDATE assistant_threads t
+  SET skill_set_snapshot = $6::jsonb
+  FROM completed_event e
+  WHERE t.id = e.assistant_thread_id
+    AND t.project_id = $3
+    AND t.deleted IS FALSE
+    AND t.skill_set_snapshot IS NOT DISTINCT FROM $7::jsonb
+    AND (t.skill_set_snapshot IS NULL OR $8::boolean)
+    AND (
+      $7::jsonb IS NULL
+      OR $6::jsonb IS DISTINCT FROM $7::jsonb
+    )
+  RETURNING t.id
+)
+SELECT EXISTS(SELECT 1 FROM completed_event) AS completed
 `
 
-type CompleteAssistantThreadEventParams struct {
-	CompletedStatus string
-	EventID         uuid.UUID
-	ProjectID       uuid.UUID
+type CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams struct {
+	CompletedStatus  string
+	EventID          uuid.UUID
+	ProjectID        uuid.UUID
+	ProcessingStatus string
+	ClaimedAttempt   int64
+	CurrentSnapshot  []byte
+	ClaimedSnapshot  []byte
+	AllowAdvance     bool
 }
 
-func (q *Queries) CompleteAssistantThreadEvent(ctx context.Context, arg CompleteAssistantThreadEventParams) error {
-	_, err := q.db.Exec(ctx, completeAssistantThreadEvent, arg.CompletedStatus, arg.EventID, arg.ProjectID)
-	return err
+func (q *Queries) CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx context.Context, arg CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams) (bool, error) {
+	row := q.db.QueryRow(ctx, completeAssistantThreadEventAndAdvanceSkillSnapshot,
+		arg.CompletedStatus,
+		arg.EventID,
+		arg.ProjectID,
+		arg.ProcessingStatus,
+		arg.ClaimedAttempt,
+		arg.CurrentSnapshot,
+		arg.ClaimedSnapshot,
+		arg.AllowAdvance,
+	)
+	var completed bool
+	err := row.Scan(&completed)
+	return completed, err
 }
 
 const countActiveAssistantRuntimes = `-- name: CountActiveAssistantRuntimes :one
@@ -1091,6 +1134,28 @@ func (q *Queries) GetProjectName(ctx context.Context, projectID uuid.UUID) (stri
 	var name string
 	err := row.Scan(&name)
 	return name, err
+}
+
+const initThreadSkillSnapshot = `-- name: InitThreadSkillSnapshot :one
+UPDATE assistant_threads
+SET skill_set_snapshot = COALESCE(skill_set_snapshot, $1::jsonb)
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+RETURNING skill_set_snapshot
+`
+
+type InitThreadSkillSnapshotParams struct {
+	Candidate []byte
+	ThreadID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) InitThreadSkillSnapshot(ctx context.Context, arg InitThreadSkillSnapshotParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, initThreadSkillSnapshot, arg.Candidate, arg.ThreadID, arg.ProjectID)
+	var skill_set_snapshot []byte
+	err := row.Scan(&skill_set_snapshot)
+	return skill_set_snapshot, err
 }
 
 const insertAssistantThreadEvent = `-- name: InsertAssistantThreadEvent :one

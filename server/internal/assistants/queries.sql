@@ -64,6 +64,14 @@ WHERE t.id = @thread_id
   AND t.deleted IS FALSE
   AND a.deleted IS FALSE;
 
+-- name: InitThreadSkillSnapshot :one
+UPDATE assistant_threads
+SET skill_set_snapshot = COALESCE(skill_set_snapshot, @candidate::jsonb)
+WHERE id = @thread_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING skill_set_snapshot;
+
 -- name: ResolveThreadCorrelation :one
 SELECT id, project_id, assistant_id, correlation_id
 FROM assistant_threads
@@ -834,15 +842,19 @@ LIMIT 1;
 
 -- name: ClaimNextPendingEvent :one
 WITH next_event AS (
-  SELECT e.id
+  SELECT e.id, t.skill_set_snapshot
   FROM assistant_thread_events e
+  JOIN assistant_threads t
+    ON t.id = e.assistant_thread_id
+    AND t.project_id = e.project_id
   WHERE e.project_id = @project_id
     AND e.assistant_thread_id = @thread_id
     AND e.deleted IS FALSE
     AND e.status = @pending_status
+    AND t.deleted IS FALSE
   ORDER BY e.created_at ASC
   LIMIT 1
-  FOR UPDATE SKIP LOCKED
+  FOR UPDATE OF e SKIP LOCKED
 )
 UPDATE assistant_thread_events e
 SET
@@ -851,17 +863,38 @@ SET
   updated_at = clock_timestamp()
 FROM next_event
 WHERE e.id = next_event.id
-RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at;
+  AND e.project_id = @project_id
+RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at, next_event.skill_set_snapshot;
 
--- name: CompleteAssistantThreadEvent :exec
-UPDATE assistant_thread_events
-SET
-  status = @completed_status,
-  processed_at = clock_timestamp(),
-  last_error = NULL,
-  updated_at = clock_timestamp()
-WHERE id = @event_id
-  AND project_id = @project_id;
+-- name: CompleteAssistantThreadEventAndAdvanceSkillSnapshot :one
+WITH completed_event AS (
+  UPDATE assistant_thread_events event
+  SET
+    status = @completed_status,
+    processed_at = clock_timestamp(),
+    last_error = NULL,
+    updated_at = clock_timestamp()
+  WHERE event.id = @event_id
+    AND event.project_id = @project_id
+    AND event.status = @processing_status
+    AND event.attempts = @claimed_attempt
+  RETURNING event.assistant_thread_id
+), advanced_snapshot AS (
+  UPDATE assistant_threads t
+  SET skill_set_snapshot = sqlc.narg('current_snapshot')::jsonb
+  FROM completed_event e
+  WHERE t.id = e.assistant_thread_id
+    AND t.project_id = @project_id
+    AND t.deleted IS FALSE
+    AND t.skill_set_snapshot IS NOT DISTINCT FROM sqlc.narg('claimed_snapshot')::jsonb
+    AND (t.skill_set_snapshot IS NULL OR @allow_advance::boolean)
+    AND (
+      sqlc.narg('claimed_snapshot')::jsonb IS NULL
+      OR sqlc.narg('current_snapshot')::jsonb IS DISTINCT FROM sqlc.narg('claimed_snapshot')::jsonb
+    )
+  RETURNING t.id
+)
+SELECT EXISTS(SELECT 1 FROM completed_event) AS completed;
 
 -- name: FailAssistantThreadEvent :exec
 UPDATE assistant_thread_events
