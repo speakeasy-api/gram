@@ -336,3 +336,15 @@ func TestToEntryTruncatesDetailsOnRuneBoundary(t *testing.T) {
 	require.True(t, utf8.ValidString(entry.Details))
 	require.LessOrEqual(t, len([]rune(entry.Details)), maxDetailsLen+1)
 }
+
+func TestVersionGreaterTreatsTrailingZerosAsEqual(t *testing.T) {
+	t.Parallel()
+
+	// "1.0" and "1" are the same version: neither compares greater, so the
+	// stable sort preserves their relative order.
+	require.False(t, versionGreater("1.0", "1"))
+	require.False(t, versionGreater("1", "1.0"))
+	require.True(t, versionGreater("1.0.1", "1"))
+	require.True(t, versionGreater("0.90.1", "0.90.0"))
+	require.False(t, versionGreater("0.89.0", "0.90.0"))
+}

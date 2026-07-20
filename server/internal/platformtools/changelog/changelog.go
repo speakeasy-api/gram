@@ -131,6 +131,16 @@ func (c *Client) Entries(ctx context.Context) ([]Entry, error) {
 	// refresh. Each caller still honors its own deadline via the select below,
 	// falling back to stale entries rather than waiting on the network.
 	ch := c.refresh.DoChan(refreshKey, func() (any, error) {
+		// A caller that saw a stale cache may land here just after a
+		// concurrent flight refreshed it; recheck before paying for a fetch.
+		c.mu.Lock()
+		if c.entries != nil && time.Since(c.fetchedAt) < cacheTTL {
+			entries := c.entries
+			c.mu.Unlock()
+			return entries, nil
+		}
+		c.mu.Unlock()
+
 		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), FetchTimeout)
 		defer cancel()
 
@@ -251,6 +261,11 @@ func parseVersion(v string) []int {
 	out := make([]int, len(parts))
 	for i, p := range parts {
 		out[i], _ = strconv.Atoi(strings.TrimSpace(p))
+	}
+	// Trailing zero segments don't change a version's order ("1.0" == "1");
+	// strip them so the length tie-breaker can't call such versions unequal.
+	for len(out) > 0 && out[len(out)-1] == 0 {
+		out = out[:len(out)-1]
 	}
 	return out
 }
