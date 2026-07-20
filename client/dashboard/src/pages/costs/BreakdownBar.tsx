@@ -1,3 +1,4 @@
+import { Page } from "@/components/page-layout";
 import {
   SEGMENT_BASE,
   SEGMENT_INACTIVE,
@@ -61,6 +62,9 @@ export function BreakdownBar({
   axisOptions,
   axisHint,
   onAxisChange,
+  searchValue,
+  onSearchChange,
+  searchPlaceholder,
   actions,
 }: {
   // The current cut, stated plainly (e.g. "Cost by Model") — the caption's
@@ -74,6 +78,11 @@ export function BreakdownBar({
   // (e.g. the root Skill cut excludes subagent-run skills).
   axisHint?: string;
   onAxisChange: (value: string) => void;
+  // Free-text filter over the table's rows, rendered as the standard toolbar
+  // search box. Client-side: it narrows the already-loaded rows, never the query.
+  searchValue: string;
+  onSearchChange: (value: string) => void;
+  searchPlaceholder: string;
   // Controls that belong to the table below (e.g. CSV export), rendered beside
   // the axis track.
   actions?: ReactNode;
@@ -106,7 +115,7 @@ export function BreakdownBar({
   );
 
   return (
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+    <div className="mb-3 flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold">
           {title}
@@ -128,20 +137,30 @@ export function BreakdownBar({
         </h2>
         <p className="text-muted-foreground text-xs">{caption}</p>
       </div>
-      <div className="flex items-center gap-2">
-        {/* A lone axis is no choice at all — at a session leaf (Agent, Model)
-            "Sessions" is the only option, and a track you can't move reads as a
-            broken toggle. The title already names the cut. */}
-        {axisOptions.length > 1 && (
-          <SegmentedControl
-            value={axisValue}
-            onChange={onAxisChange}
-            options={segments}
-            trailing={more}
-          />
-        )}
-        {actions}
-      </div>
+      {/* The standard list-page control strip: search narrows the rows on the
+          left; the preset axis track (re-cut, not narrow) and table actions
+          keep their place on the right. */}
+      <Page.Toolbar>
+        <Page.Toolbar.Search
+          value={searchValue}
+          onChange={onSearchChange}
+          placeholder={searchPlaceholder}
+        />
+        <Page.Toolbar.Actions>
+          {/* A lone axis is no choice at all — at a session leaf (Agent, Model)
+              "Sessions" is the only option, and a track you can't move reads as
+              a broken toggle. The title already names the cut. */}
+          {axisOptions.length > 1 && (
+            <SegmentedControl
+              value={axisValue}
+              onChange={onAxisChange}
+              options={segments}
+              trailing={more}
+            />
+          )}
+          {actions}
+        </Page.Toolbar.Actions>
+      </Page.Toolbar>
     </div>
   );
 }

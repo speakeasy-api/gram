@@ -36,11 +36,46 @@ import {
   narrowTokenEndpointAuthMethod,
   parseScopes,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import { issuerDocumentationLinks } from "./issuerDocumentationLinks";
 
 // Sentinel for the unselected project in the org-level-issuer scope picker.
 // Radix Select treats the empty string specially, so submission is gated until
 // the operator picks a real project (a client must be project-scoped).
 const UNSELECTED_PROJECT = "";
+
+// DocumentationLinks surfaces the issuer's documentation so customers can create
+// the upstream OAuth client themselves, owning its credentials, access, and rate
+// limits rather than sharing a Gram-owned client. Renders nothing when the
+// issuer carries no documentation URLs.
+function DocumentationLinks({ issuer }: { issuer: RemoteSessionIssuer }) {
+  const links = issuerDocumentationLinks(issuer);
+
+  if (links.length === 0) {
+    return null;
+  }
+
+  return (
+    <Stack gap={2}>
+      <Type muted small>
+        Documentation links to assist with creating this client.
+      </Type>
+      <Stack direction="horizontal" gap={4}>
+        {links.map(({ label, url }) => (
+          <Type key={label} muted small>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground underline underline-offset-2"
+            >
+              {label}
+            </a>
+          </Type>
+        ))}
+      </Stack>
+    </Stack>
+  );
+}
 
 // CreateRemoteSessionClientSheet registers a standalone remote_session_client
 // under the page's already-selected issuer via the org-admin createClient
@@ -257,6 +292,7 @@ export function CreateRemoteSessionClientSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">New Client</SheetTitle>
+          <DocumentationLinks issuer={issuer} />
         </SheetHeader>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
