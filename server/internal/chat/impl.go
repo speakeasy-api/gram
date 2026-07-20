@@ -843,6 +843,8 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		Title:                chat.Title.String,
 		UserID:               &chat.UserID.String,
 		ExternalUserID:       &chat.ExternalUserID.String,
+		AssistantID:          conv.FromNullableUUID(chat.AssistantID),
+		AssistantName:        conv.FromPGText[string](chat.AssistantName),
 		Source:               source,
 		NumMessages:          int(stats.Total),
 		CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
