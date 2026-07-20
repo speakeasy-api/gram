@@ -1663,6 +1663,33 @@ function generateChatUUID(chatNumber: number): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
+// $/M-token prices as [input, output, cache read, cache write]. The default is
+// the rough blended Claude rate ($3/$15/$0.30/$3.75) every seeded cohort prices
+// usage at so cost charts are non-zero; the cost-history block passes per-model
+// rates (HISTORY_PRICING) instead.
+type UsagePricing = [number, number, number, number];
+const DEFAULT_USAGE_PRICING: UsagePricing = [3, 15, 0.3, 3.75];
+
+// Cost string for a seeded usage row, 6dp fixed like the raw gen_ai.usage.cost
+// attribute. Single home for the pricing arithmetic — cohort blocks must not
+// re-derive it inline.
+function computeUsageCost(
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens: number,
+  cacheCreationTokens: number,
+  pricing: UsagePricing = DEFAULT_USAGE_PRICING,
+): string {
+  const [pIn, pOut, pRead, pWrite] = pricing;
+  return (
+    (inputTokens * pIn +
+      outputTokens * pOut +
+      cacheReadTokens * pRead +
+      cacheCreationTokens * pWrite) /
+    1_000_000
+  ).toFixed(6);
+}
+
 // Name used to find + reset the seeded detection policy on re-runs. The id is
 // DB-generated (not hardcoded) so re-seeding into a freshly recreated project
 // can't collide on a global primary key and silently skip policy creation.
@@ -2576,9 +2603,7 @@ async function seedPersonalAccounts(init: {
       const inputTokens = 1200 + ((acctIdx * 7 + k * 53) % 5000);
       const outputTokens = 300 + ((acctIdx * 11 + k * 29) % 1800);
       const totalTokens = inputTokens + outputTokens;
-      const cost = ((inputTokens * 3 + outputTokens * 15) / 1_000_000).toFixed(
-        6,
-      );
+      const cost = computeUsageCost(inputTokens, outputTokens, 0, 0);
       const attrs = `{"gram.provider": "${acct.provider}", "gram.account_type": "${acct.type}", "gram.external_org_id": "${acct.externalOrgId}", "gram.device_id": "${acct.device}", "gen_ai.conversation.id": "${sessionId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${acct.provider}", "gram.resource.urn": "${urn}", "gram.project.id": "${projectId}", "user.id": "${acct.ownerUserId}", "gram.hook.source": "${svc}"}`;
       chRows.push(
         `(${timeNano}, ${timeNano}, 'INFO', '${acct.type} account usage', '${traceId}', '${attrs}', '{"service.name": "${svc}"}', '${projectId}', '${urn}', '${svc}', '${sessionId}')`,
@@ -3366,15 +3391,12 @@ async function seedObservabilityData(init: {
     const cacheCreationTokens = 1_000 + Math.floor(Math.random() * 15_000);
     const totalTokens =
       inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-    // Rough blended prices ($3/M input, $15/M output, $0.30/M cache read,
-    // $3.75/M cache write) so cost charts are non-zero.
-    const cost = (
-      (inputTokens * 3 +
-        outputTokens * 15 +
-        cacheReadTokens * 0.3 +
-        cacheCreationTokens * 3.75) /
-      1_000_000
-    ).toFixed(6);
+    const cost = computeUsageCost(
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+    );
 
     // Stamp account_type + provider (the new telemetry.query dimensions) so the
     // cost/token/chat breakdowns on /costs and /insights are drillable by them.
@@ -3438,13 +3460,12 @@ async function seedObservabilityData(init: {
       const cacheCreationTokens = Math.floor(Math.random() * 3_000);
       const totalTokens =
         inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-      const cost = (
-        (inputTokens * 3 +
-          outputTokens * 15 +
-          cacheReadTokens * 0.3 +
-          cacheCreationTokens * 3.75) /
-        1_000_000
-      ).toFixed(6);
+      const cost = computeUsageCost(
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
+      );
 
       chInserts.push(
         `(${timeNano}, ${timeNano}, 'INFO', 'Chat completion (OTEL forwarded)', '${traceId}', '{"gen_ai.conversation.id": "${chatId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.cache_read.input_tokens": ${cacheReadTokens}, "gen_ai.usage.cache_creation.input_tokens": ${cacheCreationTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}"}', '{}', '${projectId}', 'agents:chat:completion', 'otel-collector', '${chatId}')`,
@@ -3496,13 +3517,12 @@ async function seedObservabilityData(init: {
       const cacheCreationTokens = 5_000 + (n % 3) * 1_500;
       const totalTokens =
         inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-      const cost = (
-        (inputTokens * 3 +
-          outputTokens * 15 +
-          cacheReadTokens * 0.3 +
-          cacheCreationTokens * 3.75) /
-        1_000_000
-      ).toFixed(6);
+      const cost = computeUsageCost(
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
+      );
 
       chInserts.push(
         `(${timeNano}, ${timeNano}, 'INFO', 'Chat completion', '${traceId}', '{${acctFrag}"gen_ai.operation.name": "chat", "gen_ai.conversation.id": "${chatId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.cache_read.input_tokens": ${cacheReadTokens}, "gen_ai.usage.cache_creation.input_tokens": ${cacheCreationTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "claude-sonnet-4-6", "gen_ai.provider.name": "anthropic", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", ${userAttrs}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
@@ -3656,16 +3676,13 @@ async function seedObservabilityData(init: {
         Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost;
       const totalTokens =
         inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-      const [pIn, pOut, pRead, pWrite] = HISTORY_PRICING[model] ?? [
-        3, 15, 0.3, 3.75,
-      ];
-      const cost = (
-        (inputTokens * pIn +
-          outputTokens * pOut +
-          cacheReadTokens * pRead +
-          cacheCreationTokens * pWrite) /
-        1_000_000
-      ).toFixed(6);
+      const cost = computeUsageCost(
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
+        HISTORY_PRICING[model],
+      );
 
       const uaFrag = anonymous
         ? `"gram.hook.source": "${hookSource}"` +
@@ -3737,22 +3754,19 @@ async function seedObservabilityData(init: {
           `(${timeNano + BigInt(1_000_000_000)}, ${timeNano + BigInt(1_000_000_000)}, 'INFO', 'claude_code.usage', '${traceId}', '{"gen_ai.conversation.id": "${chatId}", "gen_ai.usage.total_tokens": ${totalTokens}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:usage/tokens', 'claude-code', '${chatId}')`,
         );
 
-        const [pIn, pOut, pRead, pWrite] = HISTORY_PRICING[claudeModel] ?? [
-          3, 15, 0.3, 3.75,
-        ];
         attributions.forEach((attrFrag, i) => {
           const f = fractions[i];
           const rowIn = Math.round(inputTokens * f);
           const rowOut = Math.round(outputTokens * f);
           const rowRead = Math.round(cacheReadTokens * f);
           const rowWrite = Math.round(cacheCreationTokens * f);
-          const rowCost = (
-            (rowIn * pIn +
-              rowOut * pOut +
-              rowRead * pRead +
-              rowWrite * pWrite) /
-            1_000_000
-          ).toFixed(6);
+          const rowCost = computeUsageCost(
+            rowIn,
+            rowOut,
+            rowRead,
+            rowWrite,
+            HISTORY_PRICING[claudeModel],
+          );
           const rowNano = timeNano + BigInt((2 + i) * 1_000_000_000);
           sessionRows.push(
             `(${rowNano}, ${rowNano}, 'INFO', 'claude_code.api_request', '${traceId}', '{${acctFrag}"event.name": "api_request", "prompt.id": "prompt-${dayNum}-${s}-${i}", "gen_ai.conversation.id": "${chatId}", "model": "${claudeModel}", "input_tokens": ${rowIn}, "output_tokens": ${rowOut}, "cache_read_tokens": ${rowRead}, "cache_creation_tokens": ${rowWrite}, "cost_usd": ${rowCost}, ${attrFrag}"gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:otel:logs', 'claude-code', '${chatId}')`,

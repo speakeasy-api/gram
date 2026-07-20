@@ -280,9 +280,15 @@ export function CostsExplorer(): JSX.Element {
   const byParamParent = isDimension(byParam)
     ? datasetPivotParent(dataset, byParam)
     : null;
+  // A `?by=` naming a dimension the drill path already pins (e.g. a stale link
+  // ending `division~X/department~Y?by=department_name`) would render a
+  // degenerate one-row "breakdown" of the entity by itself — with a drill
+  // chevron that no-ops, since drillIntoDim refuses to re-add a pinned dim.
+  // Treat it like any other invalid axis and fall back to the default.
   const groupBy =
     isDimension(byParam) &&
     datasetDimSet.has(byParam) &&
+    !path.some((c) => c.dim === byParam) &&
     (byParamParent === null || path.some((c) => c.dim === byParamParent))
       ? byParam
       : datasetDefaultGroupBy(dataset, path, availableDims);
