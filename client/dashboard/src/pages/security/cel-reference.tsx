@@ -8,7 +8,6 @@ import {
 import { BookOpen } from "lucide-react";
 import { useState, type JSX } from "react";
 import { useCelEngine } from "./use-cel-engine";
-import type { CelReferenceData } from "./cel-wasm";
 
 // One reference for the whole editing surface: fields, matchers, and macros
 // from the engine catalog, in a side sheet with aligned term/description
@@ -133,5 +132,3 @@ function ReferenceRow({
     </>
   );
 }
-
-export type { CelReferenceData };

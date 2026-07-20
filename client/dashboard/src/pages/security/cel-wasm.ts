@@ -25,7 +25,7 @@ interface CelMacroRef {
   returnsBool: boolean;
 }
 
-export interface CelReferenceData {
+interface CelReferenceData {
   variables: CelVarRef[];
   matchers: CelFuncRef[];
   macros: CelMacroRef[];

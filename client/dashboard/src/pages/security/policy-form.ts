@@ -206,18 +206,6 @@ export function policyMessageTypesForForm(
   );
 }
 
-export function policyMessageTypesForPayload(
-  selectedMessageTypes: Set<PolicyMessageType>,
-): PolicyMessageType[] {
-  const orderedTypes = ALL_POLICY_MESSAGE_TYPES.filter((type) =>
-    selectedMessageTypes.has(type),
-  );
-  if (orderedTypes.length === ALL_POLICY_MESSAGE_TYPES.length) {
-    return [];
-  }
-  return orderedTypes;
-}
-
 /** Example scope CEL snippets offered beneath the include field — narrow a
  *  policy to a subset of messages. Lives in cel-examples.json so the celenv
  *  Go test compile-checks every snippet against the real engine. */

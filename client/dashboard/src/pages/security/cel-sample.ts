@@ -10,11 +10,11 @@ export type CelSample = {
   tools: CelSampleTool[];
 };
 
-export type CelSampleTool = { name: string; args: string };
+type CelSampleTool = { name: string; args: string };
 
 // Mirrors toolref.MCPServerOf / MCPFunctionOf: "mcp__<server>__<function>"
 // (Claude Code) and "MCP:<function>" (Cursor); bare names are native tools.
-export function toolServerOf(name: string): string {
+function toolServerOf(name: string): string {
   if (name.startsWith("mcp__")) {
     const rest = name.slice("mcp__".length);
     const idx = rest.indexOf("__");
@@ -24,7 +24,7 @@ export function toolServerOf(name: string): string {
   return "";
 }
 
-export function toolFunctionOf(name: string): string {
+function toolFunctionOf(name: string): string {
   if (name.startsWith("mcp__")) {
     const rest = name.slice("mcp__".length);
     const idx = rest.indexOf("__");
