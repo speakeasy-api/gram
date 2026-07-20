@@ -70,6 +70,7 @@ type Activities struct {
 	customDomainIngress             *activities.CustomDomainIngress
 	defaultCustomDomainProvisioner  k8s.ProvisionerKind
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
+	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	correlateClaudePrompts          *activities.CorrelateClaudePrompts
 	promoteStagedTelemetry          *activities.PromoteStagedTelemetry
@@ -176,6 +177,7 @@ func NewActivities(
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
 		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
+		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
 		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter),
@@ -288,6 +290,10 @@ func (a *Activities) CollectOpenRouterCreditsMetrics(ctx context.Context, args a
 
 func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {
 	return a.fireOpenRouterCreditsMetrics.Do(ctx, metrics)
+}
+
+func (a *Activities) MaybeSendOpenRouterCreditsAlerts(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {
+	return a.sendOpenRouterCreditsAlerts.Do(ctx, metrics)
 }
 
 func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {

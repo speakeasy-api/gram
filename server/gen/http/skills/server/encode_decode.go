@@ -2822,11 +2822,11 @@ func marshalSkillsUnknownSkillActivationToUnknownSkillActivationResponseBody(v *
 	return res
 }
 
-// marshalTypesSkillDistributionToSkillDistributionResponseBody builds a value
-// of type *SkillDistributionResponseBody from a value of type
-// *types.SkillDistribution.
-func marshalTypesSkillDistributionToSkillDistributionResponseBody(v *types.SkillDistribution) *SkillDistributionResponseBody {
-	res := &SkillDistributionResponseBody{
+// marshalTypesPluginSkillDistributionToPluginSkillDistributionResponseBody
+// builds a value of type *PluginSkillDistributionResponseBody from a value of
+// type *types.PluginSkillDistribution.
+func marshalTypesPluginSkillDistributionToPluginSkillDistributionResponseBody(v *types.PluginSkillDistribution) *PluginSkillDistributionResponseBody {
+	res := &PluginSkillDistributionResponseBody{
 		ID:                v.ID,
 		ProjectID:         v.ProjectID,
 		SkillID:           v.SkillID,

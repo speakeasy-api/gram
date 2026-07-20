@@ -246,7 +246,7 @@ func TestSkillsCurateCapturedSkillWithVersionLineage(t *testing.T) {
 
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "curated-plugin")
 	distribution, err := ti.service.Distribute(ctx, &gen.DistributePayload{
-		ID: updated.ID, PluginID: plugin.ID.String(), PinnedVersionID: conv.PtrEmpty(derived.Version.ID),
+		ID: updated.ID, PluginID: new(plugin.ID.String()), PinnedVersionID: conv.PtrEmpty(derived.Version.ID),
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)

@@ -2811,11 +2811,11 @@ func unmarshalUnknownSkillActivationResponseBodyToSkillsUnknownSkillActivation(v
 	return res
 }
 
-// unmarshalSkillDistributionResponseBodyToTypesSkillDistribution builds a
-// value of type *types.SkillDistribution from a value of type
-// *SkillDistributionResponseBody.
-func unmarshalSkillDistributionResponseBodyToTypesSkillDistribution(v *SkillDistributionResponseBody) *types.SkillDistribution {
-	res := &types.SkillDistribution{
+// unmarshalPluginSkillDistributionResponseBodyToTypesPluginSkillDistribution
+// builds a value of type *types.PluginSkillDistribution from a value of type
+// *PluginSkillDistributionResponseBody.
+func unmarshalPluginSkillDistributionResponseBodyToTypesPluginSkillDistribution(v *PluginSkillDistributionResponseBody) *types.PluginSkillDistribution {
+	res := &types.PluginSkillDistribution{
 		ID:                *v.ID,
 		ProjectID:         *v.ProjectID,
 		SkillID:           *v.SkillID,

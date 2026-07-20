@@ -25,6 +25,10 @@ export type GetSkillResult = {
    */
   adoption: SkillAdoption;
   /**
+   * The number of active, non-deleted assistants using the skill.
+   */
+  assistantCount: number;
+  /**
    * Active-machine convergence against the skill's plugin distribution target.
    */
   drift: SkillDrift;
@@ -49,6 +53,7 @@ export const GetSkillResult$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     adoption: SkillAdoption$inboundSchema,
+    assistant_count: z.int(),
     drift: SkillDrift$inboundSchema,
     latest_version: z.optional(SkillVersion$inboundSchema),
     sighting_timeline: z.array(SkillSightingTimelinePoint$inboundSchema),
@@ -56,6 +61,7 @@ export const GetSkillResult$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "assistant_count": "assistantCount",
       "latest_version": "latestVersion",
       "sighting_timeline": "sightingTimeline",
     });
