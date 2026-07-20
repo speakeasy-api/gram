@@ -74,7 +74,7 @@ func TestComposeInstructions_IncludesSkillsBeforeMCPAuthInOrder(t *testing.T) {
 	beta := strings.Index(instructions, `Name: "beta"`)
 	auth := strings.Index(instructions, "## MCP authentication")
 	require.True(t, base >= 0 && skills > base && alpha > skills && beta > alpha && auth > beta)
-	require.Contains(t, instructions, `Call skills_load with name "alpha" before relying on this skill.`)
+	require.Contains(t, instructions, `Call mcp__p-assistants_skills_load with name "alpha" before relying on this skill.`)
 }
 
 func TestComposeInstructions_SanitizesAndCapsSkillMetadata(t *testing.T) {
