@@ -234,6 +234,13 @@ export type SessionTableProps = {
   // The view's resolved billing mode; "metered" shows real cost ("Cost") rather
   // than the API-rate estimate ("Est. cost") on the cost column.
   billingMode?: string;
+  // Zero-row copy override — e.g. an active search should read "no matches",
+  // not "no sessions".
+  emptyMessage?: string;
+  // The unfiltered slice size, when the caller narrows `sessions` client-side
+  // (search). Keeps the truncation footer honest: a filtered list must still
+  // disclose that only the capped top slice was searched.
+  sourceCount?: number;
 };
 
 /**
@@ -253,6 +260,8 @@ export function SessionTable({
   onOpen,
   hiddenColumns,
   billingMode,
+  emptyMessage,
+  sourceCount,
 }: SessionTableProps): JSX.Element {
   // Server already ranks by cost; mirror that as the default header indicator.
   const [sort, setSort] = useState<Sort>({ key: "cost", dir: "desc" });
@@ -296,6 +305,16 @@ export function SessionTable({
     safePage * PAGE_SIZE,
     (safePage + 1) * PAGE_SIZE,
   );
+
+  // Truncation disclosure keys off the *unfiltered* slice size — a client-side
+  // search that narrows a capped list must not read as exhaustive, since only
+  // the top slice was searched. The copy shifts to name that scope.
+  const sliceCount = sourceCount ?? sessions.length;
+  const sliceTruncated = sliceCount >= DEFAULT_LIMIT;
+  let truncationNote = `Showing the ${DEFAULT_LIMIT} most expensive sessions in this slice.`;
+  if (sessions.length < sliceCount) {
+    truncationNote = `Matches within the ${DEFAULT_LIMIT} most expensive sessions in this slice.`;
+  }
 
   if (isLoading) return <SkeletonTable />;
   if (isError) {
@@ -348,7 +367,7 @@ export function SessionTable({
           style={{ gridColumn: "1 / -1" }}
         >
           <Type className="text-muted-foreground">
-            No sessions in this slice.
+            {emptyMessage ?? "No sessions in this slice."}
           </Type>
         </div>
       ) : (
@@ -372,10 +391,10 @@ export function SessionTable({
         ))
       )}
 
-      {sessions.length >= DEFAULT_LIMIT && (
+      {sliceTruncated && (
         <div className="px-5 py-3" style={{ gridColumn: "1 / -1" }}>
           <Type small className="text-muted-foreground">
-            Showing the {DEFAULT_LIMIT} most expensive sessions in this slice.
+            {truncationNote}
           </Type>
         </div>
       )}

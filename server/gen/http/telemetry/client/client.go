@@ -92,6 +92,10 @@ type Client struct {
 	// the getToolUsageFilterOptions endpoint.
 	GetToolUsageFilterOptionsDoer goahttp.Doer
 
+	// GetMcpServerActivity Doer is the HTTP client used to make requests to the
+	// getMcpServerActivity endpoint.
+	GetMcpServerActivityDoer goahttp.Doer
+
 	// ListHooksTraces Doer is the HTTP client used to make requests to the
 	// listHooksTraces endpoint.
 	ListHooksTracesDoer goahttp.Doer
@@ -135,6 +139,7 @@ func NewClient(
 		GetToolUsageSummaryDoer:       doer,
 		ListToolUsageTracesDoer:       doer,
 		GetToolUsageFilterOptionsDoer: doer,
+		GetMcpServerActivityDoer:      doer,
 		ListHooksTracesDoer:           doer,
 		RestoreResponseBody:           restoreBody,
 		scheme:                        scheme,
@@ -595,6 +600,30 @@ func (c *Client) GetToolUsageFilterOptions() goa.Endpoint {
 		resp, err := c.GetToolUsageFilterOptionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageFilterOptions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMcpServerActivity returns an endpoint that makes HTTP requests to the
+// telemetry service getMcpServerActivity server.
+func (c *Client) GetMcpServerActivity() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMcpServerActivityRequest(c.encoder)
+		decodeResponse = DecodeGetMcpServerActivityResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMcpServerActivityRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMcpServerActivityDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getMcpServerActivity", err)
 		}
 		return decodeResponse(resp)
 	}
