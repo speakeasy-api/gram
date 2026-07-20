@@ -662,6 +662,7 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE our.organization_id = $1
   AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
 ORDER BY users.email, users.id
 `
 

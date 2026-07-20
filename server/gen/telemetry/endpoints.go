@@ -35,6 +35,7 @@ type Endpoints struct {
 	GetToolUsageSummary       goa.Endpoint
 	ListToolUsageTraces       goa.Endpoint
 	GetToolUsageFilterOptions goa.Endpoint
+	GetMcpServerActivity      goa.Endpoint
 	ListHooksTraces           goa.Endpoint
 }
 
@@ -62,6 +63,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetToolUsageSummary:       NewGetToolUsageSummaryEndpoint(s, a.APIKeyAuth),
 		ListToolUsageTraces:       NewListToolUsageTracesEndpoint(s, a.APIKeyAuth),
 		GetToolUsageFilterOptions: NewGetToolUsageFilterOptionsEndpoint(s, a.APIKeyAuth),
+		GetMcpServerActivity:      NewGetMcpServerActivityEndpoint(s, a.APIKeyAuth),
 		ListHooksTraces:           NewListHooksTracesEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -87,6 +89,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetToolUsageSummary = m(e.GetToolUsageSummary)
 	e.ListToolUsageTraces = m(e.ListToolUsageTraces)
 	e.GetToolUsageFilterOptions = m(e.GetToolUsageFilterOptions)
+	e.GetMcpServerActivity = m(e.GetMcpServerActivity)
 	e.ListHooksTraces = m(e.ListHooksTraces)
 }
 
@@ -1112,6 +1115,65 @@ func NewGetToolUsageFilterOptionsEndpoint(s Service, authAPIKeyFn security.AuthA
 			return nil, err
 		}
 		return s.GetToolUsageFilterOptions(ctx, p)
+	}
+}
+
+// NewGetMcpServerActivityEndpoint returns an endpoint function that calls the
+// method "getMcpServerActivity" of service "telemetry".
+func NewGetMcpServerActivityEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMcpServerActivityPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMcpServerActivity(ctx, p)
 	}
 }
 

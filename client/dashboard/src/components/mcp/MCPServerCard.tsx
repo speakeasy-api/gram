@@ -7,6 +7,8 @@ import { Badge } from "@speakeasy-api/moonshine";
 import { ArrowRight, Network } from "lucide-react";
 import { Link } from "react-router";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
+import { MCPActivityIndicator } from "./MCPActivityIndicator";
+import type { McpActivityStatus } from "./mcp-activity";
 
 // MCPServerCard renders an mcp_servers row inside the /mcp listing grid.
 // Today only Remote-MCP-backed servers reach this component (filtered upstream
@@ -20,9 +22,13 @@ import { MCPStatusIndicator } from "./MCPStatusIndicator";
 export function MCPServerCard({
   server,
   endpointCount,
+  activityStatus,
+  recentWindowDays,
 }: {
   server: McpServer;
   endpointCount: number;
+  activityStatus?: McpActivityStatus | null;
+  recentWindowDays?: number;
 }): JSX.Element {
   const routes = useRoutes();
 
@@ -54,10 +60,18 @@ export function MCPServerCard({
 
         {/* Footer row with status indicator and open link */}
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <MCPStatusIndicator
-            mcpEnabled={mcpEnabled}
-            mcpIsPublic={mcpIsPublic}
-          />
+          <div className="flex items-center gap-2">
+            <MCPStatusIndicator
+              mcpEnabled={mcpEnabled}
+              mcpIsPublic={mcpIsPublic}
+            />
+            {activityStatus && (
+              <MCPActivityIndicator
+                status={activityStatus}
+                recentWindowDays={recentWindowDays}
+              />
+            )}
+          </div>
           <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
             <span>Open</span>
             <ArrowRight className="h-3.5 w-3.5" />

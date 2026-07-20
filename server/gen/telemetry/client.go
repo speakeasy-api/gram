@@ -34,11 +34,12 @@ type Client struct {
 	GetToolUsageSummaryEndpoint       goa.Endpoint
 	ListToolUsageTracesEndpoint       goa.Endpoint
 	GetToolUsageFilterOptionsEndpoint goa.Endpoint
+	GetMcpServerActivityEndpoint      goa.Endpoint
 	ListHooksTracesEndpoint           goa.Endpoint
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, listToolUsageTraces, getToolUsageFilterOptions, listHooksTraces goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
 	return &Client{
 		SearchLogsEndpoint:                searchLogs,
 		SearchToolCallsEndpoint:           searchToolCalls,
@@ -59,6 +60,7 @@ func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEve
 		GetToolUsageSummaryEndpoint:       getToolUsageSummary,
 		ListToolUsageTracesEndpoint:       listToolUsageTraces,
 		GetToolUsageFilterOptionsEndpoint: getToolUsageFilterOptions,
+		GetMcpServerActivityEndpoint:      getMcpServerActivity,
 		ListHooksTracesEndpoint:           listHooksTraces,
 	}
 }
@@ -492,6 +494,29 @@ func (c *Client) GetToolUsageFilterOptions(ctx context.Context, p *GetToolUsageF
 		return
 	}
 	return ires.(*GetToolUsageFilterOptionsResult), nil
+}
+
+// GetMcpServerActivity calls the "getMcpServerActivity" endpoint of the
+// "telemetry" service.
+// GetMcpServerActivity may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetMcpServerActivity(ctx context.Context, p *GetMcpServerActivityPayload) (res *GetMcpServerActivityResult, err error) {
+	var ires any
+	ires, err = c.GetMcpServerActivityEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetMcpServerActivityResult), nil
 }
 
 // ListHooksTraces calls the "listHooksTraces" endpoint of the "telemetry"

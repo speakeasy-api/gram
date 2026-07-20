@@ -20,6 +20,10 @@ export type RemoteSessionIssuer = {
    * Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
    */
   clientIdMetadataDocumentSupported: boolean;
+  /**
+   * URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.
+   */
+  clientSetupDocumentationUrl?: string | undefined;
   createdAt: Date;
   grantTypesSupported?: Array<string> | undefined;
   /**
@@ -96,6 +100,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
   z.object({
     authorization_endpoint: z.optional(z.string()),
     client_id_metadata_document_supported: z.boolean(),
+    client_setup_documentation_url: z.optional(z.string()),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -129,6 +134,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       "authorization_endpoint": "authorizationEndpoint",
       "client_id_metadata_document_supported":
         "clientIdMetadataDocumentSupported",
+      "client_setup_documentation_url": "clientSetupDocumentationUrl",
       "created_at": "createdAt",
       "grant_types_supported": "grantTypesSupported",
       "jwks_uri": "jwksUri",

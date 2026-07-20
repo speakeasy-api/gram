@@ -108,6 +108,8 @@ type GetPluginResponseBody struct {
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -133,6 +135,8 @@ type CreatePluginResponseBody struct {
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -158,6 +162,8 @@ type UpdatePluginResponseBody struct {
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -3272,6 +3278,8 @@ type PluginResponseBody struct {
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -3613,6 +3621,7 @@ func NewGetPluginPluginOK(body *GetPluginResponseBody) *plugins.Plugin {
 		Description:     body.Description,
 		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
+		SkillCount:      body.SkillCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3801,6 +3810,7 @@ func NewCreatePluginPluginCreated(body *CreatePluginResponseBody) *plugins.Plugi
 		Description:     body.Description,
 		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
+		SkillCount:      body.SkillCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3989,6 +3999,7 @@ func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
 		Description:     body.Description,
 		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
+		SkillCount:      body.SkillCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,

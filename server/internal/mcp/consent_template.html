@@ -325,7 +325,7 @@
       }
     </style>
   </head>
-  <body>
+  <body{{if .AutoClose}} data-auto-close{{end}}>
     <main class="main">
       <div class="auth-consent-container">
         <div class="header">
@@ -377,7 +377,11 @@
           </div>
           {{end}}
         </div>
-        {{end}} {{if .FirstParty}}
+        {{end}} {{if .AutoClose}}
+        <p class="info">
+          Connection complete. This tab will close automatically.
+        </p>
+        {{else if .FirstParty}}
         <p class="info">
           When you've connected the services above, you can close this tab.
         </p>
