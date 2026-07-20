@@ -15,7 +15,10 @@ import (
 )
 
 // Endpoints consumed by the Speakeasy device agent running on developer
-// machines. Authenticates via an org-scoped API key carrying the 'agent' scope.
+// machines. Authenticates via an API key carrying the 'agent_user' scope — the
+// per-user credential minted by token-exchange. An org key with the broader
+// 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so
+// existing installs keep working during the transition.
 type Service interface {
 	// Resolve the marketplaces and plugins assigned to the enrolled user. The
 	// device agent reconciles these into whichever AI developer tools it manages
@@ -75,8 +78,9 @@ type AgentPlugin struct {
 // GetPluginsPayload is the payload type of the agent service getPlugins method.
 type GetPluginsPayload struct {
 	ApikeyToken *string
-	// Email address of the enrolled user. Used to resolve plugin assignments
-	// against principal URNs.
+	// Email address of the enrolled user. Authoritative when authenticating with
+	// an org-scoped agent install key (the MDM zero-touch path); ignored for a
+	// per-user key, whose owner is the enrolled user.
 	Email string
 }
 
