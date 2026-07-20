@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -517,24 +518,22 @@ func TestQuery_EmailFallsBackToHostname(t *testing.T) {
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
+	// The MV materializes synchronously with the insert; only the async insert
+	// queue needs draining for the rows to become visible deterministically.
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
 	// Group by email: the identified user keeps their address, the emailless
 	// session surfaces under its hostname, and only the identity-less row
 	// remains in the '' bucket.
-	var result *gen.QueryResult
-	require.Eventually(t, func() bool {
-		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("email"),
-			TopN:    10,
-			SortBy:  "total_cost",
-		})
-		if err != nil || res == nil {
-			return false
-		}
-		result = res
-		return len(res.Table) == 3
-	}, 10*time.Second, 200*time.Millisecond)
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("email"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Table, 3)
 
 	cost := tableCostByGroup(result.Table)
 	require.InDelta(t, 0.25, cost["a@x.com"], 1e-9)
@@ -553,6 +552,22 @@ func TestQuery_EmailFallsBackToHostname(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, drill.Table, 1)
 	require.InDelta(t, 0.40, drill.Table[0].Measures.TotalCost, 1e-9)
+
+	// The standalone Device dimension groups by hostname alone — here the
+	// identified user's spend surfaces under their machine too, unlike the
+	// email dimension where the address wins.
+	byHost, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("hostname"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	hostCost := tableCostByGroup(byHost.Table)
+	require.InDelta(t, 0.25, hostCost["daves-mbp.local"], 1e-9)
+	require.InDelta(t, 0.40, hostCost["ci-runner-1"], 1e-9)
+	require.InDelta(t, 0.10, hostCost[""], 1e-9)
 }
 
 func TestQuery_DefaultSortByAndTopN(t *testing.T) {

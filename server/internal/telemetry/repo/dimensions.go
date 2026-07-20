@@ -75,6 +75,16 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
 	},
+	"hostname": {
+		// The device hostname the Go hooks report on every event
+		// (gram.hook.hostname), propagated onto Claude OTEL rows via the
+		// session cache. A standalone per-device breakdown, independent of the
+		// email dimension's fallback use of the same column.
+		aggregateColumn:        "hook_hostname",
+		rawExpr:                "toString(attributes.gram.hook.hostname)",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
+	},
 	"model": {
 		aggregateColumn: "model",
 		// Source-aware: Claude api_request rows carry the model on

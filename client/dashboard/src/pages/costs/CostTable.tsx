@@ -90,10 +90,12 @@ function InfoTooltip({ text }: { text: string }): JSX.Element {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
+        {/* stopPropagation keeps a click on the icon from activating the
+            surrounding row drill button. */}
         <span
-          role="note"
           tabIndex={0}
           aria-label={text}
+          onClick={(event) => event.stopPropagation()}
           className="text-muted-foreground inline-flex shrink-0 cursor-help"
         >
           <Info className="size-3.5" />

@@ -173,6 +173,13 @@ const CASES: Case[] = [
     split: "Showing all project spend — $4.04 across 3 Providers.",
   },
   {
+    dim: Dimension.Hostname,
+    title: "Cost by Device",
+    empty: "Showing all project spend, broken down by Device.",
+    single: "Showing all project spend — $4.04, all from a single Device.",
+    split: "Showing all project spend — $4.04 across 3 Devices.",
+  },
+  {
     dim: Dimension.Role,
     title: "Cost by Role",
     empty: "Showing all project spend, broken down by Role.",

@@ -7,6 +7,7 @@ import {
   Cloud,
   Cpu,
   FolderKanban,
+  Laptop,
   Layers,
   type LucideIcon,
   Network,
@@ -109,6 +110,9 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
     heading: "People",
     options: [
       { value: Dimension.Email, label: "User", icon: UserRound },
+      // The machine the Go hooks report (gram.hook.hostname) — the identity
+      // the User breakdown falls back to for sessions with no email.
+      { value: Dimension.Hostname, label: "Device", icon: Laptop },
       { value: Dimension.Role, label: "Role", icon: Shield },
     ],
   },
