@@ -62,8 +62,26 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 	},
 	"email": {
-		aggregateColumn:        "user_email",
-		rawExpr:                "user_email",
+		// The user breakdown falls back to the device hostname when a session
+		// carries no email: company-credential sessions emit no user identity,
+		// but the Go hooks report gram.hook.hostname on every event (and the
+		// session cache propagates it onto Claude OTEL rows), so identity-less
+		// spend splits per device instead of pooling into one empty bucket.
+		// Group, filter, and dimension_values all share this expression, which
+		// keeps the hostname buckets drillable. Rows with neither email nor
+		// hostname still land in the '' bucket.
+		aggregateColumn:        "if(user_email != '', user_email, hook_hostname)",
+		rawExpr:                "if(user_email != '', user_email, toString(attributes.gram.hook.hostname))",
+		kind:                   attributeDimScalar,
+		coLocateSessionFilters: false,
+	},
+	"hostname": {
+		// The device hostname the Go hooks report on every event
+		// (gram.hook.hostname), propagated onto Claude OTEL rows via the
+		// session cache. A standalone per-device breakdown, independent of the
+		// email dimension's fallback use of the same column.
+		aggregateColumn:        "hook_hostname",
+		rawExpr:                "toString(attributes.gram.hook.hostname)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
 	},

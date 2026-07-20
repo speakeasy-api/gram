@@ -27,6 +27,11 @@ func IngestHooksPath() string {
 	return "/rpc/hooks.ingest"
 }
 
+// UploadSkillContentHooksPath returns the URL path to the hooks service uploadSkillContent HTTP endpoint.
+func UploadSkillContentHooksPath() string {
+	return "/rpc/hooks.uploadSkillContent"
+}
+
 // LogsHooksPath returns the URL path to the hooks service logs HTTP endpoint.
 func LogsHooksPath() string {
 	return "/rpc/hooks.otel/v1/logs"

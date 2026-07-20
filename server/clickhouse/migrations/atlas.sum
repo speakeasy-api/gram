@@ -1,4 +1,4 @@
-h1:maWeC1V/d/t0T8W+kKuFl5i37IxzUxkkoXpgf94Xy8s=
+h1:9gv070x8DR2X3WVLKzGFn/gIniNWjwk4w9So5BcEBTo=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -70,6 +70,5 @@ h1:maWeC1V/d/t0T8W+kKuFl5i37IxzUxkkoXpgf94Xy8s=
 20260714200947_add-risk-findings.sql h1:b+Neqb/8G5TEVbAaoxOke+CNZq5sYm2UYjFUIJ+Id3I=
 20260717083841_add-risk-findings-exclusion-fields.sql h1:DwX9lBE63B6RDvG7QFhAqkQg1y/cy+zWkjSDIYn3kMM=
 20260717174509_gen2-attribute-metrics-mv.sql h1:xH0ekxd9XCwI5EsK9g6MU3wSKTN1nQ9U5NmpQ2fmEh0=
-20260717184906_claude-chat-usage-cost-metrics.sql h1:DXeLrjR/x5k05ePtIdpKlG/nYjy0pzgEo3EDoV5WnLQ=
-20260720185500_attribute-metrics-hook-hostname.sql h1:noDN/n15beZtYSoFsZ6oCFcKamnW/Cpi9qp8BpImUJw=
-20260720210517_claude-chat-usage-cost-hook-hostname.sql h1:4Cd/pEfDKDkHGlAkNeI+t5ZkigGkf5/PUIw2UPTdzIg=
+20260720185500_attribute-metrics-hook-hostname.sql h1:oIeYhqL8NNPED0hT2YOeckldgWfx1bE525v4CrdzVG0=
+20260720233837_claude-chat-usage-cost-metrics.sql h1:Xk/PNLb1JS2+OHqQDcWq+GSoPpQfS+WRxdaq6HFgORk=

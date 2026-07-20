@@ -2,16 +2,16 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
 import { useQuery } from "@tanstack/react-query";
 
-export interface UseRemoteMcpUserSessionTokenResult {
+export interface UseProxiedMcpUserSessionTokenResult {
   /** The minted user-session JWT, or undefined while loading / not gated. */
   accessToken: string | undefined;
   isLoading: boolean;
 }
 
 /**
- * Mints a user-session JWT scoped to a remote MCP server, mirroring the
+ * Mints a user-session JWT scoped to a proxied MCP server, mirroring the
  * playground (see PlaygroundElements.tsx) but passing `mcpServerId` to the
- * unified mint: remote MCP servers are mcp_servers-backed and carry no toolset,
+ * unified mint: proxied MCP servers are mcp_servers-backed and carry no toolset,
  * so the JWT audience binds to the server's user_session_issuer (the /x/mcp
  * convention).
  * The minted token matches what /x/mcp/{slug}/token would emit after an OAuth
@@ -21,13 +21,13 @@ export interface UseRemoteMcpUserSessionTokenResult {
  * Only issuer-gated servers get a token; the mint RPC 400s for the rest, so we
  * leave `accessToken` undefined and let the connection proceed unauthenticated.
  */
-export function useRemoteMcpUserSessionToken({
+export function useProxiedMcpUserSessionToken({
   mcpServerId,
   isIssuerGated,
 }: {
   mcpServerId: string | undefined;
   isIssuerGated: boolean;
-}): UseRemoteMcpUserSessionTokenResult {
+}): UseProxiedMcpUserSessionTokenResult {
   const session = useSession();
   const project = useProject();
   const mintMutation = useMintUserSessionMutation();
@@ -36,7 +36,7 @@ export function useRemoteMcpUserSessionToken({
 
   const query = useQuery({
     queryKey: [
-      "remoteMcpUserSessionToken",
+      "proxiedMcpUserSessionToken",
       project.id,
       mcpServerId,
       session.user.id,

@@ -36,6 +36,13 @@ type SkillDistribution struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type SkillRawHash struct {
+	ProjectID       uuid.UUID
+	RawSha256       string
+	CanonicalSha256 string
+	CreatedAt       pgtype.Timestamptz
+}
+
 type SkillVersion struct {
 	ID               uuid.UUID
 	SkillID          uuid.UUID
@@ -48,4 +55,12 @@ type SkillVersion struct {
 	ValidationErrors []byte
 	CreatedAt        pgtype.Timestamptz
 	CreatedByUserID  string
+}
+
+type SkillVersionOrigin struct {
+	SkillVersionID uuid.UUID
+	SkillID        uuid.UUID
+	ProjectID      uuid.UUID
+	Origin         string
+	CreatedAt      pgtype.Timestamptz
 }

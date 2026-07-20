@@ -37,6 +37,26 @@ ON CONFLICT (project_id, name) WHERE archived_at IS NULL
 DO NOTHING
 RETURNING *;
 
+-- name: CreateCapturedSkill :one
+INSERT INTO skills (
+  project_id,
+  name,
+  display_name,
+  summary,
+  source_kind,
+  classification
+) VALUES (
+  @project_id,
+  @name,
+  @display_name,
+  sqlc.narg(summary)::text,
+  'captured',
+  'custom'
+)
+ON CONFLICT (project_id, name) WHERE archived_at IS NULL
+DO NOTHING
+RETURNING *;
+
 -- name: CreateSkillVersion :one
 INSERT INTO skill_versions (
   skill_id,
@@ -75,6 +95,57 @@ WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL
   AND sv.canonical_sha256 = @canonical_sha256;
+
+-- name: InsertCapturedSkillVersionOrigin :exec
+INSERT INTO skill_version_origins (skill_version_id, skill_id, project_id, origin)
+SELECT sv.id, sv.skill_id, s.project_id, 'captured'
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND sv.id = @skill_version_id
+ON CONFLICT (skill_version_id) DO NOTHING;
+
+-- name: DeleteSkillVersionOrigin :exec
+DELETE FROM skill_version_origins
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id;
+
+-- name: StoreSkillRawHashAlias :one
+WITH inserted AS (
+  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
+  SELECT s.project_id, @raw_sha256, sv.canonical_sha256
+  FROM skill_versions sv
+  JOIN skills s ON s.id = sv.skill_id
+  WHERE s.project_id = @project_id
+    AND s.id = @skill_id
+    AND sv.id = @skill_version_id
+    AND sv.canonical_sha256 = @canonical_sha256
+  ON CONFLICT (project_id, raw_sha256) DO NOTHING
+  RETURNING 1
+)
+SELECT TRUE AS matches
+FROM inserted
+UNION ALL
+SELECT srh.canonical_sha256 = @canonical_sha256 AS matches
+FROM skill_raw_hashes srh
+WHERE srh.project_id = @project_id
+  AND srh.raw_sha256 = @raw_sha256
+LIMIT 1;
+
+-- name: GetSkillVersionOrigin :one
+SELECT *
+FROM skill_version_origins
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id;
+
+-- name: GetSkillRawHash :one
+SELECT *
+FROM skill_raw_hashes
+WHERE project_id = @project_id
+  AND raw_sha256 = @raw_sha256;
 
 -- name: UpdateSkill :one
 UPDATE skills
@@ -218,11 +289,15 @@ WHERE s.project_id = @project_id
 SELECT sv.id
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN skill_version_origins svo
+  ON svo.project_id = s.project_id
+  AND svo.skill_id = sv.skill_id
+  AND svo.skill_version_id = sv.id
 WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL
   AND sv.spec_valid IS TRUE
-ORDER BY sv.created_at DESC, sv.id DESC
+ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
 LIMIT 1;
 
 -- name: GetPluginForDistribution :one
@@ -252,10 +327,14 @@ FROM skill_distributions sd
 JOIN LATERAL (
   SELECT sv.id
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = @project_id
@@ -289,10 +368,14 @@ JOIN skills s
 JOIN LATERAL (
   SELECT sv.id
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = @project_id
@@ -381,10 +464,14 @@ FROM skill_distributions prev
 JOIN LATERAL (
   SELECT sv.id
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = prev.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = prev.skill_id
     AND sv.spec_valid IS TRUE
     AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE prev.id = sd.id
