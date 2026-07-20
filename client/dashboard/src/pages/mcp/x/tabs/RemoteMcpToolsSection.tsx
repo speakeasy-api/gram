@@ -1,7 +1,3 @@
-import {
-  AnnotationBadgeIcons,
-  type ResolvedToolAnnotations,
-} from "@/components/tool-list/AnnotationBadges";
 import { Heading } from "@/components/ui/heading";
 import {
   Sheet,
@@ -21,6 +17,7 @@ import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
+import { ToolAnnotationIndicators } from "./ToolAnnotationIndicators";
 import { ToolMetadataDriftPanel } from "./ToolMetadataDriftPanel";
 import { computeDrift } from "./toolMetadataSync";
 import { useSyncToolMetadata } from "./useSyncToolMetadata";
@@ -413,7 +410,7 @@ function RemoteToolRow({
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-w-0 items-center gap-2">
           <p className="text-foreground truncate text-sm leading-6">{name}</p>
-          <AnnotationBadgeIcons {...resolveAnnotations(annotations, stored)} />
+          <ToolAnnotationIndicators annotations={annotations} stored={stored} />
         </div>
         <p className="text-muted-foreground truncate text-sm leading-6">
           {description || "No description"}
@@ -442,8 +439,9 @@ function RemoteToolDetails({
           <SheetTitle className="font-mono text-sm break-all">
             {name}
           </SheetTitle>
-          <AnnotationBadgeIcons
-            {...resolveAnnotations(tool.annotations, stored)}
+          <ToolAnnotationIndicators
+            annotations={tool.annotations}
+            stored={stored}
           />
         </div>
         {(stored?.title ?? tool.annotations?.title) ? (
@@ -575,27 +573,6 @@ function RemoteMcpToolsConnectPrompt({
       ) : null}
     </div>
   );
-}
-
-/**
- * Resolve the hints to display for a tool: Speakeasy's stored metadata wins over
- * whatever the server advertised, and an unset stored hint falls through to the
- * advertised value. Same `override ?? base` precedence AnnotationBadges applies
- * to tool variations — stored hints are tri-state, so `false` is a real
- * override and only `undefined` falls through.
- */
-function resolveAnnotations(
-  annotations: ProxiedMcpToolAnnotations | undefined,
-  stored?: ToolMetadata,
-): ResolvedToolAnnotations {
-  return {
-    readOnly: Boolean(stored?.readOnlyHint ?? annotations?.readOnlyHint),
-    destructive: Boolean(
-      stored?.destructiveHint ?? annotations?.destructiveHint,
-    ),
-    idempotent: Boolean(stored?.idempotentHint ?? annotations?.idempotentHint),
-    openWorld: Boolean(stored?.openWorldHint ?? annotations?.openWorldHint),
-  };
 }
 
 type ToolParameter = {
