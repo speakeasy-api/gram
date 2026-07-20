@@ -22,13 +22,15 @@ type TransactionalID string
 // Loops transactional template IDs. Keep all IDs declared here so the
 // registry is grep-friendly.
 const (
-	transactionalIDTeamInvite                         TransactionalID = "cml3n1h2n27o50i2rakc30bwb"
-	transactionalIDEnterpriseAdminOnboarding          TransactionalID = "cmpqyxnzl00hj0jwtkibhyjdz"
-	transactionalIDAccessRequestCreated               TransactionalID = "cmq12wqp901sl0j0ll8cpr0yj"
-	transactionalIDTumUsageThreshold                  TransactionalID = "cmrdon75q00390jvq44l87erv"
-	transactionalIDTumUsageOverage                    TransactionalID = "cmrdopjpd028m0jx0v8sl25wj"
-	transactionalIDOpenRouterChatCreditsThreshold     TransactionalID = "cmrpjavhw06x10j1dsxivfted"
-	transactionalIDOpenRouterInternalCreditsThreshold TransactionalID = "cmrpkq1r6014d0jze28webret"
+	transactionalIDTeamInvite                TransactionalID = "cml3n1h2n27o50i2rakc30bwb"
+	transactionalIDEnterpriseAdminOnboarding TransactionalID = "cmpqyxnzl00hj0jwtkibhyjdz"
+	transactionalIDAccessRequestCreated      TransactionalID = "cmq12wqp901sl0j0ll8cpr0yj"
+	transactionalIDTumUsageThreshold         TransactionalID = "cmrdon75q00390jvq44l87erv"
+	transactionalIDTumUsageOverage           TransactionalID = "cmrdopjpd028m0jx0v8sl25wj"
+	// gosec's G101 name heuristic matches the "Cred" in "Credits"; these are
+	// Loops template ids like every other constant in this block, not secrets.
+	transactionalIDOpenRouterChatCreditsThreshold     TransactionalID = "cmrpjavhw06x10j1dsxivfted" //nolint:gosec // template id, not a credential
+	transactionalIDOpenRouterInternalCreditsThreshold TransactionalID = "cmrpkq1r6014d0jze28webret" //nolint:gosec // template id, not a credential
 )
 
 // Template is implemented by every concrete email template. Concrete types
