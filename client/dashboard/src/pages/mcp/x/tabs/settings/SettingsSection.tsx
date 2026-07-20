@@ -41,12 +41,16 @@ function SettingsSectionRoot({
 
 function DangerSettingsSectionRoot({
   children,
+  id,
 }: {
   children: React.ReactNode;
+  id?: string;
 }) {
   return (
     <SettingsSectionContext.Provider value={DANGER_SETTINGS_SECTION_CONTEXT}>
-      <section className="space-y-3">{children}</section>
+      <section id={id} className="space-y-3 scroll-mt-4">
+        {children}
+      </section>
     </SettingsSectionContext.Provider>
   );
 }

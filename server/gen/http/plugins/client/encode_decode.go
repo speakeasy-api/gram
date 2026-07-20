@@ -3812,6 +3812,7 @@ func unmarshalPluginResponseBodyToPluginsPlugin(v *PluginResponseBody) *plugins.
 		Description:     v.Description,
 		IsDefault:       v.IsDefault,
 		ServerCount:     v.ServerCount,
+		SkillCount:      v.SkillCount,
 		AssignmentCount: v.AssignmentCount,
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,

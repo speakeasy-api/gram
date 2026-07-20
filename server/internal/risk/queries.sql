@@ -514,16 +514,14 @@ WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
 
--- name: GetRiskOverviewCounts :one
+-- name: GetRiskOverviewScanCounts :one
+-- messages_scanned counts every scanned message in the window regardless of
+-- found state. chat_message_id is NOT NULL with a FK to chat_messages, so the
+-- old JOIN was lossless — dropping it lets this be an index-only distinct on
+-- risk_results_project_created_msg_idx (project_id, created_at, chat_message_id).
+-- active_policies is a cheap scalar subquery, folded in here to save a round trip.
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
-  , (COUNT(*) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    ))::BIGINT AS findings
-  , (COUNT(DISTINCT cm.chat_id) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-        AND cm.chat_id IS NOT NULL
-    ))::BIGINT AS flagged_sessions
   , (
       SELECT COUNT(*)::BIGINT
       FROM risk_policies active_rp
@@ -532,10 +530,26 @@ SELECT
         AND deleted IS FALSE
     ) AS active_policies
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
 WHERE rr.project_id = @project_id
   AND rr.created_at >= @from_time
   AND rr.created_at < @to_time;
+
+-- name: GetRiskOverviewFindingCounts :one
+-- findings + flagged_sessions over the live-found subset. Pushing the found
+-- predicate into WHERE lets the partial risk_results_project_found_idx serve the
+-- scan, so the JOIN to chat_messages only touches found rows instead of every
+-- scanned row. COUNT(DISTINCT cm.chat_id) already skips NULL chat_ids.
+SELECT
+    COUNT(*)::BIGINT AS findings
+  , COUNT(DISTINCT cm.chat_id)::BIGINT AS flagged_sessions
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.project_id = @project_id
+  AND rr.created_at >= @from_time
+  AND rr.created_at < @to_time
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL;
 
 -- name: ListRiskOverviewTopRules :many
 -- Project-wide finding counts grouped by rule_id within a window.

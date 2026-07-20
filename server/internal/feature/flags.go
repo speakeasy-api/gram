@@ -13,6 +13,7 @@ const (
 	FlagPromptPolicies Flag = "gram-prompt-policies"
 
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
+	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its

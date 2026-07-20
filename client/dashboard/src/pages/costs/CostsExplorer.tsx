@@ -12,7 +12,7 @@ import { useChatDeleteMutation } from "@gram/client/react-query/chatDelete.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { resolveScopeBillingMode } from "@/components/estimated-cost-utils";
@@ -32,6 +32,7 @@ import { ChatDetailSheet } from "../chatLogs/ChatDetailPanel";
 import { type CardSpec, CostWidgets } from "./CostWidgets";
 import { EntityProfile } from "./EntityProfile";
 import { SessionTable, type SessionColumnId } from "./SessionTable";
+import { buildSessionCsv } from "./sessionCsv";
 import {
   type Axis,
   availableDimensions,
@@ -60,6 +61,10 @@ import {
   SESSIONS_AXIS,
   showsTopSessionsWidget,
 } from "./taxonomy";
+
+// Server-side cap on the per-session list (ranked by cost). SessionTable's
+// truncation footer and the search zero-match copy both key off it.
+const SESSION_LIMIT = 100;
 
 const EMPTY_MEASURES: Measures = {
   cost: 0,
@@ -138,6 +143,10 @@ export function CostsExplorer(): JSX.Element {
   // Which session's detail overlay is open (ephemeral UI, not drill state — so
   // it lives in component state rather than the URL).
   const [openChatId, setOpenChatId] = useState<string | null>(null);
+  // Free-text filter over the visible table rows (ephemeral view state, like
+  // openChatId). Client-side only: the table already holds the server-ranked
+  // top-N slice, so search narrows what's shown without touching the queries.
+  const [breakdownSearch, setBreakdownSearch] = useState("");
 
   // Drill state is the URL. The filter `path` is encoded as pathname segments
   // (so the breadcrumb tracks it and the view is shareable/refresh-safe); the
@@ -473,7 +482,7 @@ export function CostsExplorer(): JSX.Element {
             from,
             to,
             sortBy: "total_cost",
-            limit: 100,
+            limit: SESSION_LIMIT,
             filters: filters.length ? filters : undefined,
           },
         }),
@@ -523,6 +532,20 @@ export function CostsExplorer(): JSX.Element {
   const visibleRows = isAttributionDim(groupBy)
     ? rows.filter((r) => r.groupValue !== "")
     : rows;
+
+  // Search narrows the table only — headline stats, widgets, and CSV-adjacent
+  // aggregates stay slice totals. Rows match on both the raw group value and
+  // its display name (a user's email matches their prettified name too).
+  const normalizedSearch = breakdownSearch.trim().toLowerCase();
+  const searchedRows = normalizedSearch
+    ? visibleRows.filter(
+        (r) =>
+          r.groupValue.toLowerCase().includes(normalizedSearch) ||
+          displayName(groupBy, r.groupValue)
+            .toLowerCase()
+            .includes(normalizedSearch),
+      )
+    : visibleRows;
 
   // At the root, an attribution breakdown is presented as a "collection" (e.g.
   // "MCP Servers") rather than the project — and its headline stats then sum
@@ -904,6 +927,33 @@ export function CostsExplorer(): JSX.Element {
       : []),
   ];
   const axisValue: string = sessionsMode ? SESSIONS_AXIS : groupBy;
+
+  // A search typed against one cut is meaningless against another — clear it
+  // when the drill path or the breakdown axis changes.
+  useEffect(() => {
+    setBreakdownSearch("");
+  }, [location.pathname, axisValue]);
+
+  // The session list matches on everything its rows display: title, chat id,
+  // user, agent, and model.
+  const allSessions = sessionsData?.sessions ?? [];
+  const searchedSessions = normalizedSearch
+    ? allSessions.filter((s) =>
+        [s.title, s.gramChatId, s.userEmail, s.hookSource, s.model].some(
+          (field) => field?.toLowerCase().includes(normalizedSearch),
+        ),
+      )
+    : allSessions;
+
+  // Zero-match copy for the session search. Over a capped slice, scope the
+  // claim to what was actually searched — lower-ranked sessions may still match.
+  let sessionsEmptyMessage: string | undefined;
+  if (normalizedSearch) {
+    sessionsEmptyMessage = "No matches for your search.";
+    if (allSessions.length >= SESSION_LIMIT) {
+      sessionsEmptyMessage = `No matches in the ${SESSION_LIMIT} most expensive sessions.`;
+    }
+  }
   const onViewSessions =
     sessionsMode || !sliceScoped
       ? undefined
@@ -997,10 +1047,14 @@ export function CostsExplorer(): JSX.Element {
     rows: (topSessionsData?.sessions ?? []).map((s) => ({
       id: s.gramChatId,
       label: s.title?.length ? s.title : s.gramChatId.slice(0, 8),
+      // Whose session it was — dropped only once the drill path pins a user, as
+      // every row then repeats that same address. Deliberately independent of
+      // `groupBy`: these are the slice's top sessions whatever the table below
+      // is grouped by, so keying the sublabel off the breakdown axis both hid a
+      // useful attribution and resized this card (and with it the whole widget
+      // row) on every re-pivot.
       sublabel:
-        groupBy !== Dimension.Email &&
-        currentEntity?.dim !== Dimension.Email &&
-        s.userEmail?.length
+        currentEntity?.dim !== Dimension.Email && s.userEmail?.length
           ? s.userEmail
           : undefined,
       cost: s.totalCost,
@@ -1065,6 +1119,7 @@ export function CostsExplorer(): JSX.Element {
       />
       <EntityProfile
         entity={currentEntity}
+        path={path}
         collection={collection}
         cacheMetric={attributionView}
         widgets={widgets}
@@ -1072,7 +1127,6 @@ export function CostsExplorer(): JSX.Element {
         onHome={goHome}
         projectName={project.name}
         parentValue={parentValue}
-        ancestors={path.slice(0, -1)}
         stats={stats}
         groupBy={groupBy}
         canDrill={canDrill}
@@ -1080,20 +1134,37 @@ export function CostsExplorer(): JSX.Element {
         axisOptions={axisOptions}
         axisHint={axisHint}
         onAxisChange={(value) => changeGroupBy(value as Axis)}
-        rows={visibleRows}
+        searchValue={breakdownSearch}
+        onSearchChange={setBreakdownSearch}
+        rows={searchedRows}
         billingMode={viewBillingMode}
         onDrill={drillInto}
         tableOverride={
           sessionsMode ? (
             <SessionTable
-              sessions={sessionsData?.sessions ?? []}
+              sessions={searchedSessions}
               isLoading={sessionsFetching && !sessionsData}
               isError={sessionsError}
               onOpen={setOpenChatId}
               hiddenColumns={hiddenSessionColumns}
               billingMode={viewBillingMode}
+              emptyMessage={sessionsEmptyMessage}
+              sourceCount={allSessions.length}
             />
           ) : undefined
+        }
+        overrideCsv={
+          sessionsMode
+            ? {
+                rowCount: searchedSessions.length,
+                build: () =>
+                  buildSessionCsv(
+                    searchedSessions,
+                    hiddenSessionColumns,
+                    viewBillingMode,
+                  ),
+              }
+            : undefined
         }
         onViewSessions={onViewSessions}
         seriesByGroup={seriesByGroup}

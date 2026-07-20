@@ -48,6 +48,10 @@ export type Plugin = {
    */
   servers?: Array<PluginServer> | undefined;
   /**
+   * Number of active skills in this plugin.
+   */
+  skillCount?: number | undefined;
+  /**
    * URL-safe identifier, unique per org.
    */
   slug: string;
@@ -69,6 +73,7 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
     name: z.string(),
     server_count: z.optional(z.int()),
     servers: z.optional(z.array(PluginServer$inboundSchema)),
+    skill_count: z.optional(z.int()),
     slug: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -81,6 +86,7 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
       "created_at": "createdAt",
       "is_default": "isDefault",
       "server_count": "serverCount",
+      "skill_count": "skillCount",
       "updated_at": "updatedAt",
     });
   }),

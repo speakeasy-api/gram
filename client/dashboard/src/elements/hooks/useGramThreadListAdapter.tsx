@@ -1,10 +1,10 @@
 import {
-  unstable_RemoteThreadListAdapter as RemoteThreadListAdapter,
+  type RemoteThreadListAdapter,
   ThreadMessage,
   RuntimeAdapterProvider,
   ThreadHistoryAdapter,
-  useAssistantApi,
-  type AssistantApi,
+  useAui,
+  type AssistantClient,
 } from "@assistant-ui/react";
 import { createAssistantStream, type AssistantStream } from "assistant-stream";
 import {
@@ -213,7 +213,7 @@ async function loadFullChat(
 class GramThreadHistoryAdapter {
   private apiUrl: string;
   private getHeaders: () => Promise<Record<string, string>>;
-  private store: AssistantApi;
+  private store: AssistantClient;
   // Read lazily rather than captured: the adapter is constructed once, but the
   // consumer may swap `transformChatMessage` across renders, so resolve it from
   // the live options on every load instead of snapshotting it here.
@@ -222,7 +222,7 @@ class GramThreadHistoryAdapter {
   constructor(
     apiUrl: string,
     getHeaders: () => Promise<Record<string, string>>,
-    store: AssistantApi,
+    store: AssistantClient,
     getTransformChatMessage?: () => ChatMessageTransform | undefined,
   ) {
     this.apiUrl = apiUrl;
@@ -349,7 +349,7 @@ class GramThreadHistoryAdapter {
 function useGramThreadHistoryAdapter(
   optionsRef: React.RefObject<ThreadListAdapterOptions>,
 ): ThreadHistoryAdapter {
-  const store = useAssistantApi();
+  const store = useAui();
   const [adapter] = useState(
     () =>
       new GramThreadHistoryAdapter(

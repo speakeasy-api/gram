@@ -498,6 +498,7 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE our.organization_id = @organization_id
   AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
 ORDER BY users.email, users.id;
 
 -- name: ListAccessNotificationUsers :many

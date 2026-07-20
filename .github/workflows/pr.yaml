@@ -1960,6 +1960,7 @@ jobs:
       - atlas-push
       - webhooks-catalog-breaking-changes
       - tunnel-agent
+      - svix-sync-webhooks
     steps:
       - name: Check results
         env:
@@ -2006,8 +2007,26 @@ jobs:
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [docker-build-server, assistant-runtime-image, svix-sync-webhooks]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      [
+        ci-gate,
+        docker-build-server,
+        assistant-runtime-image,
+        svix-sync-webhooks,
+      ]
+    # ci-gate's transitive needs include path-filtered jobs, and a skipped job
+    # anywhere in the needs chain skips dependents under the default success()
+    # condition even when every direct need succeeded. !cancelled() opts out of
+    # that propagation, so each need's result must be checked explicitly: ci-gate
+    # green gates the release, and the image/sync jobs succeeding (not skipped)
+    # keeps docs-only pushes from dispatching one.
+    if: >-
+      !cancelled() &&
+      needs.ci-gate.result == 'success' &&
+      needs.docker-build-server.result == 'success' &&
+      needs.assistant-runtime-image.result == 'success' &&
+      needs.svix-sync-webhooks.result == 'success' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Generate GitHub App Token
         id: generate-token
