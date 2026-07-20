@@ -841,6 +841,8 @@ JOIN LATERAL (
 ) resolved ON TRUE
 WHERE sd.project_id = $1
   AND sd.channel = 'plugin'
+  AND sd.plugin_id IS NOT NULL
+  AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 ORDER BY p.slug ASC, s.name ASC
 `
@@ -901,6 +903,7 @@ SELECT
     WHERE sd.plugin_id = p.id
       AND sd.project_id = p.project_id
       AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
       AND sd.revoked_at IS NULL
       AND EXISTS (
         SELECT 1
@@ -1254,6 +1257,8 @@ JOIN LATERAL (
 WHERE prev.id = sd.id
   AND sd.project_id = $1
   AND sd.plugin_id = $2
+  AND sd.channel = 'plugin'
+  AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id, s.name AS skill_name, s.display_name AS skill_display_name
 `
