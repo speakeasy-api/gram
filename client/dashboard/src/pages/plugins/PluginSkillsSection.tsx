@@ -16,12 +16,13 @@ import {
 } from "@gram/client/react-query/skillDistributions.js";
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { SectionEmptyState } from "./SectionEmptyState";
 
 /**
  * The Skills section of the plugin detail page: lists the skills this plugin
@@ -30,9 +31,12 @@ import { toast } from "sonner";
  */
 export function PluginSkillsSection({
   pluginId,
+  searchQuery,
   onMutated,
 }: {
   pluginId: string;
+  /** Page-level search query; narrows the listed skill distributions. */
+  searchQuery: string;
   /** Invoked after a successful change, e.g. to offer a marketplace publish. */
   onMutated: (message: string) => void;
 }): JSX.Element {
@@ -57,6 +61,18 @@ export function PluginSkillsSection({
       ) ?? [],
     [distributionsQuery.data?.pages],
   );
+
+  // Case-insensitive match on the card's visible labels: the skill display
+  // name and its mono slug-style name.
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredDistributions = useMemo(() => {
+    if (!normalizedSearch) return distributions;
+    return distributions.filter(
+      (d) =>
+        d.skillDisplayName.toLowerCase().includes(normalizedSearch) ||
+        d.skillName.toLowerCase().includes(normalizedSearch),
+    );
+  }, [distributions, normalizedSearch]);
 
   const skillsQuery = useSkillsInfinite({ limit: 200 }, undefined, {
     throwOnError: false,
@@ -117,6 +133,42 @@ export function PluginSkillsSection({
     );
   };
 
+  // Precomputed list body keeps the JSX below free of nested ternaries while
+  // distinguishing "nothing distributed yet" from "no search matches".
+  let listContent: JSX.Element;
+  if (distributionsQuery.error && !distributionsQuery.data) {
+    listContent = (
+      <ErrorAlert
+        title="Unable to load distributed skills"
+        error={distributionsQuery.error}
+      />
+    );
+  } else if (!isMembershipLoaded) {
+    listContent = <Skeleton className="h-24 w-full rounded-xl" />;
+  } else if (distributions.length === 0) {
+    listContent = (
+      <SectionEmptyState
+        title="No skills distributed yet"
+        subtitle="Add project skills to bundle them with this plugin."
+      />
+    );
+  } else if (filteredDistributions.length === 0) {
+    listContent = <SectionEmptyState title="No skills match your search" />;
+  } else {
+    listContent = (
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {filteredDistributions.map((distribution) => (
+          <PluginSkillCard
+            key={distribution.id}
+            distribution={distribution}
+            isRemoving={undistribute.isPending}
+            onRemove={() => handleRemoveSkill(distribution)}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="mb-3 flex items-center gap-3">
@@ -160,41 +212,7 @@ export function PluginSkillsSection({
           </Button>
         </RequireScope>
       </div>
-      <div className="mb-8">
-        {distributionsQuery.error && !distributionsQuery.data ? (
-          <ErrorAlert
-            title="Unable to load distributed skills"
-            error={distributionsQuery.error}
-          />
-        ) : !isMembershipLoaded ? (
-          <Skeleton className="h-24 w-full rounded-xl" />
-        ) : distributions.length === 0 ? (
-          <Stack
-            gap={2}
-            className="border-border rounded-xl border py-8"
-            align="center"
-            justify="center"
-          >
-            <Type variant="body" muted>
-              No skills distributed yet
-            </Type>
-            <Type small muted>
-              Add project skills to bundle them with this plugin.
-            </Type>
-          </Stack>
-        ) : (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            {distributions.map((distribution) => (
-              <PluginSkillCard
-                key={distribution.id}
-                distribution={distribution}
-                isRemoving={undistribute.isPending}
-                onRemove={() => handleRemoveSkill(distribution)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      <div className="mb-8">{listContent}</div>
 
       {/* Add Skill Dialog */}
       <Dialog open={isAddSkillOpen} onOpenChange={setIsAddSkillOpen}>

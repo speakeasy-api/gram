@@ -68,6 +68,8 @@ export function SettingsTab({
   const queryClient = useQueryClient();
   const [name, setName] = useState(issuer.name ?? "");
   const [slug, setSlug] = useState(issuer.slug);
+  const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
+    useState(issuer.clientSetupDocumentationUrl ?? "");
   const [showDelete, setShowDelete] = useState(false);
 
   // Issuer URL + endpoints + RFC 8414 discovery live in the shared hook, seeded
@@ -145,6 +147,8 @@ export function SettingsTab({
           id: issuer.id,
           name: name.trim(),
           slug: slug.trim(),
+          // An empty string clears the stored URL to NULL.
+          clientSetupDocumentationUrl: clientSetupDocumentationUrl.trim(),
           issuer: issuerUrl.trim(),
           authorizationEndpoint: authorizationEndpoint.trim(),
           tokenEndpoint: tokenEndpoint.trim(),
@@ -219,6 +223,17 @@ export function SettingsTab({
             runDiscover(issuerUrl);
           }}
           onResetEndpoints={handleResetEndpoints}
+        />
+      </SettingsSection>
+
+      <SettingsSection
+        title="Client setup"
+        description="Documentation linked from the New Client sheet so operators can set up an OAuth client with this provider themselves."
+      >
+        <Field
+          label="Client setup documentation URL"
+          value={clientSetupDocumentationUrl}
+          onChange={setClientSetupDocumentationUrl}
         />
       </SettingsSection>
 
