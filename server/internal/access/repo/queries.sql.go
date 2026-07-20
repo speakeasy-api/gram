@@ -1400,7 +1400,7 @@ func (q *Queries) ListPrincipalGrantsByResource(ctx context.Context, arg ListPri
 	return items, nil
 }
 
-const listPrincipalGrantsByScope = `-- name: ListPrincipalGrantsByScope :many
+const listPrincipalGrantsByResourceIDs = `-- name: ListPrincipalGrantsByResourceIDs :many
 SELECT principal_urn, scope, effect, selectors
 FROM principal_grants
 WHERE organization_id = $1
@@ -1408,34 +1408,42 @@ WHERE organization_id = $1
   AND selectors @> jsonb_build_object(
     'resource_kind', $3::text
   )
+  AND selectors->>'resource_id' = ANY($4::text[])
 ORDER BY principal_urn
 `
 
-type ListPrincipalGrantsByScopeParams struct {
+type ListPrincipalGrantsByResourceIDsParams struct {
 	OrganizationID string
 	Scope          string
 	ResourceKind   string
+	ResourceIds    []string
 }
 
-type ListPrincipalGrantsByScopeRow struct {
+type ListPrincipalGrantsByResourceIDsRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
 	Effect       pgtype.Text
 	Selectors    []byte
 }
 
-// Returns grant rows for every resource of one kind under a scope in an org.
-// Batched form of ListPrincipalGrantsByResource: callers group the results by
-// the selector's resource_id to avoid a per-resource round trip.
-func (q *Queries) ListPrincipalGrantsByScope(ctx context.Context, arg ListPrincipalGrantsByScopeParams) ([]ListPrincipalGrantsByScopeRow, error) {
-	rows, err := q.db.Query(ctx, listPrincipalGrantsByScope, arg.OrganizationID, arg.Scope, arg.ResourceKind)
+// Returns grant rows for a set of resources under one scope in an org. Batched
+// form of ListPrincipalGrantsByResource that stays scoped to the caller's
+// resource ids, so listing one project's resources never loads the whole org.
+// Callers group the results by the selector's resource_id.
+func (q *Queries) ListPrincipalGrantsByResourceIDs(ctx context.Context, arg ListPrincipalGrantsByResourceIDsParams) ([]ListPrincipalGrantsByResourceIDsRow, error) {
+	rows, err := q.db.Query(ctx, listPrincipalGrantsByResourceIDs,
+		arg.OrganizationID,
+		arg.Scope,
+		arg.ResourceKind,
+		arg.ResourceIds,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPrincipalGrantsByScopeRow
+	var items []ListPrincipalGrantsByResourceIDsRow
 	for rows.Next() {
-		var i ListPrincipalGrantsByScopeRow
+		var i ListPrincipalGrantsByResourceIDsRow
 		if err := rows.Scan(
 			&i.PrincipalUrn,
 			&i.Scope,

@@ -483,16 +483,24 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		totalMessages = 0
 	}
 
-	analyzedRows, err := s.repo.CountAnalyzedMessagesByProject(ctx, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count analyzed messages").LogError(ctx, s.logger)
-	}
-	analyzedByPolicy := make(map[analyzedMessagesKey]int64, len(analyzedRows))
-	for _, r := range analyzedRows {
-		analyzedByPolicy[analyzedMessagesKey{policyID: r.RiskPolicyID, version: r.RiskPolicyVersion}] = r.AnalyzedMessages
+	// Analyzed counts are optional status enrichment, so a failure degrades to
+	// zero (pending = total) rather than failing the whole list — matching the
+	// tolerance of the single-policy CountAnalyzedMessages path.
+	analyzedByPolicy := map[analyzedMessagesKey]int64{}
+	if analyzedRows, err := s.repo.CountAnalyzedMessagesByProject(ctx, *authCtx.ProjectID); err != nil {
+		s.logger.WarnContext(ctx, "count analyzed messages for risk policy list failed", attr.SlogError(err))
+	} else {
+		analyzedByPolicy = make(map[analyzedMessagesKey]int64, len(analyzedRows))
+		for _, r := range analyzedRows {
+			analyzedByPolicy[analyzedMessagesKey{policyID: r.RiskPolicyID, version: r.RiskPolicyVersion}] = r.AnalyzedMessages
+		}
 	}
 
-	audienceByPolicy, err := riskPolicyAudienceURNsByPolicy(ctx, s.db, authCtx.ActiveOrganizationID)
+	policyIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		policyIDs = append(policyIDs, row.ID.String())
+	}
+	audienceByPolicy, err := riskPolicyAudienceURNsByPolicy(ctx, s.db, authCtx.ActiveOrganizationID, policyIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audiences").LogError(ctx, s.logger)
 	}
