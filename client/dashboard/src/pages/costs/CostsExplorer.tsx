@@ -49,6 +49,7 @@ import {
   defaultGroupBy,
   displayName,
   encodeCrumb,
+  firstSplittableDimension,
   isAttributionDim,
   isDataset,
   isDimension,
@@ -302,30 +303,27 @@ export function CostsExplorer(): JSX.Element {
   // (the endpoints are org-scoped, but project_id is an allowlisted dimension),
   // then narrowed further by the drill path. This keeps the dashboard to the
   // project in the URL and guarantees session detail (project-scoped) loads.
-  const filters: QueryFilter[] = useMemo(() => {
+  //
+  // These are the ENTITY's filters — everything that identifies the node in
+  // view, independent of how it is being broken down. The detail query feeds
+  // off them, so the slice's dimension_values (and with them the final
+  // breakdown axis) resolve without depending on the axis itself.
+  const entityFilters: QueryFilter[] = useMemo(() => {
     const drill = path.map((c) => ({ dimension: c.dim, values: [c.value] }));
-    // Skill is its own drill tree (Subagent → Skill). When Skill is in view —
-    // grouped, or already drilled into — without an ancestor Subagent, this is
-    // the "skills run outside a subagent" branch: exclude rows that also carry a
-    // subagent (agent_name = '') so agent+skill spend surfaces only under
-    // Subagent → Skill, never leaking into the root Skill breakdown.
-    // Keyed on the CANDIDATE axis, not the final slice-aware one: the final
-    // resolution reads the detail query, which reads these filters — and since
-    // attribution dims are exempt from that resolution, candidate and final
-    // agree whenever Skill is in view, so this never diverges.
-    const skillInContext =
-      candidateGroupBy === Dimension.SkillName ||
-      path.some((c) => c.dim === Dimension.SkillName);
+    // Skill is its own drill tree (Subagent → Skill). A Skill pinned without an
+    // ancestor Subagent identifies the "skills run outside a subagent" branch,
+    // so the agent_name='' restriction is part of the entity here (the axis-
+    // driven case lives in `filters` below).
     const hasAgentCrumb = path.some((c) => c.dim === Dimension.AgentName);
     const synthetic: QueryFilter[] =
-      skillInContext && !hasAgentCrumb
+      path.some((c) => c.dim === Dimension.SkillName) && !hasAgentCrumb
         ? [{ dimension: Dimension.AgentName, values: [""] }]
         : [];
     const base: QueryFilter[] = project.id
       ? [{ dimension: Dimension.ProjectId, values: [project.id] }]
       : [];
     return [...base, ...drill, ...synthetic];
-  }, [path, project.id, candidateGroupBy]);
+  }, [path, project.id]);
 
   // Drop session columns whose dimension the drill path already pins to a single
   // value — that column would just repeat the same value down every row. Mapped
@@ -345,19 +343,20 @@ export function CostsExplorer(): JSX.Element {
   // never run org-wide (without the project_id filter) during the first paint.
   const projectReady = Boolean(project.id);
 
-  // A no-group_by query over the same filters returns a single aggregate row for
-  // the whole slice. Two things come off it:
+  // A no-group_by query over the entity's filters returns a single aggregate
+  // row for the whole slice. Two things come off it:
   //   • its dimension_values are the current entity's distinct division/
-  //     department/job_title/roles/etc (only meaningful once drilled in), and
+  //     department/job_title/roles/etc — "(unset)" buckets included — which
+  //     drive the axis resolution and pivot pruning below, and
   //   • its measures are the TRUE slice totals — critically the distinct session
   //     count, which cannot be recovered by summing the per-group breakdown rows
   //     (see `stats`). Runs at every level so the root headline is correct too.
-  const { data: detailData } = useQuery({
+  const { data: detailData, status: detailStatus } = useQuery({
     queryKey: [
       "costs-explorer-detail",
       from.toISOString(),
       to.toISOString(),
-      filters,
+      entityFilters,
     ],
     enabled: projectReady,
     throwOnError: false,
@@ -368,44 +367,76 @@ export function CostsExplorer(): JSX.Element {
             from,
             to,
             topN: 1,
-            filters: filters.length ? filters : undefined,
+            filters: entityFilters.length ? entityFilters : undefined,
           },
         }),
       ),
   });
   const detailRow = detailData?.table?.[0];
-  // Attribute grid + pivot pruning only apply once drilled into an entity; at the
-  // root, keep this undefined so those consumers still fail open (show every
+  // Attribute counts + pivot pruning only apply once drilled into an entity; at
+  // the root, keep this undefined so those consumers still fail open (show every
   // pivot). The row's measures, by contrast, are used at every level.
   const attributes = path.length > 0 ? detailRow?.dimensionValues : undefined;
 
-  // Distinct values a dimension takes within the current slice; undefined while
-  // the slice is unknown (root, or detail still loading) so callers fail open.
+  // Distinct groups a breakdown by `dim` would produce within the current
+  // slice ("(unset)" included — the server surfaces the '' bucket for every
+  // groupable dim); undefined while the slice is unknown (root, or detail
+  // still loading) so callers fail open.
   const sliceValueCount = (dim: Dimension): number | undefined =>
     attributes ? (attributes[dim]?.length ?? 0) : undefined;
+  // The same count over named values only — for consumers that hide the
+  // "(unset)" bucket (the mix cards), where an axis splittable only via
+  // "(unset)" would still make a pointless one-row card.
+  const sliceNamedValueCount = (dim: Dimension): number | undefined =>
+    attributes
+      ? (attributes[dim]?.filter((v) => v !== "").length ?? 0)
+      : undefined;
 
-  // The final breakdown axis: the candidate, unless the slice can't be split by
-  // it — e.g. a division whose spend all sits in one department must not land
-  // on (or even offer) a Department cut; walk the chain to the first axis with
-  // >1 distinct values instead (Department → User → Agent). Attribution dims
-  // are exempt: their axis also shapes `filters` (the skill-only synthetic
-  // filter), so re-resolving them against a query keyed on those same filters
-  // could oscillate — their pruning lives purely in pivotOptions. When nothing
-  // below can split the slice, keep the candidate: a one-row table is then the
-  // honest terminal view.
-  const groupBy = (() => {
-    if (
-      isAttributionDim(candidateGroupBy) ||
-      (sliceValueCount(candidateGroupBy) ?? 2) > 1
-    ) {
-      return candidateGroupBy;
-    }
-    let next = nextAvailableDimension(candidateGroupBy, availableDims);
-    while (next !== null && (sliceValueCount(next) ?? 2) <= 1) {
-      next = nextAvailableDimension(next, availableDims);
-    }
-    return next ?? candidateGroupBy;
-  })();
+  // The final breakdown axis: the candidate, unless the slice can't actually
+  // be split by it — a division whose spend all sits in one department must
+  // not land on (or offer) a Department cut. Resolved against the entity
+  // slice's group counts, falling down the chain to the first splittable axis.
+  const groupBy = firstSplittableDimension(
+    candidateGroupBy,
+    availableDims,
+    sliceValueCount,
+  );
+
+  // Drill state is the URL: when resolution lands on a different axis than
+  // `?by=` claims (stale link, mix-card drill, or a slice the requested axis
+  // can't split), rewrite the param in place so copied links and back/forward
+  // reflect what is actually rendered. Gated on a settled resolution
+  // (attributes known) and skipped in sessions mode, whose sentinel rides
+  // `?by=` itself. groupBy always survives its own re-resolution, so the
+  // rewrite reaches a fixed point after one pass.
+  useEffect(() => {
+    if (!attributes || sessionsMode) return;
+    if (byParam === groupBy) return;
+    goToNode(path, groupBy, true);
+  });
+
+  // The breakdown queries' filters: the entity's, plus the skill-only
+  // synthetic filter when the AXIS is the root Skill cut — excluding rows that
+  // also carry a subagent (agent_name = '') so agent+skill spend surfaces only
+  // under Subagent → Skill, never leaking into the root Skill breakdown. (The
+  // path-pinned skill case already carries it in entityFilters.)
+  const filters: QueryFilter[] = useMemo(() => {
+    const skillAxis =
+      groupBy === Dimension.SkillName &&
+      !path.some(
+        (c) => c.dim === Dimension.SkillName || c.dim === Dimension.AgentName,
+      );
+    return skillAxis
+      ? [...entityFilters, { dimension: Dimension.AgentName, values: [""] }]
+      : entityFilters;
+  }, [entityFilters, groupBy, path]);
+
+  // Hold the grouped queries until the axis is resolved on a drilled node —
+  // otherwise a slice whose landing axis collapses fetches every grouped query
+  // twice (candidate axis, then corrected axis). The root skips the wait (no
+  // slice pruning there), and a failed detail probe fails open rather than
+  // blocking the page (the main query doubles as the logs-disabled probe).
+  const axisResolving = path.length > 0 && detailStatus === "pending";
 
   // The primary query also doubles as the logs-enabled probe: telemetry.query
   // returns 404 when logging is off for the org. Opt out of the app-wide
@@ -422,7 +453,7 @@ export function CostsExplorer(): JSX.Element {
           groupBy,
           filters,
         ],
-        enabled: projectReady,
+        enabled: projectReady && !axisResolving,
         throwOnError: false,
         queryFn: () =>
           unwrapAsync(
@@ -442,9 +473,10 @@ export function CostsExplorer(): JSX.Element {
       }),
     );
 
-  // Treat "project not resolved yet" as loading, so the skeleton shows instead
-  // of an empty "no data" flash before the project-scoped queries enable.
-  const loadingSlice = (!projectReady || isFetching) && !data;
+  // Treat "project not resolved yet" (and a still-resolving axis) as loading,
+  // so the skeleton shows instead of an empty "no data" flash before the
+  // project-scoped queries enable.
+  const loadingSlice = (!projectReady || axisResolving || isFetching) && !data;
 
   // Previous equal-length period (immediately before [from, to]) — for the
   // per-group % change column.
@@ -460,7 +492,7 @@ export function CostsExplorer(): JSX.Element {
       groupBy,
       filters,
     ],
-    enabled: projectReady,
+    enabled: projectReady && !axisResolving,
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
@@ -483,7 +515,7 @@ export function CostsExplorer(): JSX.Element {
       "costs-explorer-prev-detail",
       prevFrom.toISOString(),
       prevTo.toISOString(),
-      filters,
+      entityFilters,
     ],
     enabled: projectReady,
     throwOnError: false,
@@ -494,7 +526,7 @@ export function CostsExplorer(): JSX.Element {
             from: prevFrom,
             to: prevTo,
             topN: 1,
-            filters: filters.length ? filters : undefined,
+            filters: entityFilters.length ? entityFilters : undefined,
           },
         }),
       ),
@@ -692,7 +724,9 @@ export function CostsExplorer(): JSX.Element {
   }, [data, collectionDim]);
 
   // Per-level secondary breakdowns: the configured cuts for the current axis,
-  // minus any already filtered or that don't vary within this slice (≤1 value).
+  // minus any already filtered or that don't vary within this slice. Counted
+  // over NAMED values: the cards drop the "" bucket from display, so an axis
+  // splittable only via "(unset)" would make a pointless one-row card.
   const mixDims = (MIX_DIMS[groupBy] ?? [Dimension.Model]).filter(
     (d) =>
       d !== groupBy &&
@@ -701,7 +735,7 @@ export function CostsExplorer(): JSX.Element {
       // In an unscoped dataset view only the dataset's own attribution dims are
       // correctly scoped; a cross-cut like Model would sum whole-project spend.
       (sliceScoped || datasetDimSet.has(d)) &&
-      (!attributes || (attributes[d]?.length ?? 0) > 1),
+      (sliceNamedValueCount(d) ?? 2) > 1,
   );
   const mixDimA = mixDims[0];
   const mixDimB = mixDims[1];
@@ -714,7 +748,7 @@ export function CostsExplorer(): JSX.Element {
       mixDimA,
       filters,
     ],
-    enabled: projectReady && !!mixDimA,
+    enabled: projectReady && !axisResolving && !!mixDimA,
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
@@ -738,7 +772,7 @@ export function CostsExplorer(): JSX.Element {
       mixDimB,
       filters,
     ],
-    enabled: projectReady && !!mixDimB,
+    enabled: projectReady && !axisResolving && !!mixDimB,
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
@@ -906,23 +940,20 @@ export function CostsExplorer(): JSX.Element {
     const staticNext = nextAvailableDimension(dim, availableDims);
     if (staticNext === null) return;
     // When the drilled row's own distinct values are known (a main-table row —
-    // each query row carries the dimension_values of its slice), also skip
-    // chain axes that can't split it, so a one-department division drills
-    // straight to its users. Mirrors the slice-aware `groupBy` resolution,
-    // including its attribution-dim exemption; if everything below collapses,
-    // keep the static landing (the destination then renders its terminal
-    // one-row view). Mix-card drills pass no rowValues and land statically —
-    // the destination's own resolution corrects the axis on arrival.
-    let next: Dimension | null = staticNext;
-    while (
-      next !== null &&
-      rowValues !== undefined &&
-      !isAttributionDim(next) &&
-      (rowValues[next]?.length ?? 0) <= 1
-    ) {
-      next = nextAvailableDimension(next, availableDims);
-    }
-    goToNode([...path, { dim, value }], next ?? staticNext, false, ds);
+    // each query row carries the dimension_values of its slice), resolve the
+    // landing axis against them so a one-department division drills straight
+    // to its users, with the URL correct from the first render. Same resolver
+    // as the on-load `groupBy` — one policy, two entry points. Mix-card drills
+    // pass no rowValues and land statically; the destination's own resolution
+    // (plus the URL rewrite) corrects the axis on arrival.
+    const next = rowValues
+      ? firstSplittableDimension(
+          staticNext,
+          availableDims,
+          (d) => rowValues[d]?.length ?? 0,
+        )
+      : staticNext;
+    goToNode([...path, { dim, value }], next, false, ds);
   };
 
   // Drill into a main-table row: use the current breakdown axis.
@@ -959,15 +990,13 @@ export function CostsExplorer(): JSX.Element {
     goToNode([], datasetDefaultGroupBy(ds, [], availableDims), false, ds);
 
   // Offer a breakdown axis only if it can actually partition the current slice
-  // into >1 row. `attributes` (the entity's distinct dimension values) tells us:
-  // a dim with ≤1 value would collapse to a single row, so it's dropped. The
-  // server includes the "" (unset) bucket in the account-classification dims'
-  // values (account_type, provider, billing_mode) — there "" is a real,
-  // drillable slice, so e.g. team + unclassified spend counts as 2 values and
-  // keeps the axis (DNO-425). Always keep the active axis — the slice-aware
-  // `groupBy` resolution guarantees it can split the slice except in the
-  // terminal nothing-splits case, where showing it beats an empty track. Show
-  // everything at the org root, where there's no slice to measure against yet.
+  // into >1 group ("(unset)" buckets count — the table renders them, see
+  // sliceValueCount). The active axis is always kept: the slice-aware `groupBy`
+  // resolution guarantees it can split the slice, except (a) the terminal
+  // nothing-splits case, where a one-row table with its axis shown beats an
+  // empty track, and (b) attribution axes, which the resolver accepts as-is
+  // (their pruning is the dataset structure itself). Show everything at the
+  // org root, where there's no slice to measure against yet.
   const filteredDims = new Set(path.map((c) => c.dim));
   const pivotOptions = datasetPivots(dataset).filter((p) => {
     if (filteredDims.has(p.dim)) return false;
@@ -979,8 +1008,7 @@ export function CostsExplorer(): JSX.Element {
     if (parent && !filteredDims.has(parent)) return false;
     // Hide dimensions the org has no data for at all (IDP doesn't populate them).
     if (availableDims && !availableDims.has(p.dim)) return false;
-    if (!attributes) return true;
-    return (attributes[p.dim]?.length ?? 0) > 1;
+    return (sliceValueCount(p.dim) ?? 2) > 1;
   });
 
   // The breakdown <Select> options: dimension pivots plus the always-available

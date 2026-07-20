@@ -389,21 +389,26 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.ElementsMatch(t, []string{"opus"}, eng.DimensionValues["model"])
 	require.ElementsMatch(t, []string{"claude-code", "cursor"}, eng.DimensionValues["hook_source"])
 	require.ElementsMatch(t, []string{"admin", "dev"}, eng.DimensionValues["role"])
-	// Unset dimensions are present as keys with empty (filtered) lists.
-	require.Empty(t, eng.DimensionValues["job_title"])
-	// billing_mode is the exception: unclassified rows surface as "" so a scope
-	// mixing metered and unclassified spend can never read as confidently metered.
+	// '' is a real value for groupable dimensions — it is the "(unset)" bucket a
+	// breakdown by that dimension would render, so the collected lists must
+	// count it (DNO-384 for billing_mode, DNO-425 generally): an entirely unset
+	// dimension collapses to the single "" bucket, and a mixed one (Engineering
+	// has a classified team/anthropic Claude row plus an unclassified cursor
+	// row) surfaces both so the slice reads as divisible.
+	require.ElementsMatch(t, []string{""}, eng.DimensionValues["job_title"])
 	require.ElementsMatch(t, []string{""}, eng.DimensionValues["billing_mode"])
-	// account_type and provider share that exception (DNO-425): Engineering mixes
-	// a classified Claude row (team/anthropic) with an unclassified cursor row, and
-	// the "" bucket must surface so the slice reads as divisible by these dims.
 	require.ElementsMatch(t, []string{"team", ""}, eng.DimensionValues["account_type"])
 	require.ElementsMatch(t, []string{"anthropic", ""}, eng.DimensionValues["provider"])
+	// Attribution dims are the exception (emptyIsNotApplicable): '' there marks
+	// rows the attribute doesn't apply to, not an "(unset)" slice, so it stays
+	// filtered out.
+	require.Empty(t, eng.DimensionValues["skill_name"])
 
-	// Sales had a single role-less user; its email surfaces and role is empty.
+	// Sales had a single role-less user; its email surfaces and its empty roles
+	// array collapses to the "(unset)" role bucket.
 	sales := rowByGroup(t, deptResult.Table, "Sales")
 	require.ElementsMatch(t, []string{"c@x.com"}, sales.DimensionValues["email"])
-	require.Empty(t, sales.DimensionValues["role"])
+	require.ElementsMatch(t, []string{""}, sales.DimensionValues["role"])
 
 	// Group by role: dev gets both Engineering rows ($0.35), admin one ($0.25),
 	// and Sales' role-less spend surfaces under the empty-string group ($0.50).

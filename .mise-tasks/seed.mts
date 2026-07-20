@@ -3515,8 +3515,6 @@ async function seedObservabilityData(init: {
       const outputTokens = 300 + (n % 4) * 250;
       const cacheReadTokens = 8_000 + (n % 6) * 4_000;
       const cacheCreationTokens = 5_000 + (n % 3) * 1_500;
-      const totalTokens =
-        inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
       const cost = computeUsageCost(
         inputTokens,
         outputTokens,
@@ -3524,8 +3522,63 @@ async function seedObservabilityData(init: {
         cacheCreationTokens,
       );
 
+      // Claude api_request shape (claude-code:otel:logs) — the sole Claude
+      // usage source the provenance-first attribute_metrics MV admits for
+      // post-cutoff rows; the pre-cutoff backfill accepts it too, so the whole
+      // window aggregates regardless of where the cutoff falls.
       chInserts.push(
-        `(${timeNano}, ${timeNano}, 'INFO', 'Chat completion', '${traceId}', '{${acctFrag}"gen_ai.operation.name": "chat", "gen_ai.conversation.id": "${chatId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.cache_read.input_tokens": ${cacheReadTokens}, "gen_ai.usage.cache_creation.input_tokens": ${cacheCreationTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "claude-sonnet-4-6", "gen_ai.provider.name": "anthropic", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", ${userAttrs}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+        `(${timeNano}, ${timeNano}, 'INFO', 'claude_code.api_request', '${traceId}', '{${acctFrag}"event.name": "api_request", "prompt.id": "prompt-dno425-${n}", "gen_ai.conversation.id": "${chatId}", "model": "claude-sonnet-4-6", "input_tokens": ${inputTokens}, "output_tokens": ${outputTokens}, "cache_read_tokens": ${cacheReadTokens}, "cache_creation_tokens": ${cacheCreationTokens}, "cost_usd": ${cost}, "gram.project.id": "${projectId}", ${userAttrs}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:otel:logs', 'claude-code', '${chatId}')`,
+      );
+    }
+  }
+
+  // ── Value + "(unset)" division: single named department plus dept-less spend
+  // The complementary regression fixture: a division ("Platform Services")
+  // where half the users sit in one department and the rest have NO department
+  // attribute at all. A Department breakdown of this slice renders TWO rows —
+  // "Infrastructure" and the drillable "(unset)" bucket — so the Department
+  // axis must stay offered and be the drill landing here (unlike the
+  // uniform-department cohort above, which skips it). Exercises the server's
+  // "(unset)"-aware dimension_values for org dims (the '' bucket must be
+  // counted, not filtered).
+  const UNSET_DIV_NAME = "Platform Services";
+  const UNSET_DIV_USERS = 4;
+  const UNSET_DIV_SESSIONS_PER_USER = 4;
+  for (let u = 0; u < UNSET_DIV_USERS; u++) {
+    // Users 0-1 belong to Infrastructure; users 2-3 carry no department.
+    const deptFrag =
+      u < 2 ? `"user.attributes.department_name": "Infrastructure", ` : "";
+    const userAttrs =
+      `"user.email": "platform-user${u}@example.com", ` +
+      deptFrag +
+      `"user.attributes.division_name": "${UNSET_DIV_NAME}", ` +
+      `"user.attributes.job_title": "${JOB_TITLES[u % JOB_TITLES.length]}", ` +
+      `"user.attributes.employee_type": "full_time", ` +
+      `"user.attributes.cost_center_name": "CC-2000", ` +
+      `"user.roles": ["developer"], "user.groups": ["platform"], ` +
+      `"gram.hook.source": "claude-code"`;
+    for (let s = 0; s < UNSET_DIV_SESSIONS_PER_USER; s++) {
+      const n = u * UNSET_DIV_SESSIONS_PER_USER + s;
+      const chatId = generateChatUUID(210_000 + n);
+      const sessionTime = new Date(
+        now - (n % DAYS_BACK) * msPerDay - u * 3_600_000,
+      );
+      const timeNano = BigInt(sessionTime.getTime()) * BigInt(1_000_000);
+      const traceId = crypto.randomBytes(16).toString("hex");
+      const inputTokens = 1_200 + (n % 4) * 600;
+      const outputTokens = 400 + (n % 3) * 300;
+      const cacheReadTokens = 10_000 + (n % 5) * 3_000;
+      const cacheCreationTokens = 4_000 + (n % 3) * 2_000;
+      const cost = computeUsageCost(
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
+      );
+
+      // Same Claude api_request shape as the cohort above (see there).
+      chInserts.push(
+        `(${timeNano}, ${timeNano}, 'INFO', 'claude_code.api_request', '${traceId}', '{"gram.account_type": "team", "gram.provider": "anthropic", "event.name": "api_request", "prompt.id": "prompt-unsetdiv-${n}", "gen_ai.conversation.id": "${chatId}", "model": "claude-sonnet-4-6", "input_tokens": ${inputTokens}, "output_tokens": ${outputTokens}, "cache_read_tokens": ${cacheReadTokens}, "cache_creation_tokens": ${cacheCreationTokens}, "cost_usd": ${cost}, "gram.project.id": "${projectId}", ${userAttrs}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:otel:logs', 'claude-code', '${chatId}')`,
       );
     }
   }
@@ -3556,8 +3609,10 @@ async function seedObservabilityData(init: {
   }
 
   // $/M-token prices per model: [input, output, cache read, cache write].
-  const HISTORY_PRICING: Record<string, [number, number, number, number]> = {
-    "claude-sonnet-4-6": [3, 15, 0.3, 3.75],
+  // Sonnet is priced at the shared blended default so the two paths (per-model
+  // history rows and default-priced cohorts) can never drift apart.
+  const HISTORY_PRICING: Record<string, UsagePricing> = {
+    "claude-sonnet-4-6": DEFAULT_USAGE_PRICING,
     "claude-haiku-4-5": [1, 5, 0.1, 1.25],
     "gpt-4": [30, 60, 0, 0],
     "gpt-4o-mini": [0.15, 0.6, 0.075, 0],
