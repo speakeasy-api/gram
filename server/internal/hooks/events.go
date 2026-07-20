@@ -92,3 +92,31 @@ func parseCursorHookEvent(raw string) (HookEvent, bool) {
 		return HookEventUnknown, false
 	}
 }
+
+// parseOpencodeHookEvent maps the source.raw_event_name values the opencode
+// observability plugin emits (Phase 2) to canonical HookEvent names. Some of
+// these are not 1:1 opencode bus events — the plugin synthesizes
+// "tool.execute.error", "message.submitted", and "message.completed" from
+// opencode's raw events, so keep this switch in lockstep with the plugin.
+func parseOpencodeHookEvent(raw string) (HookEvent, bool) {
+	switch raw {
+	case "session.created":
+		return HookEventSessionStart, true
+	case "session.idle", "session.deleted":
+		return HookEventSessionEnd, true
+	case "tool.execute.before":
+		return HookEventPreToolUse, true
+	case "tool.execute.after":
+		return HookEventPostToolUse, true
+	case "tool.execute.error":
+		return HookEventPostToolUseFailure, true
+	case "message.submitted":
+		return HookEventUserPromptSubmit, true
+	case "message.completed":
+		return HookEventAfterAgentResponse, true
+	case "permission.asked":
+		return HookEventPermissionRequest, true
+	default:
+		return HookEventUnknown, false
+	}
+}
