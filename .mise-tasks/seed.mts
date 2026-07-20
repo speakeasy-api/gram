@@ -3502,6 +3502,15 @@ async function seedObservabilityData(init: {
     "db-migrate",
     "spec-writer",
   ];
+  // Device hostnames for the identity-less slice: the user breakdown falls
+  // back to gram.hook.hostname when a session has no email, so these surface
+  // as per-device rows between the named users and the pooled bucket.
+  const ANON_HOSTNAMES = [
+    "build-runner-01",
+    "build-runner-02",
+    "ci-batch-runner",
+    "shared-dev-box.local",
+  ];
 
   // telemetry_logs carries a 90-day TTL that ClickHouse applies at INSERT
   // time: MVs still fire on the full block (so chat_token_summaries / TUM get
@@ -3569,6 +3578,14 @@ async function seedObservabilityData(init: {
       // mirroring how a gateway-authenticated org looks in production.
       const anonymous = r() < 0.12;
       const anonBoost = anonymous ? 4 : 1;
+      // Most identity-less sessions still ran on a device with the Gram hooks
+      // installed, so their rows carry gram.hook.hostname and the user
+      // breakdown surfaces them per device; the rest have no hostname either
+      // and pool into the "Team-wide account" bucket.
+      const anonHostname =
+        anonymous && r() < 0.7
+          ? ANON_HOSTNAMES[Math.floor(r() * ANON_HOSTNAMES.length)]
+          : null;
 
       // Cache-heavy token mix (agent sessions replay large cached prompts);
       // ~15% are light API-style calls with little cache traffic.
@@ -3593,7 +3610,8 @@ async function seedObservabilityData(init: {
       ).toFixed(6);
 
       const uaFrag = anonymous
-        ? `"gram.hook.source": "${hookSource}"`
+        ? `"gram.hook.source": "${hookSource}"` +
+          (anonHostname ? `, "gram.hook.hostname": "${anonHostname}"` : "")
         : userAttrsJSONFragment(userIndex, hookSource);
       const acctFrag = acct.accountType
         ? `"gram.account_type": "${acct.accountType}", "gram.provider": "${acct.provider}", `
@@ -4218,7 +4236,7 @@ function attributeMetricsBackfillSQL(
   timePredicate: string,
 ): string {
   return `
-    INSERT INTO attribute_metrics_summaries (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, total_chats, total_input_tokens, total_output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, total_cost, total_tool_calls, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name)
+    INSERT INTO attribute_metrics_summaries (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, total_chats, total_input_tokens, total_output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, total_cost, total_tool_calls, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, hook_hostname)
     WITH
         toUnixTimestamp64Nano(toDateTime64('2026-07-14 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
         (
@@ -4278,7 +4296,8 @@ function attributeMetricsBackfillSQL(
         if(is_claude_api_request, toString(attributes.skill.name), '') AS skill_name,
         if(is_claude_api_request, toString(attributes.agent.name), '') AS agent_name,
         if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
-        if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name
+        if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name,
+        toString(attributes.gram.hook.hostname) AS hook_hostname
     FROM ${sourceTable}
     WHERE gram_project_id = '${projectId}'
       AND (${timePredicate})
@@ -4303,7 +4322,8 @@ function attributeMetricsBackfillSQL(
         skill_name,
         agent_name,
         mcp_server_name,
-        mcp_tool_name;
+        mcp_tool_name,
+        hook_hostname;
   `;
 }
 

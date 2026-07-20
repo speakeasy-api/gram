@@ -282,7 +282,12 @@ export function EntityProfile({
   // `title` title-cases a user's address into a name ("Olivia Novak"), which is
   // friendlier but ambiguous between two people — keep the address it came from
   // alongside it. Only users have one; every other value is already its label.
-  const emailSuffix = entity?.dim === Dimension.Email ? entity.value : null;
+  // The user dimension can also hold a device hostname (the fallback for
+  // sessions with no email) — no address to repeat there.
+  const emailSuffix =
+    entity?.dim === Dimension.Email && entity.value.includes("@")
+      ? entity.value
+      : null;
   const badgeVariant = entityBadgeVariant(
     entity?.dim ?? collection?.dim ?? null,
   );

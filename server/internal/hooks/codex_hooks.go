@@ -347,6 +347,7 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
+		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
