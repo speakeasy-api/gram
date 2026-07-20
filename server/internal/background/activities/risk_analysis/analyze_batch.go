@@ -49,6 +49,8 @@ type AnalyzeBatch struct {
 	flags                  feature.Provider
 	presidioPub            gcp.Publisher[*riskv1.PresidioAnalysis]
 	gitleaksPub            gcp.Publisher[*riskv1.GitleaksAnalysis]
+	promptInjectionPub     gcp.Publisher[*riskv1.PromptInjectionAnalysis]
+	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	customRuleScanner      *customruleanalyzer.Scanner
 	cliDestructiveScanner  *clidestructive.Scanner
@@ -70,6 +72,8 @@ func NewAnalyzeBatch(
 	flags feature.Provider,
 	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
 	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],
+	promptInjectionPub gcp.Publisher[*riskv1.PromptInjectionAnalysis],
+	promptPolicyPub gcp.Publisher[*riskv1.PromptPolicyAnalysis],
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
 	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
@@ -97,6 +101,8 @@ func NewAnalyzeBatch(
 		flags:                  flags,
 		presidioPub:            presidioPub,
 		gitleaksPub:            gitleaksPub,
+		promptInjectionPub:     promptInjectionPub,
+		promptPolicyPub:        promptPolicyPub,
 		customRulesPub:         customRulesPub,
 		customRuleScanner:      customRuleScanner,
 		cliDestructiveScanner:  clidestructive.NewScanner(),

@@ -97,6 +97,12 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and detailed cont
 - [OpenRouter](https://openrouter.ai/) — LLM gateway.
 - [Speakeasy](https://www.speakeasy.com/) — generated SDKs. Spec hosted [here](https://app.getgram.ai/openapi.yaml).
 
+## Contributors
+
+<a href="https://github.com/speakeasy-api/gram/graphs/contributors">
+  <img alt="Gram contributors" src="https://contrib.rocks/image?repo=speakeasy-api/gram" />
+</a>
+
 <hr />
 <br />
 

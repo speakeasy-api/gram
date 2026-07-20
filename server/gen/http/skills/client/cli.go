@@ -361,10 +361,15 @@ func BuildDistributePayload(skillsDistributeBody string, skillsDistributeSession
 	{
 		err = json.Unmarshal([]byte(skillsDistributeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"pinned_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440001\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", body.PluginID, goa.FormatUUID))
+		if body.PluginID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", *body.PluginID, goa.FormatUUID))
+		}
+		if body.AssistantID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", *body.AssistantID, goa.FormatUUID))
+		}
 		if body.PinnedVersionID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.pinned_version_id", *body.PinnedVersionID, goa.FormatUUID))
 		}
@@ -393,6 +398,7 @@ func BuildDistributePayload(skillsDistributeBody string, skillsDistributeSession
 	v := &skills.DistributePayload{
 		ID:              body.ID,
 		PluginID:        body.PluginID,
+		AssistantID:     body.AssistantID,
 		PinnedVersionID: body.PinnedVersionID,
 	}
 	v.SessionToken = sessionToken
@@ -410,10 +416,15 @@ func BuildUndistributePayload(skillsUndistributeBody string, skillsUndistributeS
 	{
 		err = json.Unmarshal([]byte(skillsUndistributeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440001\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", body.PluginID, goa.FormatUUID))
+		if body.PluginID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", *body.PluginID, goa.FormatUUID))
+		}
+		if body.AssistantID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", *body.AssistantID, goa.FormatUUID))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -437,8 +448,9 @@ func BuildUndistributePayload(skillsUndistributeBody string, skillsUndistributeS
 		}
 	}
 	v := &skills.UndistributePayload{
-		ID:       body.ID,
-		PluginID: body.PluginID,
+		ID:          body.ID,
+		PluginID:    body.PluginID,
+		AssistantID: body.AssistantID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

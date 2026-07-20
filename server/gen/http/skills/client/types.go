@@ -51,7 +51,9 @@ type DistributeRequestBody struct {
 	// The skill ID.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The plugin that carries the skill.
-	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
+	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
+	// The assistant that carries the skill.
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
 	// An optional valid version to pin instead of tracking the latest valid
 	// version.
 	PinnedVersionID *string `form:"pinned_version_id,omitempty" json:"pinned_version_id,omitempty" xml:"pinned_version_id,omitempty"`
@@ -63,7 +65,9 @@ type UndistributeRequestBody struct {
 	// The skill ID.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The plugin the skill was distributed to.
-	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
+	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
+	// The assistant the skill was distributed to.
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
 }
 
 // CreateResponseBody is the type of the "skills" service "create" endpoint
@@ -121,6 +125,8 @@ type GetResponseBody struct {
 	Skill *SkillResponseBody `form:"skill,omitempty" json:"skill,omitempty" xml:"skill,omitempty"`
 	// The latest immutable version by creation order.
 	LatestVersion *SkillVersionResponseBody `form:"latest_version,omitempty" json:"latest_version,omitempty" xml:"latest_version,omitempty"`
+	// The number of active, non-deleted assistants using the skill.
+	AssistantCount *int64 `form:"assistant_count,omitempty" json:"assistant_count,omitempty" xml:"assistant_count,omitempty"`
 }
 
 // ListVersionsResponseBody is the type of the "skills" service "listVersions"
@@ -149,6 +155,10 @@ type DistributeResponseBody struct {
 	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
 	// The name of the plugin that carries the skill.
 	PluginName *string `form:"plugin_name,omitempty" json:"plugin_name,omitempty" xml:"plugin_name,omitempty"`
+	// The assistant that carries the skill.
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// The name of the assistant that carries the skill.
+	AssistantName *string `form:"assistant_name,omitempty" json:"assistant_name,omitempty" xml:"assistant_name,omitempty"`
 	// The pinned version, absent when tracking the latest valid version.
 	PinnedVersionID *string `form:"pinned_version_id,omitempty" json:"pinned_version_id,omitempty" xml:"pinned_version_id,omitempty"`
 	// The version currently targeted by this distribution.
@@ -166,8 +176,8 @@ type DistributeResponseBody struct {
 // ListDistributionsResponseBody is the type of the "skills" service
 // "listDistributions" endpoint HTTP response body.
 type ListDistributionsResponseBody struct {
-	// The active skill distributions in this page.
-	Distributions []*SkillDistributionResponseBody `form:"distributions,omitempty" json:"distributions,omitempty" xml:"distributions,omitempty"`
+	// The active plugin skill distributions in this page.
+	Distributions []*PluginSkillDistributionResponseBody `form:"distributions,omitempty" json:"distributions,omitempty" xml:"distributions,omitempty"`
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -2088,9 +2098,9 @@ type GitHubSkillIssueResponseBody struct {
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 }
 
-// SkillDistributionResponseBody is used to define fields on response body
-// types.
-type SkillDistributionResponseBody struct {
+// PluginSkillDistributionResponseBody is used to define fields on response
+// body types.
+type PluginSkillDistributionResponseBody struct {
 	// The distribution ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project that owns the distribution.
@@ -2162,6 +2172,7 @@ func NewDistributeRequestBody(p *skills.DistributePayload) *DistributeRequestBod
 	body := &DistributeRequestBody{
 		ID:              p.ID,
 		PluginID:        p.PluginID,
+		AssistantID:     p.AssistantID,
 		PinnedVersionID: p.PinnedVersionID,
 	}
 	return body
@@ -2171,8 +2182,9 @@ func NewDistributeRequestBody(p *skills.DistributePayload) *DistributeRequestBod
 // the "undistribute" endpoint of the "skills" service.
 func NewUndistributeRequestBody(p *skills.UndistributePayload) *UndistributeRequestBody {
 	body := &UndistributeRequestBody{
-		ID:       p.ID,
-		PluginID: p.PluginID,
+		ID:          p.ID,
+		PluginID:    p.PluginID,
+		AssistantID: p.AssistantID,
 	}
 	return body
 }
@@ -2837,7 +2849,9 @@ func NewListGatewayError(body *ListGatewayErrorResponseBody) *goa.ServiceError {
 // NewGetSkillResultOK builds a "skills" service "get" endpoint result from a
 // HTTP "OK" response.
 func NewGetSkillResultOK(body *GetResponseBody) *skills.GetSkillResult {
-	v := &skills.GetSkillResult{}
+	v := &skills.GetSkillResult{
+		AssistantCount: *body.AssistantCount,
+	}
 	v.Skill = unmarshalSkillResponseBodyToTypesSkill(body.Skill)
 	v.LatestVersion = unmarshalSkillVersionResponseBodyToTypesSkillVersion(body.LatestVersion)
 
@@ -3309,8 +3323,10 @@ func NewDistributeSkillDistributionOK(body *DistributeResponseBody) *types.Skill
 		SkillID:           *body.SkillID,
 		SkillName:         *body.SkillName,
 		SkillDisplayName:  *body.SkillDisplayName,
-		PluginID:          *body.PluginID,
-		PluginName:        *body.PluginName,
+		PluginID:          body.PluginID,
+		PluginName:        body.PluginName,
+		AssistantID:       body.AssistantID,
+		AssistantName:     body.AssistantName,
 		PinnedVersionID:   body.PinnedVersionID,
 		ResolvedVersionID: *body.ResolvedVersionID,
 		Channel:           *body.Channel,
@@ -3628,13 +3644,13 @@ func NewListDistributionsListSkillDistributionsResultOK(body *ListDistributionsR
 	v := &skills.ListSkillDistributionsResult{
 		NextCursor: body.NextCursor,
 	}
-	v.Distributions = make([]*types.SkillDistribution, len(body.Distributions))
+	v.Distributions = make([]*types.PluginSkillDistribution, len(body.Distributions))
 	for i, val := range body.Distributions {
 		if val == nil {
 			v.Distributions[i] = nil
 			continue
 		}
-		v.Distributions[i] = unmarshalSkillDistributionResponseBodyToTypesSkillDistribution(val)
+		v.Distributions[i] = unmarshalPluginSkillDistributionResponseBodyToTypesPluginSkillDistribution(val)
 	}
 
 	return v
@@ -3902,6 +3918,9 @@ func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 	if body.LatestVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("latest_version", "body"))
 	}
+	if body.AssistantCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assistant_count", "body"))
+	}
 	if body.Skill != nil {
 		if err2 := ValidateSkillResponseBody(body.Skill); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -3949,12 +3968,6 @@ func ValidateDistributeResponseBody(body *DistributeResponseBody) (err error) {
 	if body.SkillDisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("skill_display_name", "body"))
 	}
-	if body.PluginID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("plugin_id", "body"))
-	}
-	if body.PluginName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("plugin_name", "body"))
-	}
 	if body.ResolvedVersionID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resolved_version_id", "body"))
 	}
@@ -3982,6 +3995,9 @@ func ValidateDistributeResponseBody(body *DistributeResponseBody) (err error) {
 	if body.PluginID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", *body.PluginID, goa.FormatUUID))
 	}
+	if body.AssistantID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", *body.AssistantID, goa.FormatUUID))
+	}
 	if body.PinnedVersionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.pinned_version_id", *body.PinnedVersionID, goa.FormatUUID))
 	}
@@ -3989,8 +4005,8 @@ func ValidateDistributeResponseBody(body *DistributeResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.resolved_version_id", *body.ResolvedVersionID, goa.FormatUUID))
 	}
 	if body.Channel != nil {
-		if !(*body.Channel == "plugin") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.channel", *body.Channel, []any{"plugin"}))
+		if !(*body.Channel == "plugin" || *body.Channel == "assistant") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.channel", *body.Channel, []any{"plugin", "assistant"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -4010,7 +4026,7 @@ func ValidateListDistributionsResponseBody(body *ListDistributionsResponseBody) 
 	}
 	for _, e := range body.Distributions {
 		if e != nil {
-			if err2 := ValidateSkillDistributionResponseBody(e); err2 != nil {
+			if err2 := ValidatePluginSkillDistributionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -6610,9 +6626,9 @@ func ValidateGitHubSkillIssueResponseBody(body *GitHubSkillIssueResponseBody) (e
 	return
 }
 
-// ValidateSkillDistributionResponseBody runs the validations defined on
-// SkillDistributionResponseBody
-func ValidateSkillDistributionResponseBody(body *SkillDistributionResponseBody) (err error) {
+// ValidatePluginSkillDistributionResponseBody runs the validations defined on
+// PluginSkillDistributionResponseBody
+func ValidatePluginSkillDistributionResponseBody(body *PluginSkillDistributionResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

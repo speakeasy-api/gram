@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
@@ -27,6 +29,7 @@ type ExclusionSet struct {
 }
 
 type exclusionRule struct {
+	id           uuid.UUID
 	matchType    string
 	value        string
 	ruleIDFilter string
@@ -44,6 +47,7 @@ func NewExclusionSet(exclusions []repo.RiskExclusion) ExclusionSet {
 	rules := make([]exclusionRule, 0, len(exclusions))
 	for _, e := range exclusions {
 		r := exclusionRule{
+			id:           e.ID,
 			matchType:    e.MatchType,
 			value:        e.MatchValue,
 			ruleIDFilter: e.RuleIDFilter.String, // NULL -> "" (any)
@@ -69,6 +73,14 @@ func (s ExclusionSet) Empty() bool {
 
 // Excluded reports whether any exclusion suppresses the finding.
 func (s ExclusionSet) Excluded(f scanners.Finding) bool {
+	_, ok := s.ExcludedBy(f)
+	return ok
+}
+
+// ExcludedBy returns the id of the first exclusion that suppresses the finding,
+// and whether one did. Rules are evaluated in the order they were loaded, so
+// the returned id is the earliest-matching exclusion.
+func (s ExclusionSet) ExcludedBy(f scanners.Finding) (uuid.UUID, bool) {
 	for _, r := range s.rules {
 		if r.ruleIDFilter != "" && f.RuleID != r.ruleIDFilter {
 			continue
@@ -79,27 +91,27 @@ func (s ExclusionSet) Excluded(f scanners.Finding) bool {
 		switch r.matchType {
 		case "exact":
 			if f.Match == r.value {
-				return true
+				return r.id, true
 			}
 		case "regex":
 			if r.re != nil && r.re.MatchString(f.Match) {
-				return true
+				return r.id, true
 			}
 		case "rule_id":
 			if f.RuleID == r.value {
-				return true
+				return r.id, true
 			}
 		case "source":
 			if f.Source == r.value {
-				return true
+				return r.id, true
 			}
 		case "entity_type":
 			if f.RuleID == "pii."+strings.ToLower(r.value) {
-				return true
+				return r.id, true
 			}
 		}
 	}
-	return false
+	return uuid.UUID{}, false
 }
 
 // FilterFindings returns a new slice with excluded findings removed. Returns

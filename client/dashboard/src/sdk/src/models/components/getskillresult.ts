@@ -15,6 +15,10 @@ import { SkillVersion, SkillVersion$inboundSchema } from "./skillversion.js";
  */
 export type GetSkillResult = {
   /**
+   * The number of active, non-deleted assistants using the skill.
+   */
+  assistantCount: number;
+  /**
    * An immutable version of a skill manifest.
    */
   latestVersion: SkillVersion;
@@ -30,11 +34,13 @@ export const GetSkillResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    assistant_count: z.int(),
     latest_version: SkillVersion$inboundSchema,
     skill: Skill$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      "assistant_count": "assistantCount",
       "latest_version": "latestVersion",
     });
   }),
