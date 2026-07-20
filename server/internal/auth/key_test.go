@@ -15,6 +15,7 @@ import (
 // still reads the data endpoints during the transition), but a per-user
 // `agent_user` key never implies `agent` (so it cannot reach the mint endpoint).
 func TestEffectiveScopes(t *testing.T) {
+	t.Parallel()
 	has := func(scopes []string, s APIKeyScope) bool { return slices.Contains(scopes, s.String()) }
 
 	tests := []struct {
@@ -54,6 +55,7 @@ func TestEffectiveScopes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			raw := make([]string, len(tt.in))
 			for i, s := range tt.in {
 				raw[i] = s.String()
@@ -78,6 +80,7 @@ func TestEffectiveScopes(t *testing.T) {
 
 // TestEffectiveScopes_NoMutation ensures the input slice is not mutated.
 func TestEffectiveScopes_NoMutation(t *testing.T) {
+	t.Parallel()
 	in := []string{APIKeyScopeAgent.String()}
 	_ = effectiveScopes(in)
 	if len(in) != 1 || in[0] != APIKeyScopeAgent.String() {
