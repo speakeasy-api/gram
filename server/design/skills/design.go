@@ -328,6 +328,10 @@ var DistributeSkillRequestBody = Type("DistributeSkillRequestBody", func() {
 	Attribute("assistant_id", String, "The assistant that carries the skill.", func() { Format(FormatUUID) })
 	Attribute("pinned_version_id", String, "An optional valid version to pin instead of tracking the latest valid version.", func() { Format(FormatUUID) })
 	Required("id")
+	Example(Val{
+		"id":        "550e8400-e29b-41d4-a716-446655440000",
+		"plugin_id": "550e8400-e29b-41d4-a716-446655440001",
+	})
 })
 
 var UndistributeSkillRequestBody = Type("UndistributeSkillRequestBody", func() {
@@ -337,6 +341,10 @@ var UndistributeSkillRequestBody = Type("UndistributeSkillRequestBody", func() {
 	Attribute("plugin_id", String, "The plugin the skill was distributed to.", func() { Format(FormatUUID) })
 	Attribute("assistant_id", String, "The assistant the skill was distributed to.", func() { Format(FormatUUID) })
 	Required("id")
+	Example(Val{
+		"id":        "550e8400-e29b-41d4-a716-446655440000",
+		"plugin_id": "550e8400-e29b-41d4-a716-446655440001",
+	})
 })
 
 var SkillValidationError = Type("SkillValidationError", func() {

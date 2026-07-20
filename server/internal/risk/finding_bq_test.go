@@ -160,6 +160,70 @@ func TestFindingBQWriter_HandleBatch_MapsAllFields(t *testing.T) {
 	require.Equal(t, bigquery.NullTimestamp{Timestamp: wantTS, Valid: true}, row.CreatedAt)
 }
 
+func TestFindingBQRow_SaveUsesFindingIDAsInsertID(t *testing.T) {
+	t.Parallel()
+
+	row := risk.FindingBQRow{
+		ID:                       bigquery.NullString{StringVal: "finding-1", Valid: true},
+		RequestID:                bigquery.NullString{},
+		ChatMessageID:            bigquery.NullString{},
+		ProjectID:                bigquery.NullString{},
+		OrganizationID:           bigquery.NullString{},
+		RiskPolicyID:             bigquery.NullString{},
+		RiskPolicyVersion:        bigquery.NullInt64{},
+		CreatedAt:                bigquery.NullTimestamp{},
+		RuleID:                   bigquery.NullString{},
+		Description:              bigquery.NullString{},
+		Match:                    bigquery.NullString{},
+		StartPos:                 bigquery.NullInt64{},
+		EndPos:                   bigquery.NullInt64{},
+		Tags:                     nil,
+		Source:                   bigquery.NullString{},
+		Confidence:               bigquery.NullFloat64{},
+		DeadLetterReason:         bigquery.NullString{},
+		FingerprintPepperVersion: bigquery.NullString{},
+		FingerprintGlobalHS256:   bigquery.NullString{},
+		FingerprintTenantHS256:   bigquery.NullString{},
+	}
+
+	_, insertID, err := row.Save()
+
+	require.NoError(t, err)
+	require.Equal(t, "finding-1", insertID)
+}
+
+func TestFindingBQRow_SaveNoDedupeWithoutFindingID(t *testing.T) {
+	t.Parallel()
+
+	row := risk.FindingBQRow{
+		ID:                       bigquery.NullString{StringVal: "", Valid: false},
+		RequestID:                bigquery.NullString{},
+		ChatMessageID:            bigquery.NullString{},
+		ProjectID:                bigquery.NullString{},
+		OrganizationID:           bigquery.NullString{},
+		RiskPolicyID:             bigquery.NullString{},
+		RiskPolicyVersion:        bigquery.NullInt64{},
+		CreatedAt:                bigquery.NullTimestamp{},
+		RuleID:                   bigquery.NullString{},
+		Description:              bigquery.NullString{},
+		Match:                    bigquery.NullString{},
+		StartPos:                 bigquery.NullInt64{},
+		EndPos:                   bigquery.NullInt64{},
+		Tags:                     nil,
+		Source:                   bigquery.NullString{},
+		Confidence:               bigquery.NullFloat64{},
+		DeadLetterReason:         bigquery.NullString{},
+		FingerprintPepperVersion: bigquery.NullString{},
+		FingerprintGlobalHS256:   bigquery.NullString{},
+		FingerprintTenantHS256:   bigquery.NullString{},
+	}
+
+	_, insertID, err := row.Save()
+
+	require.NoError(t, err)
+	require.Equal(t, bigquery.NoDedupeID, insertID)
+}
+
 func TestFindingBQWriter_HandleBatch_ConfiguresInserter(t *testing.T) {
 	t.Parallel()
 
@@ -604,6 +668,10 @@ func (panicProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[st
 	panic("IsFlagEnabled should not be called")
 }
 
+func (panicProvider) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
+	panic("IsFlagEnabledLocal should not be called")
+}
+
 func (panicProvider) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
 	panic("FlagPayload should not be called")
 }
@@ -612,6 +680,10 @@ func (panicProvider) FlagPayload(context.Context, feature.Flag, string, map[stri
 type errProvider struct{ err error }
 
 func (p errProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
+	return false, p.err
+}
+
+func (p errProvider) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
 	return false, p.err
 }
 
