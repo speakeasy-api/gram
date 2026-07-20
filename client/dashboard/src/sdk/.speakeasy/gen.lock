@@ -355,6 +355,7 @@ trackedFiles:
   src/funcs/telemetryCaptureEvent.ts: {}
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts: {}
   src/funcs/telemetryGetHooksSummary.ts: {}
+  src/funcs/telemetryGetMcpServerActivity.ts: {}
   src/funcs/telemetryGetObservabilityOverview.ts: {}
   src/funcs/telemetryGetProjectMetricsSummary.ts: {}
   src/funcs/telemetryGetProjectOverview.ts: {}
@@ -379,6 +380,7 @@ trackedFiles:
   src/funcs/templatesRender.ts: {}
   src/funcs/templatesRenderByID.ts: {}
   src/funcs/templatesUpdate.ts: {}
+  src/funcs/tokenExchangeExchange.ts: {}
   src/funcs/toolsList.ts: {}
   src/funcs/toolsetsAddExternalOAuthServer.ts: {}
   src/funcs/toolsetsAddOAuthProxyServer.ts: {}
@@ -580,6 +582,7 @@ trackedFiles:
   src/models/components/evaluatepromptguardrailrequestbody.ts: {}
   src/models/components/evolveform.ts: {}
   src/models/components/evolveresult.ts: {}
+  src/models/components/exchangerequestbody.ts: {}
   src/models/components/exportmcpmetadatarequestbody.ts: {}
   src/models/components/exprcompileresult.ts: {}
   src/models/components/externalcredentialsummary.ts: {}
@@ -614,6 +617,8 @@ trackedFiles:
   src/models/components/getintegrationresult.ts: {}
   src/models/components/getlatestdeploymentresult.ts: {}
   src/models/components/getmcpmetadataresponsebody.ts: {}
+  src/models/components/getmcpserveractivitypayload.ts: {}
+  src/models/components/getmcpserveractivityresult.ts: {}
   src/models/components/getmetricssummaryresult.ts: {}
   src/models/components/getobservabilityoverviewpayload.ts: {}
   src/models/components/getobservabilityoverviewresult.ts: {}
@@ -758,6 +763,7 @@ trackedFiles:
   src/models/components/mcpmetadata.ts: {}
   src/models/components/mcpregistry.ts: {}
   src/models/components/mcpserver.ts: {}
+  src/models/components/mcpserveractivity.ts: {}
   src/models/components/migratelegacygramregistrationsform.ts: {}
   src/models/components/migratelegacygramregistrationsresult.ts: {}
   src/models/components/mintusersessionrequestbody.ts: {}
@@ -957,6 +963,7 @@ trackedFiles:
   src/models/components/testdetectionruleresult.ts: {}
   src/models/components/tierlimits.ts: {}
   src/models/components/timeseriesbucket.ts: {}
+  src/models/components/tokenresult.ts: {}
   src/models/components/tokensundermanagement.ts: {}
   src/models/components/tool.ts: {}
   src/models/components/toolannotations.ts: {}
@@ -1219,6 +1226,7 @@ trackedFiles:
   src/models/operations/getmcpendpoint.ts: {}
   src/models/operations/getmcpmetadata.ts: {}
   src/models/operations/getmcpserver.ts: {}
+  src/models/operations/getmcpserveractivity.ts: {}
   src/models/operations/getmcpserverdetails.ts: {}
   src/models/operations/getobservabilityoverview.ts: {}
   src/models/operations/getonboardingstatus.ts: {}
@@ -1425,6 +1433,7 @@ trackedFiles:
   src/models/operations/suggestexclusion.ts: {}
   src/models/operations/switchauthscopes.ts: {}
   src/models/operations/testdetectionrule.ts: {}
+  src/models/operations/tokenexchange.ts: {}
   src/models/operations/triggerriskanalysis.ts: {}
   src/models/operations/undistributeskill.ts: {}
   src/models/operations/unmaskriskresult.ts: {}
@@ -1639,6 +1648,8 @@ trackedFiles:
   src/react-query/getMcpMetadata.ts: {}
   src/react-query/getMcpServer.core.ts: {}
   src/react-query/getMcpServer.ts: {}
+  src/react-query/getMcpServerActivity.core.ts: {}
+  src/react-query/getMcpServerActivity.ts: {}
   src/react-query/getObservabilityOverview.core.ts: {}
   src/react-query/getObservabilityOverview.ts: {}
   src/react-query/getPeriodUsage.core.ts: {}
@@ -1991,6 +2002,7 @@ trackedFiles:
   src/react-query/template.ts: {}
   src/react-query/templates.core.ts: {}
   src/react-query/templates.ts: {}
+  src/react-query/tokenExchangeExchange.ts: {}
   src/react-query/toolVariationGroups.core.ts: {}
   src/react-query/toolVariationGroups.ts: {}
   src/react-query/toolset.core.ts: {}
@@ -2121,6 +2133,7 @@ trackedFiles:
   src/sdk/skills.ts: {}
   src/sdk/telemetry.ts: {}
   src/sdk/templates.ts: {}
+  src/sdk/tokenexchange.ts: {}
   src/sdk/tools.ts: {}
   src/sdk/toolsets.ts: {}
   src/sdk/triggers.ts: {}
@@ -3753,6 +3766,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2025-03-27T03:11:55.483Z", "id": "e06adce2-4b1d-4fb6-bb17-def0edb665e6", "project_id": "afa4249c-4a63-4332-86b6-e84f3ad65c72", "updated_at": "2025-07-28T20:58:04.836Z", "visibility": "private"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getMcpServerActivity:
+    speakeasy-default-get-mcp-server-activity:
+      requestBody:
+        application/json: {"recent_window_days": 14}
+      responses:
+        "200":
+          application/json: {"activity": [{"recent_tool_calls": 21147, "target_id": "<id>", "target_label": "<value>", "target_type": "tunneled_mcp_server", "total_tool_calls": 866664}], "lookback_days": 283054, "recent_window_days": 917174}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6001,6 +6025,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  tokenExchange:
+    speakeasy-default-token-exchange:
+      requestBody:
+        application/json: {"email": "dev@acme.corp"}
+      responses:
+        "200":
+          application/json: {"access_token": "<value>", "expires_in": 235611, "refresh_token": "<value>", "user_email": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   triggerRiskAnalysis:
     speakeasy-default-trigger-risk-analysis:
       requestBody:

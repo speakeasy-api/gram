@@ -2642,6 +2642,88 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 	return toToolUsageFilterOptionsResult(options, hostedMCPMatchers, payload.OptionTypes), nil
 }
 
+// mcpServerActivityLookbackDays bounds the "ever active" window. Telemetry logs
+// are retained for 90 days, so a longer lookback can never surface older calls;
+// a server quiet for the full window reads as "never received a tool call".
+const mcpServerActivityLookbackDays = 90
+
+func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.GetMcpServerActivityPayload) (res *telem_gen.GetMcpServerActivityResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	recentWindowDays := payload.RecentWindowDays
+	if recentWindowDays <= 0 {
+		recentWindowDays = 14
+	}
+	if recentWindowDays > mcpServerActivityLookbackDays {
+		recentWindowDays = mcpServerActivityLookbackDays
+	}
+
+	now := time.Now()
+	timeEnd := now.UnixNano()
+	timeStart := now.AddDate(0, 0, -mcpServerActivityLookbackDays).UnixNano()
+	recentThreshold := now.AddDate(0, 0, -recentWindowDays).UnixNano()
+
+	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
+	}
+	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
+	}
+
+	rows, err := s.chRepo.GetMcpServerActivity(ctx, repo.GetMcpServerActivityParams{
+		GramProjectID:     authCtx.ProjectID.String(),
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		RecentThresholdNs: recentThreshold,
+		HostedMCPMatchers: hostedMCPMatchers,
+		MCPServerMatchers: mcpServerMatchers,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching mcp server activity")
+	}
+
+	activity := make([]*telem_gen.McpServerActivity, 0, len(rows))
+	for _, row := range rows {
+		entry := &telem_gen.McpServerActivity{
+			TargetType:      telem_gen.McpServerActivityTargetType(row.TargetType),
+			TargetID:        row.TargetID,
+			TargetLabel:     row.TargetLabel,
+			TotalToolCalls:  int64(row.TotalToolCalls),  //nolint:gosec // Bounded count
+			RecentToolCalls: int64(row.RecentToolCalls), //nolint:gosec // Bounded count
+			LastToolCallAt:  nil,
+		}
+		if row.LastToolCallUnixNano > 0 {
+			lastAt := time.Unix(0, row.LastToolCallUnixNano).UTC().Format(time.RFC3339)
+			entry.LastToolCallAt = &lastAt
+		}
+		activity = append(activity, entry)
+	}
+
+	return &telem_gen.GetMcpServerActivityResult{
+		Activity:         activity,
+		RecentWindowDays: recentWindowDays,
+		LookbackDays:     mcpServerActivityLookbackDays,
+	}, nil
+}
+
 func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.HostedMCPMatcher, error) {
 	toolsets, err := toolsetsRepo.New(s.db).ListToolsetsByProject(ctx, projectID)
 	if err != nil {

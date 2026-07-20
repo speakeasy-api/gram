@@ -3,6 +3,7 @@ package posthog
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -15,9 +16,10 @@ import (
 )
 
 type Posthog struct {
-	client   posthog.Client
-	disabled bool
-	logger   *slog.Logger
+	client          posthog.Client
+	disabled        bool
+	localEvaluation bool
+	logger          *slog.Logger
 }
 
 func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthogEndpoint string, posthogPersonalAPIKey string) *Posthog {
@@ -26,18 +28,20 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 	if posthogAPIKey == "" {
 		logger.InfoContext(ctx, "posthog API key not found, disabling posthog")
 		return &Posthog{
-			disabled: true,
-			logger:   logger,
-			client:   nil,
+			disabled:        true,
+			localEvaluation: false,
+			logger:          logger,
+			client:          nil,
 		}
 	}
 
 	if posthogEndpoint == "" {
 		logger.InfoContext(ctx, "posthog endpoint not found, disabling posthog")
 		return &Posthog{
-			disabled: true,
-			logger:   logger,
-			client:   nil,
+			disabled:        true,
+			localEvaluation: false,
+			logger:          logger,
+			client:          nil,
 		}
 	}
 
@@ -58,16 +62,18 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to instantiate posthog client", attr.SlogError(err))
 		return &Posthog{
-			disabled: true,
-			logger:   logger,
-			client:   nil,
+			disabled:        true,
+			localEvaluation: false,
+			logger:          logger,
+			client:          nil,
 		}
 	}
 
 	return &Posthog{
-		client:   client,
-		disabled: false,
-		logger:   logger,
+		client:          client,
+		disabled:        false,
+		localEvaluation: posthogPersonalAPIKey != "",
+		logger:          logger,
 	}
 }
 
@@ -108,6 +114,46 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 	return string(j) == "true", nil
 }
 
+func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
+	if p.disabled {
+		p.logger.InfoContext(ctx, "posthog is disabled, returning false")
+		return false, nil
+	}
+	if !p.localEvaluation {
+		return false, nil
+	}
+
+	var phPersonProperties posthog.Properties
+	if len(personProperties) > 0 {
+		phPersonProperties = posthog.NewProperties()
+		for key, value := range personProperties {
+			phPersonProperties.Set(key, value)
+		}
+	}
+	sendFeatureFlagEvents := false
+	flagState, err := p.client.IsFeatureEnabled(posthog.FeatureFlagPayload{
+		Key:                   string(flag),
+		DistinctId:            distinctID,
+		Groups:                posthogGroups(groups),
+		PersonProperties:      phPersonProperties,
+		OnlyEvaluateLocally:   true,
+		SendFeatureFlagEvents: &sendFeatureFlagEvents,
+	})
+	if err != nil {
+		var inconclusive *posthog.InconclusiveMatchError
+		if errors.As(err, &inconclusive) || errors.Is(err, posthog.ErrFlagNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to locally check feature flag: %w", err)
+	}
+
+	j, err := json.Marshal(flagState)
+	if err != nil {
+		return false, fmt.Errorf("failed to unmarshal feature flag: %w", err)
+	}
+	return string(j) == "true", nil
+}
+
 func (p *Posthog) FlagPayload(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) ([]byte, error) {
 	// When posthog is disabled we have no clearance data. Return nil so callers
 	// fall back to their fail-closed default (e.g. carry the current version).
@@ -139,6 +185,17 @@ func (p *Posthog) FlagPayload(ctx context.Context, flag feature.Flag, distinctID
 	}
 
 	return []byte(payload), nil
+}
+
+func posthogGroups(groups map[string]string) posthog.Groups {
+	var phGroups posthog.Groups
+	if len(groups) > 0 {
+		phGroups = posthog.NewGroups()
+		for groupType, groupKey := range groups {
+			phGroups.Set(groupType, groupKey)
+		}
+	}
+	return phGroups
 }
 
 func (p *Posthog) IdentifyUser(ctx context.Context, distinctID string, personProperties map[string]any) error {

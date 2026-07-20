@@ -44,8 +44,8 @@ func NewGetPluginsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
-			RequiredScopes: []string{"agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent_user"},
 		}
 		var key string
 		if p.ApikeyToken != nil {

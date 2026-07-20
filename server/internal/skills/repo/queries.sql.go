@@ -116,7 +116,7 @@ FROM skills s
 WHERE s.project_id = $4
   AND s.id = $5
   AND s.archived_at IS NULL
-RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, channel, created_by_user_id, revoked_at, created_at, updated_at
+RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, assistant_id, channel, created_by_user_id, revoked_at, created_at, updated_at
 `
 
 type CreateSkillDistributionParams struct {
@@ -142,6 +142,7 @@ func (q *Queries) CreateSkillDistribution(ctx context.Context, arg CreateSkillDi
 		&i.SkillID,
 		&i.PinnedVersionID,
 		&i.PluginID,
+		&i.AssistantID,
 		&i.Channel,
 		&i.CreatedByUserID,
 		&i.RevokedAt,
@@ -227,7 +228,7 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 
 const getActiveSkillDistributionRecord = `-- name: GetActiveSkillDistributionRecord :one
 SELECT
-  sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
+  sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
   resolved.id AS resolved_version_id
 FROM skill_distributions sd
 JOIN LATERAL (
@@ -267,6 +268,7 @@ func (q *Queries) GetActiveSkillDistributionRecord(ctx context.Context, arg GetA
 		&i.SkillDistribution.SkillID,
 		&i.SkillDistribution.PinnedVersionID,
 		&i.SkillDistribution.PluginID,
+		&i.SkillDistribution.AssistantID,
 		&i.SkillDistribution.Channel,
 		&i.SkillDistribution.CreatedByUserID,
 		&i.SkillDistribution.RevokedAt,
@@ -605,7 +607,7 @@ func (q *Queries) GetValidSkillVersion(ctx context.Context, arg GetValidSkillVer
 
 const listActiveSkillDistributions = `-- name: ListActiveSkillDistributions :many
 SELECT
-  sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
+  sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
   s.name AS skill_name,
   s.display_name AS skill_display_name,
   pl.name AS plugin_name,
@@ -680,6 +682,7 @@ func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActi
 			&i.SkillDistribution.SkillID,
 			&i.SkillDistribution.PinnedVersionID,
 			&i.SkillDistribution.PluginID,
+			&i.SkillDistribution.AssistantID,
 			&i.SkillDistribution.Channel,
 			&i.SkillDistribution.CreatedByUserID,
 			&i.SkillDistribution.RevokedAt,
@@ -857,7 +860,7 @@ WHERE project_id = $1
   AND plugin_id = $3
   AND channel = 'plugin'
   AND revoked_at IS NULL
-RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, channel, created_by_user_id, revoked_at, created_at, updated_at
+RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, assistant_id, channel, created_by_user_id, revoked_at, created_at, updated_at
 `
 
 type RevokeActiveSkillDistributionParams struct {
@@ -875,6 +878,7 @@ func (q *Queries) RevokeActiveSkillDistribution(ctx context.Context, arg RevokeA
 		&i.SkillID,
 		&i.PinnedVersionID,
 		&i.PluginID,
+		&i.AssistantID,
 		&i.Channel,
 		&i.CreatedByUserID,
 		&i.RevokedAt,
@@ -902,7 +906,7 @@ WHERE prev.id = sd.id
   AND sd.project_id = $1
   AND sd.skill_id = $2
   AND sd.revoked_at IS NULL
-RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id
+RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id
 `
 
 type RevokeAllSkillDistributionsBySkillParams struct {
@@ -932,6 +936,7 @@ func (q *Queries) RevokeAllSkillDistributionsBySkill(ctx context.Context, arg Re
 			&i.SkillDistribution.SkillID,
 			&i.SkillDistribution.PinnedVersionID,
 			&i.SkillDistribution.PluginID,
+			&i.SkillDistribution.AssistantID,
 			&i.SkillDistribution.Channel,
 			&i.SkillDistribution.CreatedByUserID,
 			&i.SkillDistribution.RevokedAt,
@@ -1000,7 +1005,7 @@ WHERE project_id = $2
   AND plugin_id = $4
   AND channel = 'plugin'
   AND revoked_at IS NULL
-RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, channel, created_by_user_id, revoked_at, created_at, updated_at
+RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, assistant_id, channel, created_by_user_id, revoked_at, created_at, updated_at
 `
 
 type UpdateSkillDistributionParams struct {
@@ -1024,6 +1029,7 @@ func (q *Queries) UpdateSkillDistribution(ctx context.Context, arg UpdateSkillDi
 		&i.SkillID,
 		&i.PinnedVersionID,
 		&i.PluginID,
+		&i.AssistantID,
 		&i.Channel,
 		&i.CreatedByUserID,
 		&i.RevokedAt,
