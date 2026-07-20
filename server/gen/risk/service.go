@@ -312,9 +312,10 @@ type CreateRiskPolicyPayload struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty/omitted leaves the domain rule inert.
 	ApprovedEmailDomains []string
-	// Category keys whose centrally recommended detection scope is NOT applied for
-	// this policy. Empty/omitted = all recommendations apply.
-	DisabledRecommendedScopes []string
+	// Per-category detection scopes. Each specified category replaces its
+	// centrally recommended scope; a scope with both predicates empty scans every
+	// message surface. Empty/omitted = all recommendations apply unchanged.
+	DetectionScopes []*types.RiskDetectionScope
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
@@ -1225,9 +1226,10 @@ type UpdateRiskPolicyPayload struct {
 	// For the account_identity source: corporate email domains considered
 	// approved. Omit to preserve the current list; send an empty array to clear it.
 	ApprovedEmailDomains []string
-	// Category keys whose centrally recommended detection scope is NOT applied for
-	// this policy. Omit to preserve the current value; send empty to clear.
-	DisabledRecommendedScopes []string
+	// Per-category detection scopes. Each specified category replaces its
+	// centrally recommended scope; a scope with both predicates empty scans every
+	// message surface. Omit to preserve the current value; send empty to clear.
+	DetectionScopes []*types.RiskDetectionScope
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string

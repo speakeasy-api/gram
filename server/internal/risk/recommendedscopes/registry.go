@@ -12,8 +12,16 @@ import (
 )
 
 // Version is surfaced via API and metrics so behavior changes are attributable.
-const Version = 1
+const Version = 2
 
+// assistantExempt drops the agent's own free text from scanning: risky content
+// reaching the assistant enters via an already-scanned surface (user input,
+// tool output), so assistant text is dominated by echo.
+const assistantExempt = `kind == "assistant_message"`
+
+// readOnlyToolsRegex is the narrow allowlist of read-only tool names; a
+// tool-call batch is exempt from prompt-injection scanning only when every
+// call in it is read-only, so write and exec tool arguments stay in scope.
 const readOnlyToolsRegex = "^(Read|Grep|Glob|LS|NotebookRead|ExitPlanMode|TodoWrite|AskUserQuestion|ToolSearch|WebSearch)$"
 
 // Recommendation is the centrally-maintained detection scope for one category.
@@ -32,51 +40,51 @@ var registry = []Recommendation{
 	{
 		Category:     categories.CategorySecrets,
 		ScopeInclude: "",
-		ScopeExempt:  "",
-		Rationale:    "Secrets can leak through user paste, tool output, assistant echo, and tool arguments alike, so all message surfaces remain intentionally in scope.",
+		ScopeExempt:  assistantExempt,
+		Rationale:    "Secrets enter through user paste, tool output, and tool arguments; the agent's own free text only echoes content those surfaces already scanned.",
 		Applicable:   true,
 	},
 	{
 		Category:     categories.CategoryFinancial,
 		ScopeInclude: "",
-		ScopeExempt:  "",
-		Rationale:    "Financial data can appear in user input, tool results, assistant responses, and tool arguments, so all message surfaces remain intentionally in scope.",
+		ScopeExempt:  assistantExempt,
+		Rationale:    "Financial data enters through user input, tool results, and tool arguments; the agent's own free text only echoes content those surfaces already scanned.",
 		Applicable:   true,
 	},
 	{
 		Category:     categories.CategoryPII,
 		ScopeInclude: "",
-		ScopeExempt:  "",
-		Rationale:    "PII can be introduced, returned, repeated, or passed onward by any message surface, so all message surfaces remain intentionally in scope.",
+		ScopeExempt:  assistantExempt,
+		Rationale:    "PII enters through user input, tool results, and tool arguments; the agent's own free text only echoes content those surfaces already scanned.",
 		Applicable:   true,
 	},
 	{
 		Category:     categories.CategoryGovernmentIDs,
 		ScopeInclude: "",
-		ScopeExempt:  "",
-		Rationale:    "Government identifiers can appear in user input, tool output, assistant echo, and tool arguments, so all message surfaces remain intentionally in scope.",
+		ScopeExempt:  assistantExempt,
+		Rationale:    "Government identifiers enter through user input, tool output, and tool arguments; the agent's own free text only echoes content those surfaces already scanned.",
 		Applicable:   true,
 	},
 	{
 		Category:     categories.CategoryHealthcare,
 		ScopeInclude: "",
-		ScopeExempt:  "",
-		Rationale:    "Healthcare data can be exposed across prompts, tool results, assistant responses, and tool arguments, so all message surfaces remain intentionally in scope.",
+		ScopeExempt:  assistantExempt,
+		Rationale:    "Healthcare data enters through prompts, tool results, and tool arguments; the agent's own free text only echoes content those surfaces already scanned.",
 		Applicable:   true,
 	},
 	{
 		Category:     categories.CategoryOffPolicy,
 		ScopeInclude: "",
-		ScopeExempt:  "",
-		// A kind == "tool_response" exemption is a candidate pending corpus validation.
-		Rationale:  "Off-policy content can be present across message surfaces; tool-response exemption remains a candidate until corpus validation proves it does not hide violations.",
+		ScopeExempt:  assistantExempt,
+		// A kind == "tool_response" exemption is a further candidate pending corpus validation.
+		Rationale:  "Off-policy content is scanned on user input and tool traffic; the agent's own free text is excluded as echo of already-scanned surfaces.",
 		Applicable: true,
 	},
 	{
 		Category:     categories.CategoryPromptPolicy,
 		ScopeInclude: "",
-		ScopeExempt:  "",
-		Rationale:    "Prompt-policy guardrails are user-authored and intent is unknowable, so all message surfaces remain intentionally in scope.",
+		ScopeExempt:  assistantExempt,
+		Rationale:    "Prompt-policy guardrails are judged on user input and tool traffic; specify a custom detection scope on the policy if a guardrail targets the agent's own responses.",
 		Applicable:   true,
 	},
 	{
@@ -86,7 +94,7 @@ var registry = []Recommendation{
 			`kind == "assistant_message" || (kind == "tool_request" && tool_calls.exists(t, t.name.matchRegex("%[1]s")) && !tool_calls.exists(t, !t.name.matchRegex("%[1]s")))`,
 			readOnlyToolsRegex,
 		),
-		Rationale:  "Injection rides in user input, tool output, and write/exec tool args, never the agent's own free text or all-read-only tool-call batches; validated to cut judge FPs ~37%->~5% with zero attack-corpus regressions.",
+		Rationale:  "Injection enters through user input, tool output, and write or exec tool calls; the agent's own free text and all-read-only tool-call batches are excluded.",
 		Applicable: true,
 	},
 	{

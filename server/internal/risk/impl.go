@@ -388,11 +388,12 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 		}
 	}
-	if len(payload.DisabledRecommendedScopes) > 0 {
-		if err := validateRecommendedScopeCategories(payload.DisabledRecommendedScopes); err != nil {
+	if len(payload.DetectionScopes) > 0 {
+		specs, err := validateDetectionScopes(s.celEng, payload.DetectionScopes)
+		if err != nil {
 			return nil, err
 		}
-		analyzerConfig, err = ra.WithDisabledRecommendedScopes(analyzerConfig, payload.DisabledRecommendedScopes)
+		analyzerConfig, err = ra.WithDetectionScopes(analyzerConfig, specs)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 		}
@@ -628,11 +629,12 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		analyzerConfig = updated
 	}
 	// Omit to preserve; send (possibly empty, to clear) to replace.
-	if payload.DisabledRecommendedScopes != nil {
-		if err := validateRecommendedScopeCategories(payload.DisabledRecommendedScopes); err != nil {
+	if payload.DetectionScopes != nil {
+		specs, err := validateDetectionScopes(s.celEng, payload.DetectionScopes)
+		if err != nil {
 			return nil, err
 		}
-		updated, err := ra.WithDisabledRecommendedScopes(analyzerConfig, payload.DisabledRecommendedScopes)
+		updated, err := ra.WithDetectionScopes(analyzerConfig, specs)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 		}
@@ -1624,7 +1626,15 @@ func (s *Service) ListRiskCategories(ctx context.Context, payload *gen.ListRiskC
 
 	defs := categories.All()
 	out := make([]*gen.RiskCategoryDefinition, 0, len(defs))
+	// The definition list carries trailing scanner-source fallback entries for
+	// Classify precedence (duplicate secrets/pii keys); the API surface is one
+	// entry per category, keeping the canonical (first) definition.
+	seen := make(map[categories.Category]bool, len(defs))
 	for _, def := range defs {
+		if seen[def.Category] {
+			continue
+		}
+		seen[def.Category] = true
 		ruleIDs := def.RuleIDs
 		if ruleIDs == nil {
 			ruleIDs = []string{}
@@ -2188,18 +2198,54 @@ func validateMessageTypes(messageTypes []string) error {
 	return nil
 }
 
-func validateRecommendedScopeCategories(keys []string) error {
-	known := make(map[categories.Category]struct{}, len(categories.All()))
-	for _, def := range categories.All() {
-		known[def.Category] = struct{}{}
-	}
-	for _, key := range keys {
-		if _, ok := known[categories.Category(key)]; ok {
+// validateDetectionScopes checks each specified scope's category (must be a
+// registry category whose message scoping applies) and CEL predicates, and
+// converts to the analyzer_config representation.
+func validateDetectionScopes(eng *celenv.Engine, specs []*types.RiskDetectionScope) ([]ra.DetectionScopeConfig, error) {
+	out := make([]ra.DetectionScopeConfig, 0, len(specs))
+	seen := make(map[categories.Category]bool, len(specs))
+	for _, spec := range specs {
+		if spec == nil {
 			continue
 		}
-		return oops.E(oops.CodeInvalid, nil, "recommended scope category %q is not recognized", key)
+		cat := categories.Category(spec.Category)
+		rec, ok := recommendedscopes.For(cat)
+		if !ok {
+			return nil, oops.E(oops.CodeInvalid, nil, "detection scope category %q is not recognized", spec.Category)
+		}
+		if !rec.Applicable {
+			return nil, oops.E(oops.CodeInvalid, nil, "category %q is session-scoped; message detection scopes do not apply", spec.Category)
+		}
+		if seen[cat] {
+			return nil, oops.E(oops.CodeInvalid, nil, "detection scope category %q specified more than once", spec.Category)
+		}
+		seen[cat] = true
+		include := strings.TrimSpace(conv.PtrValOr(spec.ScopeInclude, ""))
+		exempt := strings.TrimSpace(conv.PtrValOr(spec.ScopeExempt, ""))
+		if _, err := ra.CompileScope(eng, include, exempt); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "detection scope for %q does not compile", spec.Category)
+		}
+		out = append(out, ra.DetectionScopeConfig{Category: string(cat), ScopeInclude: include, ScopeExempt: exempt})
 	}
-	return nil
+	return out, nil
+}
+
+// detectionScopesToAPI maps the analyzer_config detection scopes into the API
+// representation.
+func detectionScopesToAPI(analyzerConfig []byte) []*types.RiskDetectionScope {
+	specs := ra.DetectionScopesFromConfig(analyzerConfig)
+	if len(specs) == 0 {
+		return nil
+	}
+	out := make([]*types.RiskDetectionScope, 0, len(specs))
+	for _, spec := range specs {
+		out = append(out, &types.RiskDetectionScope{
+			Category:     spec.Category,
+			ScopeInclude: conv.PtrEmpty(spec.ScopeInclude),
+			ScopeExempt:  conv.PtrEmpty(spec.ScopeExempt),
+		})
+	}
+	return out
 }
 
 func validateCustomDetectionRule(eng *celenv.Engine, ruleID, title, detectionExpr, severity string) error {
@@ -2931,34 +2977,34 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	}
 
 	return &types.RiskPolicy{
-		ID:                        row.ID.String(),
-		ProjectID:                 row.ProjectID.String(),
-		Name:                      row.Name,
-		PolicyType:                row.PolicyType,
-		Sources:                   row.Sources,
-		PresidioEntities:          row.PresidioEntities,
-		PresidioScoreThreshold:    ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
-		ApprovedEmailDomains:      ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
-		DisabledRecommendedScopes: ra.DisabledRecommendedScopesFromConfig(row.AnalyzerConfig),
-		PromptInjectionRules:      row.PromptInjectionRules,
-		DisabledRules:             row.DisabledRules,
-		CustomRuleIds:             row.CustomRuleIds,
-		MessageTypes:              row.MessageTypes,
-		ScopeInclude:              conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:               conv.FromPGText[string](row.ScopeExempt),
-		Enabled:                   row.Enabled,
-		Action:                    row.Action,
-		AudienceType:              row.AudienceType,
-		AudiencePrincipalUrns:     audiencePrincipalURNs,
-		AutoName:                  row.AutoName,
-		UserMessage:               conv.FromPGText[string](row.UserMessage),
-		Prompt:                    conv.FromPGText[string](row.Prompt),
-		ModelConfig:               unmarshalModelConfig(row.ModelConfig),
-		Version:                   row.Version,
-		CreatedAt:                 row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                 row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:           pendingMessages,
-		TotalMessages:             totalMessages,
+		ID:                     row.ID.String(),
+		ProjectID:              row.ProjectID.String(),
+		Name:                   row.Name,
+		PolicyType:             row.PolicyType,
+		Sources:                row.Sources,
+		PresidioEntities:       row.PresidioEntities,
+		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
+		DetectionScopes:        detectionScopesToAPI(row.AnalyzerConfig),
+		PromptInjectionRules:   row.PromptInjectionRules,
+		DisabledRules:          row.DisabledRules,
+		CustomRuleIds:          row.CustomRuleIds,
+		MessageTypes:           row.MessageTypes,
+		ScopeInclude:           conv.FromPGText[string](row.ScopeInclude),
+		ScopeExempt:            conv.FromPGText[string](row.ScopeExempt),
+		Enabled:                row.Enabled,
+		Action:                 row.Action,
+		AudienceType:           row.AudienceType,
+		AudiencePrincipalUrns:  audiencePrincipalURNs,
+		AutoName:               row.AutoName,
+		UserMessage:            conv.FromPGText[string](row.UserMessage),
+		Prompt:                 conv.FromPGText[string](row.Prompt),
+		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
+		Version:                row.Version,
+		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:        pendingMessages,
+		TotalMessages:          totalMessages,
 	}, nil
 }
 
@@ -2967,34 +3013,34 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		audiencePrincipalURNs = []string{}
 	}
 	return &types.RiskPolicy{
-		ID:                        row.ID.String(),
-		ProjectID:                 row.ProjectID.String(),
-		Name:                      row.Name,
-		PolicyType:                row.PolicyType,
-		Sources:                   row.Sources,
-		PresidioEntities:          row.PresidioEntities,
-		PresidioScoreThreshold:    ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
-		ApprovedEmailDomains:      ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
-		DisabledRecommendedScopes: ra.DisabledRecommendedScopesFromConfig(row.AnalyzerConfig),
-		PromptInjectionRules:      row.PromptInjectionRules,
-		DisabledRules:             row.DisabledRules,
-		CustomRuleIds:             row.CustomRuleIds,
-		MessageTypes:              row.MessageTypes,
-		ScopeInclude:              conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:               conv.FromPGText[string](row.ScopeExempt),
-		Enabled:                   row.Enabled,
-		Action:                    row.Action,
-		AudienceType:              row.AudienceType,
-		AudiencePrincipalUrns:     audiencePrincipalURNs,
-		AutoName:                  row.AutoName,
-		UserMessage:               conv.FromPGText[string](row.UserMessage),
-		Prompt:                    conv.FromPGText[string](row.Prompt),
-		ModelConfig:               unmarshalModelConfig(row.ModelConfig),
-		Version:                   row.Version,
-		CreatedAt:                 row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                 row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:           -1,
-		TotalMessages:             -1,
+		ID:                     row.ID.String(),
+		ProjectID:              row.ProjectID.String(),
+		Name:                   row.Name,
+		PolicyType:             row.PolicyType,
+		Sources:                row.Sources,
+		PresidioEntities:       row.PresidioEntities,
+		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
+		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
+		DetectionScopes:        detectionScopesToAPI(row.AnalyzerConfig),
+		PromptInjectionRules:   row.PromptInjectionRules,
+		DisabledRules:          row.DisabledRules,
+		CustomRuleIds:          row.CustomRuleIds,
+		MessageTypes:           row.MessageTypes,
+		ScopeInclude:           conv.FromPGText[string](row.ScopeInclude),
+		ScopeExempt:            conv.FromPGText[string](row.ScopeExempt),
+		Enabled:                row.Enabled,
+		Action:                 row.Action,
+		AudienceType:           row.AudienceType,
+		AudiencePrincipalUrns:  audiencePrincipalURNs,
+		AutoName:               row.AutoName,
+		UserMessage:            conv.FromPGText[string](row.UserMessage),
+		Prompt:                 conv.FromPGText[string](row.Prompt),
+		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
+		Version:                row.Version,
+		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:        -1,
+		TotalMessages:          -1,
 	}
 }
 

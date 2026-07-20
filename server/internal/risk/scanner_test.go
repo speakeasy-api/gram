@@ -517,7 +517,7 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 	require.Equal(t, message.ToolRequest, toolResult.MessageType)
 }
 
-func TestScanner_RecommendedScopesSkipsPromptInjectionButKeepsGitleaks(t *testing.T) {
+func TestScanner_RecommendedScopesSkipAssistantMessages(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 	insertRealtimeBlockPolicy(t, ti, ctx, "pi then secrets", []string{risk_analysis.SourcePromptInjection, risk_analysis.SourceGitleaks}, nil)
@@ -528,8 +528,7 @@ func TestScanner_RecommendedScopesSkipsPromptInjectionButKeepsGitleaks(t *testin
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "assistant echoed AKIAIOSFODNN7REALKEY", message.Assistant, "")
 	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, risk_analysis.SourceGitleaks, result.Source)
+	require.Nil(t, result, "assistant messages are out of scope for every category")
 	require.Equal(t, int32(0), engine.calls.Load(), "prompt injection classifier must not run for assistant_message when recommended scopes are on")
 }
 
@@ -575,10 +574,12 @@ func TestScanner_RecommendedScopesPromptInjectionToolRequestReadOnly(t *testing.
 	require.Equal(t, int32(1), engine.calls.Load())
 }
 
-func TestScanner_RecommendedScopesOptOutRestoresPromptInjection(t *testing.T) {
+func TestScanner_DetectionScopeUnrestrictedRestoresPromptInjection(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
-	cfg, err := risk_analysis.WithDisabledRecommendedScopes(nil, []string{"prompt_injection"})
+	cfg, err := risk_analysis.WithDetectionScopes(nil, []risk_analysis.DetectionScopeConfig{
+		{Category: "prompt_injection", ScopeInclude: "", ScopeExempt: ""},
+	})
 	require.NoError(t, err)
 	insertRealtimeBlockPolicy(t, ti, ctx, "pi opt out", []string{risk_analysis.SourcePromptInjection}, cfg)
 

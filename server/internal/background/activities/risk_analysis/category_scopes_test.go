@@ -66,9 +66,13 @@ func finding(source, ruleID string) scanners.Finding {
 	}
 }
 
-func masksFor(t *testing.T, enabled bool, disabled []string, messages []batchMessage) CategoryScopeMasks {
+func masksFor(t *testing.T, enabled bool, specified []DetectionScopeConfig, messages []batchMessage) CategoryScopeMasks {
 	t.Helper()
-	return NewCategoryScopes(CompiledScope{eng: nil, include: nil, exempt: nil, includeCEL: "", exemptCEL: ""}, mustRecommendedSet(t), disabled, enabled, nil).Masks(t.Context(), messages)
+	eng, err := celenv.New()
+	require.NoError(t, err)
+	compiled, err := CompileDetectionScopes(eng, specified)
+	require.NoError(t, err)
+	return NewCategoryScopes(CompiledScope{eng: nil, include: nil, exempt: nil, includeCEL: "", exemptCEL: ""}, mustRecommendedSet(t), compiled, enabled, nil).Masks(t.Context(), messages)
 }
 
 func mergeOne(masks CategoryScopeMasks, findings [][]scanners.Finding) [][]scanners.Finding {
@@ -116,24 +120,46 @@ func TestRecommendedCategoryScopesPromptInjectionBehavior(t *testing.T) {
 func TestRecommendedCategoryScopesMultiSourceSameMessage(t *testing.T) {
 	t.Parallel()
 
-	messages := []batchMessage{msg(message.Assistant)}
+	messages := []batchMessage{msg(message.Assistant), msg(message.ToolResponse)}
 	masks := masksFor(t, true, nil, messages)
 	pi := finding(SourcePromptInjection, promptinjection.Rule)
 	secret := finding(SourceGitleaks, "secret.generic-api-key")
 
-	out := mergeOne(masks, [][]scanners.Finding{{pi, secret}})
-	require.Len(t, out[0], 1)
-	require.Equal(t, SourceGitleaks, out[0][0].Source)
+	out := mergeOne(masks, [][]scanners.Finding{{pi, secret}, {pi, secret}})
+	require.Empty(t, out[0], "assistant messages are out of scope for every category")
+	require.Len(t, out[1], 2)
 }
 
-func TestRecommendedCategoryScopesOptOutKeepsPromptInjection(t *testing.T) {
+func TestDetectionScopeUnrestrictedKeepsPromptInjection(t *testing.T) {
 	t.Parallel()
 
 	messages := []batchMessage{msg(message.Assistant)}
-	masks := masksFor(t, true, []string{string(categories.CategoryPromptInjection)}, messages)
+	masks := masksFor(t, true, []DetectionScopeConfig{
+		{Category: string(categories.CategoryPromptInjection), ScopeInclude: "", ScopeExempt: ""},
+	}, messages)
 
 	out := mergeOne(masks, [][]scanners.Finding{{finding(SourcePromptInjection, promptinjection.Rule)}})
 	require.Len(t, out[0], 1)
+}
+
+func TestDetectionScopeSpecifiedWinsOverRecommendation(t *testing.T) {
+	t.Parallel()
+
+	// Recommendation admits tool responses for prompt injection; the specified
+	// scope narrows to user messages only and must win for its category while
+	// leaving other categories on their recommendations.
+	messages := []batchMessage{
+		msg(message.User),
+		msg(message.ToolResponse),
+		toolReq("Bash"),
+	}
+	masks := masksFor(t, true, []DetectionScopeConfig{
+		{Category: string(categories.CategoryPromptInjection), ScopeInclude: `kind == "user_message"`, ScopeExempt: ""},
+	}, messages)
+
+	require.True(t, masks.InScope(0, categories.CategoryPromptInjection))
+	require.False(t, masks.InScope(1, categories.CategoryPromptInjection))
+	require.True(t, masks.InScope(2, categories.CategoryCLIDestructive))
 }
 
 func TestRecommendedCategoryScopesToolRequestOnlyCategories(t *testing.T) {
@@ -187,7 +213,7 @@ func TestRecommendedCategoryScopesSubset(t *testing.T) {
 	contents := messageContents(messages)
 	masks := masksFor(t, true, nil, messages)
 	require.Equal(t, 2, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
-	require.Equal(t, 0, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
+	require.Equal(t, 1, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
 
 	piMessages, piContents, piIndices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
 	require.Equal(t, []int{1, 3}, piIndices)
@@ -195,8 +221,8 @@ func TestRecommendedCategoryScopesSubset(t *testing.T) {
 	require.Equal(t, []string{contents[1], contents[3]}, piContents)
 
 	presidioMessages, _, presidioIndices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
-	require.Equal(t, []int{0, 1, 2, 3}, presidioIndices)
-	require.Len(t, presidioMessages, 4)
+	require.Equal(t, []int{1, 2, 3}, presidioIndices)
+	require.Len(t, presidioMessages, 3)
 }
 
 func TestSourceCategoriesConsistentWithClassify(t *testing.T) {
@@ -239,18 +265,22 @@ func TestSourceCategoriesConsistentWithClassify(t *testing.T) {
 	}
 }
 
-func TestDisabledRecommendedScopesConfig(t *testing.T) {
+func TestDetectionScopesConfig(t *testing.T) {
 	t.Parallel()
 
-	require.Nil(t, DisabledRecommendedScopesFromConfig(nil))
-	require.Nil(t, DisabledRecommendedScopesFromConfig([]byte(`{`)))
+	require.Nil(t, DetectionScopesFromConfig(nil))
+	require.Nil(t, DetectionScopesFromConfig([]byte(`{`)))
 
-	out, err := WithDisabledRecommendedScopes(nil, []string{"prompt_injection", "cli_destructive"})
+	specs := []DetectionScopeConfig{
+		{Category: "prompt_injection", ScopeInclude: `kind == "user_message"`, ScopeExempt: ""},
+		{Category: "cli_destructive", ScopeInclude: "", ScopeExempt: ""},
+	}
+	out, err := WithDetectionScopes(nil, specs)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"recommended_scopes":{"disabled_categories":["prompt_injection","cli_destructive"]}}`, string(out))
-	require.Equal(t, []string{"prompt_injection", "cli_destructive"}, DisabledRecommendedScopesFromConfig(out))
+	require.JSONEq(t, `{"detection_scopes":[{"category":"prompt_injection","scope_include":"kind == \"user_message\""},{"category":"cli_destructive"}]}`, string(out))
+	require.Equal(t, specs, DetectionScopesFromConfig(out))
 
-	out, err = WithDisabledRecommendedScopes(out, nil)
+	out, err = WithDetectionScopes(out, nil)
 	require.NoError(t, err)
 	require.JSONEq(t, `{}`, string(out))
 }

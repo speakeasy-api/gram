@@ -41662,11 +41662,11 @@ components:
           items:
             type: string
           description: 'Custom detection rule ids to attach as detectors: a match produces a finding.'
-        disabled_recommended_scopes:
+        detection_scopes:
           type: array
           items:
-            type: string
-          description: Category keys whose centrally recommended detection scope is NOT applied for this policy. Empty/omitted = all recommendations apply.
+            $ref: '#/components/schemas/RiskDetectionScope'
+          description: Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Empty/omitted = all recommendations apply unchanged.
         disabled_rules:
           type: array
           items:
@@ -49676,6 +49676,20 @@ components:
         - severity
         - created_at
         - updated_at
+    RiskDetectionScope:
+      type: object
+      properties:
+        category:
+          type: string
+          description: Risk category key this detection scope applies to.
+        scope_exempt:
+          type: string
+          description: 'CEL exemption predicate: the category skips a message when this boolean expression is true. Empty means no exemption.'
+        scope_include:
+          type: string
+          description: 'CEL scope predicate: the category detects on a message only when this boolean expression is true. Empty means every message surface is included.'
+      required:
+        - category
     RiskExclusion:
       type: object
       properties:
@@ -49885,11 +49899,11 @@ components:
           items:
             type: string
           description: 'Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.'
-        disabled_recommended_scopes:
+        detection_scopes:
           type: array
           items:
-            type: string
-          description: Category keys whose centrally recommended detection scope is not applied for this policy. Empty means every recommendation applies.
+            $ref: '#/components/schemas/RiskDetectionScope'
+          description: Per-category detection scopes specified for this policy. The scan surface merges these with the recommended scopes, the specified scope winning on category conflict. Empty means every recommendation applies unchanged.
         disabled_rules:
           type: array
           items:
@@ -54740,11 +54754,11 @@ components:
           items:
             type: string
           description: 'Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.'
-        disabled_recommended_scopes:
+        detection_scopes:
           type: array
           items:
-            type: string
-          description: Category keys whose centrally recommended detection scope is NOT applied for this policy. Omit to preserve the current value; send empty to clear.
+            $ref: '#/components/schemas/RiskDetectionScope'
+          description: Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Omit to preserve the current value; send empty to clear.
         disabled_rules:
           type: array
           items:

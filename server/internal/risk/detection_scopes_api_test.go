@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/risk"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -33,6 +34,7 @@ func TestListRiskCategoriesRecommendedScopes(t *testing.T) {
 	for _, cat := range result.Categories {
 		byKey[cat.Key] = cat
 	}
+	require.Len(t, result.Categories, len(byKey), "categories must be unique by key; the Classify fallback entries must not leak")
 
 	promptInjection := byKey[string(categories.CategoryPromptInjection)]
 	require.NotNil(t, promptInjection)
@@ -58,7 +60,7 @@ func TestListRiskCategoriesRecommendedScopes(t *testing.T) {
 	require.False(t, accountIdentity.RecommendedScopeApplicable)
 }
 
-func TestCreateRiskPolicyDisabledRecommendedScopesPersistsAndRoundTrips(t *testing.T) {
+func TestCreateRiskPolicyDetectionScopesPersistsAndRoundTrips(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -67,17 +69,20 @@ func TestCreateRiskPolicyDisabledRecommendedScopesPersistsAndRoundTrips(t *testi
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	disabled := []string{string(categories.CategoryPromptInjection), string(categories.CategoryCLIDestructive)}
+	scopes := []*types.RiskDetectionScope{
+		{Category: string(categories.CategoryPromptInjection), ScopeInclude: new(`kind == "user_message"`), ScopeExempt: nil},
+		{Category: string(categories.CategoryCLIDestructive), ScopeInclude: nil, ScopeExempt: nil},
+	}
 	created, err := ti.service.CreateRiskPolicy(ctx, &risk.CreateRiskPolicyPayload{
-		Name:                      new("Recommended Scope Opt-Outs"),
-		DisabledRecommendedScopes: disabled,
+		Name:            new("Detection Scopes"),
+		DetectionScopes: scopes,
 	})
 	require.NoError(t, err)
-	require.Equal(t, disabled, created.DisabledRecommendedScopes)
+	require.Equal(t, scopes, created.DetectionScopes)
 
 	got, err := ti.service.GetRiskPolicy(ctx, &risk.GetRiskPolicyPayload{ID: created.ID})
 	require.NoError(t, err)
-	require.Equal(t, disabled, got.DisabledRecommendedScopes)
+	require.Equal(t, scopes, got.DetectionScopes)
 
 	policyID, err := uuid.Parse(created.ID)
 	require.NoError(t, err)
@@ -86,10 +91,13 @@ func TestCreateRiskPolicyDisabledRecommendedScopesPersistsAndRoundTrips(t *testi
 		ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, disabled, ra.DisabledRecommendedScopesFromConfig(row.AnalyzerConfig))
+	require.Equal(t, []ra.DetectionScopeConfig{
+		{Category: "prompt_injection", ScopeInclude: `kind == "user_message"`, ScopeExempt: ""},
+		{Category: "cli_destructive", ScopeInclude: "", ScopeExempt: ""},
+	}, ra.DetectionScopesFromConfig(row.AnalyzerConfig))
 }
 
-func TestUpdateRiskPolicyDisabledRecommendedScopesOmitPreservesEmptyClears(t *testing.T) {
+func TestUpdateRiskPolicyDetectionScopesOmitPreservesEmptyClears(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -98,30 +106,32 @@ func TestUpdateRiskPolicyDisabledRecommendedScopesOmitPreservesEmptyClears(t *te
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	disabled := []string{string(categories.CategoryPromptInjection), string(categories.CategoryCLIDestructive)}
+	scopes := []*types.RiskDetectionScope{
+		{Category: string(categories.CategoryPromptInjection), ScopeInclude: nil, ScopeExempt: nil},
+	}
 	created, err := ti.service.CreateRiskPolicy(ctx, &risk.CreateRiskPolicyPayload{
-		Name:                      new("Recommended Scope Update"),
-		DisabledRecommendedScopes: disabled,
+		Name:            new("Detection Scope Update"),
+		DetectionScopes: scopes,
 	})
 	require.NoError(t, err)
 
 	renamed, err := ti.service.UpdateRiskPolicy(ctx, &risk.UpdateRiskPolicyPayload{
 		ID:   created.ID,
-		Name: "Renamed Recommended Scope Update",
+		Name: "Renamed Detection Scope Update",
 	})
 	require.NoError(t, err)
-	require.Equal(t, disabled, renamed.DisabledRecommendedScopes)
+	require.Equal(t, scopes, renamed.DetectionScopes)
 
 	cleared, err := ti.service.UpdateRiskPolicy(ctx, &risk.UpdateRiskPolicyPayload{
-		ID:                        created.ID,
-		Name:                      "Renamed Recommended Scope Update",
-		DisabledRecommendedScopes: []string{},
+		ID:              created.ID,
+		Name:            "Renamed Detection Scope Update",
+		DetectionScopes: []*types.RiskDetectionScope{},
 	})
 	require.NoError(t, err)
-	require.Empty(t, cleared.DisabledRecommendedScopes)
+	require.Empty(t, cleared.DetectionScopes)
 }
 
-func TestRiskPolicyDisabledRecommendedScopesRejectsUnknownCategory(t *testing.T) {
+func TestRiskPolicyDetectionScopesValidation(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -130,21 +140,46 @@ func TestRiskPolicyDisabledRecommendedScopesRejectsUnknownCategory(t *testing.T)
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	_, err := ti.service.CreateRiskPolicy(ctx, &risk.CreateRiskPolicyPayload{
-		Name:                      new("Unknown Recommended Scope"),
-		DisabledRecommendedScopes: []string{"not_a_category"},
-	})
-	requireOopsCode(t, err, oops.CodeInvalid)
+	invalid := []struct {
+		name   string
+		scopes []*types.RiskDetectionScope
+	}{
+		{"unknown category", []*types.RiskDetectionScope{
+			{Category: "not_a_category", ScopeInclude: nil, ScopeExempt: nil},
+		}},
+		{"custom self-scopes", []*types.RiskDetectionScope{
+			{Category: string(categories.CategoryCustom), ScopeInclude: nil, ScopeExempt: nil},
+		}},
+		{"session-scoped category", []*types.RiskDetectionScope{
+			{Category: string(categories.CategoryAccountIdentity), ScopeInclude: nil, ScopeExempt: nil},
+		}},
+		{"duplicate category", []*types.RiskDetectionScope{
+			{Category: string(categories.CategoryPII), ScopeInclude: nil, ScopeExempt: nil},
+			{Category: string(categories.CategoryPII), ScopeInclude: nil, ScopeExempt: nil},
+		}},
+		{"bad CEL", []*types.RiskDetectionScope{
+			{Category: string(categories.CategoryPII), ScopeInclude: new(`kind ==`), ScopeExempt: nil},
+		}},
+	}
+	for _, tc := range invalid {
+		_, err := ti.service.CreateRiskPolicy(ctx, &risk.CreateRiskPolicyPayload{
+			Name:            new("Invalid Detection Scope"),
+			DetectionScopes: tc.scopes,
+		})
+		requireOopsCode(t, err, oops.CodeInvalid)
+	}
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &risk.CreateRiskPolicyPayload{
-		Name: new("Known Recommended Scope"),
+		Name: new("Valid Then Invalid Update"),
 	})
 	require.NoError(t, err)
 
 	_, err = ti.service.UpdateRiskPolicy(ctx, &risk.UpdateRiskPolicyPayload{
-		ID:                        created.ID,
-		Name:                      created.Name,
-		DisabledRecommendedScopes: []string{"not_a_category"},
+		ID:   created.ID,
+		Name: created.Name,
+		DetectionScopes: []*types.RiskDetectionScope{
+			{Category: "not_a_category", ScopeInclude: nil, ScopeExempt: nil},
+		},
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }

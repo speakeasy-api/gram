@@ -199,7 +199,7 @@ func filterByCategoryScopes(ctx context.Context, orgID string, metrics *riskMetr
 func messageContents(messages []batchMessage) []string {
 	contents := make([]string, len(messages))
 	for i, msg := range messages {
-		contents[i] = msg.Content
+		contents[i] = msg.scanSurface()
 	}
 	return contents
 }

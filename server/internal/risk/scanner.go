@@ -512,7 +512,11 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	if !app.Includes(view) || app.Exempts(view) {
 		return nil, nil
 	}
-	categoryScope := ra.NewCategoryScope(app, s.recommended, ra.DisabledRecommendedScopesFromConfig(policy.AnalyzerConfig), recommendedScopesOn)
+	specified, err := ra.CompileDetectionScopes(eng, ra.DetectionScopesFromConfig(policy.AnalyzerConfig))
+	if err != nil {
+		return nil, fmt.Errorf("compile detection scopes: %w", err)
+	}
+	categoryScope := ra.NewCategoryScope(app, s.recommended, specified, recommendedScopesOn)
 
 	if policy.PolicyType == ra.PolicyTypePromptBased {
 		if !categoryScope.SourceInScope(view, ra.SourceLLMJudge) {

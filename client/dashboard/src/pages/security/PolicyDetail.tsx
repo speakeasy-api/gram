@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -36,6 +37,7 @@ import {
 import { riskEvalsEvaluate } from "@gram/client/funcs/riskEvalsEvaluate.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskCategoryDefinition } from "@gram/client/models/components/riskcategorydefinition.js";
+import type { RiskDetectionScope } from "@gram/client/models/components/riskdetectionscope.js";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import {
   keepPreviousData,
@@ -45,6 +47,7 @@ import {
 } from "@tanstack/react-query";
 import {
   Check,
+  Info,
   Loader2,
   Pencil,
   Shield,
@@ -68,10 +71,8 @@ import { useQueryState } from "nuqs";
 import { type Step } from "@/pages/setup/components/onboarding-stepper";
 import {
   DETECTION_RULES,
-  POLICY_MESSAGE_TYPE_META,
   RULE_CATEGORY_META,
   type PolicyAction,
-  type PolicyMessageType,
   type RuleCategory,
 } from "./policy-data";
 import {
@@ -80,11 +81,9 @@ import {
   DetectorCard,
   PolicyAudiencePicker,
   RuleSelectList,
-  ScopeCard,
 } from "./PolicyCenter";
 import {
   ALL_CATEGORIES,
-  ALL_POLICY_MESSAGE_TYPES,
   CATEGORY_LEVEL_DETECTORS,
   FLAG_ONLY_CATEGORIES,
   SCOPE_EXEMPT_CEL_EXAMPLES,
@@ -92,12 +91,9 @@ import {
   categoriesToPayload,
   parseApprovedEmailDomains,
   pinnedHiddenRuleIds,
-  policyMessageTypesForForm,
-  policyMessageTypesForPayload,
   policyToCategories,
 } from "./policy-form";
 import { CelExpressionField } from "./cel-field";
-import { useCelStatus } from "./use-cel-status";
 import { useDetectionRulesStore } from "./detection-rules-data";
 import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
@@ -645,17 +641,9 @@ function PromptPolicyEditor({
   const [failOpen, setFailOpen] = useState(
     policy?.modelConfig?.failOpen ?? true,
   );
-  const [messageTypes, setMessageTypes] = useState<Set<PolicyMessageType>>(() =>
-    policyMessageTypesForForm(policy?.messageTypes),
-  );
-  const [scopeInclude, setScopeInclude] = useState(policy?.scopeInclude ?? "");
-  const [scopeExempt, setScopeExempt] = useState(policy?.scopeExempt ?? "");
-  const [scopeMode, setScopeMode] = useState<"messageTypes" | "cel">(
-    policy?.scopeInclude ? "cel" : "messageTypes",
-  );
-  const [disabledRecommendedScopes, setDisabledRecommendedScopes] = useState<
-    Set<string>
-  >(() => new Set(policy?.disabledRecommendedScopes ?? []));
+  const [scopeOverrides, setScopeOverrides] = useState<
+    Map<string, ScopeOverride>
+  >(() => scopeOverridesFromPolicy(policy?.detectionScopes));
   const [action, setAction] = useState<PolicyAction>(policy?.action ?? "flag");
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
@@ -678,11 +666,9 @@ function PromptPolicyEditor({
       model !== (policy.modelConfig?.model ?? "") ||
       temperature !== (policy.modelConfig?.temperature ?? 0) ||
       failOpen !== (policy.modelConfig?.failOpen ?? true) ||
-      scopeInclude !== (policy.scopeInclude ?? "") ||
-      scopeExempt !== (policy.scopeExempt ?? "") ||
-      !sameSet(
-        disabledRecommendedScopes,
-        new Set(policy.disabledRecommendedScopes ?? []),
+      !sameScopeOverrides(
+        scopeOverrides,
+        scopeOverridesFromPolicy(policy.detectionScopes),
       ) ||
       action !== (policy.action ?? "flag") ||
       userMessage !== (policy.userMessage ?? "") ||
@@ -695,8 +681,7 @@ function PromptPolicyEditor({
             ? (policy.audiencePrincipalUrns ?? [])
             : [],
         ),
-      ) ||
-      !sameSet(messageTypes, policyMessageTypesForForm(policy.messageTypes)));
+      ));
 
   const updateMutation = useRiskPoliciesUpdateMutation({
     onSuccess: () => {
@@ -729,18 +714,6 @@ function PromptPolicyEditor({
     setStep(next);
   };
 
-  // Scope is a mutex: message-type mode sends the selected parts (CEL cleared),
-  // CEL mode sends the include expression (message types cleared).
-  const scopePayload = () => ({
-    messageTypes:
-      scopeMode === "messageTypes"
-        ? policyMessageTypesForPayload(messageTypes)
-        : [],
-    scopeInclude:
-      scopeMode === "cel" && scopeInclude.trim() ? scopeInclude : undefined,
-    scopeExempt: scopeExempt || undefined,
-  });
-
   const actionPayload = () => ({
     action,
     audienceType,
@@ -755,15 +728,11 @@ function PromptPolicyEditor({
     () => new Set<RuleCategory>(["prompt_policy"]),
     [],
   );
-  const disabledRecommendedScopesPayloadForPrompt = () =>
-    disabledRecommendedScopesPayload(
-      promptPolicyCategories,
-      disabledRecommendedScopes,
-    );
+  const detectionScopesPayloadForPrompt = () =>
+    detectionScopesPayload(promptPolicyCategories, scopeOverrides);
 
   const save = () => {
     if (!policy) return;
-    const disabledRecommendations = disabledRecommendedScopesPayloadForPrompt();
     updateMutation.mutate({
       request: {
         updateRiskPolicyRequestBody: {
@@ -776,8 +745,7 @@ function PromptPolicyEditor({
             temperature,
             failOpen,
           },
-          ...scopePayload(),
-          disabledRecommendedScopes: disabledRecommendations,
+          detectionScopes: detectionScopesPayloadForPrompt(),
           ...actionPayload(),
           userMessage,
           autoName,
@@ -787,7 +755,7 @@ function PromptPolicyEditor({
   };
 
   const create = () => {
-    const disabledRecommendations = disabledRecommendedScopesPayloadForPrompt();
+    const detectionScopes = detectionScopesPayloadForPrompt();
     createMutation.mutate({
       request: {
         createRiskPolicyRequestBody: {
@@ -796,10 +764,7 @@ function PromptPolicyEditor({
           enabled: true,
           prompt,
           modelConfig: { model: model || undefined, temperature, failOpen },
-          ...scopePayload(),
-          ...(disabledRecommendations.length > 0
-            ? { disabledRecommendedScopes: disabledRecommendations }
-            : {}),
+          ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
           autoName,
@@ -810,26 +775,34 @@ function PromptPolicyEditor({
 
   const canCreate = prompt.trim().length > 0;
 
-  // Stable guardrail snapshot for eval query keys.
+  // Stable guardrail snapshot for eval query keys. The replay uses the
+  // prompt_policy category's effective detection scope (the override when
+  // set, the recommendation otherwise) so eval verdicts match scan behavior.
+  const categoriesQuery = useRiskCategories();
+  const promptPolicyDef = categoriesQuery.data?.categories?.find(
+    (c) => c.key === "prompt_policy",
+  );
+  const effectiveScope = scopeOverrides.get("prompt_policy") ?? {
+    scopeInclude: promptPolicyDef?.recommendedScopeInclude ?? "",
+    scopeExempt: promptPolicyDef?.recommendedScopeExempt ?? "",
+  };
   const guardrail = useMemo<Guardrail>(
     () => ({
       prompt,
       model,
       temperature,
       failOpen,
-      messageTypes: scopeMode === "messageTypes" ? [...messageTypes] : [],
-      scopeInclude: scopeMode === "cel" ? scopeInclude : "",
-      scopeExempt,
+      messageTypes: [],
+      scopeInclude: effectiveScope.scopeInclude,
+      scopeExempt: effectiveScope.scopeExempt,
     }),
     [
       prompt,
       model,
       temperature,
       failOpen,
-      scopeMode,
-      messageTypes,
-      scopeInclude,
-      scopeExempt,
+      effectiveScope.scopeInclude,
+      effectiveScope.scopeExempt,
     ],
   );
 
@@ -873,16 +846,9 @@ function PromptPolicyEditor({
         <ScopeStep
           description="Which messages the judge evaluates. Narrow the scope to reduce noise and cost."
           selectedCategories={promptPolicyCategories}
-          disabledRecommendedScopes={disabledRecommendedScopes}
-          setDisabledRecommendedScopes={setDisabledRecommendedScopes}
-          messageTypes={messageTypes}
-          setMessageTypes={setMessageTypes}
-          scopeMode={scopeMode}
-          setScopeMode={setScopeMode}
-          scopeInclude={scopeInclude}
-          setScopeInclude={setScopeInclude}
-          scopeExempt={scopeExempt}
-          setScopeExempt={setScopeExempt}
+          scopeOverrides={scopeOverrides}
+          setScopeOverrides={setScopeOverrides}
+          legacyPolicy={policy}
         />
       )}
 
@@ -916,10 +882,7 @@ function PromptPolicyEditor({
           model={model}
           temperature={temperature}
           failOpen={failOpen}
-          scopeMode={scopeMode}
-          messageTypes={messageTypes}
-          scopeInclude={scopeInclude}
-          scopeExempt={scopeExempt}
+          customizedScopeCount={scopeOverrides.size}
           action={action}
           audienceType={audienceType}
           audiencePrincipalCount={audiencePrincipalUrns.size}
@@ -1082,136 +1045,71 @@ function JudgeSection({
 function ScopeStep({
   description,
   selectedCategories,
-  disabledRecommendedScopes,
-  setDisabledRecommendedScopes,
-  messageTypes,
-  setMessageTypes,
-  scopeMode,
-  setScopeMode,
-  scopeInclude,
-  setScopeInclude,
-  scopeExempt,
-  setScopeExempt,
+  scopeOverrides,
+  setScopeOverrides,
+  legacyPolicy,
 }: {
   description: string;
   selectedCategories: Set<RuleCategory>;
-  disabledRecommendedScopes: Set<string>;
-  setDisabledRecommendedScopes: (next: Set<string>) => void;
-  messageTypes: Set<PolicyMessageType>;
-  setMessageTypes: (next: Set<PolicyMessageType>) => void;
-  scopeMode: "messageTypes" | "cel";
-  setScopeMode: (m: "messageTypes" | "cel") => void;
-  scopeInclude: string;
-  setScopeInclude: (v: string) => void;
-  scopeExempt: string;
-  setScopeExempt: (v: string) => void;
+  scopeOverrides: Map<string, ScopeOverride>;
+  setScopeOverrides: (next: Map<string, ScopeOverride>) => void;
+  legacyPolicy?: RiskPolicy | null;
 }): JSX.Element {
   return (
     <Card>
       <SectionHeader description={description} />
       <Stack gap={5}>
-        <div className="space-y-3">
-          <div className="border-border inline-flex rounded-md border p-0.5">
-            {(
-              [
-                { key: "messageTypes", label: "Message types" },
-                { key: "cel", label: "CEL expression" },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setScopeMode(opt.key)}
-                className={cn(
-                  "rounded px-3 py-1 text-xs font-medium transition-colors",
-                  scopeMode === opt.key
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <p className="text-muted-foreground text-xs">
-            {scopeMode === "messageTypes"
-              ? "Apply to whole session parts. Switch to a CEL expression to match on tool or content attributes instead."
-              : "Apply only to messages matching the expression below — this replaces the message-type selection."}
-          </p>
-        </div>
-
         <RecommendedScopesPanel
           selectedCategories={selectedCategories}
-          disabledRecommendedScopes={disabledRecommendedScopes}
-          setDisabledRecommendedScopes={setDisabledRecommendedScopes}
+          scopeOverrides={scopeOverrides}
+          setScopeOverrides={setScopeOverrides}
         />
-
-        {scopeMode === "messageTypes" ? (
-          <>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {ALL_POLICY_MESSAGE_TYPES.map((type) => (
-                <ScopeCard
-                  key={type}
-                  type={type}
-                  checked={messageTypes.has(type)}
-                  onToggle={(checked) => {
-                    const updated = new Set(messageTypes);
-                    if (checked) updated.add(type);
-                    else updated.delete(type);
-                    setMessageTypes(updated);
-                  }}
-                />
-              ))}
-            </div>
-            {messageTypes.size === 0 && (
-              <p className="text-destructive text-xs">
-                Select at least one session part.
-              </p>
-            )}
-          </>
-        ) : (
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">
-              Evaluate messages matching
-            </Label>
-            <p className="text-muted-foreground text-xs">
-              The policy evaluates a message only when this expression is true.
-            </p>
-            <CelExpressionField
-              value={scopeInclude}
-              onChange={setScopeInclude}
-              examples={SCOPE_INCLUDE_CEL_EXAMPLES}
-            />
-          </div>
-        )}
-
-        <div className="border-border space-y-4 border-t pt-6">
-          <div>
-            <Label className="text-sm font-medium">Exemptions</Label>
-            <p className="text-muted-foreground text-xs">
-              Skip the whole policy for any message matching this expression —
-              an allowlist, regardless of the scope above.
-            </p>
-          </div>
-          <CelExpressionField
-            value={scopeExempt}
-            onChange={setScopeExempt}
-            examples={SCOPE_EXEMPT_CEL_EXAMPLES}
-          />
-        </div>
+        <LegacyScopeNotice policy={legacyPolicy} />
       </Stack>
     </Card>
   );
 }
 
+// Read-only reminder for policies that still carry a policy-level scope from
+// before category detection scopes became the only scoping surface. The
+// dashboard no longer edits these fields; a migration will fold them into
+// category scopes.
+function LegacyScopeNotice({
+  policy,
+}: {
+  policy?: RiskPolicy | null;
+}): JSX.Element | null {
+  if (!policy) return null;
+  const parts: string[] = [];
+  if ((policy.messageTypes ?? []).length > 0) {
+    parts.push(`message types: ${(policy.messageTypes ?? []).join(", ")}`);
+  }
+  if ((policy.scopeInclude ?? "").trim() !== "") {
+    parts.push(`include: ${(policy.scopeInclude ?? "").trim()}`);
+  }
+  if ((policy.scopeExempt ?? "").trim() !== "") {
+    parts.push(`exempt: ${(policy.scopeExempt ?? "").trim()}`);
+  }
+  if (parts.length === 0) return null;
+  return (
+    <div className="border-border bg-muted/20 rounded-md border px-3 py-2">
+      <Type small muted>
+        A legacy policy-level scope still narrows this policy in addition to the
+        category scopes above ({parts.join("; ")}). It is preserved as-is and
+        will be migrated into category scopes.
+      </Type>
+    </div>
+  );
+}
+
 function RecommendedScopesPanel({
   selectedCategories,
-  disabledRecommendedScopes,
-  setDisabledRecommendedScopes,
+  scopeOverrides,
+  setScopeOverrides,
 }: {
   selectedCategories: Set<RuleCategory>;
-  disabledRecommendedScopes: Set<string>;
-  setDisabledRecommendedScopes: (next: Set<string>) => void;
+  scopeOverrides: Map<string, ScopeOverride>;
+  setScopeOverrides: (next: Map<string, ScopeOverride>) => void;
 }): JSX.Element | null {
   const categoriesQuery = useRiskCategories();
 
@@ -1233,12 +1131,12 @@ function RecommendedScopesPanel({
   }
 
   return (
-    <div className="border-border space-y-3 border-t pt-6">
+    <div className="space-y-3">
       <div className="space-y-1">
-        <Label className="text-sm font-medium">Recommended scopes</Label>
+        <Label className="text-sm font-medium">Detection scopes</Label>
         <p className="text-muted-foreground text-xs">
-          These category-specific refinements compose with your policy scope
-          server-side.
+          Each category scans the highlighted surfaces. Click a surface to
+          customize; a custom scope replaces the recommendation.
         </p>
       </div>
       <div className="space-y-2">
@@ -1246,12 +1144,12 @@ function RecommendedScopesPanel({
           <RecommendedScopeRow
             key={category.key}
             category={category}
-            disabled={disabledRecommendedScopes.has(category.key)}
-            onDisabledChange={(disabled) => {
-              const next = new Set(disabledRecommendedScopes);
-              if (disabled) next.add(category.key);
-              else next.delete(category.key);
-              setDisabledRecommendedScopes(next);
+            override={scopeOverrides.get(category.key)}
+            onOverrideChange={(override) => {
+              const next = new Map(scopeOverrides);
+              if (override === null) next.delete(category.key);
+              else next.set(category.key, override);
+              setScopeOverrides(next);
             }}
           />
         ))}
@@ -1260,70 +1158,243 @@ function RecommendedScopesPanel({
   );
 }
 
+// The four message surfaces a detection scope selects over, in transcript
+// order. Chip editing serializes back to canonical kind expressions.
+const SCOPE_SURFACES = [
+  { kind: "user_message", label: "User" },
+  { kind: "tool_request", label: "Tool requests" },
+  { kind: "tool_response", label: "Tool responses" },
+  { kind: "assistant_message", label: "Assistant" },
+] as const;
+type ScopeSurfaceKind = (typeof SCOPE_SURFACES)[number]["kind"];
+const ALL_SURFACE_KINDS: ScopeSurfaceKind[] = SCOPE_SURFACES.map((s) => s.kind);
+
+// Parses an expression made solely of `kind == "..."` terms ORed together;
+// null for anything else (a real CEL scope the chips cannot represent).
+function kindsFromExpr(expr: string): Set<ScopeSurfaceKind> | null {
+  const trimmed = expr.trim();
+  const out = new Set<ScopeSurfaceKind>();
+  if (trimmed === "") return out;
+  for (const part of trimmed.split("||")) {
+    const match = /^\(?\s*kind\s*==\s*"(\w+)"\s*\)?$/.exec(part.trim());
+    const kind = match?.[1] as ScopeSurfaceKind | undefined;
+    if (!kind || !ALL_SURFACE_KINDS.includes(kind)) return null;
+    out.add(kind);
+  }
+  return out;
+}
+
+// The surfaces a scope admits, or null when it is not a pure surface
+// expression. An empty include means every surface.
+function surfacesFromScope(
+  include: string,
+  exempt: string,
+): Set<ScopeSurfaceKind> | null {
+  const included = kindsFromExpr(include);
+  const exempted = kindsFromExpr(exempt);
+  if (included === null || exempted === null) return null;
+  const base =
+    included.size === 0
+      ? new Set<ScopeSurfaceKind>(ALL_SURFACE_KINDS)
+      : included;
+  return new Set([...base].filter((kind) => !exempted.has(kind)));
+}
+
+// Canonical scope for a surface set: every surface = unrestricted, one
+// missing = exempt it, otherwise include the chosen surfaces.
+function scopeFromSurfaces(surfaces: Set<ScopeSurfaceKind>): ScopeOverride {
+  if (surfaces.size >= ALL_SURFACE_KINDS.length) {
+    return { scopeInclude: "", scopeExempt: "" };
+  }
+  const missing = ALL_SURFACE_KINDS.filter((kind) => !surfaces.has(kind));
+  if (missing.length === 1) {
+    return { scopeInclude: "", scopeExempt: `kind == "${missing[0]}"` };
+  }
+  return {
+    scopeInclude: ALL_SURFACE_KINDS.filter((kind) => surfaces.has(kind))
+      .map((kind) => `kind == "${kind}"`)
+      .join(" || "),
+    scopeExempt: "",
+  };
+}
+
 function RecommendedScopeRow({
   category,
-  disabled,
-  onDisabledChange,
+  override,
+  onOverrideChange,
 }: {
   category: RiskCategoryDefinition;
-  disabled: boolean;
-  onDisabledChange: (disabled: boolean) => void;
+  override: ScopeOverride | undefined;
+  onOverrideChange: (override: ScopeOverride | null) => void;
 }): JSX.Element {
+  const [celOpen, setCelOpen] = useState(false);
+
   if (!category.recommendedScopeApplicable) {
     return (
-      <div className="border-border bg-muted/20 rounded-md border px-3 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <Type small className="font-medium">
-              {category.label}
-            </Type>
-            <Type small muted>
-              {category.recommendedScopeRationale}
-            </Type>
-          </div>
-          <Badge variant="neutral">N/A — session-scoped</Badge>
+      <div className="border-border bg-muted/20 flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <Type small className="font-medium">
+            {category.label}
+          </Type>
+          <ScopeRationaleHint rationale={category.recommendedScopeRationale} />
         </div>
+        <Badge variant="neutral">Session-scoped</Badge>
       </div>
     );
   }
 
+  const activeScope = override ?? {
+    scopeInclude: category.recommendedScopeInclude,
+    scopeExempt: category.recommendedScopeExempt,
+  };
+  const activeSurfaces = surfacesFromScope(
+    activeScope.scopeInclude,
+    activeScope.scopeExempt,
+  );
+  const celMode = celOpen || activeSurfaces === null;
+
+  const toggleSurface = (kind: ScopeSurfaceKind) => {
+    if (!activeSurfaces) return;
+    const next = new Set(activeSurfaces);
+    if (next.has(kind)) {
+      if (next.size === 1) return;
+      next.delete(kind);
+    } else {
+      next.add(kind);
+    }
+    onOverrideChange(scopeFromSurfaces(next));
+  };
+
   return (
-    <div className="border-border rounded-md border px-3 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-2">
-          <div className="space-y-1">
-            <Type small className="font-medium">
-              {category.label}
-            </Type>
-            <Type small muted>
-              {category.recommendedScopeRationale}
-            </Type>
-          </div>
+    <div className="border-border rounded-md border px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Type small className="font-medium">
+            {category.label}
+          </Type>
+          <ScopeRationaleHint rationale={category.recommendedScopeRationale} />
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge variant="neutral">
+            {override === undefined ? "Recommended" : "Custom"}
+          </Badge>
+          {override !== undefined && (
+            <button
+              type="button"
+              onClick={() => {
+                setCelOpen(false);
+                onOverrideChange(null);
+              }}
+              className="text-muted-foreground hover:text-foreground text-xs underline"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!celMode && activeSurfaces && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {SCOPE_SURFACES.map(({ kind, label }) => {
+            const active = activeSurfaces.has(kind);
+            return (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => toggleSurface(kind)}
+                aria-pressed={active}
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                  active
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-border text-muted-foreground hover:text-foreground line-through",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => {
+              if (override === undefined) {
+                onOverrideChange({ ...activeScope });
+              }
+              setCelOpen(true);
+            }}
+            className="text-muted-foreground hover:text-foreground ml-1 text-xs underline"
+          >
+            Use CEL
+          </button>
+        </div>
+      )}
+
+      {celMode && override === undefined && (
+        <div className="mt-2 space-y-2">
           <RecommendedScopeCode
             include={category.recommendedScopeInclude}
             exempt={category.recommendedScopeExempt}
           />
+          <button
+            type="button"
+            onClick={() => {
+              onOverrideChange({ ...activeScope });
+              setCelOpen(true);
+            }}
+            className="text-muted-foreground hover:text-foreground text-xs underline"
+          >
+            Customize
+          </button>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+      )}
+
+      {celMode && override !== undefined && (
+        <div className="mt-3 space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs font-medium">
+              Detect on messages matching
+            </Label>
+            <CelExpressionField
+              value={override.scopeInclude}
+              onChange={(value) =>
+                onOverrideChange({ ...override, scopeInclude: value })
+              }
+              examples={SCOPE_INCLUDE_CEL_EXAMPLES}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs font-medium">
+              Exempt messages matching
+            </Label>
+            <CelExpressionField
+              value={override.scopeExempt}
+              onChange={(value) =>
+                onOverrideChange({ ...override, scopeExempt: value })
+              }
+              examples={SCOPE_EXEMPT_CEL_EXAMPLES}
+            />
+          </div>
           <Type small muted>
-            Apply recommended scope
-          </Type>
-          <Switch
-            checked={!disabled}
-            onCheckedChange={(checked) => onDisabledChange(!checked)}
-          />
-        </div>
-      </div>
-      {disabled && (
-        <div className="border-warning/40 bg-warning/10 mt-3 flex items-start gap-2 rounded-md border px-3 py-2">
-          <TriangleAlert className="text-warning mt-0.5 size-4 shrink-0" />
-          <Type small>
-            Disabling re-widens detection to surfaces this recommendation
-            excludes: {category.recommendedScopeRationale}
+            Empty include and exempt scans every message surface. This scope
+            replaces the recommendation; future recommendation updates will not
+            apply.
           </Type>
         </div>
       )}
     </div>
+  );
+}
+
+function ScopeRationaleHint({
+  rationale,
+}: {
+  rationale: string;
+}): JSX.Element | null {
+  if (rationale.trim() === "") return null;
+  return (
+    <SimpleTooltip tooltip={rationale}>
+      <Info className="text-muted-foreground size-3.5 shrink-0" />
+    </SimpleTooltip>
   );
 }
 
@@ -1373,13 +1444,60 @@ function hasDisplayableRecommendedScope(
   );
 }
 
-function disabledRecommendedScopesPayload(
-  selectedCategories: Set<RuleCategory>,
-  disabledRecommendedScopes: Set<string>,
-): string[] {
-  return [...selectedCategories].filter((category) =>
-    disabledRecommendedScopes.has(category),
+// A category with an entry here has its recommendation replaced by the
+// user-authored scope; both fields empty scans every message surface.
+type ScopeOverride = { scopeInclude: string; scopeExempt: string };
+
+function scopeOverridesFromPolicy(
+  scopes: RiskDetectionScope[] | undefined,
+): Map<string, ScopeOverride> {
+  return new Map(
+    (scopes ?? []).map((s) => [
+      s.category,
+      { scopeInclude: s.scopeInclude ?? "", scopeExempt: s.scopeExempt ?? "" },
+    ]),
   );
+}
+
+function sameScopeOverrides(
+  a: Map<string, ScopeOverride>,
+  b: Map<string, ScopeOverride>,
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const [category, override] of a) {
+    const other = b.get(category);
+    if (
+      !other ||
+      other.scopeInclude !== override.scopeInclude ||
+      other.scopeExempt !== override.scopeExempt
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function scopeSummaryText(customizedScopeCount: number): string {
+  return customizedScopeCount > 0
+    ? `Recommended scopes (${customizedScopeCount} customized)`
+    : "Recommended scopes";
+}
+
+function detectionScopesPayload(
+  selectedCategories: Set<RuleCategory>,
+  overrides: Map<string, ScopeOverride>,
+): RiskDetectionScope[] {
+  return [...overrides]
+    .filter(([category]) => selectedCategories.has(category as RuleCategory))
+    .map(([category, override]) => ({
+      category,
+      ...(override.scopeInclude.trim()
+        ? { scopeInclude: override.scopeInclude.trim() }
+        : {}),
+      ...(override.scopeExempt.trim()
+        ? { scopeExempt: override.scopeExempt.trim() }
+        : {}),
+    }));
 }
 
 // ── Action section (flag vs block) ───────────────────────────────────────────
@@ -1789,10 +1907,7 @@ function PromptReview({
   model,
   temperature,
   failOpen,
-  scopeMode,
-  messageTypes,
-  scopeInclude,
-  scopeExempt,
+  customizedScopeCount,
   action,
   audienceType,
   audiencePrincipalCount,
@@ -1804,10 +1919,7 @@ function PromptReview({
   model: string;
   temperature: number;
   failOpen: boolean;
-  scopeMode: "messageTypes" | "cel";
-  messageTypes: Set<PolicyMessageType>;
-  scopeInclude: string;
-  scopeExempt: string;
+  customizedScopeCount: number;
   action: PolicyAction;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
@@ -1815,12 +1927,7 @@ function PromptReview({
   activeVerdict: EvalVerdict | null;
   onVerdictSelect: (verdict: EvalVerdict) => void;
 }): JSX.Element {
-  const scopeText =
-    scopeMode === "cel"
-      ? scopeInclude.trim() || "All messages matching a CEL expression"
-      : [...messageTypes]
-          .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
-          .join(", ") || "No message types selected";
+  const scopeText = scopeSummaryText(customizedScopeCount);
   const modelLabel =
     JUDGE_MODELS.find((m) => m.value === model)?.label ?? model;
 
@@ -1845,13 +1952,6 @@ function PromptReview({
               {scopeText}
             </Type>
           </SummaryRow>
-          {scopeExempt.trim() ? (
-            <SummaryRow label="Exemptions">
-              <Type small mono className="text-right break-all">
-                {scopeExempt.trim()}
-              </Type>
-            </SummaryRow>
-          ) : null}
           <SummaryRow label="Action">
             <Badge variant={action === "flag" ? "neutral" : "warning"}>
               {action === "block"
@@ -2952,13 +3052,8 @@ function StandardPolicyEditor({
       name: policy.name,
       action: (policy.action as PolicyAction) ?? "flag",
       userMessage: policy.userMessage ?? "",
-      scopeInclude: policy.scopeInclude ?? "",
-      scopeExempt: policy.scopeExempt ?? "",
-      messageTypes: policyMessageTypesForForm(policy.messageTypes),
       disabledRules: new Set(policy.disabledRules ?? []),
-      disabledRecommendedScopes: new Set(
-        policy.disabledRecommendedScopes ?? [],
-      ),
+      scopeOverrides: scopeOverridesFromPolicy(policy.detectionScopes),
       customRuleIds: new Set(policy.customRuleIds ?? []),
       categories: cats,
       approvedDomains: (policy.approvedEmailDomains ?? []).join(", "),
@@ -2981,20 +3076,12 @@ function StandardPolicyEditor({
   const [disabledRules, setDisabledRules] = useState<Set<string>>(
     () => new Set(policy?.disabledRules ?? []),
   );
-  const [disabledRecommendedScopes, setDisabledRecommendedScopes] = useState<
-    Set<string>
-  >(() => new Set(policy?.disabledRecommendedScopes ?? []));
+  const [scopeOverrides, setScopeOverrides] = useState<
+    Map<string, ScopeOverride>
+  >(() => scopeOverridesFromPolicy(policy?.detectionScopes));
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(() => new Set(policy?.customRuleIds ?? []));
-  const [scopeInclude, setScopeInclude] = useState(policy?.scopeInclude ?? "");
-  const [scopeExempt, setScopeExempt] = useState(policy?.scopeExempt ?? "");
-  const [scopeMode, setScopeMode] = useState<"messageTypes" | "cel">(
-    (policy?.scopeInclude ?? "").trim() !== "" ? "cel" : "messageTypes",
-  );
-  const [selectedMessageTypes, setSelectedMessageTypes] = useState<
-    Set<PolicyMessageType>
-  >(() => policyMessageTypesForForm(policy?.messageTypes));
   const [action, setAction] = useState<PolicyAction>(
     (policy?.action as PolicyAction) ?? "flag",
   );
@@ -3019,10 +3106,6 @@ function StandardPolicyEditor({
   const [detectionExpanded, setDetectionExpanded] = useState(true);
 
   // ── Derived state ──
-  const includeCelStatus = useCelStatus(
-    scopeMode === "cel" ? scopeInclude : "",
-  );
-  const exemptCelStatus = useCelStatus(scopeExempt);
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
@@ -3033,34 +3116,18 @@ function StandardPolicyEditor({
         CATEGORY_LEVEL_DETECTORS.has(c) ||
         DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
     );
-  const scopeMissing =
-    scopeMode === "messageTypes"
-      ? selectedMessageTypes.size === 0
-      : scopeInclude.trim() === "";
-  const applicationInvalid =
-    (scopeMode === "cel" && includeCelStatus.kind === "error") ||
-    exemptCelStatus.kind === "error";
   const audienceMissing =
     audienceType === "targeted" && audiencePrincipalUrns.size === 0;
-  const saveBlocked =
-    !hasEnabledDetector ||
-    scopeMissing ||
-    applicationInvalid ||
-    audienceMissing;
+  const saveBlocked = !hasEnabledDetector || audienceMissing;
 
   const dirty =
     !!orig &&
     (name !== orig.name ||
       action !== orig.action ||
       userMessage !== orig.userMessage ||
-      scopeExempt !== orig.scopeExempt ||
-      (scopeMode === "cel"
-        ? scopeInclude !== orig.scopeInclude
-        : orig.scopeInclude !== "") ||
       audienceType !== orig.audienceType ||
-      !sameSet(selectedMessageTypes, orig.messageTypes) ||
       !sameSet(disabledRules, orig.disabledRules) ||
-      !sameSet(disabledRecommendedScopes, orig.disabledRecommendedScopes) ||
+      !sameScopeOverrides(scopeOverrides, orig.scopeOverrides) ||
       !sameSet(selectedCustomRuleIds, orig.customRuleIds) ||
       !sameSet(selectedCategories, orig.categories) ||
       approvedDomains !== orig.approvedDomains ||
@@ -3114,12 +3181,6 @@ function StandardPolicyEditor({
       disabledRules,
       pinnedHiddenRuleIds(policy?.presidioEntities),
     );
-    const messageTypes =
-      scopeMode === "cel"
-        ? []
-        : policyMessageTypesForPayload(selectedMessageTypes);
-    const includeCel = scopeMode === "cel" ? scopeInclude.trim() : "";
-    const exemptCel = scopeExempt.trim();
     // Flag-only sources (destructive_tool, cli_destructive, account_identity)
     // are rejected by the server with action=block, so force flag as a safety
     // net in case the form state drifted.
@@ -3136,9 +3197,9 @@ function StandardPolicyEditor({
     // preserves whatever is stored.
     const identityActive = selectedCategories.has("account_identity");
     const approvedEmailDomains = parseApprovedEmailDomains(approvedDomains);
-    const disabledRecommendations = disabledRecommendedScopesPayload(
+    const detectionScopes = detectionScopesPayload(
       selectedCategories,
-      disabledRecommendedScopes,
+      scopeOverrides,
     );
 
     if (policy) {
@@ -3151,12 +3212,9 @@ function StandardPolicyEditor({
             sources,
             presidioEntities,
             promptInjectionRules,
-            disabledRecommendedScopes: disabledRecommendations,
+            detectionScopes,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
-            messageTypes,
-            scopeInclude: includeCel,
-            scopeExempt: exemptCel,
             action: resolvedAction,
             audienceType,
             audiencePrincipalUrns: principals,
@@ -3175,14 +3233,9 @@ function StandardPolicyEditor({
             sources,
             presidioEntities,
             promptInjectionRules,
-            ...(disabledRecommendations.length > 0
-              ? { disabledRecommendedScopes: disabledRecommendations }
-              : {}),
+            ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
-            messageTypes,
-            ...(includeCel ? { scopeInclude: includeCel } : {}),
-            ...(exemptCel ? { scopeExempt: exemptCel } : {}),
             action: resolvedAction,
             audienceType,
             audiencePrincipalUrns: principals,
@@ -3278,16 +3331,9 @@ function StandardPolicyEditor({
           <ScopeStep
             description="Apply everywhere, or narrow the scope to reduce noise and cost."
             selectedCategories={selectedCategories}
-            disabledRecommendedScopes={disabledRecommendedScopes}
-            setDisabledRecommendedScopes={setDisabledRecommendedScopes}
-            messageTypes={selectedMessageTypes}
-            setMessageTypes={setSelectedMessageTypes}
-            scopeMode={scopeMode}
-            setScopeMode={setScopeMode}
-            scopeInclude={scopeInclude}
-            setScopeInclude={setScopeInclude}
-            scopeExempt={scopeExempt}
-            setScopeExempt={setScopeExempt}
+            scopeOverrides={scopeOverrides}
+            setScopeOverrides={setScopeOverrides}
+            legacyPolicy={policy}
           />
         )}
 
@@ -3310,10 +3356,7 @@ function StandardPolicyEditor({
             name={name}
             categories={selectedCategories}
             customRuleCount={selectedCustomRuleIds.size}
-            scopeMode={scopeMode}
-            selectedMessageTypes={selectedMessageTypes}
-            scopeInclude={scopeInclude}
-            scopeExempt={scopeExempt}
+            customizedScopeCount={scopeOverrides.size}
             action={action}
             audienceType={audienceType}
             audiencePrincipalCount={audiencePrincipalUrns.size}
@@ -3344,10 +3387,7 @@ function StandardReview({
   name,
   categories,
   customRuleCount,
-  scopeMode,
-  selectedMessageTypes,
-  scopeInclude,
-  scopeExempt,
+  customizedScopeCount,
   action,
   audienceType,
   audiencePrincipalCount,
@@ -3355,10 +3395,7 @@ function StandardReview({
   name: string;
   categories: Set<RuleCategory>;
   customRuleCount: number;
-  scopeMode: "messageTypes" | "cel";
-  selectedMessageTypes: Set<PolicyMessageType>;
-  scopeInclude: string;
-  scopeExempt: string;
+  customizedScopeCount: number;
   action: PolicyAction;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
@@ -3372,12 +3409,7 @@ function StandardReview({
     );
   }
 
-  const scopeText =
-    scopeMode === "cel"
-      ? scopeInclude.trim() || "All messages matching a CEL expression"
-      : [...selectedMessageTypes]
-          .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
-          .join(", ") || "No message types selected";
+  const scopeText = scopeSummaryText(customizedScopeCount);
 
   return (
     <Card>
@@ -3406,13 +3438,6 @@ function StandardReview({
             {scopeText}
           </Type>
         </SummaryRow>
-        {scopeExempt.trim() ? (
-          <SummaryRow label="Exemptions">
-            <Type small mono className="text-right break-all">
-              {scopeExempt.trim()}
-            </Type>
-          </SummaryRow>
-        ) : null}
         <SummaryRow label="Action">
           <Badge variant={action === "flag" ? "neutral" : "warning"}>
             {action === "block" ? "Block" : action === "warn" ? "Warn" : "Flag"}

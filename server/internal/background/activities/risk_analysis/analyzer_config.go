@@ -9,10 +9,10 @@ import (
 // risk_policies.analyzer_config (JSONB), namespaced by analyzer. New per-scanner
 // options live here rather than as a dedicated column each.
 type AnalyzerConfig struct {
-	Presidio          *PresidioConfig          `json:"presidio,omitempty"`
-	BuiltinPresets    *BuiltinPresetsConfig    `json:"builtin_presets,omitempty"`
-	AccountIdentity   *AccountIdentityConfig   `json:"account_identity,omitempty"`
-	RecommendedScopes *RecommendedScopesConfig `json:"recommended_scopes,omitempty"`
+	Presidio        *PresidioConfig        `json:"presidio,omitempty"`
+	BuiltinPresets  *BuiltinPresetsConfig  `json:"builtin_presets,omitempty"`
+	AccountIdentity *AccountIdentityConfig `json:"account_identity,omitempty"`
+	DetectionScopes []DetectionScopeConfig `json:"detection_scopes,omitempty"`
 }
 
 // PresidioConfig holds presidio-scanner options.
@@ -39,10 +39,13 @@ type AccountIdentityConfig struct {
 	ApprovedEmailDomains []string `json:"approved_email_domains,omitempty"`
 }
 
-// RecommendedScopesConfig holds per-policy opt-outs from centrally recommended
-// per-category detection scopes.
-type RecommendedScopesConfig struct {
-	DisabledCategories []string `json:"disabled_categories,omitempty"`
+// DetectionScopeConfig specifies one category's detection scope. A specified
+// category replaces its registry recommendation; both fields empty means the
+// category scans every message surface.
+type DetectionScopeConfig struct {
+	Category     string `json:"category"`
+	ScopeInclude string `json:"scope_include,omitempty"`
+	ScopeExempt  string `json:"scope_exempt,omitempty"`
 }
 
 // ParseAnalyzerConfig decodes the JSONB blob, returning a zero config for
@@ -98,14 +101,10 @@ func ApprovedEmailDomainsFromConfig(b []byte) []string {
 	return nil
 }
 
-// DisabledRecommendedScopesFromConfig returns categories whose centrally
-// recommended detection scopes are disabled for this policy.
-func DisabledRecommendedScopesFromConfig(b []byte) []string {
-	c := ParseAnalyzerConfig(b)
-	if c.RecommendedScopes != nil {
-		return c.RecommendedScopes.DisabledCategories
-	}
-	return nil
+// DetectionScopesFromConfig returns the policy's specified per-category
+// detection scopes, or nil when none are specified.
+func DetectionScopesFromConfig(b []byte) []DetectionScopeConfig {
+	return ParseAnalyzerConfig(b).DetectionScopes
 }
 
 // WithApprovedEmailDomains returns analyzer_config JSON with
@@ -129,19 +128,14 @@ func WithApprovedEmailDomains(base []byte, v []string) ([]byte, error) {
 	return out, nil
 }
 
-// WithDisabledRecommendedScopes returns analyzer_config JSON with
-// recommended_scopes.disabled_categories set to v, or cleared when v is empty.
-// Only fields known to AnalyzerConfig are round-tripped; any unrecognized keys
-// in base are dropped.
-func WithDisabledRecommendedScopes(base []byte, v []string) ([]byte, error) {
+// WithDetectionScopes returns analyzer_config JSON with detection_scopes set
+// to v, or cleared when v is empty. Only fields known to AnalyzerConfig are
+// round-tripped; any unrecognized keys in base are dropped.
+func WithDetectionScopes(base []byte, v []DetectionScopeConfig) ([]byte, error) {
 	c := ParseAnalyzerConfig(base)
-	switch {
-	case len(v) > 0:
-		c.RecommendedScopes = &RecommendedScopesConfig{DisabledCategories: v}
-	case c.RecommendedScopes != nil:
-		// DisabledCategories is recommended_scopes' only field today; clearing
-		// it leaves the section empty, so drop it entirely.
-		c.RecommendedScopes = nil
+	c.DetectionScopes = v
+	if len(v) == 0 {
+		c.DetectionScopes = nil
 	}
 	out, err := json.Marshal(c)
 	if err != nil {

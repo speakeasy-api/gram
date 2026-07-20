@@ -3,6 +3,7 @@ package risk_analysis
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
@@ -65,14 +66,45 @@ func (r RecommendedSet) scope(cat categories.Category) (CompiledScope, bool) {
 	return scope, ok
 }
 
-// CategoryScopes is the per-batch composition: policy scope ∩ (recommended
-// scopes − policy opt-outs). Nil-safe zero value = policy scope only.
+// CompileDetectionScopes compiles a policy's specified per-category detection
+// scopes. A specified category replaces its registry recommendation; a scope
+// with no predicates (both CEL fields empty) is inert and admits every
+// message surface.
+func CompileDetectionScopes(eng *celenv.Engine, specs []DetectionScopeConfig) (map[categories.Category]CompiledScope, error) {
+	if len(specs) == 0 {
+		return nil, nil
+	}
+	out := make(map[categories.Category]CompiledScope, len(specs))
+	for _, spec := range specs {
+		scope, err := CompileScope(eng, spec.ScopeInclude, spec.ScopeExempt)
+		if err != nil {
+			return nil, fmt.Errorf("compile detection scope %s: %w", spec.Category, err)
+		}
+		out[categories.Category(spec.Category)] = scope
+	}
+	return out, nil
+}
+
+// effectiveScope resolves a category's detection scope: the policy-specified
+// scope wins over the registry recommendation.
+func effectiveScope(rec RecommendedSet, specified map[categories.Category]CompiledScope, cat categories.Category) (CompiledScope, bool) {
+	if scope, ok := specified[cat]; ok {
+		return scope, true
+	}
+	return rec.scope(cat)
+}
+
+// CategoryScopes is the per-batch composition of per-category detection
+// scopes: policy-specified scopes merged over registry recommendations, with
+// the specified scope winning per category. The legacy policy scope still
+// intersects while `scope_include`/`scope_exempt` remain on policy rows.
+// Nil-safe zero value = policy scope only.
 type CategoryScopes struct {
-	policy   CompiledScope
-	rec      RecommendedSet
-	disabled map[categories.Category]bool
-	enabled  bool
-	metrics  *riskMetrics
+	policy    CompiledScope
+	rec       RecommendedSet
+	specified map[categories.Category]CompiledScope
+	enabled   bool
+	metrics   *riskMetrics
 }
 
 // CategoryScopeMasks contains per-message policy and category scope exclusions.
@@ -81,41 +113,34 @@ type CategoryScopeMasks struct {
 	categoryOut map[categories.Category][]bool
 }
 
-func NewCategoryScopes(policy CompiledScope, rec RecommendedSet, disabled []string, enabled bool, metrics *riskMetrics) CategoryScopes {
-	disabledSet := make(map[categories.Category]bool, len(disabled))
-	for _, cat := range disabled {
-		disabledSet[categories.Category(cat)] = true
-	}
+func NewCategoryScopes(policy CompiledScope, rec RecommendedSet, specified map[categories.Category]CompiledScope, enabled bool, metrics *riskMetrics) CategoryScopes {
 	return CategoryScopes{
-		policy:   policy,
-		rec:      rec,
-		disabled: disabledSet,
-		enabled:  enabled,
-		metrics:  metrics,
+		policy:    policy,
+		rec:       rec,
+		specified: specified,
+		enabled:   enabled,
+		metrics:   metrics,
 	}
 }
 
 // CategoryScope is the single-message composition used by realtime
-// enforcement: policy scope ∩ (recommended scopes − policy opt-outs).
+// enforcement: policy-specified detection scopes merged over registry
+// recommendations, specified winning per category.
 type CategoryScope struct {
-	policy   CompiledScope
-	rec      RecommendedSet
-	disabled map[categories.Category]bool
-	enabled  bool
+	policy    CompiledScope
+	rec       RecommendedSet
+	specified map[categories.Category]CompiledScope
+	enabled   bool
 }
 
 // NewCategoryScope builds a single-message category scope. Its zero value is
 // policy scope only.
-func NewCategoryScope(policy CompiledScope, rec RecommendedSet, disabled []string, enabled bool) CategoryScope {
-	disabledSet := make(map[categories.Category]bool, len(disabled))
-	for _, cat := range disabled {
-		disabledSet[categories.Category(cat)] = true
-	}
+func NewCategoryScope(policy CompiledScope, rec RecommendedSet, specified map[categories.Category]CompiledScope, enabled bool) CategoryScope {
 	return CategoryScope{
-		policy:   policy,
-		rec:      rec,
-		disabled: disabledSet,
-		enabled:  enabled,
+		policy:    policy,
+		rec:       rec,
+		specified: specified,
+		enabled:   enabled,
 	}
 }
 
@@ -124,10 +149,10 @@ func (s CategoryScope) InScope(view MessageView, cat categories.Category) bool {
 	if !s.policyIncludes(view) {
 		return false
 	}
-	if !s.enabled || s.disabled[cat] {
+	if !s.enabled {
 		return true
 	}
-	scope, ok := s.rec.scope(cat)
+	scope, ok := effectiveScope(s.rec, s.specified, cat)
 	if !ok {
 		return true
 	}
@@ -171,25 +196,29 @@ func (s CategoryScope) policyIncludes(view MessageView) bool {
 	return s.policy.Includes(view) && !s.policy.Exempts(view)
 }
 
-// Masks computes the policy-scope mask and category-specific recommended-scope
-// masks for the batch. Identical recommended CEL programs are evaluated once
-// per message and shared by every category using that program.
+// Masks computes the policy-scope mask and per-category detection scope masks
+// for the batch. Identical CEL programs are evaluated once per message and
+// shared by every category using that program.
 func (s CategoryScopes) Masks(_ context.Context, messages []batchMessage) CategoryScopeMasks {
 	masks := CategoryScopeMasks{
 		policyOut:   s.policyExclusions(messages),
 		categoryOut: map[categories.Category][]bool{},
 	}
-	if !s.enabled || len(s.rec.scopes) == 0 {
+	if !s.enabled || (len(s.rec.scopes) == 0 && len(s.specified) == 0) {
 		return masks
 	}
+
+	effective := make(map[categories.Category]CompiledScope, len(s.rec.scopes)+len(s.specified))
+	maps.Copy(effective, s.rec.scopes)
+	maps.Copy(effective, s.specified)
 
 	type evalKey struct {
 		include string
 		exempt  string
 	}
 	evaluated := map[evalKey][]bool{}
-	for cat, scope := range s.rec.scopes {
-		if s.disabled[cat] {
+	for cat, scope := range effective {
+		if !scope.Active() {
 			continue
 		}
 		key := evalKey{include: scope.includeCEL, exempt: scope.exemptCEL}

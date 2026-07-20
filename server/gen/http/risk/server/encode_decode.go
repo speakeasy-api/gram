@@ -9808,6 +9808,22 @@ func EncodeDeleteRiskEvalReviewError(encoder func(context.Context, http.Response
 	}
 }
 
+// unmarshalRiskDetectionScopeRequestBodyToTypesRiskDetectionScope builds a
+// value of type *types.RiskDetectionScope from a value of type
+// *RiskDetectionScopeRequestBody.
+func unmarshalRiskDetectionScopeRequestBodyToTypesRiskDetectionScope(v *RiskDetectionScopeRequestBody) *types.RiskDetectionScope {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskDetectionScope{
+		Category:     *v.Category,
+		ScopeInclude: v.ScopeInclude,
+		ScopeExempt:  v.ScopeExempt,
+	}
+
+	return res
+}
+
 // unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds
 // a value of type *types.RiskPolicyModelConfig from a value of type
 // *RiskPolicyModelConfigRequestBody.
@@ -9819,6 +9835,22 @@ func unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *Ri
 		Model:       v.Model,
 		Temperature: v.Temperature,
 		FailOpen:    v.FailOpen,
+	}
+
+	return res
+}
+
+// marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody builds a
+// value of type *RiskDetectionScopeResponseBody from a value of type
+// *types.RiskDetectionScope.
+func marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody(v *types.RiskDetectionScope) *RiskDetectionScopeResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskDetectionScopeResponseBody{
+		Category:     v.Category,
+		ScopeInclude: v.ScopeInclude,
+		ScopeExempt:  v.ScopeExempt,
 	}
 
 	return res
@@ -9889,10 +9921,14 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 			res.ApprovedEmailDomains[i] = val
 		}
 	}
-	if v.DisabledRecommendedScopes != nil {
-		res.DisabledRecommendedScopes = make([]string, len(v.DisabledRecommendedScopes))
-		for i, val := range v.DisabledRecommendedScopes {
-			res.DisabledRecommendedScopes[i] = val
+	if v.DetectionScopes != nil {
+		res.DetectionScopes = make([]*RiskDetectionScopeResponseBody, len(v.DetectionScopes))
+		for i, val := range v.DetectionScopes {
+			if val == nil {
+				res.DetectionScopes[i] = nil
+				continue
+			}
+			res.DetectionScopes[i] = marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody(val)
 		}
 	}
 	if v.DisabledRules != nil {

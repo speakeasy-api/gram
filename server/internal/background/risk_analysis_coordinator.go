@@ -105,8 +105,8 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					// Placeholder: overwritten by AnalyzeBatch.Do from the refetched
 					// policy's AnalyzerConfig (defaults to true). The zero value here
 					// does NOT disable the library; it is required only by exhaustruct.
-					BuiltinPresetsEnabled:     false,
-					DisabledRecommendedScopes: nil,
+					BuiltinPresetsEnabled: false,
+					DetectionScopes:       nil,
 				})
 				futures = append(futures, f)
 			}

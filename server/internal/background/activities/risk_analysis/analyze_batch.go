@@ -135,10 +135,10 @@ type AnalyzeBatchArgs struct {
 	// false positives. Do derives it from the refetched policy's analyzer_config
 	// (defaulting ON), so it is not a caller input.
 	BuiltinPresetsEnabled bool
-	// DisabledRecommendedScopes is the list of categories whose centrally
-	// recommended scopes are disabled for this policy. Do derives it from the
+	// DetectionScopes are the policy's specified per-category detection scopes,
+	// each replacing its registry recommendation. Do derives it from the
 	// refetched policy's analyzer_config, so it is not a caller input.
-	DisabledRecommendedScopes []string
+	DetectionScopes []DetectionScopeConfig
 }
 
 type AnalyzeBatchResult struct {
@@ -193,7 +193,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	args.PresidioScoreThreshold = PresidioScoreThresholdFromConfig(policy.AnalyzerConfig)
 	args.ApprovedEmailDomains = ApprovedEmailDomainsFromConfig(policy.AnalyzerConfig)
 	args.BuiltinPresetsEnabled = BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig)
-	args.DisabledRecommendedScopes = DisabledRecommendedScopesFromConfig(policy.AnalyzerConfig)
+	args.DetectionScopes = DetectionScopesFromConfig(policy.AnalyzerConfig)
 
 	rows, err := a.fetchContent(ctx, args)
 	if err != nil {
@@ -239,8 +239,12 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		if err != nil {
 			return nil, fmt.Errorf("compile policy scope: %w", err)
 		}
+		specified, err := CompileDetectionScopes(a.celEng, args.DetectionScopes)
+		if err != nil {
+			return nil, fmt.Errorf("compile detection scopes: %w", err)
+		}
 		recommendedEnabled := a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagRiskRecommendedScopes)
-		categoryScopes := NewCategoryScopes(scope, a.recommended, args.DisabledRecommendedScopes, recommendedEnabled, a.metrics)
+		categoryScopes := NewCategoryScopes(scope, a.recommended, specified, recommendedEnabled, a.metrics)
 		masks := categoryScopes.Masks(ctx, messages)
 
 		switch policy.PolicyType {

@@ -23,6 +23,29 @@ type batchMessage struct {
 	ToolCalls    []recordedToolCall
 }
 
+// scanSurface is the text content scanners (gitleaks, presidio) evaluate:
+// message content plus, for tool requests, each call's arguments. Realtime
+// scans the same argument text; composing it here keeps args-only secrets and
+// PII visible to batch. Positions in an appended region index into this
+// composed surface, mirroring realtime's args-as-text anchoring.
+func (m batchMessage) scanSurface() string {
+	if m.Type != message.ToolRequest || len(m.ToolCalls) == 0 {
+		return m.Content
+	}
+	var b strings.Builder
+	b.WriteString(m.Content)
+	for _, call := range m.ToolCalls {
+		if call.Function.Arguments == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(call.Function.Arguments)
+	}
+	return b.String()
+}
+
 type recordedToolCall struct {
 	ID       string `json:"id"`
 	Function struct {
