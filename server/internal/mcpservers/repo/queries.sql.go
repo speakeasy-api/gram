@@ -549,6 +549,24 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 	return items, nil
 }
 
+const lockMCPServerToolMetadataWrite = `-- name: LockMCPServerToolMetadataWrite :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Acquire a transaction-scoped advisory lock keyed on the MCP server ID so
+// tool metadata mutations on the same server serialize across processes.
+//
+// Two things depend on this. The authoritative write touches an unbounded set
+// of rows in two branches, so competing full syncs with different tool sets can
+// take row locks in opposing orders and deadlock. And every mutation reads the
+// collection before and after itself to build its audit snapshots, which under
+// READ COMMITTED would otherwise straddle another transaction's commit and
+// record a transition that never happened.
+func (q *Queries) LockMCPServerToolMetadataWrite(ctx context.Context, mcpServerID string) error {
+	_, err := q.db.Exec(ctx, lockMCPServerToolMetadataWrite, mcpServerID)
+	return err
+}
+
 const setMCPServerToolMetadata = `-- name: SetMCPServerToolMetadata :many
 WITH input AS (
     SELECT
