@@ -209,7 +209,7 @@ export function CodeBlock({
           variant="tertiary"
           size="sm"
           onClick={handleCopy}
-          className="absolute top-1/2 right-2 -translate-y-1/2 p-2"
+          className="absolute top-2 right-2 p-2"
         >
           <Button.LeftIcon>
             {copied ? (

@@ -65,6 +65,7 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	service          *auth.Service
+	authorizer       *auth.Auth
 	conn             *pgxpool.Pool
 	sessionManager   *sessions.Manager
 	identityResolver *identity.Resolver
@@ -162,8 +163,10 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, nil)
+	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
+	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
 
-	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
+	return ctx, result
 }
 
 func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
@@ -210,13 +213,16 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, nil)
+	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
+	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
 
-	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
+	return ctx, result
 }
 
 func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Pool, sessionManager *sessions.Manager, resolver *identity.Resolver, mockServer *httptest.Server, authConfigs auth.AuthConfigurations, nonceStore cache.Cache) *testInstance {
 	return &testInstance{
 		service:          svc,
+		authorizer:       nil,
 		conn:             conn,
 		sessionManager:   sessionManager,
 		identityResolver: resolver,

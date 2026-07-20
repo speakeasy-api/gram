@@ -23,6 +23,10 @@ export type IngestHookEventRequest = {
    * Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
    */
   idempotencyKey?: string | undefined;
+  /**
+   * Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
+   */
+  xGramReplayed?: boolean | undefined;
   ingestRequestBody: IngestRequestBody;
 };
 
@@ -31,6 +35,7 @@ export type IngestHookEventRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Idempotency-Key"?: string | undefined;
+  "X-Gram-Replayed"?: boolean | undefined;
   IngestRequestBody: IngestRequestBody$Outbound;
 };
 
@@ -43,6 +48,7 @@ export const IngestHookEventRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
+    xGramReplayed: z.optional(z.boolean()),
     ingestRequestBody: IngestRequestBody$outboundSchema,
   }),
   z.transform((v) => {
@@ -50,6 +56,7 @@ export const IngestHookEventRequest$outboundSchema: z.ZodMiniType<
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
       idempotencyKey: "Idempotency-Key",
+      xGramReplayed: "X-Gram-Replayed",
       ingestRequestBody: "IngestRequestBody",
     });
   }),

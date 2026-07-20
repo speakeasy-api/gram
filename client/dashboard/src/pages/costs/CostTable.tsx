@@ -218,6 +218,9 @@ export type CostTableProps = {
   // The view's resolved billing mode; "metered" shows real cost rather than the
   // API-rate estimate on the cost headers.
   billingMode?: string;
+  // Zero-row copy override — e.g. an active search should read "no matches",
+  // not "no data".
+  emptyMessage?: string;
 };
 
 export function CostTable({
@@ -229,6 +232,7 @@ export function CostTable({
   seriesByGroup,
   isLoading,
   billingMode,
+  emptyMessage,
 }: CostTableProps): JSX.Element {
   const [sort, setSort] = useState<Sort>({ key: "cost", dir: "desc" });
   const [page, setPage] = useState(0);
@@ -401,7 +405,7 @@ export function CostTable({
           style={{ gridColumn: "1 / -1" }}
         >
           <Type className="text-muted-foreground">
-            No cost data for this slice.
+            {emptyMessage ?? "No cost data for this slice."}
           </Type>
         </div>
       ) : (

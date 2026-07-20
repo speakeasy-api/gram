@@ -14,7 +14,9 @@ import CatalogDetail, {
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
-import CLIs from "./pages/CLIs";
+import Skills from "./pages/Skills";
+import SkillsList from "./pages/skills/SkillsList";
+import SkillDetail from "./pages/skills/SkillDetail";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
@@ -45,7 +47,6 @@ import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
-import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
 import Collections, { CollectionsRoot } from "./pages/collections/Collections";
 import CollectionDetail from "./pages/collections/CollectionDetail";
@@ -177,12 +178,6 @@ const ROUTE_STRUCTURE = {
     url: "/register",
     component: Register,
     unauthenticated: true,
-  },
-  onboarding: {
-    title: "Onboarding",
-    url: "onboarding",
-    component: OnboardingWizard,
-    outsideMainLayout: true, // Break out of normal page structure
   },
   home: {
     title: "Home",
@@ -337,11 +332,19 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  clis: {
+  skills: {
     title: "Skills",
-    url: "clis",
+    url: "skills",
     icon: "terminal",
-    component: CLIs,
+    component: Skills,
+    indexComponent: SkillsList,
+    subPages: {
+      detail: {
+        title: "Skill",
+        url: ":skillId",
+        component: SkillDetail,
+      },
+    },
   },
   mcp: {
     title: "MCP",

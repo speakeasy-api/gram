@@ -28,7 +28,7 @@ const routes = {
   assistants: route("Assistants", "assistants"),
   catalog: route("Catalog", "catalog"),
   chat: route("Project Assistant", "chat"),
-  clis: route("CLIs", "clis"),
+  skills: route("Skills", "skills"),
   costs: route("Costs", "costs"),
   deployments: route("Deployments", "deployments"),
   detectionRules: route("Detection Rules", "detection-rules"),
@@ -89,7 +89,9 @@ describe("useProjectNavRoutes", () => {
     testState.skillsEnabled = false;
 
     const { result } = renderHook(() => useProjectNavRoutes());
-    const skills = result.current.find((entry) => entry.route === routes.clis);
+    const skills = result.current.find(
+      (entry) => entry.route === routes.skills,
+    );
 
     expect(skills?.scope).toEqual(["project:read"]);
     expect(skills?.resourceId).toBeUndefined();
@@ -99,7 +101,9 @@ describe("useProjectNavRoutes", () => {
     testState.skillsEnabled = true;
 
     const { result } = renderHook(() => useProjectNavRoutes());
-    const skills = result.current.find((entry) => entry.route === routes.clis);
+    const skills = result.current.find(
+      (entry) => entry.route === routes.skills,
+    );
 
     expect(skills?.scope).toEqual(["skill:read"]);
     expect(skills?.resourceId).toBe("project_a");

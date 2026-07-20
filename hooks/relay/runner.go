@@ -171,7 +171,12 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		payload.Source.UserEmail = new(email)
 	}
 	r.correlateCodexToolID(typed, &payload)
-	res := r.send(ctx, c, payload)
+	// One idempotency key covers this event end to end: the send's internal
+	// replays, the org-key retry below, and — if the control plane is down —
+	// the spooled copy a later drain replays. The server stores at most one
+	// event per key, so every redelivery path is safe.
+	idemKey := newIdempotencyToken()
+	res := r.send(ctx, c, payload, idemKey)
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
 	if res.authRejected && c.Source == credEnv {
 		// The configured key is authoritative and a re-login can never replace
@@ -201,12 +206,18 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 				Org:       r.cfg.OrgID,
 				Source:    credOrg,
 			}
-			res = r.send(ctx, orgCreds, payload)
+			res = r.send(ctx, orgCreds, payload, idemKey)
 			r.debugf("event=%s auth-retry=org status=%d denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.decision.denied())
+			r.finishExchange(idemKey, payload, res)
 			return res, stateReady
 		}
 		return res, stateReauthNeeded
 	}
+	// The exchange is final: an unsent payload (unreachable/5xx/429/408) is
+	// kept for replay, a healthy exchange flushes any backlog, and a
+	// definitive 4xx does neither — the server answered, and would reject a
+	// replay identically.
+	r.finishExchange(idemKey, payload, res)
 	return res, stateReady
 }
 
@@ -214,8 +225,8 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 // org-settings effects the server returned into the local cache. Every
 // successful exchange — gating or fire-and-forget — refreshes the offline
 // copy failOpenAllowed consults during control-plane downtime.
-func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequestBody) ingestResult {
-	res := r.client.send(ctx, c, payload)
+func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequestBody, idemKey string) ingestResult {
+	res := r.client.send(ctx, c, payload, idemKey)
 	if res.statusCode >= 200 && res.statusCode < 300 && res.failOpen != nil {
 		writeOrgSettings(r.cfg, *res.failOpen)
 	}
@@ -247,7 +258,7 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 		return verdict{block: true, message: msg, nudge: true}
 	}
 
-	if res.statusCode >= 200 && res.statusCode < 300 {
+	if res.accepted() {
 		switch {
 		case strings.EqualFold(res.decision.Decision, "allow"):
 			return verdict{block: false, message: "", nudge: false}

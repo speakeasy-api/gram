@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goahttp "goa.design/goa/v3/http"
@@ -778,6 +779,11 @@ func EncodeIngestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		if p.IdempotencyKey != nil {
 			head := *p.IdempotencyKey
 			req.Header.Set("Idempotency-Key", head)
+		}
+		if p.Replayed != nil {
+			head := *p.Replayed
+			headStr := strconv.FormatBool(head)
+			req.Header.Set("X-Gram-Replayed", headStr)
 		}
 		body := NewIngestRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {

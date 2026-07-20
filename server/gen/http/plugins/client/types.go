@@ -108,6 +108,8 @@ type GetPluginResponseBody struct {
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -133,6 +135,8 @@ type CreatePluginResponseBody struct {
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -158,6 +162,8 @@ type UpdatePluginResponseBody struct {
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -250,6 +256,11 @@ type GetPublishStatusResponseBody struct {
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string `form:"last_published_at,omitempty" json:"last_published_at,omitempty" xml:"last_published_at,omitempty"`
+	// Version stamped into the currently published plugin.json manifests (e.g.
+	// 0.1.1783692954) — the version plugin clients such as Claude Code report for
+	// installed plugins. Absent when the project is not connected or the live
+	// version could not be determined.
+	LiveVersion *string `form:"live_version,omitempty" json:"live_version,omitempty" xml:"live_version,omitempty"`
 }
 
 // PublishPluginsResponseBody is the type of the "plugins" service
@@ -3267,6 +3278,8 @@ type PluginResponseBody struct {
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -3608,6 +3621,7 @@ func NewGetPluginPluginOK(body *GetPluginResponseBody) *plugins.Plugin {
 		Description:     body.Description,
 		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
+		SkillCount:      body.SkillCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3796,6 +3810,7 @@ func NewCreatePluginPluginCreated(body *CreatePluginResponseBody) *plugins.Plugi
 		Description:     body.Description,
 		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
+		SkillCount:      body.SkillCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3984,6 +3999,7 @@ func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
 		Description:     body.Description,
 		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
+		SkillCount:      body.SkillCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -5455,6 +5471,7 @@ func NewGetPublishStatusPublishStatusResultOK(body *GetPublishStatusResponseBody
 		HasCollaborators:          body.HasCollaborators,
 		UpToDate:                  body.UpToDate,
 		LastPublishedAt:           body.LastPublishedAt,
+		LiveVersion:               body.LiveVersion,
 	}
 
 	return v

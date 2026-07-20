@@ -19,6 +19,20 @@ vi.mock("@/components/ui/tooltip", () => ({
   SimpleTooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: () => ({
+    data: {
+      members: [
+        {
+          id: "gram-user-1",
+          email: "ada@example.com",
+          name: "Ada Lovelace",
+        },
+      ],
+    },
+  }),
+}));
+
 function makeChat(id: string): ChatOverview {
   const createdAt = new Date("2026-01-01T12:00:00Z");
 
@@ -106,5 +120,30 @@ describe("ChatLogsTable", () => {
 
     expect(screen.getByText("Claude Chat Desktop")).toBeTruthy();
     expect(screen.queryByText("claude")).toBeNull();
+  });
+
+  it("shows a resolved member name for a compliance chat", () => {
+    render(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            userId: "gram-user-1",
+            externalUserId: "user_01HXXXXXXXXXXXXXXXXXXXXXXX",
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByText("Ada Lovelace")).toBeTruthy();
+    expect(screen.queryByText("user_01HXXXXXXXXXXXXXXXXXXXXXXX")).toBeNull();
   });
 });

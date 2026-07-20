@@ -18,8 +18,7 @@ credentials, apps, or registry pushes are involved.
    mise run build:assistants-runtime-image
    ```
 
-2. Start Gram normally (e.g. `madprocs`, or `mise start:server
---dev-single-process`).
+2. Start Gram normally (e.g. `./zero --agent`).
 
 3. Send a turn to an assistant (for example from the dashboard). The server
    launches the matching `gram-asst-<assistant-id>` container automatically,
@@ -47,10 +46,13 @@ was added, re-run `mise run zero:tls`.
 ### Inspecting and cleaning up
 
 ```sh
-mise run assistants:local-status   # containers, ports, images, volumes
-mise run start:assistant-runtime   # stream runtime logs (also part of madprocs)
+# containers, ports, images, volumes
+mise run assistants:local-status
+# stream runtime logs (also part of pitchfork daemons)
+pitchfork logs --tail assistant-runtime
 docker logs -f gram-asst-<assistant-id>
-mise run assistants:local-clean    # remove all runtime containers + volumes
+# remove all runtime containers + volumes
+mise run assistants:local-clean
 ```
 
 ### Smoke test

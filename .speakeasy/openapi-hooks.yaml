@@ -32,6 +32,13 @@ paths:
           schema:
             description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
             type: string
+        - allowEmptyValue: true
+          description: Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
+          in: header
+          name: X-Gram-Replayed
+          schema:
+            description: Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
+            type: boolean
       requestBody:
         content:
           application/json:
@@ -453,7 +460,7 @@ tags:
   - name: admin
     description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: agent
-    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.
+    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
   - name: assets
@@ -536,10 +543,14 @@ tags:
     description: Dashboard API for interacting with resources.
   - name: risk
     description: Manage risk analysis policies and view scan results.
+  - name: skills
+    description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
   - name: telemetry
     description: Fetch telemetry data for tools in Gram.
   - name: templates
     description: Manages re-usable prompt templates and higher-order tools for a project.
+  - name: tokenExchange
+    description: 'Device-agent token exchange: trade an org-scoped install credential (an API key with the ''agent'' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.'
   - name: tools
     description: Dashboard API for interacting with tools.
   - name: toolsets

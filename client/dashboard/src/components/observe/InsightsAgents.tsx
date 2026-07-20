@@ -32,7 +32,7 @@ import type { UserSummary } from "@gram/client/models/components/usersummary.js"
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@/elements";
 import {
   defineFilters,
   useFilterState,

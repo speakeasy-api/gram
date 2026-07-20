@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
+import { shadowMCPInventoryActions } from "./shadowMCPInventoryActionItems";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
@@ -146,11 +147,6 @@ function initialPolicyIDsForAction(
   return shadowMCPPolicyIDs;
 }
 
-function openActionFromMenu(event: Event, openAction: () => void) {
-  event.stopPropagation();
-  window.setTimeout(openAction, 0);
-}
-
 export function ShadowMCPInventoryActionMenu({
   disabled,
   onOpenAction,
@@ -163,8 +159,7 @@ export function ShadowMCPInventoryActionMenu({
   ) => void;
   server: ShadowMCPInventoryServer;
 }): JSX.Element {
-  const hasRequest = server.requestCount > 0;
-  const hasAllowDecision = server.access === "allowed";
+  const actions = shadowMCPInventoryActions(server, { disabled, onOpenAction });
 
   return (
     <DropdownMenu modal={false}>
@@ -183,42 +178,17 @@ export function ShadowMCPInventoryActionMenu({
         align="end"
         onClick={(event) => event.stopPropagation()}
       >
-        {hasRequest && (
+        {actions.map((action, index) => (
           <DropdownMenuItem
+            key={index}
             onSelect={(event) => {
-              openActionFromMenu(event, () => onOpenAction("review", server));
+              event.stopPropagation();
+              action.onClick();
             }}
           >
-            Review Request
+            {action.label}
           </DropdownMenuItem>
-        )}
-        {!hasRequest && !hasAllowDecision && (
-          <DropdownMenuItem
-            onSelect={(event) => {
-              openActionFromMenu(event, () => onOpenAction("add", server));
-            }}
-          >
-            Add Allow Rule
-          </DropdownMenuItem>
-        )}
-        {hasAllowDecision && (
-          <>
-            <DropdownMenuItem
-              onSelect={(event) => {
-                openActionFromMenu(event, () => onOpenAction("edit", server));
-              }}
-            >
-              Edit Rule
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={(event) => {
-                openActionFromMenu(event, () => onOpenAction("delete", server));
-              }}
-            >
-              Delete Rule
-            </DropdownMenuItem>
-          </>
-        )}
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

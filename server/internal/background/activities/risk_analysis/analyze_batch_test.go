@@ -23,6 +23,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -84,6 +85,46 @@ func newGitleaksPub() *gcp.MockPublisher[*riskv1.GitleaksAnalysis] {
 	return pub
 }
 
+func newPromptInjectionPub() *gcp.MockPublisher[*riskv1.PromptInjectionAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.PromptInjectionAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
+func newPromptPolicyPub() *gcp.MockPublisher[*riskv1.PromptPolicyAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.PromptPolicyAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
+func capturingPromptInjectionPub(t *testing.T) (*gcp.MockPublisher[*riskv1.PromptInjectionAnalysis], *[]*riskv1.PromptInjectionAnalysis) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*riskv1.PromptInjectionAnalysis]()
+	var published []*riskv1.PromptInjectionAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*riskv1.PromptInjectionAnalysis)
+			require.True(t, ok)
+			published = append(published, msg)
+		})
+	return pub, &published
+}
+
+func capturingPromptPolicyPub(t *testing.T) (*gcp.MockPublisher[*riskv1.PromptPolicyAnalysis], *[]*riskv1.PromptPolicyAnalysis) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*riskv1.PromptPolicyAnalysis]()
+	var published []*riskv1.PromptPolicyAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*riskv1.PromptPolicyAnalysis)
+			require.True(t, ok)
+			published = append(published, msg)
+		})
+	return pub, &published
+}
+
 func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 	pub := gcp.NewMockPublisher[*riskv1.CustomRulesAnalysis]()
 	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
@@ -92,7 +133,7 @@ func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -148,6 +189,8 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -196,6 +239,122 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	assert.True(t, sawDeadLetter, "expected a presidio dead-letter row with dead_letter_reason set")
 }
 
+func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgIDs := seedMessages(t, conn, td, 3)
+	promptInjectionPub, published := capturingPromptInjectionPub(t)
+
+	ab := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		nil,
+		&feature.InMemory{},
+		newPresidioPub(),
+		newGitleaksPub(),
+		promptInjectionPub,
+		newPromptPolicyPub(),
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+	)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       msgIDs,
+		Sources:          []string{risk_analysis.SourcePromptInjection},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Len(t, *published, len(msgIDs))
+}
+
+func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "prompt policy",
+		PolicyType:     "prompt_based",
+		Sources:        []string{},
+		Enabled:        true,
+		Action:         "flag",
+		AudienceType:   "everyone",
+		AutoName:       false,
+		Prompt:         pgtype.Text{String: "Block unsafe requests", Valid: true},
+	})
+	require.NoError(t, err)
+	msgIDs := seedMessages(t, conn, td, 2)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
+	promptPolicyPub, published := capturingPromptPolicyPub(t)
+
+	ab := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		(&recordingPromptJudge{}).Evaluate,
+		flags,
+		newPresidioPub(),
+		newGitleaksPub(),
+		newPromptInjectionPub(),
+		promptPolicyPub,
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+	)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     policy.ID,
+		PolicyVersion:    policy.Version,
+		MessageIDs:       msgIDs,
+		Sources:          nil,
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Len(t, *published, len(msgIDs))
+}
+
 func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
@@ -242,6 +401,8 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -348,6 +509,8 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -382,6 +545,20 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	require.Empty(t, msg.MCPServer, "native tool has no MCP server")
 	require.Empty(t, msg.MCPFunction)
 	require.Contains(t, msg.Body, "rm -rf /tmp/data")
+
+	// The stored finding's Match is the full flagged event the judge saw, not the
+	// empty string it used to be — that's what the Risk Events UI reveals.
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, promptpolicy.Source, rows[0].Source)
+	require.Equal(t, judgemessage.Render(msg), rows[0].Match.String)
+	require.Contains(t, rows[0].Match.String, "rm -rf /tmp/data")
 }
 
 func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
@@ -434,6 +611,8 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -816,6 +995,7 @@ func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testDa
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,
@@ -885,6 +1065,7 @@ func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testD
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,
@@ -943,6 +1124,8 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
@@ -1148,6 +1331,7 @@ func insertAssistantToolCall(t *testing.T, conn *pgxpool.Pool, td testData, call
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,

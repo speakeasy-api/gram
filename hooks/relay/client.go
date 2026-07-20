@@ -53,6 +53,24 @@ type ingestResult struct {
 	failOpen *bool
 }
 
+// accepted reports a definitive 2xx exchange — the server stored (or
+// deduped) the event. The one classification used by the live path, the
+// spool, and the drain; keep them agreeing by never inlining the range.
+func (r ingestResult) accepted() bool {
+	return r.statusCode >= 200 && r.statusCode < 300
+}
+
+// unsent reports whether the control plane failed to store the event: the
+// server was unreachable (statusCode 0), failing (5xx), or shedding load
+// (429/408 — the request wasn't processed, and replaying later is exactly
+// what a rate-limiting server wants). Other 4xx are the server answering —
+// a replay would fail identically. Matches the device agent's downtime
+// classification (its ADR-0010).
+func (r ingestResult) unsent() bool {
+	return r.statusCode == 0 || r.statusCode >= 500 ||
+		r.statusCode == http.StatusTooManyRequests || r.statusCode == http.StatusRequestTimeout
+}
+
 // client posts canonical hook events through the generated ingest SDK with
 // bounded retries and a reused idempotency token so redelivered requests are
 // stored exactly once.
@@ -60,6 +78,10 @@ type client struct {
 	sdk *sdk.SpeakeasyHooks
 	// budget caps one send end to end; a field so tests can shrink it.
 	budget time.Duration
+	// replayed stamps X-Gram-Replayed on every request via the typed SDK
+	// field, marking a drain redelivery so the server applies the long
+	// idempotency window and tags telemetry. Set by newReplayClient.
+	replayed bool
 }
 
 func newClient(serverURL string) *client {
@@ -92,15 +114,24 @@ func newClient(serverURL string) *client {
 // here — safe because the Idempotency-Key is minted once and reused, and
 // necessary because a blocking hook would otherwise deny over one dropped
 // connection.
-func (cl *client) send(ctx context.Context, c creds, body components.IngestRequestBody) ingestResult {
+//
+// The caller mints idemKey (see deliver) so the same key survives beyond
+// this exchange: a payload spooled after a failed send replays under the
+// original key, and the server dedupes it against any partially delivered
+// original.
+func (cl *client) send(ctx context.Context, c creds, body components.IngestRequestBody, idemKey string) ingestResult {
 	ctx, cancel := context.WithTimeout(ctx, cl.budget)
 	defer cancel()
 
 	req := operations.IngestHookEventRequest{
 		GramKey:        new(c.APIKey),
 		GramProject:    nil,
-		IdempotencyKey: new(newIdempotencyToken()),
+		IdempotencyKey: new(idemKey),
+		XGramReplayed:  nil,
 		Body:           body,
+	}
+	if cl.replayed {
+		req.XGramReplayed = new(true)
 	}
 	if c.Project != "" {
 		req.GramProject = new(c.Project)

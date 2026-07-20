@@ -1307,12 +1307,22 @@ func redactMatch(source string, match *string, orgID string) string {
 	if source == shadowmcp.SourceShadowMCP || source == ra.SourceAccountIdentity {
 		return *match
 	}
+	return fingerprintRedactedMatch(orgID, *match)
+}
+
+// fingerprintRedactedMatch encodes match as `<redacted len=N sha=XXXXXXXX>`.
+// Unlike redactMatch it applies to every source with no shadow_mcp/
+// account_identity passthrough, so the ClickHouse writer can store a display
+// string without ever persisting a plaintext match or PII. The hash is salted
+// by orgID with a NUL separator so two orgs holding the same secret produce
+// different fingerprints, while staying deterministic within an org.
+func fingerprintRedactedMatch(orgID, match string) string {
 	var buf []byte
 	buf = append(buf, orgID...)
 	buf = append(buf, 0x00)
-	buf = append(buf, *match...)
+	buf = append(buf, match...)
 	sum := sha256.Sum256(buf)
-	return fmt.Sprintf("<redacted len=%d sha=%s>", len(*match), hex.EncodeToString(sum[:4]))
+	return fmt.Sprintf("<redacted len=%d sha=%s>", len(match), hex.EncodeToString(sum[:4]))
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
@@ -1377,13 +1387,22 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	}
 
 	window := riskOverviewWindowParams(from, to)
-	counts, err := s.repo.GetRiskOverviewCounts(ctx, repo.GetRiskOverviewCountsParams{
+	scanCounts, err := s.repo.GetRiskOverviewScanCounts(ctx, repo.GetRiskOverviewScanCountsParams{
 		ProjectID: *authCtx.ProjectID,
 		FromTime:  window.from,
 		ToTime:    window.to,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview counts").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview scan counts").LogError(ctx, s.logger)
+	}
+
+	findingCounts, err := s.repo.GetRiskOverviewFindingCounts(ctx, repo.GetRiskOverviewFindingCountsParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview finding counts").LogError(ctx, s.logger)
 	}
 
 	userRows, err := s.repo.ListRiskOverviewTopUsers(ctx, repo.ListRiskOverviewTopUsersParams{
@@ -1453,10 +1472,10 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	return &gen.RiskOverviewResult{
 		From:               from.UTC().Format(time.RFC3339),
 		To:                 to.UTC().Format(time.RFC3339),
-		MessagesScanned:    counts.MessagesScanned,
-		Findings:           counts.Findings,
-		FlaggedSessions:    counts.FlaggedSessions,
-		ActivePolicies:     counts.ActivePolicies,
+		MessagesScanned:    scanCounts.MessagesScanned,
+		Findings:           findingCounts.Findings,
+		FlaggedSessions:    findingCounts.FlaggedSessions,
+		ActivePolicies:     scanCounts.ActivePolicies,
 		TopCategories:      topCategories,
 		TopUsers:           topUsers,
 		TopRules:           topRules,
@@ -1577,7 +1596,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		cid := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt, row.Replayed))
 		if i == pageSize {
 			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
 		}
@@ -1609,7 +1628,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
 		chatID := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
+		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt, row.Replayed))
 		if i == pageSize {
 			nextCursor = &riskResultsCursor{MessageCreatedAt: row.MessageCreatedAt.Time, ID: row.ID}
 		}
@@ -3613,6 +3632,7 @@ func foundRowToResult(
 	source string, ruleID, description, match pgtype.Text,
 	startPos, endPos pgtype.Int4,
 	confidence pgtype.Float8, tags []string, spans []byte, createdAt pgtype.Timestamptz,
+	replayed bool,
 ) *types.RiskResult {
 	return &types.RiskResult{
 		ID:            id.String(),
@@ -3636,6 +3656,7 @@ func foundRowToResult(
 		// for callers ListRiskResults decides shouldn't see raw match/spans.
 		MatchRedacted: nil,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
+		Replayed:      replayed,
 	}
 }
 

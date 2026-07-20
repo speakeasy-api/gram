@@ -94,16 +94,22 @@ func readCachedAuth(cfg Config) (creds, bool) {
 		Org:       values["org"],
 		Source:    credCache,
 	}
-	if c.ServerURL != cfg.ServerURL || c.APIKey == "" {
-		return creds{}, false
-	}
-	if cfg.OrgID != "" && c.Org != "" && c.Org != cfg.OrgID {
+	if c.APIKey == "" || !sameDeployment(c.ServerURL, c.Org, cfg.ServerURL, cfg.OrgID) {
 		return creds{}, false
 	}
 	if cfg.ProjectSlug != "" {
 		c.Project = cfg.ProjectSlug
 	}
 	return c, true
+}
+
+// sameDeployment reports whether a stored credential or config describing
+// (gotURL, gotOrg) may serve the deployment (wantURL, wantOrg): the server
+// must match exactly, the org only when both sides are known. The one copy
+// of this rule — the auth cache and the spool drain both gate on it, and a
+// tightening must reach both.
+func sameDeployment(gotURL, gotOrg, wantURL, wantOrg string) bool {
+	return gotURL == wantURL && (wantOrg == "" || gotOrg == "" || gotOrg == wantOrg)
 }
 
 // resolveAuth returns the effective credential: an explicit env key wins over

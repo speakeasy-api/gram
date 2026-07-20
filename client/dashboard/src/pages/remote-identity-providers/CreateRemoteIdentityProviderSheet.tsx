@@ -71,6 +71,8 @@ export function CreateRemoteIdentityProviderSheet({
   const [nameDirty, setNameDirty] = useState(false);
   const [slug, setSlug] = useState("");
   const [slugDirty, setSlugDirty] = useState(false);
+  const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
+    useState("");
 
   const {
     issuerUrl,
@@ -128,6 +130,7 @@ export function CreateRemoteIdentityProviderSheet({
     setNameDirty(false);
     setSlug("");
     setSlugDirty(false);
+    setClientSetupDocumentationUrl("");
     setIssuerUrl("");
     resetEndpointState();
     clearDiscoverError();
@@ -154,6 +157,8 @@ export function CreateRemoteIdentityProviderSheet({
           slug: slug.trim(),
           issuer: issuerUrl.trim(),
           name: name.trim() || undefined,
+          clientSetupDocumentationUrl:
+            clientSetupDocumentationUrl.trim() || undefined,
           authorizationEndpoint: authorizationEndpoint.trim() || undefined,
           tokenEndpoint: tokenEndpoint.trim() || undefined,
           registrationEndpoint: registrationEndpoint.trim() || undefined,
@@ -277,6 +282,21 @@ export function CreateRemoteIdentityProviderSheet({
                 Friendly label shown in the dashboard. Auto-derived from the
                 Issuer URL until you edit it; falls back to the Issuer URL when
                 left blank.
+              </Type>
+            </Stack>
+
+            <Stack gap={2}>
+              <Label className="text-muted-foreground text-xs">
+                Client setup documentation URL (optional)
+              </Label>
+              <Input
+                value={clientSetupDocumentationUrl}
+                onChange={setClientSetupDocumentationUrl}
+                placeholder="https://docs.example.com/oauth/apps"
+              />
+              <Type muted small>
+                Linked from the New Client sheet so operators can set up an
+                OAuth client with this provider themselves.
               </Type>
             </Stack>
 

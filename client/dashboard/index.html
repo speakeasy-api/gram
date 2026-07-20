@@ -38,23 +38,29 @@
       href="https://static.clairedefermat.com"
       crossorigin
     />
+    <!-- Fonts live in src/fonts (not public/) so they build to hashed
+         /assets/ files. That keeps these preload URLs and the @font-face
+         URLs in App.css resolving to the same absolute URL when assets are
+         served through the CDN (nginx rewrites "/assets/ in HTML; the CDN
+         only serves /assets/ and redirects other paths back to the app
+         origin, which would break preload matching). -->
     <link
       rel="preload"
-      href="/fonts/diatype/ABCDiatype-Regular.woff2"
+      href="/src/fonts/diatype/ABCDiatype-Regular.woff2"
       as="font"
       type="font/woff2"
       crossorigin
     />
     <link
       rel="preload"
-      href="/fonts/diatype/ABCDiatype-Light.woff2"
+      href="/src/fonts/diatype/ABCDiatype-Light.woff2"
       as="font"
       type="font/woff2"
       crossorigin
     />
     <link
       rel="preload"
-      href="/fonts/diatype-mono/ABCDiatypeMono-Regular.woff2"
+      href="/src/fonts/diatype-mono/ABCDiatypeMono-Regular.woff2"
       as="font"
       type="font/woff2"
       crossorigin

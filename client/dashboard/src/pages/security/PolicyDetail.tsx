@@ -304,7 +304,7 @@ function PolicyKindChooser(): JSX.Element {
               Choose policy type
             </Heading>
             <Type small muted>
-              Start with a detector-based policy or define criteria in plain
+              Start with a built-in detector policy or define criteria in plain
               language.
             </Type>
           </Stack>
@@ -315,7 +315,7 @@ function PolicyKindChooser(): JSX.Element {
               className="hover:bg-muted/40 rounded-xl border p-5 text-left transition-colors"
             >
               <Shield className="text-muted-foreground mb-3 h-5 w-5" />
-              <Type className="font-medium">Detector-based</Type>
+              <Type className="font-medium">Built-in detector</Type>
               <Type small muted className="mt-1">
                 Scan for secrets, PII, and risky tool calls with built-in and
                 custom detection rules.
@@ -486,7 +486,7 @@ function PolicyHeader({
 }): JSX.Element {
   const KindIcon = kind === "prompt" ? Sparkles : Shield;
   const kindLabel =
-    kind === "prompt" ? "Prompt-based (LLM judge)" : "Detector-based";
+    kind === "prompt" ? "Prompt-based (LLM judge)" : "Built-in detector";
   const placeholder =
     kind === "prompt" ? "Untitled prompt policy" : "Untitled standard policy";
   const isCreate = policy === null;
@@ -2637,8 +2637,12 @@ function SessionTranscript({
       hasMoreAfter: transcript.hasMoreAfter,
       onLoadOlder: transcript.fetchOlder,
       onLoadNewer: transcript.fetchNewer,
+      // The from-start transcript's only missing range is the tail, so the
+      // break button drains the rest of the conversation.
+      onLoadAllOlder: transcript.fetchOlder,
+      onLoadAllNewer: transcript.loadRest,
       isFetchingOlder: transcript.isFetchingOlder,
-      isFetchingNewer: transcript.isFetchingNewer,
+      isFetchingNewer: transcript.isFetchingNewer || transcript.isLoadingRest,
       initialScrollIndex: null,
       scrollToFinding: false,
     }),
@@ -2647,8 +2651,10 @@ function SessionTranscript({
       transcript.hasMoreAfter,
       transcript.fetchOlder,
       transcript.fetchNewer,
+      transcript.loadRest,
       transcript.isFetchingOlder,
       transcript.isFetchingNewer,
+      transcript.isLoadingRest,
     ],
   );
   const rowCtx = useMemo<RowContext>(

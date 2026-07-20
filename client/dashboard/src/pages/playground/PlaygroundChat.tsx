@@ -12,7 +12,7 @@ import {
   ChatHistory,
   GramElementsProvider,
   type Model,
-} from "@gram-ai/elements";
+} from "@/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
@@ -50,7 +50,7 @@ interface PlaygroundChatProps {
 }
 
 /**
- * The shared playground chat surface: the `@gram-ai/elements` provider, the
+ * The shared playground chat surface: the Gram Elements provider, the
  * MCP-Apps provider, the chat-history popover, and the chat itself. Both the
  * toolset-backed and remote-MCP-backed variants resolve their own MCP URL and
  * gateway token, then render through here so the chat looks and behaves

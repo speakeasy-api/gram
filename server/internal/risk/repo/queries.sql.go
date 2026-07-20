@@ -1215,16 +1215,45 @@ func (q *Queries) GetRiskExclusionForReconcile(ctx context.Context, arg GetRiskE
 	return i, err
 }
 
-const getRiskOverviewCounts = `-- name: GetRiskOverviewCounts :one
+const getRiskOverviewFindingCounts = `-- name: GetRiskOverviewFindingCounts :one
+SELECT
+    COUNT(*)::BIGINT AS findings
+  , COUNT(DISTINCT cm.chat_id)::BIGINT AS flagged_sessions
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.project_id = $1
+  AND rr.created_at >= $2
+  AND rr.created_at < $3
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+`
+
+type GetRiskOverviewFindingCountsParams struct {
+	ProjectID uuid.UUID
+	FromTime  pgtype.Timestamptz
+	ToTime    pgtype.Timestamptz
+}
+
+type GetRiskOverviewFindingCountsRow struct {
+	Findings        int64
+	FlaggedSessions int64
+}
+
+// findings + flagged_sessions over the live-found subset. Pushing the found
+// predicate into WHERE lets the partial risk_results_project_found_idx serve the
+// scan, so the JOIN to chat_messages only touches found rows instead of every
+// scanned row. COUNT(DISTINCT cm.chat_id) already skips NULL chat_ids.
+func (q *Queries) GetRiskOverviewFindingCounts(ctx context.Context, arg GetRiskOverviewFindingCountsParams) (GetRiskOverviewFindingCountsRow, error) {
+	row := q.db.QueryRow(ctx, getRiskOverviewFindingCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
+	var i GetRiskOverviewFindingCountsRow
+	err := row.Scan(&i.Findings, &i.FlaggedSessions)
+	return i, err
+}
+
+const getRiskOverviewScanCounts = `-- name: GetRiskOverviewScanCounts :one
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
-  , (COUNT(*) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    ))::BIGINT AS findings
-  , (COUNT(DISTINCT cm.chat_id) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-        AND cm.chat_id IS NOT NULL
-    ))::BIGINT AS flagged_sessions
   , (
       SELECT COUNT(*)::BIGINT
       FROM risk_policies active_rp
@@ -1233,34 +1262,31 @@ SELECT
         AND deleted IS FALSE
     ) AS active_policies
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
 WHERE rr.project_id = $1
   AND rr.created_at >= $2
   AND rr.created_at < $3
 `
 
-type GetRiskOverviewCountsParams struct {
+type GetRiskOverviewScanCountsParams struct {
 	ProjectID uuid.UUID
 	FromTime  pgtype.Timestamptz
 	ToTime    pgtype.Timestamptz
 }
 
-type GetRiskOverviewCountsRow struct {
+type GetRiskOverviewScanCountsRow struct {
 	MessagesScanned int64
-	Findings        int64
-	FlaggedSessions int64
 	ActivePolicies  int64
 }
 
-func (q *Queries) GetRiskOverviewCounts(ctx context.Context, arg GetRiskOverviewCountsParams) (GetRiskOverviewCountsRow, error) {
-	row := q.db.QueryRow(ctx, getRiskOverviewCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
-	var i GetRiskOverviewCountsRow
-	err := row.Scan(
-		&i.MessagesScanned,
-		&i.Findings,
-		&i.FlaggedSessions,
-		&i.ActivePolicies,
-	)
+// messages_scanned counts every scanned message in the window regardless of
+// found state. chat_message_id is NOT NULL with a FK to chat_messages, so the
+// old JOIN was lossless — dropping it lets this be an index-only distinct on
+// risk_results_project_created_msg_idx (project_id, created_at, chat_message_id).
+// active_policies is a cheap scalar subquery, folded in here to save a round trip.
+func (q *Queries) GetRiskOverviewScanCounts(ctx context.Context, arg GetRiskOverviewScanCountsParams) (GetRiskOverviewScanCountsRow, error) {
+	row := q.db.QueryRow(ctx, getRiskOverviewScanCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
+	var i GetRiskOverviewScanCountsRow
+	err := row.Scan(&i.MessagesScanned, &i.ActivePolicies)
 	return i, err
 }
 
@@ -2339,7 +2365,7 @@ func (q *Queries) ListRiskPolicyEvalReviews(ctx context.Context, arg ListRiskPol
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, cm.replayed, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -2395,6 +2421,7 @@ type ListRiskResultsByChatFoundRow struct {
 	CreatedAt           pgtype.Timestamptz
 	ChatID              uuid.UUID
 	MessageCreatedAt    pgtype.Timestamptz
+	Replayed            bool
 	ChatTitle           pgtype.Text
 	ChatUserID          pgtype.Text
 	BlockID             uuid.UUID
@@ -2440,6 +2467,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.MessageCreatedAt,
+			&i.Replayed,
 			&i.ChatTitle,
 			&i.ChatUserID,
 			&i.BlockID,
@@ -2582,14 +2610,14 @@ SELECT
     sub.rule_id, sub.description, sub.match, sub.start_pos, sub.end_pos,
     sub.confidence, sub.tags, sub.spans, sub.dead_letter_reason, sub.created_at,
     sub.chat_id, sub.message_created_at, sub.chat_title, sub.chat_user_id,
-    sub.block_id
+    sub.block_id, sub.replayed
 FROM (
   SELECT
       rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id,
       rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found,
       rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
       rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.created_at,
-      cm.chat_id, cm.created_at AS message_created_at,
+      cm.chat_id, cm.created_at AS message_created_at, cm.replayed,
       c.title AS chat_title, c.external_user_id AS chat_user_id,
       COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id,
       CASE
@@ -2724,6 +2752,7 @@ type ListRiskResultsByProjectFoundRow struct {
 	ChatTitle         pgtype.Text
 	ChatUserID        pgtype.Text
 	BlockID           uuid.UUID
+	Replayed          bool
 }
 
 // Sort by the underlying chat message's created_at (the event time), NOT
@@ -2796,6 +2825,7 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 			&i.ChatTitle,
 			&i.ChatUserID,
 			&i.BlockID,
+			&i.Replayed,
 		); err != nil {
 			return nil, err
 		}

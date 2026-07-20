@@ -1,5 +1,50 @@
 # dashboard
 
+## 0.91.1
+
+### Patch Changes
+
+- 50289f1: Show the number of active skills carried by each plugin on the Plugins page.
+
+## 0.91.0
+
+### Minor Changes
+
+- f83c87f: Manage skill distributions from the dashboard. Skills now open as a dedicated detail page with an at-a-glance sidebar, section navigation, and a plugin distribution banner for distributing the skill to plugins and revoking distributions. The plugin detail page's Skills section replaces the coming-soon placeholder with the actual list of skills the plugin carries, including add and remove controls. Skill distributions can now also be listed filtered by skill or plugin.
+
+### Patch Changes
+
+- b1e392a: Fix the plugin assignments dropdown not scrolling when it contains many users/roles. The multi-select popover is portaled inside the modal assignments sheet, so make its popover modal to restore mouse-wheel scrolling of the options list.
+- f4f4f92: Add a copy-to-clipboard button next to the plugin version badge on the plugin detail page so the version string can be copied in one click.
+- 4f4eff9: Resolve chat session owners from organization members instead of displaying opaque external user IDs.
+
+## 0.90.0
+
+### Minor Changes
+
+- 2afa6cf: Include device agent setup instructions in onboarding and revamp device agent page
+- 5d1ed01: Environment variable values can now be viewed after save when they are not secret. Both the environment detail page and the MCP server environment settings gain a Secret toggle, masked values with an eye reveal, a copy action for readable values, and a shared edit dialog with per-row edit and delete actions. Secret values keep today's redacted-preview behavior.
+- 52aaf58: Add a "Fail Open During Outages" toggle to the org Logging & Telemetry page and remove the Observability Mode toggle it supersedes (DNO-497). Org admins can choose to let agent tool calls proceed when Speakeasy is unreachable instead of blocking them, with copy spelling out the trade-off: blocking policies are not enforced during the outage, events are still recorded and scanned after recovery, and broken credentials always block regardless.
+- 67d672a: Inline the Gram Elements library into the dashboard as application code at `src/elements/`. The `elements/` workspace package is removed and `@gram-ai/elements` is no longer published from this repo; the dashboard now imports Elements via `@/elements`.
+- 9b7b385: The catalog "Add to Project" flow now installs servers as Remote MCP servers: one remote MCP server per selected endpoint, a linked private MCP server with a pre-staged default endpoint, OAuth auto-configuration when the upstream supports dynamic client registration, and optional upstream header values collected in the dialog. This replaces the deployment/toolset pipeline (no deployment polling, tool URNs, or fork naming); collection installs and onboarding distribution bundle MCP servers directly, and catalog Added indicators match installed servers by endpoint URL.
+- 3edf806: Plugin assignments: organizations using the Speakeasy device agent can now choose which principals receive each plugin. From a plugin's detail page, admins assign an org-wide default (everyone), specific roles, individual members, or email addresses, and the device agent (`agent.getPlugins`) delivers each plugin only to its resolved recipients (email, user, and RBAC role membership). New plugins — including the auto-provisioned Default plugin — default to everyone, so nothing stops being delivered; admins can narrow the audience afterward. The assignments section is shown only for device-agent organizations; marketplace installs (Claude, Cursor, Codex) continue to receive every published plugin regardless of assignment.
+- d3eb9ca: Add a Skills registry page at /skills for recording, inspecting, comparing, and archiving project skill manifests.
+- d32a5ed: Add right-click context menus to every table row, card, and list entry with per-entry actions, mirroring each entry's "⋯" menu: sources, deployments, exclusions, policy center, shadow MCP inventory, team members, roles, remote identity provider tabs, tool lists, chat logs, project cards, and plugin cards. Menus share one action definition with the visible kebab so the two stay in sync, and sources table rows are now real links (native open-in-new-tab and copy-link).
+
+### Patch Changes
+
+- cc8791e: Add project-selectable read and write permissions for skills to RBAC role management.
+- a98cbcd: Gate the Skills page by organization entitlement and provision default Skills grants for RBAC-enabled organizations.
+- f4786b5: Show the currently live (published) plugin version on the plugin detail page.
+  `getPublishStatus` now reports `live_version` — the version stamped into the
+  published plugin.json manifests, read back from the marketplace repo via a
+  single Contents API call and cached briefly — and the dashboard displays it
+  next to the publish freshness indicator, so it can be compared directly
+  against the version plugin clients like Claude Code report for installed
+  plugins when debugging sync lag.
+- 7ff9141: Persist the replayed flag on captured chat messages and surface it on risk results: messages redelivered from a device's offline spool after control-plane downtime (X-Gram-Replayed) now carry chat_messages.replayed, and findings produced by scanning them return replayed on the RiskResult type so retroactive findings are distinguishable from live ones.
+- f96b6fb: Unfurl Gram dashboard links shared in Slack with the Speakeasy logo (the dashboard favicon) and a humanized page title. The generated Slack app manifest now registers the dashboard as an unfurl domain and grants links:write, and the trigger webhook answers link_shared events with chat.unfurl.
+
 ## 0.89.0
 
 ### Minor Changes

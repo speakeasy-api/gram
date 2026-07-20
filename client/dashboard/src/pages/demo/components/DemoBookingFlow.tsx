@@ -17,6 +17,9 @@ export function DemoBookingFlow(): JSX.Element {
   const email = session?.user.email ?? "";
   const { firstName, lastName } = splitDisplayName(session?.user.displayName);
   const name = [firstName, lastName].filter(Boolean).join(" ");
+  // The org is created from the company name entered during sign-up, so it
+  // doubles as the answer to the Cal form's company question.
+  const companyName = session?.organization?.name ?? "";
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -62,6 +65,9 @@ export function DemoBookingFlow(): JSX.Element {
             hideEventTypeDetails: "true",
             name,
             email,
+            // Prefill key must match the booking question's identifier on the
+            // Cal event (see CAL_DEMO_LINK).
+            company: companyName,
             cssVarsPerTheme: JSON.stringify({
               light: { "cal-bg": "transparent" },
               dark: { "cal-bg": "transparent" },
