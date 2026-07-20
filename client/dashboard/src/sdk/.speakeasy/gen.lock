@@ -3387,7 +3387,7 @@ examples:
   distributeSkill:
     speakeasy-default-distribute-skill:
       requestBody:
-        application/json: {"id": "4fc97fb6-f058-4e7e-9e97-5681ce8613a2"}
+        application/json: {"id": "550e8400-e29b-41d4-a716-446655440000", "plugin_id": "550e8400-e29b-41d4-a716-446655440001"}
       responses:
         "200":
           application/json: {"channel": "plugin", "created_at": "2025-09-14T19:24:28.651Z", "created_by_user_id": "<id>", "id": "4c40713b-faa0-4f6b-916d-c3c15c487cc7", "project_id": "4b9a0b45-eb7c-42eb-bf87-107c2d2a9055", "resolved_version_id": "1802abfd-f6e4-4711-b40e-709fa4913e6c", "skill_display_name": "<value>", "skill_id": "98b37be4-63d6-405e-ab2a-96a596db1511", "skill_name": "<value>", "updated_at": "2026-08-30T16:19:52.579Z"}
@@ -6050,7 +6050,7 @@ examples:
   undistributeSkill:
     speakeasy-default-undistribute-skill:
       requestBody:
-        application/json: {"id": "e4deb49b-0782-4e18-b3e0-040fa8435cf5"}
+        application/json: {"id": "550e8400-e29b-41d4-a716-446655440000", "plugin_id": "550e8400-e29b-41d4-a716-446655440001"}
       responses:
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
