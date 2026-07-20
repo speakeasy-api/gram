@@ -12,14 +12,24 @@ import type { CommandAction } from "./CommandPalette";
 const MAX_FOCUS_RESTORE_FRAMES = 60;
 
 function isVisiblyRendered(element: HTMLElement): boolean {
-  const style = window.getComputedStyle(element);
+  let current: HTMLElement | null = element;
 
-  return (
-    style.display !== "none" &&
-    style.visibility !== "hidden" &&
-    style.visibility !== "collapse" &&
-    element.getClientRects().length > 0
-  );
+  while (current) {
+    const style = window.getComputedStyle(current);
+    if (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      style.visibility === "collapse" ||
+      Number.parseFloat(style.opacity) === 0 ||
+      style.contentVisibility === "hidden"
+    ) {
+      return false;
+    }
+
+    current = current.parentElement;
+  }
+
+  return element.getClientRects().length > 0;
 }
 
 function isUsableFocusTarget(
