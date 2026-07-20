@@ -1,9 +1,9 @@
-export interface DotEnvEntry {
+interface DotEnvEntry {
   key: string;
   value: string;
 }
 
-export interface DotEnvParseResult {
+interface DotEnvParseResult {
   entries: DotEnvEntry[];
   invalidLineNumbers: number[];
 }
