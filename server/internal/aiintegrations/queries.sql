@@ -90,7 +90,7 @@ WITH inserted AS (
     , @poll_watermark_at
     , @next_poll_after
   )
-  ON CONFLICT (ai_integration_config_id, schedule) DO NOTHING
+  ON CONFLICT (ai_integration_config_id, schedule) DO UPDATE SET updated_at = ai_integration_syncs.updated_at
   RETURNING *
 )
 SELECT *
