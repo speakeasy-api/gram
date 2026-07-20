@@ -72,6 +72,15 @@ describe("scopePhrase", () => {
       "(unset)'s spend",
     );
   });
+
+  // The empty user bucket is the company credential's spend (Claude Code on an
+  // API key/gateway emits no user identity), so it reads as the shared team
+  // account rather than "(unset)".
+  it("names the unset user bucket the team-wide account", () => {
+    expect(scopePhrase([at(Dimension.Email, "")], "spend")).toBe(
+      "Team-wide account's spend",
+    );
+  });
 });
 
 // ── Title + caption, per breakdown axis ─────────────────────────────────────

@@ -1,5 +1,10 @@
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
-import { providerLabel } from "@/components/observe/account-display-utils";
+import {
+  providerLabel,
+  unsetLabel,
+} from "@/components/observe/account-display-utils";
+
+export { unsetLabel };
 
 // Shared cost-taxonomy config + helpers, used by both the CostsExplorer
 // controller and the EntityProfile view. Kept in a non-component module so the
@@ -402,7 +407,7 @@ export function datasetDefaultGroupBy(
 // title-cased form belongs to the hero, which pairs it with the address anyway
 // (see prettyName in EntityProfile).
 export function displayName(dim: Dimension, value: string): string {
-  if (value === "") return "(unset)";
+  if (value === "") return unsetLabel(dim);
   if (dim === Dimension.Provider) return providerLabel(value);
   if (dim === Dimension.AccountType) {
     return value.charAt(0).toUpperCase() + value.slice(1);

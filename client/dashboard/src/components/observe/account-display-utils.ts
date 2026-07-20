@@ -3,6 +3,8 @@
 // "only-export-components" rule) and these can be shared with non-component
 // modules like the cost taxonomy.
 
+import { Dimension } from "@gram/client/models/components/queryfilter.js";
+
 // A single linked AI account in display shape. Identity is (provider, email):
 // the same email on two providers is two distinct accounts, so provider is
 // always shown alongside the email.
@@ -26,6 +28,18 @@ export function providerLabel(provider: string): string {
   const known = PROVIDER_LABELS[provider.toLowerCase()];
   if (known) return known;
   return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
+// Label for a breakdown dimension's empty-value bucket. For the user (email)
+// dimension the pooled empty bucket IS the company credential's usage — Claude
+// Code authenticated with an API key/gateway emits no user identity at all, so
+// this spend belongs to the shared team account rather than any individual —
+// and it gets a real name (POC-282). Other dimensions keep the neutral
+// "(unset)": their empty buckets mix identity-less traffic with attributed
+// users who merely lack the attribute (e.g. no department in the directory),
+// so no single semantic label is honest there.
+export function unsetLabel(dim: Dimension): string {
+  return dim === Dimension.Email ? "Team-wide account" : "(unset)";
 }
 
 // The email to display for a session produced by a personal AI account (e.g. a
