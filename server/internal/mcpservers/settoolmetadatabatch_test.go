@@ -64,7 +64,7 @@ func TestSetToolMetadataBatch(t *testing.T) {
 	require.NotNil(t, result)
 
 	require.Len(t, result.Tools, 2)
-	require.Equal(t, 0, result.Retired)
+	require.Equal(t, 0, result.Deleted)
 
 	byName := map[string]*types.ToolMetadata{}
 	for _, tool := range result.Tools {
@@ -88,7 +88,7 @@ func TestSetToolMetadataBatch(t *testing.T) {
 	require.Equal(t, beforeUpdates+1, afterUpdates, "two tools written produce one collection-level entry")
 }
 
-func TestSetToolMetadataBatch_UpsertsAndRetires(t *testing.T) {
+func TestSetToolMetadataBatch_UpsertsAndDeletes(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -110,7 +110,7 @@ func TestSetToolMetadataBatch_UpsertsAndRetires(t *testing.T) {
 	beforeUpdates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
 	require.NoError(t, err)
 
-	// alpha changes hints, beta is absent (retired), gamma is new.
+	// alpha changes hints, beta is absent (deleted), gamma is new.
 	result, err := ti.service.SetToolMetadataBatch(ctx, &gen.SetToolMetadataBatchPayload{
 		McpServerID: serverID,
 		Tools: []*gen.ToolMetadataForm{
@@ -124,9 +124,9 @@ func TestSetToolMetadataBatch_UpsertsAndRetires(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, result.Tools, 2)
-	require.Equal(t, 1, result.Retired)
+	require.Equal(t, 1, result.Deleted)
 
-	// gamma created, alpha updated and beta retired all land in one entry.
+	// gamma created, alpha updated and beta deleted all land in one entry.
 	afterUpdates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeUpdates+1, afterUpdates)
@@ -181,14 +181,14 @@ func TestSetToolMetadataBatch_NoOpUpsertSkipsUpdateEvent(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 0, result.Retired)
+	require.Equal(t, 0, result.Deleted)
 
 	afterUpdates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeUpdates, afterUpdates, "unchanged hints emit no update event")
 }
 
-func TestSetToolMetadataBatch_EmptyBatchRetiresAll(t *testing.T) {
+func TestSetToolMetadataBatch_EmptyBatchDeletesAll(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -216,7 +216,7 @@ func TestSetToolMetadataBatch_EmptyBatchRetiresAll(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, result.Tools)
-	require.Equal(t, 2, result.Retired)
+	require.Equal(t, 2, result.Deleted)
 
 	listed, err := ti.service.ListToolMetadata(ctx, &gen.ListToolMetadataPayload{
 		McpServerID:      serverID,

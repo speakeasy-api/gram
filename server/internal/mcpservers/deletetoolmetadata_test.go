@@ -58,7 +58,7 @@ func TestDeleteToolMetadata(t *testing.T) {
 	require.Len(t, listed.Tools, 1)
 	require.Equal(t, "beta", listed.Tools[0].ToolName)
 
-	// The retired entry is still visible with include_deleted.
+	// The deleted entry is still visible with include_deleted.
 	includeDeleted := true
 	withDeleted, err := ti.service.ListToolMetadata(ctx, &gen.ListToolMetadataPayload{
 		McpServerID:      serverID,

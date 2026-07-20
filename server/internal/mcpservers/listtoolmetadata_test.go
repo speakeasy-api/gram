@@ -84,7 +84,7 @@ func TestListToolMetadata_IncludeDeleted(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Retire beta by re-submitting the batch without it.
+	// Delete beta by re-submitting the batch without it.
 	_, err = ti.service.SetToolMetadataBatch(ctx, &gen.SetToolMetadataBatchPayload{
 		McpServerID: serverID,
 		Tools: []*gen.ToolMetadataForm{

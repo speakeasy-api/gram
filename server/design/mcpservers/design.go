@@ -188,13 +188,13 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("setToolMetadataBatch", func() {
-		Description("Authoritative batch upsert of tool metadata for an MCP server. Every tool in the payload is upserted and any stored tool absent from the payload is retired (soft-deleted), all in one transaction.")
+		Description("Authoritative batch upsert of tool metadata for an MCP server. Every tool in the payload is upserted and any stored tool absent from the payload is soft-deleted, all in one transaction.")
 
 		Payload(func() {
 			Attribute("mcp_server_id", String, "The ID of the MCP server the tool metadata belongs to", func() {
 				Format(FormatUUID)
 			})
-			Attribute("tools", ArrayOf(ToolMetadataForm), "The authoritative set of tools for the MCP server. Stored tools absent from this list are retired.")
+			Attribute("tools", ArrayOf(ToolMetadataForm), "The authoritative set of tools for the MCP server. Stored tools absent from this list are soft-deleted.")
 			Required("mcp_server_id", "tools")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -217,7 +217,7 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("addToolMetadataBatch", func() {
-		Description("Strictly additive batch insert of tool metadata for an MCP server. Every tool in the payload is inserted; if any of them already has a live stored entry the whole batch fails with a conflict and nothing is inserted. Stored tools absent from the payload are left untouched and nothing is retired. Callers are expected to send only tools they know are new.")
+		Description("Strictly additive batch insert of tool metadata for an MCP server. Every tool in the payload is inserted; if any of them already has a live stored entry the whole batch fails with a conflict and nothing is inserted. Stored tools absent from the payload are left untouched and nothing is deleted. Callers are expected to send only tools they know are new.")
 
 		Payload(func() {
 			Attribute("mcp_server_id", String, "The ID of the MCP server the tool metadata belongs to", func() {
@@ -252,7 +252,7 @@ var _ = Service("mcpServers", func() {
 			Attribute("mcp_server_id", String, "The ID of the MCP server the tool metadata belongs to", func() {
 				Format(FormatUUID)
 			})
-			Attribute("include_deleted", Boolean, "Include retired (soft-deleted) tool metadata entries in the result. Retired entries carry a deleted_at timestamp.")
+			Attribute("include_deleted", Boolean, "Include soft-deleted tool metadata entries in the result. Deleted entries carry a deleted_at timestamp.")
 			Required("mcp_server_id")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -307,7 +307,7 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("deleteToolMetadata", func() {
-		Description("Retire (soft-delete) a single tool metadata entry.")
+		Description("Soft-delete a single tool metadata entry.")
 
 		Payload(func() {
 			Attribute("mcp_server_id", String, "The ID of the MCP server the tool metadata belongs to", func() {
@@ -509,7 +509,7 @@ var ToolMetadata = Type("ToolMetadata", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("deleted_at", String, func() {
-		Description("When the tool metadata entry was retired. Only present on retired entries returned by listToolMetadata with include_deleted.")
+		Description("When the tool metadata entry was deleted. Only present on deleted entries returned by listToolMetadata with include_deleted.")
 		Format(FormatDateTime)
 	})
 
@@ -520,8 +520,8 @@ var SetToolMetadataBatchResult = Type("SetToolMetadataBatchResult", func() {
 	Description("Result of an authoritative tool metadata batch upsert.")
 
 	Attribute("tools", ArrayOf(ToolMetadata), "The stored tool metadata after the upsert")
-	Attribute("retired", Int, "The number of stored tools retired because they were absent from the payload")
-	Required("tools", "retired")
+	Attribute("deleted", Int, "The number of stored tools soft-deleted because they were absent from the payload")
+	Required("tools", "deleted")
 })
 
 var AddToolMetadataBatchResult = Type("AddToolMetadataBatchResult", func() {

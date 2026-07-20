@@ -187,10 +187,10 @@ func (s *Service) SetToolMetadataBatch(ctx context.Context, payload *gen.SetTool
 	}
 
 	after := make([]*types.ToolMetadata, 0, len(rows))
-	retired := 0
+	deleted := 0
 	for _, row := range rows {
-		if row.WasRetired {
-			retired++
+		if row.WasDeleted {
+			deleted++
 			continue
 		}
 		after = append(after, mv.BuildToolMetadataSetView(row))
@@ -204,7 +204,7 @@ func (s *Service) SetToolMetadataBatch(ctx context.Context, payload *gen.SetTool
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return &gen.SetToolMetadataBatchResult{Tools: after, Retired: retired}, nil
+	return &gen.SetToolMetadataBatchResult{Tools: after, Deleted: deleted}, nil
 }
 
 func (s *Service) AddToolMetadataBatch(ctx context.Context, payload *gen.AddToolMetadataBatchPayload) (*gen.AddToolMetadataBatchResult, error) {

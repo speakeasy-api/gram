@@ -42,7 +42,7 @@ func BuildToolMetadataListView(rows []repo.McpServerToolMetadatum) []*types.Tool
 
 // BuildToolMetadataSetView converts a row returned by the authoritative
 // SetMCPServerToolMetadata write into the API response type. The row carries the
-// table's columns plus the was_retired discriminator, which is not part of the
+// table's columns plus the was_deleted discriminator, which is not part of the
 // view.
 func BuildToolMetadataSetView(row repo.SetMCPServerToolMetadataRow) *types.ToolMetadata {
 	return BuildToolMetadataView(repo.McpServerToolMetadatum{

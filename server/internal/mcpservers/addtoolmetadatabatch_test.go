@@ -106,7 +106,7 @@ func TestAddToolMetadataBatch_ConflictInsertsNothing(t *testing.T) {
 
 // The partial unique index covers only live rows, so a tool whose sole prior
 // row is a tombstone is recorded again as a fresh entry.
-func TestAddToolMetadataBatch_RetiredToolInsertsFresh(t *testing.T) {
+func TestAddToolMetadataBatch_DeletedToolInsertsFresh(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -158,7 +158,7 @@ func TestAddToolMetadataBatch_RetiredToolInsertsFresh(t *testing.T) {
 	require.Len(t, listed.Tools, 1)
 }
 
-// Nothing is ever retired: stored tools the payload omits survive untouched.
+// Nothing is ever deleted: stored tools the payload omits survive untouched.
 func TestAddToolMetadataBatch_LeavesAbsentToolsUntouched(t *testing.T) {
 	t.Parallel()
 
@@ -203,7 +203,7 @@ func TestAddToolMetadataBatch_LeavesAbsentToolsUntouched(t *testing.T) {
 	require.Equal(t, "beta", listed.Tools[1].ToolName)
 }
 
-// The empty batch is a no-op here, where the same shape retires everything on
+// The empty batch is a no-op here, where the same shape deletes everything on
 // the authoritative path.
 func TestAddToolMetadataBatch_EmptyBatchIsNoOp(t *testing.T) {
 	t.Parallel()
@@ -244,7 +244,7 @@ func TestAddToolMetadataBatch_EmptyBatchIsNoOp(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
-	require.Len(t, listed.Tools, 1, "the empty batch retires nothing")
+	require.Len(t, listed.Tools, 1, "the empty batch deletes nothing")
 
 	afterUpdates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
 	require.NoError(t, err)

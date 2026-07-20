@@ -107,12 +107,12 @@ RETURNING *;
 
 -- name: SetMCPServerToolMetadata :many
 -- Authoritative write of an MCP server's tool metadata collection: every tool in
--- @tools is upserted and every stored tool absent from @tools is retired, in a
+-- @tools is upserted and every stored tool absent from @tools is soft-deleted, in a
 -- single statement. The two branches touch disjoint rows (partitioned by
 -- tool_name), so neither observes the other's writes.
 --
 -- The conflict target is the partial unique index on (mcp_server_id, tool_name)
--- WHERE deleted IS FALSE, so re-adding a retired tool inserts a fresh row
+-- WHERE deleted IS FALSE, so re-adding a soft-deleted tool inserts a fresh row
 -- rather than resurrecting the tombstoned one. A tool_name repeated within
 -- @tools trips the ON CONFLICT cardinality check (SQLSTATE 21000), aborting the
 -- statement rather than silently applying one of the duplicates.
@@ -166,7 +166,7 @@ upserted AS (
     WHERE mcp_server_tool_metadata.project_id = @project_id
     RETURNING *
 ),
-retired AS (
+removed AS (
     UPDATE mcp_server_tool_metadata
     SET deleted_at = clock_timestamp()
     WHERE mcp_server_id = @mcp_server_id
@@ -181,15 +181,15 @@ SELECT
     id, project_id, mcp_server_id, tool_name, title,
     read_only_hint, destructive_hint, idempotent_hint, open_world_hint,
     created_at, updated_at, deleted_at, deleted,
-    false AS was_retired
+    false AS was_deleted
 FROM upserted
 UNION ALL
 SELECT
     id, project_id, mcp_server_id, tool_name, title,
     read_only_hint, destructive_hint, idempotent_hint, open_world_hint,
     created_at, updated_at, deleted_at, deleted,
-    true AS was_retired
-FROM retired
+    true AS was_deleted
+FROM removed
 ORDER BY tool_name;
 
 -- name: AddMCPServerToolMetadata :many
