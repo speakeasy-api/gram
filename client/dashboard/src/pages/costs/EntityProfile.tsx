@@ -284,7 +284,7 @@ export function EntityProfile({
   );
   const parent = path.length >= 2 ? path[path.length - 2] : undefined;
   let parentLabel = projectName || "All costs";
-  if (parentValue) {
+  if (parentValue !== null) {
     parentLabel = parent ? displayName(parent.dim, parentValue) : parentValue;
   }
   const palette = entityPalette(title);

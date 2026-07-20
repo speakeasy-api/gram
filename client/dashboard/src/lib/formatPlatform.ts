@@ -6,6 +6,7 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   claude: "Claude Chat Desktop",
   "claude-desktop": "Claude Chat Desktop",
   "claude-chat-desktop": "Claude Chat Desktop",
+  "claude-web": "Claude Chat Web",
   "claude-chat-web": "Claude Chat Web",
   claudecode: "Claude Code",
   "claude-code": "Claude Code",

@@ -17,4 +17,8 @@ describe("displayName", () => {
     expect(displayName(Dimension.Provider, "anthropic")).toBe("Anthropic");
     expect(displayName(Dimension.Provider, "openai")).toBe("OpenAI");
   });
+
+  it("keeps an empty dimension value visible as the unset bucket", () => {
+    expect(displayName(Dimension.DepartmentName, "")).toBe("(unset)");
+  });
 });

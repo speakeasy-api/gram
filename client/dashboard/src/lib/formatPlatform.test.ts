@@ -12,6 +12,7 @@ describe("formatPlatform", () => {
     expect(formatPlatform("claude-code")).toBe("Claude Code");
     expect(formatPlatform("ClaudeCode")).toBe("Claude Code");
     expect(formatPlatform("cowork")).toBe("Claude Cowork");
+    expect(formatPlatform("Claude Web")).toBe("Claude Chat Web");
     expect(formatPlatform("Claude Chat Web")).toBe("Claude Chat Web");
   });
 
