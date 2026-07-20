@@ -285,7 +285,11 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         )}
         <div className="bg-border w-px self-stretch" />
         <routes.playground.Link
-          queryParams={isRemoteBacked ? { mcpServer: mcpServer.id } : undefined}
+          queryParams={
+            isRemoteBacked || isTunneledBacked
+              ? { mcpServer: mcpServer.id }
+              : undefined
+          }
           className="flex flex-1 items-center justify-center hover:no-underline"
         >
           <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors">

@@ -189,7 +189,8 @@ func insertRetainedGramAggregateRow(t *testing.T, conn driver.Conn, projectID st
 			'' AS account_type, '' AS provider, '' AS billing_mode,
 			'' AS query_source, '' AS skill_name, '' AS agent_name,
 			'' AS mcp_server_name, '' AS mcp_tool_name,
-			toUInt8(0) AS generation, toUInt8(1) AS is_active
+			toUInt8(0) AS generation, toUInt8(1) AS is_active,
+			'' AS hook_hostname
 	`, projectID, timestamp.UnixNano(), hookSource, tokens, tokens)
 	require.NoError(t, err)
 }
@@ -225,7 +226,8 @@ func insertObservedClaudeAggregateRow(t *testing.T, conn driver.Conn, projectID 
 			'' AS account_type, '' AS provider, '' AS billing_mode,
 			'' AS query_source, '' AS skill_name, '' AS agent_name,
 			'' AS mcp_server_name, '' AS mcp_tool_name,
-			toUInt8(0) AS generation, toUInt8(1) AS is_active
+			toUInt8(0) AS generation, toUInt8(1) AS is_active,
+			'' AS hook_hostname
 	`, projectID, timestamp.UnixNano(), tokens, tokens)
 	require.NoError(t, err)
 }

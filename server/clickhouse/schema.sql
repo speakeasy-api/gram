@@ -521,7 +521,15 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     -- target column; column defaults are not applied. Production runbook:
     -- clickhouse/local/backfill/20260713000000_backfill-attribute-metrics-summaries.sql
     generation UInt8,
-    is_active UInt8 DEFAULT 1
+    is_active UInt8 DEFAULT 1,
+
+    -- Device hostname (gram.hook.hostname): reported by the Go hooks on every
+    -- event and propagated onto Claude OTEL rows via the session cache. A
+    -- sort-key DIMENSION appended after generation (MODIFY ORDER BY can only
+    -- append), declared last in the table to match the MV's positional SELECT.
+    -- Lets the user breakdown fall back to the device when a session carries
+    -- no email (company-credential sessions emit no user identity).
+    hook_hostname String
 ) ENGINE = AggregatingMergeTree
 -- Primary key stays the original 12 dimensions; account_type, provider,
 -- billing_mode, attribution dimensions, and generation are appended to ORDER BY
@@ -531,7 +539,7 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
 -- primary key includes the appended dims, and atlas would see drift it can't
 -- reconcile — "modifying primary key is not supported").
 PRIMARY KEY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
-ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation)
+ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation, hook_hostname)
 -- Retained beyond the standard 90-day telemetry window (matching
 -- chat_token_summaries) so the costs page can break down token usage across
 -- the same lookback that TUM billing reports cover.
@@ -670,7 +678,12 @@ SELECT
     -- column list, so the SELECT must produce every target column or ingestion
     -- fails with a column-count mismatch. Constants need no GROUP BY entry.
     toUInt8(2) AS generation,
-    toUInt8(1) AS is_active
+    toUInt8(1) AS is_active,
+
+    -- Device hostname: on hook rows directly and on Claude OTEL rows via
+    -- session-cache propagation. Declared last to match the table column
+    -- order (positional insert).
+    toString(attributes.gram.hook.hostname) AS hook_hostname
 FROM telemetry_logs
 -- Admit only the three agent surfaces: Claude OTEL api_request/tool_result
 -- rows, Codex/Cursor usage rows, and Codex/Cursor completed tool-call hook
@@ -698,7 +711,8 @@ GROUP BY
     skill_name,
     agent_name,
     mcp_server_name,
-    mcp_tool_name;
+    mcp_tool_name,
+    hook_hostname;
 
 CREATE TABLE IF NOT EXISTS chat_token_summaries (
     -- Key columns

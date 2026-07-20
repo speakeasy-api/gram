@@ -124,9 +124,12 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			ExternalAccountUUID: conv.Default(session.ExternalAccountUUID, cached.ExternalAccountUUID),
 			ExternalAccountID:   conv.Default(session.ExternalAccountID, cached.ExternalAccountID),
 			DeviceID:            conv.Default(session.DeviceID, cached.DeviceID),
-			AccountType:         "",
-			BillingMode:         "",
-			UserAccountID:       "",
+			// Claude OTEL records carry no hostname; adopt whatever the hooks
+			// path cached for the session (the Go hooks send it on every event).
+			Hostname:      cached.Hostname,
+			AccountType:   "",
+			BillingMode:   "",
+			UserAccountID: "",
 			// On this path user.email is the account's own report, so it doubles
 			// as the observed email consumers keep separate from actor identity.
 			ObservedUserEmail: userEmail,

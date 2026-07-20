@@ -1,5 +1,10 @@
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
-import { providerLabel } from "@/components/observe/account-display-utils";
+import {
+  providerLabel,
+  unsetLabel,
+} from "@/components/observe/account-display-utils";
+
+export { unsetLabel };
 
 // Shared cost-taxonomy config + helpers, used by both the CostsExplorer
 // controller and the EntityProfile view. Kept in a non-component module so the
@@ -57,6 +62,10 @@ export const PIVOTS: DimMeta[] = [
   { dim: Dimension.Model, label: "Model" },
   { dim: Dimension.AccountType, label: "Account Type" },
   { dim: Dimension.Provider, label: "Provider" },
+  // hostname is the machine the Go hooks report (gram.hook.hostname) — the
+  // per-device cut, and the identity the user breakdown falls back to when a
+  // session has no email.
+  { dim: Dimension.Hostname, label: "Device" },
   { dim: Dimension.Role, label: "Role" },
   { dim: Dimension.McpServerName, label: "MCP Server" },
   { dim: Dimension.McpToolName, label: "MCP Tool" },
@@ -130,6 +139,9 @@ export function entityBadgeVariant(dim: Dimension | null): EntityBadgeVariant {
 const SESSION_LEAF_DIMS = new Set<Dimension>([
   Dimension.HookSource,
   Dimension.Model,
+  // A device is an endpoint too: drilling one lists that machine's sessions —
+  // the natural next question about an unattributed CI runner or shared box.
+  Dimension.Hostname,
   // Claude attribution leaves: an MCP *tool* or a *skill* is an endpoint —
   // drilling one lists the sessions that touched it. Their parents (MCP Server,
   // Subagent) are NOT leaves: they drill one level deeper first (Server → Tool,
@@ -317,6 +329,7 @@ const DIM_ATTRIBUTE_KEY: Partial<Record<Dimension, string>> = {
   [Dimension.EmployeeType]: "user.attributes.employee_type",
   [Dimension.CostCenterName]: "user.attributes.cost_center_name",
   [Dimension.Email]: "user.email",
+  [Dimension.Hostname]: "gram.hook.hostname",
   [Dimension.Role]: "user.roles",
   [Dimension.Model]: "gen_ai.response.model",
   [Dimension.HookSource]: "gram.hook.source",
@@ -402,7 +415,7 @@ export function datasetDefaultGroupBy(
 // title-cased form belongs to the hero, which pairs it with the address anyway
 // (see prettyName in EntityProfile).
 export function displayName(dim: Dimension, value: string): string {
-  if (value === "") return "(unset)";
+  if (value === "") return unsetLabel(dim);
   if (dim === Dimension.Provider) return providerLabel(value);
   if (dim === Dimension.AccountType) {
     return value.charAt(0).toUpperCase() + value.slice(1);
