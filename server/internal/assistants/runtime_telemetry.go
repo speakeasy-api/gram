@@ -142,10 +142,11 @@ func (t *telemetryRuntimeBackend) RunTurn(
 	idempotencyKey string,
 	authToken string,
 	prompt string,
+	inputParts []runtimeContentPart,
 	mcpServers []runtimeMCPServer,
 ) error {
 	t.emit(ctx, runtime, "runtime_turn", "runtime turn dispatched", "INFO", nil)
-	if err := t.inner.RunTurn(ctx, runtime, threadID, idempotencyKey, authToken, prompt, mcpServers); err != nil {
+	if err := t.inner.RunTurn(ctx, runtime, threadID, idempotencyKey, authToken, prompt, inputParts, mcpServers); err != nil {
 		t.emit(ctx, runtime, "runtime_turn", "runtime turn errored", "ERROR", err)
 		return fmt.Errorf("runtime run turn: %w", err)
 	}

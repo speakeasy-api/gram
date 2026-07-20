@@ -350,7 +350,7 @@ func (g *GKERuntimeBackend) endpoint(metadata gkeRuntimeMetadata) string {
 	return fmt.Sprintf("http://%s:%d", metadata.PodIP, g.config.GuestPort)
 }
 
-func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
+func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, inputParts []runtimeContentPart, mcpServers []runtimeMCPServer) error {
 	if err := validateRuntimeBackend(g, runtime.Backend); err != nil {
 		return err
 	}
@@ -362,7 +362,7 @@ func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 		return fmt.Errorf("%w: gke runtime pod ip is not available", ErrRuntimeUnhealthy)
 	}
 
-	return g.runner.turn(ctx, g.endpoint(metadata), runtime, threadID, idempotencyKey, authToken, prompt, mcpServers, gkeRuntimeTurnTimeout)
+	return g.runner.turn(ctx, g.endpoint(metadata), runtime, threadID, idempotencyKey, authToken, prompt, inputParts, mcpServers, gkeRuntimeTurnTimeout)
 }
 
 func (g *GKERuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
