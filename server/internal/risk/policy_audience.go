@@ -135,3 +135,35 @@ func riskPolicyAudiencePrincipalURNs(ctx context.Context, db repo.DBTX, organiza
 
 	return principalURNs, nil
 }
+
+// riskPolicyAudienceURNsByPolicy batch-loads audience principal URNs for every
+// risk policy in an org in a single query, keyed by policy id. Batched form of
+// riskPolicyAudiencePrincipalURNs used by ListRiskPolicies to avoid a per-policy
+// round trip. Policies with no audience grants are simply absent from the map.
+func riskPolicyAudienceURNsByPolicy(ctx context.Context, db repo.DBTX, organizationID string) (map[string][]string, error) {
+	grants, err := authz.ListGrantsForScopeKind(ctx, db, organizationID, authz.ScopeRiskPolicyEvaluate)
+	if err != nil {
+		return nil, fmt.Errorf("list risk policy audience grants: %w", err)
+	}
+
+	byPolicy := make(map[string][]string)
+	for _, grant := range grants {
+		if grant.Effect != authz.PolicyEffectAllow {
+			continue
+		}
+		// Attribute the grant to its policy via the selector's resource_id, then
+		// re-check against the canonical selector so grants carrying extra keys
+		// (or wildcards) are excluded exactly as the single-policy path does.
+		policyID := grant.Selector.ResourceID()
+		if !maps.Equal(grant.Selector, authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)) {
+			continue
+		}
+		byPolicy[policyID] = append(byPolicy[policyID], grant.PrincipalUrn)
+	}
+	for policyID, principalURNs := range byPolicy {
+		slices.Sort(principalURNs)
+		byPolicy[policyID] = slices.Compact(principalURNs)
+	}
+
+	return byPolicy, nil
+}

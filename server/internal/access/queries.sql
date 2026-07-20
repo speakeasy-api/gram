@@ -29,6 +29,19 @@ WHERE organization_id = @organization_id
   )
 ORDER BY principal_urn;
 
+-- name: ListPrincipalGrantsByScope :many
+-- Returns grant rows for every resource of one kind under a scope in an org.
+-- Batched form of ListPrincipalGrantsByResource: callers group the results by
+-- the selector's resource_id to avoid a per-resource round trip.
+SELECT principal_urn, scope, effect, selectors
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = @scope
+  AND selectors @> jsonb_build_object(
+    'resource_kind', sqlc.arg(resource_kind)::text
+  )
+ORDER BY principal_urn;
+
 -- name: UpsertPrincipalGrant :one
 -- Creates or updates a single grant row. On conflict (same org/principal/scope/effect/selectors),
 -- the updated_at is refreshed. Uses COALESCE to match the functional unique index.

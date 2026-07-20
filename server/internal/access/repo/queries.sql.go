@@ -1400,6 +1400,58 @@ func (q *Queries) ListPrincipalGrantsByResource(ctx context.Context, arg ListPri
 	return items, nil
 }
 
+const listPrincipalGrantsByScope = `-- name: ListPrincipalGrantsByScope :many
+SELECT principal_urn, scope, effect, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND scope = $2
+  AND selectors @> jsonb_build_object(
+    'resource_kind', $3::text
+  )
+ORDER BY principal_urn
+`
+
+type ListPrincipalGrantsByScopeParams struct {
+	OrganizationID string
+	Scope          string
+	ResourceKind   string
+}
+
+type ListPrincipalGrantsByScopeRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Effect       pgtype.Text
+	Selectors    []byte
+}
+
+// Returns grant rows for every resource of one kind under a scope in an org.
+// Batched form of ListPrincipalGrantsByResource: callers group the results by
+// the selector's resource_id to avoid a per-resource round trip.
+func (q *Queries) ListPrincipalGrantsByScope(ctx context.Context, arg ListPrincipalGrantsByScopeParams) ([]ListPrincipalGrantsByScopeRow, error) {
+	rows, err := q.db.Query(ctx, listPrincipalGrantsByScope, arg.OrganizationID, arg.Scope, arg.ResourceKind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrincipalGrantsByScopeRow
+	for rows.Next() {
+		var i ListPrincipalGrantsByScopeRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Effect,
+			&i.Selectors,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,

@@ -279,3 +279,44 @@ func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource)
 
 	return grants, nil
 }
+
+// ListGrantsForScopeKind loads every grant for a scope in an org, batching what
+// ListGrantsForResource does for a single resource. Callers group the returned
+// grants by Selector.ResourceID() to attribute each grant to its resource.
+func ListGrantsForScopeKind(ctx context.Context, db repo.DBTX, organizationID string, scope Scope) ([]Grant, error) {
+	if organizationID == "" {
+		return nil, fmt.Errorf("organization id is required")
+	}
+	if scope == "" {
+		return nil, fmt.Errorf("scope is required")
+	}
+	resourceKind := ResourceKindForScope(scope)
+	if resourceKind == WildcardResource {
+		return nil, fmt.Errorf("scope %q does not map to a resource kind", scope)
+	}
+
+	rows, err := repo.New(db).ListPrincipalGrantsByScope(ctx, repo.ListPrincipalGrantsByScopeParams{
+		OrganizationID: organizationID,
+		Scope:          string(scope),
+		ResourceKind:   resourceKind,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list scope grants: %w", err)
+	}
+
+	grants := make([]Grant, 0, len(rows))
+	for _, row := range rows {
+		selector, err := SelectorFromRow(row.Selectors)
+		if err != nil {
+			return nil, err
+		}
+		grants = append(grants, Grant{
+			PrincipalUrn: row.PrincipalUrn.String(),
+			Scope:        Scope(row.Scope),
+			Effect:       policyEffectFromText(row.Effect),
+			Selector:     selector,
+		})
+	}
+
+	return grants, nil
+}
