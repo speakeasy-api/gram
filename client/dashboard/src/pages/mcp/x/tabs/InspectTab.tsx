@@ -35,6 +35,7 @@ export function InspectTab({
         isResolvingUrl={loading}
         mcpServerId={mcpServer.id}
         userSessionIssuerId={mcpServer.userSessionIssuerId}
+        remoteMcpServerId={mcpServer.remoteMcpServerId ?? undefined}
         isDisabled={mcpServer.visibility === "disabled"}
         authSettingsHref={authSettingsHref}
       />
