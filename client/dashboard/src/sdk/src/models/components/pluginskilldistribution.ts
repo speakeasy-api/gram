@@ -12,31 +12,24 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * The distribution channel.
  */
-export const Channel = {
+export const PluginSkillDistributionChannel = {
   Plugin: "plugin",
-  Assistant: "assistant",
 } as const;
 /**
  * The distribution channel.
  */
-export type Channel = ClosedEnum<typeof Channel>;
+export type PluginSkillDistributionChannel = ClosedEnum<
+  typeof PluginSkillDistributionChannel
+>;
 
 /**
- * An active plugin or assistant distribution of a project skill.
+ * An active plugin distribution of a project skill.
  */
-export type SkillDistribution = {
-  /**
-   * The assistant that carries the skill.
-   */
-  assistantId?: string | undefined;
-  /**
-   * The name of the assistant that carries the skill.
-   */
-  assistantName?: string | undefined;
+export type PluginSkillDistribution = {
   /**
    * The distribution channel.
    */
-  channel: Channel;
+  channel: PluginSkillDistributionChannel;
   /**
    * When the distribution was created.
    */
@@ -56,11 +49,11 @@ export type SkillDistribution = {
   /**
    * The plugin that carries the skill.
    */
-  pluginId?: string | undefined;
+  pluginId: string;
   /**
    * The name of the plugin that carries the skill.
    */
-  pluginName?: string | undefined;
+  pluginName: string;
   /**
    * The project that owns the distribution.
    */
@@ -88,19 +81,17 @@ export type SkillDistribution = {
 };
 
 /** @internal */
-export const Channel$inboundSchema: z.ZodMiniEnum<typeof Channel> = z.enum(
-  Channel,
-);
+export const PluginSkillDistributionChannel$inboundSchema: z.ZodMiniEnum<
+  typeof PluginSkillDistributionChannel
+> = z.enum(PluginSkillDistributionChannel);
 
 /** @internal */
-export const SkillDistribution$inboundSchema: z.ZodMiniType<
-  SkillDistribution,
+export const PluginSkillDistribution$inboundSchema: z.ZodMiniType<
+  PluginSkillDistribution,
   unknown
 > = z.pipe(
   z.object({
-    assistant_id: z.optional(z.string()),
-    assistant_name: z.optional(z.string()),
-    channel: Channel$inboundSchema,
+    channel: PluginSkillDistributionChannel$inboundSchema,
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -108,8 +99,8 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
     created_by_user_id: z.string(),
     id: z.string(),
     pinned_version_id: z.optional(z.string()),
-    plugin_id: z.optional(z.string()),
-    plugin_name: z.optional(z.string()),
+    plugin_id: z.string(),
+    plugin_name: z.string(),
     project_id: z.string(),
     resolved_version_id: z.string(),
     skill_display_name: z.string(),
@@ -122,8 +113,6 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      "assistant_id": "assistantId",
-      "assistant_name": "assistantName",
       "created_at": "createdAt",
       "created_by_user_id": "createdByUserId",
       "pinned_version_id": "pinnedVersionId",
@@ -139,12 +128,12 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function skillDistributionFromJSON(
+export function pluginSkillDistributionFromJSON(
   jsonString: string,
-): SafeParseResult<SkillDistribution, SDKValidationError> {
+): SafeParseResult<PluginSkillDistribution, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => SkillDistribution$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'SkillDistribution' from JSON`,
+    (x) => PluginSkillDistribution$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'PluginSkillDistribution' from JSON`,
   );
 }

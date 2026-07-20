@@ -7,8 +7,8 @@
 
 package types
 
-// SkillDistribution is the result type of the skills service distribute method.
-type SkillDistribution struct {
+// An active plugin distribution of a project skill.
+type PluginSkillDistribution struct {
 	// The distribution ID.
 	ID string
 	// The project that owns the distribution.
@@ -20,13 +20,9 @@ type SkillDistribution struct {
 	// The display name of the distributed skill.
 	SkillDisplayName string
 	// The plugin that carries the skill.
-	PluginID *string
+	PluginID string
 	// The name of the plugin that carries the skill.
-	PluginName *string
-	// The assistant that carries the skill.
-	AssistantID *string
-	// The name of the assistant that carries the skill.
-	AssistantName *string
+	PluginName string
 	// The pinned version, absent when tracking the latest valid version.
 	PinnedVersionID *string
 	// The version currently targeted by this distribution.
