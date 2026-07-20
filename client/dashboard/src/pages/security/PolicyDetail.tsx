@@ -47,6 +47,7 @@ import {
 } from "@tanstack/react-query";
 import {
   Check,
+  Code,
   Info,
   Loader2,
   Pencil,
@@ -94,6 +95,10 @@ import {
   policyToCategories,
 } from "./policy-form";
 import { CelExpressionField } from "./cel-field";
+import { CelReferenceSheet } from "./cel-reference";
+import { CelTrafficPreview } from "./cel-traffic-preview";
+import { useCelEngine } from "./use-cel-engine";
+import type { CelEngine, CelMessage } from "./cel-wasm";
 import { useDetectionRulesStore } from "./detection-rules-data";
 import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
@@ -1132,12 +1137,15 @@ function RecommendedScopesPanel({
 
   return (
     <div className="space-y-3">
-      <div className="space-y-1">
-        <Label className="text-sm font-medium">Detection scopes</Label>
-        <p className="text-muted-foreground text-xs">
-          Each category scans the highlighted surfaces. Click a surface to
-          customize; a custom scope replaces the recommendation.
-        </p>
+      <div className="flex items-end justify-between gap-3">
+        <div className="space-y-1">
+          <Label className="text-sm font-medium">Detection scopes</Label>
+          <p className="text-muted-foreground text-xs">
+            Each category scans the highlighted surfaces. Click a surface to
+            customize; a custom scope replaces the recommendation.
+          </p>
+        </div>
+        <CelReferenceSheet />
       </div>
       <div className="space-y-2">
         {rows.map((category) => (
@@ -1200,6 +1208,93 @@ function surfacesFromScope(
   return new Set([...base].filter((kind) => !exempted.has(kind)));
 }
 
+type SurfaceState = "in" | "out" | "conditional";
+
+// Canonical probe messages per surface. tool_request gets a write probe and an
+// all-read-only probe so tool-conditional scopes (e.g. a read-only allowlist)
+// register as "conditional" rather than a hard yes/no.
+const SURFACE_PROBES: Record<ScopeSurfaceKind, CelMessage[]> = {
+  user_message: [{ type: "user_message", content: "sample text" }],
+  assistant_message: [{ type: "assistant_message", content: "sample text" }],
+  tool_response: [{ type: "tool_response", content: "sample text" }],
+  tool_request: [
+    {
+      type: "tool_request",
+      content: "",
+      tools: [
+        { name: "Bash", server: "", function: "Bash", args: '{"command":"x"}' },
+      ],
+    },
+    {
+      type: "tool_request",
+      content: "",
+      tools: [{ name: "Read", server: "", function: "Read", args: "{}" }],
+    },
+  ],
+};
+
+// Per-surface footprint for scopes the chips cannot represent exactly
+// (granular recommendations), derived by evaluating the scope against the
+// probes: in scope for every probe, none, or only some ("conditional").
+function surfaceStatesFromProbes(
+  engine: CelEngine,
+  include: string,
+  exempt: string,
+): Record<ScopeSurfaceKind, SurfaceState> | null {
+  const inc = include.trim();
+  const exc = exempt.trim();
+  if (inc !== "" && !engine.compile(inc).ok) return null;
+  if (exc !== "" && !engine.compile(exc).ok) return null;
+  const out = {} as Record<ScopeSurfaceKind, SurfaceState>;
+  for (const kind of ALL_SURFACE_KINDS) {
+    const verdicts: boolean[] = [];
+    for (const probe of SURFACE_PROBES[kind]) {
+      let inScope = true;
+      if (inc !== "") {
+        const result = engine.evalDetection(inc, probe);
+        if (!result.ok) return null;
+        inScope = result.matched;
+      }
+      if (inScope && exc !== "") {
+        const result = engine.evalDetection(exc, probe);
+        if (!result.ok) return null;
+        if (result.matched) inScope = false;
+      }
+      verdicts.push(inScope);
+    }
+    out[kind] = verdicts.every(Boolean)
+      ? "in"
+      : verdicts.some(Boolean)
+        ? "conditional"
+        : "out";
+  }
+  return out;
+}
+
+// Forces one surface fully in or out of a scope the chips cannot express
+// exactly, by wrapping the existing predicates rather than rewriting them:
+// the rest of the scope's conditions are preserved verbatim.
+function scopeWithSurface(
+  scope: ScopeOverride,
+  kind: ScopeSurfaceKind,
+  on: boolean,
+): ScopeOverride {
+  const include = scope.scopeInclude.trim();
+  const exempt = scope.scopeExempt.trim();
+  const kindEq = `kind == "${kind}"`;
+  const kindNe = `kind != "${kind}"`;
+  if (on) {
+    return {
+      scopeInclude: include === "" ? "" : `(${include}) || ${kindEq}`,
+      scopeExempt: exempt === "" ? "" : `(${exempt}) && ${kindNe}`,
+    };
+  }
+  return {
+    scopeInclude: include === "" ? "" : `(${include}) && ${kindNe}`,
+    scopeExempt: exempt === "" ? kindEq : `(${exempt}) || ${kindEq}`,
+  };
+}
+
 // Canonical scope for a surface set: every surface = unrestricted, one
 // missing = exempt it, otherwise include the chosen surfaces.
 function scopeFromSurfaces(surfaces: Set<ScopeSurfaceKind>): ScopeOverride {
@@ -1228,6 +1323,8 @@ function RecommendedScopeRow({
   onOverrideChange: (override: ScopeOverride | null) => void;
 }): JSX.Element {
   const [celOpen, setCelOpen] = useState(false);
+  const engineState = useCelEngine();
+  const engine = engineState.status === "ready" ? engineState.engine : null;
 
   if (!category.recommendedScopeApplicable) {
     return (
@@ -1251,7 +1348,8 @@ function RecommendedScopeRow({
     activeScope.scopeInclude,
     activeScope.scopeExempt,
   );
-  const celMode = celOpen || activeSurfaces === null;
+  const granularChips = !celOpen && activeSurfaces === null;
+  const editorsOpen = celOpen && override !== undefined;
 
   const toggleSurface = (kind: ScopeSurfaceKind) => {
     if (!activeSurfaces) return;
@@ -1293,7 +1391,7 @@ function RecommendedScopeRow({
         </div>
       </div>
 
-      {!celMode && activeSurfaces && (
+      {!celOpen && activeSurfaces && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {SCOPE_SURFACES.map(({ kind, label }) => {
             const active = activeSurfaces.has(kind);
@@ -1307,50 +1405,50 @@ function RecommendedScopeRow({
                   "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
                   active
                     ? "border-foreground bg-foreground text-background"
-                    : "border-border text-muted-foreground hover:text-foreground line-through",
+                    : "border-border text-muted-foreground hover:text-foreground",
                 )}
               >
                 {label}
               </button>
             );
           })}
-          <button
-            type="button"
-            onClick={() => {
-              if (override === undefined) {
-                onOverrideChange({ ...activeScope });
-              }
-              setCelOpen(true);
-            }}
-            className="text-muted-foreground hover:text-foreground ml-1 text-xs underline"
-          >
-            Use CEL
-          </button>
+          <SimpleTooltip tooltip="Switch to CEL expressions for granular scoping: match on tool names, servers, or message content instead of whole surfaces.">
+            <button
+              type="button"
+              onClick={() => {
+                if (override === undefined) {
+                  onOverrideChange({ ...activeScope });
+                }
+                setCelOpen(true);
+              }}
+              className="border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 ml-1 flex items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs transition-colors"
+            >
+              <Code className="h-3 w-3" />
+              Granular scope
+            </button>
+          </SimpleTooltip>
         </div>
       )}
 
-      {celMode && override === undefined && (
-        <div className="mt-2 space-y-2">
-          <RecommendedScopeCode
-            include={category.recommendedScopeInclude}
-            exempt={category.recommendedScopeExempt}
-          />
-          <button
-            type="button"
-            onClick={() => {
+      {granularChips && (
+        <GranularRecommendationChips
+          engine={engine}
+          scope={activeScope}
+          onToggleSurface={(kind, on) =>
+            onOverrideChange(scopeWithSurface(activeScope, kind, on))
+          }
+          onCustomize={() => {
+            if (override === undefined) {
               onOverrideChange({ ...activeScope });
-              setCelOpen(true);
-            }}
-            className="text-muted-foreground hover:text-foreground text-xs underline"
-          >
-            Customize
-          </button>
-        </div>
+            }
+            setCelOpen(true);
+          }}
+        />
       )}
 
-      {celMode && override !== undefined && (
-        <div className="mt-3 space-y-3">
-          <div className="space-y-1">
+      {editorsOpen && override !== undefined && (
+        <div className="mt-3 space-y-4">
+          <div className="space-y-1.5">
             <Label className="text-xs font-medium">
               Detect on messages matching
             </Label>
@@ -1362,7 +1460,7 @@ function RecommendedScopeRow({
               examples={SCOPE_INCLUDE_CEL_EXAMPLES}
             />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <Label className="text-xs font-medium">
               Exempt messages matching
             </Label>
@@ -1373,12 +1471,117 @@ function RecommendedScopeRow({
               }
               examples={SCOPE_EXEMPT_CEL_EXAMPLES}
             />
+            <Type small muted>
+              Empty include and exempt scans every message surface. This scope
+              replaces the recommendation; future recommendation updates will
+              not apply.
+            </Type>
           </div>
-          <Type small muted>
-            Empty include and exempt scans every message surface. This scope
-            replaces the recommendation; future recommendation updates will not
-            apply.
-          </Type>
+          <div className="border-border border-t pt-3">
+            <CelTrafficPreview
+              includeExpr={override.scopeInclude}
+              exemptExpr={override.scopeExempt}
+              mode="scope"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A scope the chips cannot express exactly (e.g. a tool-name allowlist inside
+// tool requests): tri-state chips derived from the scope's probe footprint.
+// Clicking a chip forces that surface fully in or out while the rest of the
+// expression is preserved; conditional chips click to fully in. The exact
+// expression stays behind Granular scope. Falls back to the raw expression
+// while the engine loads.
+function GranularRecommendationChips({
+  engine,
+  scope,
+  onToggleSurface,
+  onCustomize,
+}: {
+  engine: CelEngine | null;
+  scope: ScopeOverride;
+  onToggleSurface: (kind: ScopeSurfaceKind, on: boolean) => void;
+  onCustomize: () => void;
+}): JSX.Element {
+  const states = engine
+    ? surfaceStatesFromProbes(engine, scope.scopeInclude, scope.scopeExempt)
+    : null;
+  const scannedCount = states
+    ? Object.values(states).filter((s) => s !== "out").length
+    : 0;
+
+  return (
+    <div className="mt-2 space-y-2">
+      {states ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {SCOPE_SURFACES.map(({ kind, label }) => {
+            const state = states[kind];
+            // Tri-state checkbox semantics: out and conditional click to
+            // fully in; in clicks to out (unless it is the last surface).
+            const nextOn = state !== "in";
+            const lastSurface = state !== "out" && scannedCount <= 1;
+            const chip = (
+              <button
+                key={kind}
+                type="button"
+                aria-pressed={state !== "out"}
+                onClick={() => {
+                  if (!nextOn && lastSurface) return;
+                  onToggleSurface(kind, nextOn);
+                }}
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                  state === "in" &&
+                    "border-foreground bg-foreground text-background",
+                  state === "conditional" &&
+                    "border-foreground/60 text-foreground border-dashed",
+                  state === "out" &&
+                    "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+                {state === "conditional" && "*"}
+              </button>
+            );
+            return state === "conditional" ? (
+              <SimpleTooltip
+                key={kind}
+                tooltip="Conditionally in scope: only some messages on this surface are scanned. Click to scan all of them, or open Granular scope for the exact expression."
+              >
+                {chip}
+              </SimpleTooltip>
+            ) : (
+              chip
+            );
+          })}
+          <SimpleTooltip tooltip="View and edit the exact CEL expressions behind this scope.">
+            <button
+              type="button"
+              onClick={onCustomize}
+              className="border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 ml-1 flex items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs transition-colors"
+            >
+              <Code className="h-3 w-3" />
+              Granular scope
+            </button>
+          </SimpleTooltip>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <RecommendedScopeCode
+            include={scope.scopeInclude}
+            exempt={scope.scopeExempt}
+          />
+          <button
+            type="button"
+            onClick={onCustomize}
+            className="text-muted-foreground hover:text-foreground text-xs underline"
+          >
+            Customize
+          </button>
         </div>
       )}
     </div>

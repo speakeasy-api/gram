@@ -822,6 +822,7 @@ trackedFiles:
   src/models/components/riskcategorydefinition.ts: {}
   src/models/components/riskchatsummary.ts: {}
   src/models/components/riskcustomdetectionrule.ts: {}
+  src/models/components/riskdetectionscope.ts: {}
   src/models/components/riskexclusion.ts: {}
   src/models/components/riskidrequestbody.ts: {}
   src/models/components/riskoverviewcategory.ts: {}
