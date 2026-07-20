@@ -10,6 +10,7 @@ import {
   type ShadowMCPPolicy,
 } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
 import {
+  eligibleShadowMCPAllowRulePolicies,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusDescription,
@@ -304,9 +305,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     ? "unavailable"
     : shadowMCPPolicyState(policiesQuery.data?.policies);
   const shadowMCPPolicies: ShadowMCPPolicy[] =
-    policiesQuery.data?.policies.filter((policy) =>
-      policy.sources.includes("shadow_mcp"),
-    ) ?? [];
+    eligibleShadowMCPAllowRulePolicies(policiesQuery.data?.policies);
   const queryEnabled = project.id.length > 0 && serverSlug.length > 0;
   const [usersCursor, setUsersCursor] = useState<string | undefined>(undefined);
   const [userPages, setUserPages] = useState<UsersPage[]>([]);

@@ -763,6 +763,50 @@ describe("ShadowMCPServerDetail", () => {
 
   it("adds an allow decision from the detail page action menu", async () => {
     const upsertPolicyBypass = vi.fn().mockResolvedValue({});
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            action: "block",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "policy-1",
+            name: "Blocking policy",
+            sources: ["shadow_mcp"],
+          },
+          {
+            action: "flag",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "flag-policy",
+            name: "Flag policy",
+            sources: ["shadow_mcp"],
+          },
+          {
+            action: "block",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: false,
+            id: "disabled-policy",
+            name: "Disabled policy",
+            sources: ["shadow_mcp"],
+          },
+          {
+            action: "block",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "other-source-policy",
+            name: "Other source policy",
+            sources: ["prompt_injection"],
+          },
+        ],
+      },
+      isError: false,
+      isLoading: false,
+    });
     mocks.useShadowMCPInventoryServer.mockReturnValue({
       data: inventoryServer({
         access: "none",
@@ -784,6 +828,10 @@ describe("ShadowMCPServerDetail", () => {
         screen.getByRole("heading", { name: "Add Allow Rule" }),
       ).toBeTruthy();
     });
+    expect(screen.getByText("Blocking policy")).toBeTruthy();
+    expect(screen.queryByText("Flag policy")).toBeNull();
+    expect(screen.queryByText("Disabled policy")).toBeNull();
+    expect(screen.queryByText("Other source policy")).toBeNull();
     fireEvent.click(
       within(screen.getByTestId("shadow-mcp-action-sheet")).getByRole(
         "button",
