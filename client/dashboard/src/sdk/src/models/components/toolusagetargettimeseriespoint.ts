@@ -25,7 +25,7 @@ export type TargetKind = ClosedEnum<typeof TargetKind>;
 /**
  * Tool usage target type
  */
-export const TargetType = {
+export const ToolUsageTargetTimeSeriesPointTargetType = {
   HostedMcpServer: "hosted_mcp_server",
   TunneledMcpServer: "tunneled_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
@@ -35,7 +35,9 @@ export const TargetType = {
 /**
  * Tool usage target type
  */
-export type TargetType = ClosedEnum<typeof TargetType>;
+export type ToolUsageTargetTimeSeriesPointTargetType = ClosedEnum<
+  typeof ToolUsageTargetTimeSeriesPointTargetType
+>;
 
 /**
  * A time-series bucket for one tool usage target
@@ -68,7 +70,7 @@ export type ToolUsageTargetTimeSeriesPoint = {
   /**
    * Tool usage target type
    */
-  targetType: TargetType;
+  targetType: ToolUsageTargetTimeSeriesPointTargetType;
 };
 
 /** @internal */
@@ -76,8 +78,10 @@ export const TargetKind$inboundSchema: z.ZodMiniEnum<typeof TargetKind> = z
   .enum(TargetKind);
 
 /** @internal */
-export const TargetType$inboundSchema: z.ZodMiniEnum<typeof TargetType> = z
-  .enum(TargetType);
+export const ToolUsageTargetTimeSeriesPointTargetType$inboundSchema:
+  z.ZodMiniEnum<typeof ToolUsageTargetTimeSeriesPointTargetType> = z.enum(
+    ToolUsageTargetTimeSeriesPointTargetType,
+  );
 
 /** @internal */
 export const ToolUsageTargetTimeSeriesPoint$inboundSchema: z.ZodMiniType<
@@ -91,7 +95,7 @@ export const ToolUsageTargetTimeSeriesPoint$inboundSchema: z.ZodMiniType<
     target_id: z.string(),
     target_kind: TargetKind$inboundSchema,
     target_label: z.string(),
-    target_type: TargetType$inboundSchema,
+    target_type: ToolUsageTargetTimeSeriesPointTargetType$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

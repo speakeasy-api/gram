@@ -3,6 +3,7 @@ package risk
 import (
 	"context" // #nosec G505 - safe for use for k-anonymization of matches
 	"encoding/base64"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -39,6 +40,24 @@ type FindingBQRow struct {
 	FingerprintPepperVersion bigquery.NullString    `bigquery:"fingerprint_pepper_version"`
 	FingerprintGlobalHS256   bigquery.NullString    `bigquery:"fingerprint_global_hs256"`
 	FingerprintTenantHS256   bigquery.NullString    `bigquery:"fingerprint_tenant_hs256"`
+}
+
+func (r FindingBQRow) Save() (map[string]bigquery.Value, string, error) {
+	insertID := bigquery.NoDedupeID
+	if r.ID.Valid && strings.TrimSpace(r.ID.StringVal) != "" {
+		insertID = r.ID.StringVal
+	}
+
+	type rowAlias FindingBQRow
+	row, savedInsertID, err := (&bigquery.StructSaver{
+		Schema:   nil,
+		Struct:   rowAlias(r),
+		InsertID: insertID,
+	}).Save()
+	if err != nil {
+		return nil, "", fmt.Errorf("save finding row: %w", err)
+	}
+	return row, savedInsertID, nil
 }
 
 type FindingBQWriter struct {

@@ -72,6 +72,9 @@ type CreateRemoteSessionIssuerPayload struct {
 	Name *string
 	// Optional logo asset id.
 	LogoAssetID *string
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+	ClientSetupDocumentationURL *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
@@ -177,6 +180,10 @@ type UpdateRemoteSessionIssuerPayload struct {
 	Name *string
 	// Set the logo asset id.
 	LogoAssetID *string
+	// Set or clear the URL of OAuth client setup documentation shown when creating
+	// clients. An empty string clears it to NULL; any other value must be an
+	// absolute http(s) URL.
+	ClientSetupDocumentationURL *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
