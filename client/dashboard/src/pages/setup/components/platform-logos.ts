@@ -3,7 +3,6 @@ export const PLATFORM_LOGOS: Record<string, string> = {
   "claude-cowork": "/icons/platforms/claude.svg",
   codex: "/icons/platforms/openai.svg",
   cursor: "/icons/platforms/cursor.svg",
-  // TODO: replace with official opencode brand asset once one is published.
   opencode: "/icons/platforms/opencode.svg",
 };
 

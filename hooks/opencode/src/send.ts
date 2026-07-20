@@ -1,4 +1,4 @@
-import { loadConfig } from "./config.js";
+import { isSecureUrl, loadConfig } from "./config.js";
 import type { IngestBody } from "./mapping.js";
 
 const TIMEOUT_MS = 5_000;
@@ -15,6 +15,10 @@ function sleep(ms: number): Promise<void> {
 export async function send(body: IngestBody): Promise<void> {
   const { url, key, project } = loadConfig();
 
+  // Never transmit the key or payloads over a non-TLS endpoint (loadConfig has
+  // already warned once). Fail-open: drop the event rather than throw.
+  if (!isSecureUrl(url)) return;
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -30,6 +34,9 @@ export async function send(body: IngestBody): Promise<void> {
         body: JSON.stringify(body),
         signal: controller.signal,
       });
+      // We never read the response body; cancel it so the underlying
+      // connection is released back to the pool instead of leaking.
+      void res.body?.cancel();
       if (res.ok || attempt === MAX_ATTEMPTS) {
         return;
       }

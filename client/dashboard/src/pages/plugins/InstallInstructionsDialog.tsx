@@ -681,7 +681,7 @@ export GRAM_PROJECT="your-project-slug"`;
       "enabled": true,
       "url": "<mcp-server-url>",
       "headers": {
-        "Authorization": "Bearer \${GRAM_API_KEY}"
+        "Authorization": "Bearer \${MCP_SERVER_API_KEY}"
       }
     }
   }
@@ -716,8 +716,11 @@ export GRAM_PROJECT="your-project-slug"`;
         <p className="text-muted-foreground mb-3 text-sm">
           Merge an entry into the same file's{" "}
           <code className="bg-muted rounded px-1 py-0.5 text-xs">mcp</code>{" "}
-          block. Replace the placeholders with the name and URL from that
-          server's own install page.
+          block. Replace the placeholders with the name, URL, and auth token
+          from that server's own install page — that token is separate from the
+          hooks-scoped{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">GRAM_KEY</code>{" "}
+          above.
         </p>
         <CodeBlock language="json" className="bg-background">
           {mcpConfig}

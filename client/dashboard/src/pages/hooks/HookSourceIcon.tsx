@@ -268,11 +268,7 @@ export function BedrockIcon({
 // text color like the sibling icons. Geometry from https://opencode.ai/brand
 // (sst/opencode packages/console/app/src/asset/brand/opencode-logo-*-square.svg);
 // the two-tone counter is approximated with a reduced-opacity currentColor fill.
-export function OpencodeIcon({
-  className,
-}: {
-  className?: string;
-}): JSX.Element {
+function OpencodeIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg
       className={className}

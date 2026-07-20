@@ -23,23 +23,30 @@ export const GramObservability: Plugin = async ({ directory, client }) => {
     mcpServers: [],
   };
 
-  // Resolve the MCP server list in the background and fill it in when ready.
-  // Never await here: this plugin factory runs during opencode bootstrap, and
-  // client.mcp.status() hits opencode's own server API — which isn't serving
-  // yet — so awaiting it deadlocks startup (blank screen). Tool calls only
-  // happen well after startup, by which point this has resolved; until then
-  // mcpServers is empty and names pass through un-normalized (fail-open).
-  void loadMcpServerNames(client, directory).then((names) => {
-    ctx.mcpServers = names;
-  });
+  // Resolve the MCP server list lazily on the first tool event, not at
+  // bootstrap: client.mcp.status() hits opencode's own server API, which isn't
+  // serving yet during plugin init, so a bootstrap fetch fails fast and would
+  // cache an empty list for the whole session. By the first tool call the
+  // server is up. Memoized so it runs once; fire-and-forget so it never blocks
+  // tool execution. The very first tool call may still see an empty list (load
+  // in flight) and pass names through un-normalized — fail-open, exactly the
+  // pre-normalization behavior.
+  let mcpLoad: Promise<void> | undefined;
+  const ensureMcpServers = (): void => {
+    if (mcpLoad) return;
+    mcpLoad = loadMcpServerNames(client, directory).then((names) => {
+      ctx.mcpServers = names;
+    });
+  };
 
-  // Assistant text streams in over several message.part.updated events
-  // before the message is marked complete; buffer the latest full text per
-  // messageID and flush it once, on completion. Cleared on session end to
-  // bound memory (ponytail: whole-map clear, not per-message eviction — a
-  // single plugin instance is scoped to one opencode session/directory, so
-  // this is enough).
-  const assistantText = new Map<string, string>();
+  // Assistant text streams in over several message.part.updated events before
+  // the message is marked complete, and a single message may carry multiple
+  // text parts (interleaved with tool calls). Buffer the latest text per part
+  // id, keyed by messageID, and join them in arrival order on completion.
+  // Cleared on session end to bound memory (ponytail: whole-map clear, not
+  // per-message eviction — a single plugin instance is scoped to one opencode
+  // session/directory, so this is enough).
+  const assistantText = new Map<string, Map<string, string>>();
 
   return {
     event: async ({ event }) => {
@@ -62,7 +69,12 @@ export const GramObservability: Plugin = async ({ directory, client }) => {
         case "message.part.updated": {
           const part = event.properties.part;
           if (part.type === "text") {
-            assistantText.set(part.messageID, part.text);
+            let parts = assistantText.get(part.messageID);
+            if (!parts) {
+              parts = new Map<string, string>();
+              assistantText.set(part.messageID, parts);
+            }
+            parts.set(part.id, part.text);
           } else if (part.type === "tool" && part.state.status === "error") {
             void send(
               toolFailed(
@@ -81,7 +93,8 @@ export const GramObservability: Plugin = async ({ directory, client }) => {
         case "message.updated": {
           const info = event.properties.info;
           if (info.role === "assistant" && info.time?.completed) {
-            const text = assistantText.get(info.id) ?? "";
+            const parts = assistantText.get(info.id);
+            const text = parts ? [...parts.values()].join("\n") : "";
             assistantText.delete(info.id);
             void send(assistantResponded(info, text, ctx));
           }
@@ -96,9 +109,11 @@ export const GramObservability: Plugin = async ({ directory, client }) => {
       void send(promptSubmitted({ sessionID: input.sessionID }, text, ctx));
     },
     "tool.execute.before": async (input, output) => {
+      ensureMcpServers();
       void send(toolRequested(input, output.args, ctx));
     },
     "tool.execute.after": async (input, output) => {
+      ensureMcpServers();
       void send(toolCompleted(input, output, ctx));
     },
     "permission.ask": async (input) => {
