@@ -14,6 +14,7 @@ export default defineConfig({
   define: {
     __GRAM_SERVER_URL__: JSON.stringify(""),
     __GRAM_GIT_SHA__: JSON.stringify(""),
+    __GRAM_API_URL__: JSON.stringify(""),
   },
   test: {
     environment: "happy-dom",

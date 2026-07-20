@@ -161,7 +161,7 @@ func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.Id
 	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil)
+	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
@@ -202,6 +202,9 @@ func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.Id
 	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, shadowMCPClient, posthog, telemLogger, billingStub, billingStub)
 	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
+		AssistantMemoryTools:          nil,
+		AssistantSkillTools:           nil,
+		AssistantTriggerTools:         nil,
 		ManagedAssistantInsightsTools: managedLogsTools,
 	})
 	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil)

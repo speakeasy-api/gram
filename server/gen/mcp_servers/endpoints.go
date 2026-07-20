@@ -16,12 +16,13 @@ import (
 
 // Endpoints wraps the "mcpServers" service endpoints.
 type Endpoints struct {
-	CreateMcpServer goa.Endpoint
-	GetMcpServer    goa.Endpoint
-	ListMcpServers  goa.Endpoint
-	UpdateMcpServer goa.Endpoint
-	ListToolFilters goa.Endpoint
-	DeleteMcpServer goa.Endpoint
+	CreateMcpServer      goa.Endpoint
+	GetMcpServer         goa.Endpoint
+	ListMcpServers       goa.Endpoint
+	ListMcpServersForOrg goa.Endpoint
+	UpdateMcpServer      goa.Endpoint
+	ListToolFilters      goa.Endpoint
+	DeleteMcpServer      goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "mcpServers" service with endpoints.
@@ -29,12 +30,13 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateMcpServer: NewCreateMcpServerEndpoint(s, a.APIKeyAuth),
-		GetMcpServer:    NewGetMcpServerEndpoint(s, a.APIKeyAuth),
-		ListMcpServers:  NewListMcpServersEndpoint(s, a.APIKeyAuth),
-		UpdateMcpServer: NewUpdateMcpServerEndpoint(s, a.APIKeyAuth),
-		ListToolFilters: NewListToolFiltersEndpoint(s, a.APIKeyAuth),
-		DeleteMcpServer: NewDeleteMcpServerEndpoint(s, a.APIKeyAuth),
+		CreateMcpServer:      NewCreateMcpServerEndpoint(s, a.APIKeyAuth),
+		GetMcpServer:         NewGetMcpServerEndpoint(s, a.APIKeyAuth),
+		ListMcpServers:       NewListMcpServersEndpoint(s, a.APIKeyAuth),
+		ListMcpServersForOrg: NewListMcpServersForOrgEndpoint(s, a.APIKeyAuth),
+		UpdateMcpServer:      NewUpdateMcpServerEndpoint(s, a.APIKeyAuth),
+		ListToolFilters:      NewListToolFiltersEndpoint(s, a.APIKeyAuth),
+		DeleteMcpServer:      NewDeleteMcpServerEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -43,6 +45,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateMcpServer = m(e.CreateMcpServer)
 	e.GetMcpServer = m(e.GetMcpServer)
 	e.ListMcpServers = m(e.ListMcpServers)
+	e.ListMcpServersForOrg = m(e.ListMcpServersForOrg)
 	e.UpdateMcpServer = m(e.UpdateMcpServer)
 	e.ListToolFilters = m(e.ListToolFilters)
 	e.DeleteMcpServer = m(e.DeleteMcpServer)
@@ -79,7 +82,7 @@ func NewCreateMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -138,7 +141,7 @@ func NewGetMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -197,7 +200,7 @@ func NewListMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -222,6 +225,29 @@ func NewListMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.ListMcpServers(ctx, p)
+	}
+}
+
+// NewListMcpServersForOrgEndpoint returns an endpoint function that calls the
+// method "listMcpServersForOrg" of service "mcpServers".
+func NewListMcpServersForOrgEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListMcpServersForOrgPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListMcpServersForOrg(ctx, p)
 	}
 }
 
@@ -256,7 +282,7 @@ func NewUpdateMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -315,7 +341,7 @@ func NewListToolFiltersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -374,7 +400,7 @@ func NewDeleteMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string

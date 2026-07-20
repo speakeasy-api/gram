@@ -12,12 +12,19 @@ import { Type } from "@/components/ui/type";
 import { useViewMode } from "@/components/ui/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
+import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import {
+  indexMcpActivity,
+  lookupMcpActivity,
+  mcpActivityStatus,
+  type McpActivityTargetType,
+} from "@/components/mcp/mcp-activity";
 import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Outlet, useNavigate } from "react-router";
+import { Outlet } from "react-router";
 import { toast } from "sonner";
 import { useToolsets } from "../toolsets/useToolsets";
 import { MCPEmptyState } from "./MCPEmptyState";
@@ -31,8 +38,11 @@ import {
   mcpServerFacets,
   MCP_FILTERS,
   MCP_FILTER_OPTIONS,
+  pluginFilterOptions,
+  pluginMembership,
   toolsetFacets,
 } from "./mcp-filter-schema";
+import { usePlugins } from "@gram/client/react-query/plugins.js";
 
 const BUILT_IN_SERVERS = [
   {
@@ -42,6 +52,18 @@ const BUILT_IN_SERVERS = [
     slug: "logs",
   },
 ];
+
+// A tunnelled mcp_servers row attributes its telemetry as "tunneled_mcp_server";
+// a remote-backed one attributes as "hosted_mcp_server" (same as hosted
+// toolsets). Deriving the type here lets the activity lookup disambiguate a
+// tunnelled server from a hosted toolset that happens to share its slug.
+function mcpServerTargetType(server: {
+  tunneledMcpServerId?: string;
+}): McpActivityTargetType {
+  return server.tunneledMcpServerId
+    ? "tunneled_mcp_server"
+    : "hosted_mcp_server";
+}
 
 export function MCPRoot(): JSX.Element {
   return <Outlet />;
@@ -65,7 +87,6 @@ export const MCPPage = (): JSX.Element => {
 function MCPOverview() {
   const toolsets = useToolsets();
   const routes = useRoutes();
-  const navigate = useNavigate();
   const client = useSdkClient();
 
   // TODO(AGE-1902): collapse this fetch with useToolsets() once Hosted
@@ -95,13 +116,58 @@ function MCPOverview() {
   } = useMcpEndpoints({ gramProject }, undefined, {
     throwOnError: false,
   });
+  // Plugin membership only drives the "Included in plugins" filter, so a failed
+  // fetch degrades to an empty option list rather than breaking the listing.
+  const { data: pluginsResult, refetch: refetchPlugins } = usePlugins(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
+  // Per-server tool-call activity powers the subtle "never used" / "no recent
+  // calls" markers. It's purely decorative: the backend 404s when observability
+  // is disabled for the org, so a failed or absent fetch simply hides the
+  // markers rather than degrading the listing.
+  const {
+    data: activityResult,
+    isError: isActivityError,
+    isFetching: isFetchingActivity,
+    refetch: refetchActivity,
+  } = useGetMcpServerActivity(
+    { gramProject, getMcpServerActivityPayload: {} },
+    undefined,
+    { throwOnError: false },
+  );
+  const activityByTarget = useMemo(
+    () => indexMcpActivity(activityResult?.activity),
+    [activityResult],
+  );
+  const recentWindowDays = activityResult?.recentWindowDays ?? 14;
+  // Resolve a card's activity marker. Returns undefined (hide the marker) when
+  // the activity fetch hasn't resolved or errored (react-query keeps the last
+  // good `data` on error, so we must also gate on isError to avoid showing stale
+  // markers after observability is disabled), or when the server has no
+  // matchable identifier. We only flag a server once we can confirm its state.
+  const activityStatusFor = (
+    targetType: McpActivityTargetType,
+    targetId: string | undefined,
+  ) => {
+    if (isActivityError || !activityResult || !targetId) return undefined;
+    return mcpActivityStatus(
+      lookupMcpActivity(activityByTarget, targetType, targetId),
+    );
+  };
   const handleRefresh = () => {
     void toolsets.refetch();
     void refetchMcpServers();
     void refetchEndpoints();
+    void refetchPlugins();
+    void refetchActivity();
   };
   const isRefreshing =
-    isFetchingMcpServers || isFetchingEndpoints || toolsets.isFetching;
+    isFetchingMcpServers ||
+    isFetchingEndpoints ||
+    isFetchingActivity ||
+    toolsets.isFetching;
   // Until AGE-1902 moves hosted rows here, this grid only renders mcp_servers-backed MCPs.
   const mcpServers = useMemo(
     () =>
@@ -133,11 +199,23 @@ function MCPOverview() {
   const [search, setSearch] = useState("");
   const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
 
+  const plugins = useMemo(() => pluginsResult?.plugins ?? [], [pluginsResult]);
+  const membership = useMemo(() => pluginMembership(plugins), [plugins]);
+  const filterOptions = useMemo(
+    () => ({ ...MCP_FILTER_OPTIONS, plugins: pluginFilterOptions(plugins) }),
+    [plugins],
+  );
+
   const filteredToolsets = useMemo(() => {
     const query = search.toLowerCase();
     return [...toolsets]
       .filter((toolset) => {
-        if (!matchesMcpFilters(toolsetFacets(toolset), mcpFilters.values))
+        if (
+          !matchesMcpFilters(
+            toolsetFacets(toolset, membership),
+            mcpFilters.values,
+          )
+        )
           return false;
         if (!query) return true;
         return (
@@ -146,13 +224,18 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [toolsets, search, mcpFilters.values]);
+  }, [toolsets, search, mcpFilters.values, membership]);
 
   const filteredMcpServers = useMemo(() => {
     const query = search.toLowerCase();
     return [...mcpServers]
       .filter((server) => {
-        if (!matchesMcpFilters(mcpServerFacets(server), mcpFilters.values))
+        if (
+          !matchesMcpFilters(
+            mcpServerFacets(server, membership),
+            mcpFilters.values,
+          )
+        )
           return false;
         if (!query) return true;
         return (
@@ -161,7 +244,7 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-  }, [mcpServers, search, mcpFilters.values]);
+  }, [mcpServers, search, mcpFilters.values, membership]);
 
   // Show the filter bar once there's anything to filter. Filters can drive the
   // result set to empty on their own, so the no-matches state must consider an
@@ -183,7 +266,7 @@ function MCPOverview() {
 
     toast.success(`MCP server "${result.name}" created`);
 
-    void navigate(routes.mcp.details.href(result.slug) + "#tools");
+    routes.mcp.details.tools.goTo(result.slug);
   };
 
   const newMcpServerButton = (
@@ -290,7 +373,7 @@ function MCPOverview() {
               <Page.Toolbar.Filters
                 schema={MCP_FILTERS}
                 values={mcpFilters.values}
-                optionsById={MCP_FILTER_OPTIONS}
+                optionsById={filterOptions}
                 onChange={
                   mcpFilters.setValue as (
                     id: string,
@@ -323,7 +406,15 @@ function MCPOverview() {
               ) : (
                 <>
                   {filteredToolsets.map((toolset) => (
-                    <MCPCard key={toolset.id} toolset={toolset} />
+                    <MCPCard
+                      key={toolset.id}
+                      toolset={toolset}
+                      activityStatus={activityStatusFor(
+                        "hosted_mcp_server",
+                        toolset.slug,
+                      )}
+                      recentWindowDays={recentWindowDays}
+                    />
                   ))}
                   {filteredMcpServers.map((server) => (
                     <MCPServerCard
@@ -332,6 +423,11 @@ function MCPOverview() {
                       endpointCount={
                         endpointCountByServerId.get(server.id) ?? 0
                       }
+                      activityStatus={activityStatusFor(
+                        mcpServerTargetType(server),
+                        server.slug,
+                      )}
+                      recentWindowDays={recentWindowDays}
                     />
                   ))}
                 </>
@@ -354,7 +450,15 @@ function MCPOverview() {
               ) : (
                 <>
                   {filteredToolsets.map((toolset) => (
-                    <MCPTableRow key={toolset.id} toolset={toolset} />
+                    <MCPTableRow
+                      key={toolset.id}
+                      toolset={toolset}
+                      activityStatus={activityStatusFor(
+                        "hosted_mcp_server",
+                        toolset.slug,
+                      )}
+                      recentWindowDays={recentWindowDays}
+                    />
                   ))}
                   {filteredMcpServers.map((server) => (
                     <MCPServerTableRow
@@ -363,6 +467,11 @@ function MCPOverview() {
                       endpointCount={
                         endpointCountByServerId.get(server.id) ?? 0
                       }
+                      activityStatus={activityStatusFor(
+                        mcpServerTargetType(server),
+                        server.slug,
+                      )}
+                      recentWindowDays={recentWindowDays}
                     />
                   ))}
                 </>

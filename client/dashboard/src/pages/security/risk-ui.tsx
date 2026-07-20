@@ -8,8 +8,16 @@ import {
   type ReactNode,
 } from "react";
 import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
+import { CodeBlock } from "@/components/code";
+import { Dialog } from "@/components/ui/dialog";
 import { RULE_CATEGORY_META } from "./policy-data";
-import { getCategoryForFinding, getRuleTitleFallback } from "./risk-utils";
+import {
+  getCategoryForFinding,
+  getRuleTitleFallback,
+  SEVERITY_RATING_LABEL,
+  scoreToRating,
+  type SeverityRating,
+} from "./risk-utils";
 import { Badge } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
@@ -66,6 +74,70 @@ export function RuleLabel({
     <span className="font-mono text-xs" title={ruleId}>
       {label}
     </span>
+  );
+}
+
+// Severity badge for a finding or policy. The score is a policy attribute; a
+// finding resolves it from its owning policy. Variant maps to the qualitative
+// band so the color scales with risk. Renders nothing when the score is absent
+// (e.g. a finding whose policy hasn't loaded yet).
+// Moonshine's badge palette has no distinct "orange", so High and Critical both
+// map to destructive — the label text / numeric score still distinguishes them.
+const SEVERITY_BADGE_VARIANT: Record<
+  SeverityRating,
+  "success" | "warning" | "destructive"
+> = {
+  low: "success",
+  medium: "warning",
+  high: "destructive",
+  critical: "destructive",
+};
+
+export function SeverityBadge({
+  score,
+  className,
+}: {
+  score: number | undefined;
+  className?: string;
+}): JSX.Element | null {
+  if (score == null) return null;
+  const rating = scoreToRating(score);
+  return (
+    <SimpleTooltip
+      tooltip={`${SEVERITY_RATING_LABEL[rating]} severity · score ${score.toFixed(1)}`}
+    >
+      <Badge variant={SEVERITY_BADGE_VARIANT[rating]} className={className}>
+        <Badge.Text>{SEVERITY_RATING_LABEL[rating]}</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
+  );
+}
+
+// Numeric severity, rendered as a color-coded pill. Used in list/table columns
+// where the raw score is more useful than the qualitative label — the number
+// carries the exact value while the band color (shared with SeverityBadge) makes
+// severity scannable at a glance.
+export function SeverityScore({
+  score,
+  className,
+}: {
+  score: number | undefined;
+  className?: string;
+}): JSX.Element {
+  if (score == null) {
+    return <span className="text-muted-foreground text-sm">-</span>;
+  }
+  // Rate on the rounded value we actually display, so a score sitting just below
+  // a band boundary (e.g. 3.96 → shown as "4.0") never renders the number in a
+  // color that disagrees with the band its displayed value falls in.
+  const displayed = Math.round(score * 10) / 10;
+  const rating = scoreToRating(displayed);
+  return (
+    <SimpleTooltip tooltip={`${SEVERITY_RATING_LABEL[rating]} severity`}>
+      <Badge variant={SEVERITY_BADGE_VARIANT[rating]} className={className}>
+        <Badge.Text className="tabular-nums">{displayed.toFixed(1)}</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
   );
 }
 
@@ -230,5 +302,85 @@ export function MaskedMatch({
         <Eye className="h-3 w-3" />
       </button>
     </span>
+  );
+}
+
+function prettyJSON(s: string): string {
+  try {
+    return JSON.stringify(JSON.parse(s), null, 2);
+  } catch {
+    return s;
+  }
+}
+
+// EventMatchDialog is the reveal surface for llm_judge / prompt_injection
+// findings, whose "match" is the entire flagged event (a JSON payload with
+// tool calls), not a one-line substring. It reuses the same audited, chat:read
+// -gated reveal as MaskedMatch, but presents the payload in a scrollable Dialog
+// instead of the cramped inline cell.
+export function EventMatchDialog({
+  resultId,
+  matchRedacted,
+}: {
+  resultId: string | undefined;
+  matchRedacted: string | undefined;
+}): JSX.Element {
+  const { hasScope } = useRBAC();
+  const canReveal = hasScope(REVEAL_SCOPE);
+  const [open, setOpen] = useState(false);
+  const { value, isLoading, reveal } = useUnmaskedMatch(resultId ?? "");
+
+  if (!resultId || !matchRedacted) return <span>-</span>;
+
+  // Without chat:read the value can never be revealed — render a static,
+  // non-interactive placeholder rather than an inert trigger.
+  if (!canReveal) {
+    return (
+      <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+        <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+          <Lock className="h-3 w-3" />
+          <span>Hidden</span>
+        </span>
+      </SimpleTooltip>
+    );
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) reveal();
+      }}
+    >
+      <Dialog.Trigger asChild>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <EyeOff className="h-3 w-3" />
+          <span>Click to reveal</span>
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Content className="sm:max-w-2xl">
+        <Dialog.Header>
+          <Dialog.Title>Flagged event</Dialog.Title>
+          <Dialog.Description>
+            The full event content that was flagged for this finding.
+          </Dialog.Description>
+        </Dialog.Header>
+        {value === null ? (
+          <div className="text-muted-foreground flex items-center gap-2 py-8 text-sm">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>{isLoading ? "Revealing…" : "No event content."}</span>
+          </div>
+        ) : (
+          <div className="max-h-[60vh] overflow-y-auto">
+            <CodeBlock language="json">{prettyJSON(value)}</CodeBlock>
+          </div>
+        )}
+      </Dialog.Content>
+    </Dialog>
   );
 }

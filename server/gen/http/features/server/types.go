@@ -40,9 +40,20 @@ type GetProductFeaturesResponseBody struct {
 	SsoEnabled bool `form:"sso_enabled" json:"sso_enabled" xml:"sso_enabled"`
 	// Whether SCIM/directory sync setup is enabled for the organization
 	ScimEnabled bool `form:"scim_enabled" json:"scim_enabled" xml:"scim_enabled"`
-	// Whether observability mode is enabled, making generated hook plugins fully
-	// non-blocking
-	ObservabilityModeEnabled bool `form:"observability_mode_enabled" json:"observability_mode_enabled" xml:"observability_mode_enabled"`
+	// Whether generated hook plugins may mint per-user keys via the interactive
+	// browser login
+	HooksBrowserLoginEnabled bool `form:"hooks_browser_login_enabled" json:"hooks_browser_login_enabled" xml:"hooks_browser_login_enabled"`
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled bool `form:"hooks_fail_open_enabled" json:"hooks_fail_open_enabled" xml:"hooks_fail_open_enabled"`
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled bool `form:"custom_model_keys_enabled" json:"custom_model_keys_enabled" xml:"custom_model_keys_enabled"`
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled bool `form:"skills_enabled" json:"skills_enabled" xml:"skills_enabled"`
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -429,7 +440,11 @@ func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *
 		Webhooks:                     res.Webhooks,
 		SsoEnabled:                   res.SsoEnabled,
 		ScimEnabled:                  res.ScimEnabled,
-		ObservabilityModeEnabled:     res.ObservabilityModeEnabled,
+		HooksBrowserLoginEnabled:     res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:         res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:       res.CustomModelKeysEnabled,
+		SkillsEnabled:                res.SkillsEnabled,
+		DeviceAgent:                  res.DeviceAgent,
 	}
 	return body
 }
@@ -758,8 +773,8 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "webhooks" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "observability_mode") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "observability_mode"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "webhooks" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills"}))
 		}
 	}
 	if body.FeatureName != nil {

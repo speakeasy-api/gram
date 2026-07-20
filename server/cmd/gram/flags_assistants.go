@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,17 +21,22 @@ import (
 var assistantRuntimeFlags = []cli.Flag{
 	&cli.StringFlag{
 		Name:    "assistant-runtime-provider",
-		Usage:   "Assistant runtime provider. Allowed values: flyio, gke.",
+		Usage:   "Assistant runtime provider. Allowed values: flyio, gke, local.",
 		Value:   assistants.RuntimeProviderFlyIO,
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_PROVIDER"},
 		Action: func(_ *cli.Context, val string) error {
 			switch val {
-			case "", assistants.RuntimeProviderFlyIO, assistants.RuntimeProviderGKE:
+			case "", assistants.RuntimeProviderFlyIO, assistants.RuntimeProviderGKE, assistants.RuntimeProviderLocal:
 				return nil
 			default:
 				return fmt.Errorf("invalid assistant runtime provider: %s", val)
 			}
 		},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-local-ca-file",
+		Usage:   "PEM CA bundle mounted into local assistant runtime containers and appended to their trust store, so runners trust the local server's TLS certificate. Typically the mkcert root CA.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_LOCAL_CA_FILE"},
 	},
 	&cli.StringFlag{
 		Name:    "assistant-runtime-gke-namespace",
@@ -127,9 +133,25 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 	switch provider {
 	case "", assistants.RuntimeProviderFlyIO:
 		provider = assistants.RuntimeProviderFlyIO
-	case assistants.RuntimeProviderGKE:
+	case assistants.RuntimeProviderGKE, assistants.RuntimeProviderLocal:
 	default:
 		return assistants.RuntimeBackendConfig{}, fmt.Errorf("invalid assistant runtime provider: %s", provider)
+	}
+
+	environment := c.String("environment")
+
+	// Containers cannot reach the host's loopback URL, so unless a runtime
+	// server URL was set explicitly, the local backend rewrites the host to
+	// Docker's host gateway alias (the port and scheme are preserved; the
+	// local TLS certificate covers the alias via zero:tls).
+	localRuntimeServerURL := resolvedServerURL
+	if c.String("assistant-runtime-server-url") == "" && resolvedServerURL != nil {
+		rewritten := *resolvedServerURL
+		rewritten.Host = assistants.LocalRuntimeHostGatewayAlias
+		if port := resolvedServerURL.Port(); port != "" {
+			rewritten.Host = net.JoinHostPort(rewritten.Host, port)
+		}
+		localRuntimeServerURL = &rewritten
 	}
 
 	gkeNamespace := c.String("assistant-runtime-gke-namespace")
@@ -177,6 +199,18 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			ServerURL:        resolvedServerURL,
 			RunnerCIDRBlocks: c.StringSlice("assistant-runtime-gke-runner-cidr"),
 		},
+		// Enabled whenever the process runs in the local environment (not only
+		// when local is the target) so locally created runtime rows stay
+		// routable for cleanup while experimenting with other targets.
+		Local: assistants.LocalRuntimeConfig{
+			Enabled:         provider == assistants.RuntimeProviderLocal || environment == "local",
+			Environment:     environment,
+			OCIImage:        c.String("assistant-runtime-oci-image"),
+			ImageTag:        AssistantRuntimeImageHash,
+			GuestPort:       0,
+			ServerURL:       localRuntimeServerURL,
+			ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
+		},
 	}, nil
 }
 
@@ -213,8 +247,12 @@ func newAssistantRuntime(
 	}
 
 	// Fly and GKE call back to the server at the same URL; validate it once.
-	if err := guardianPolicy.ValidateHost(ctx, cfg.Fly.ServerURL.Hostname()); err != nil {
-		return nil, fmt.Errorf("assistant runtime requires a public --assistant-runtime-server-url or --server-url; got %q: %w", cfg.Fly.ServerURL.String(), err)
+	// The local backend's URL is exempt: its host gateway alias only resolves
+	// inside containers, never from the host.
+	if cfg.Provider != assistants.RuntimeProviderLocal {
+		if err := guardianPolicy.ValidateHost(ctx, cfg.Fly.ServerURL.Hostname()); err != nil {
+			return nil, fmt.Errorf("assistant runtime requires a public --assistant-runtime-server-url or --server-url; got %q: %w", cfg.Fly.ServerURL.String(), err)
+		}
 	}
 
 	backend, err := assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg)

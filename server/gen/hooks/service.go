@@ -270,13 +270,18 @@ type CursorPayload struct {
 // Feature-specific payloads. Hooks populate only the blocks needed for the
 // event.
 type HookIngestData struct {
-	Prompt       *HookPromptData
-	ToolCall     *HookToolCallData
-	Mcp          *HookMCPData
+	Prompt   *HookPromptData
+	ToolCall *HookToolCallData
+	Mcp      *HookMCPData
+	// Configured MCP server snapshot captured at session start or configuration
+	// change. Transport credentials must be redacted by the sender.
+	McpInventory []*HookMCPData
 	Usage        *HookUsageData
 	Message      *HookMessageData
 	Skill        *HookSkillData
 	Notification *HookNotificationData
+	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+	McpAttribution []*HookMCPAttributionEntry
 }
 
 // Canonical Gram feature event.
@@ -310,6 +315,24 @@ type HookIngestSource struct {
 	RawEventName *string
 	// Hostname of the machine that emitted the hook event.
 	Hostname *string
+	// Self-reported email of the developer on the emitting machine (device agent
+	// or provider account), used for attribution when the API key is shared
+	// org-wide.
+	UserEmail *string
+}
+
+// Transcript-derived MCP attribution for one model API request. Claude redacts
+// user-configured MCP server names to 'custom' on its OTEL telemetry, but
+// records the real names in the local session transcript; hooks ship them here
+// so ingest can restore the redacted names.
+type HookMCPAttributionEntry struct {
+	// Provider API request identifier (e.g. Claude's req_*) the attribution
+	// applies to.
+	RequestID string
+	// Unredacted MCP server name from the transcript.
+	McpServer *string
+	// Unredacted MCP tool name from the transcript.
+	McpTool *string
 }
 
 // MCP feature payload.
@@ -414,8 +437,13 @@ type IngestHookResult struct {
 
 // IngestPayload is the payload type of the hooks service ingest method.
 type IngestPayload struct {
-	ApikeyToken      *string
+	// Optional API key for plugin-driven attribution.
+	ApikeyToken *string
+	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
+	// Set when the event is redelivered from a device's offline spool after
+	// control-plane downtime, under its original Idempotency-Key and occurred_at.
+	Replayed *bool
 	// Contract version. The current version is hook.ingest.v1.
 	SchemaVersion string
 	// Optional per-invocation token reused across retries so the server stores a

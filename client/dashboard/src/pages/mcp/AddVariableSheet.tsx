@@ -11,8 +11,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Button } from "@speakeasy-api/moonshine";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { AlertCircle, ChevronDown, Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { EnvVarState } from "./environmentVariableUtils";
 
@@ -26,6 +28,7 @@ interface VariableEntry {
   key: string;
   value: string;
   state: EnvVarState;
+  isSecret: boolean;
 }
 
 interface AddVariableSheetProps {
@@ -45,24 +48,41 @@ export function AddVariableSheet({
   onAddVariables,
   onLoadFromEnvironment,
 }: AddVariableSheetProps): JSX.Element {
-  const emptyEntry = { key: "", value: "" };
+  // Secret is on by default so an unattended value is never stored in the clear
+  // by accident. This matches the server's default for new entries.
+  const emptyEntry = { key: "", value: "", isSecret: true };
   const [entries, setEntries] = useState([{ ...emptyEntry }]);
+  const [error, setError] = useState<string | null>(null);
 
   const resetForm = useCallback(() => {
-    setEntries([{ key: "", value: "" }]);
+    setEntries([{ key: "", value: "", isSecret: true }]);
+    setError(null);
   }, []);
 
   const handleSave = () => {
-    const validEntries = entries
-      .filter((e) => e.key.trim())
-      .map((e) => ({
+    const keyedEntries = entries.filter((e) => e.key.trim());
+    if (keyedEntries.length === 0) return;
+
+    // A non-secret value is stored as plaintext and the server rejects an
+    // empty one, so catch it here instead of losing the row to a failed save.
+    const emptyReadable = keyedEntries.find(
+      (e) => !e.isSecret && e.value.trim() === "",
+    );
+    if (emptyReadable) {
+      setError(
+        `Enter a value for ${emptyReadable.key.toUpperCase()}, or turn on Secret to store it empty.`,
+      );
+      return;
+    }
+
+    onAddVariables(
+      keyedEntries.map((e) => ({
         key: e.key.toUpperCase().replace(/\s+/g, "_"),
         value: e.value,
         state: "system" as EnvVarState,
-      }));
-    if (validEntries.length === 0) return;
-
-    onAddVariables(validEntries);
+        isSecret: e.isSecret,
+      })),
+    );
     resetForm();
     onOpenChange(false);
   };
@@ -75,6 +95,14 @@ export function AddVariableSheet({
           : e,
       ),
     );
+    if (error) setError(null);
+  };
+
+  const updateEntrySecrecy = (index: number, isSecret: boolean) => {
+    setEntries((prev) =>
+      prev.map((e, i) => (i === index ? { ...e, isSecret } : e)),
+    );
+    if (error) setError(null);
   };
 
   const addEntry = () => {
@@ -85,6 +113,7 @@ export function AddVariableSheet({
     setEntries((prev) =>
       prev.length <= 1 ? prev : prev.filter((_, i) => i !== index),
     );
+    if (error) setError(null);
   };
 
   const hasValidEntry = entries.some((e) => e.key.trim());
@@ -184,12 +213,36 @@ export function AddVariableSheet({
                   </Label>
                 )}
                 <input
-                  type="password"
+                  type={entry.isSecret ? "password" : "text"}
                   value={entry.value}
                   onChange={(e) => updateEntry(index, "value", e.target.value)}
                   placeholder=""
                   className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full rounded-md border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
                 />
+              </div>
+              <div className="shrink-0">
+                {index === 0 && (
+                  <Label className="text-muted-foreground mb-1.5 block text-xs">
+                    Secret
+                  </Label>
+                )}
+                <div className="flex h-10 items-center">
+                  <SimpleTooltip
+                    tooltip={
+                      entry.isSecret
+                        ? "Encrypted, and only ever shown as a redacted preview"
+                        : "Stored in the clear, and readable after saving"
+                    }
+                  >
+                    <Switch
+                      checked={entry.isSecret}
+                      onCheckedChange={(checked) =>
+                        updateEntrySecrecy(index, checked)
+                      }
+                      aria-label={`Secret${entry.key ? ` for ${entry.key}` : ""}`}
+                    />
+                  </SimpleTooltip>
+                </div>
               </div>
               {entries.length > 1 && (
                 <button
@@ -212,6 +265,16 @@ export function AddVariableSheet({
             <Plus className="h-4 w-4" />
             Add Another
           </button>
+
+          {error && (
+            <div
+              className="text-destructive flex items-center gap-2 text-sm"
+              role="alert"
+            >
+              <AlertCircle className="h-4 w-4" aria-hidden="true" />
+              {error}
+            </div>
+          )}
         </div>
 
         <SheetFooter className="flex-row items-center justify-between border-t px-6 py-4">

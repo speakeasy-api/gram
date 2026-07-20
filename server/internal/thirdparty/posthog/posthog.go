@@ -3,6 +3,7 @@ package posthog
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -15,9 +16,10 @@ import (
 )
 
 type Posthog struct {
-	client   posthog.Client
-	disabled bool
-	logger   *slog.Logger
+	client          posthog.Client
+	disabled        bool
+	localEvaluation bool
+	logger          *slog.Logger
 }
 
 func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthogEndpoint string, posthogPersonalAPIKey string) *Posthog {
@@ -26,18 +28,20 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 	if posthogAPIKey == "" {
 		logger.InfoContext(ctx, "posthog API key not found, disabling posthog")
 		return &Posthog{
-			disabled: true,
-			logger:   logger,
-			client:   nil,
+			disabled:        true,
+			localEvaluation: false,
+			logger:          logger,
+			client:          nil,
 		}
 	}
 
 	if posthogEndpoint == "" {
 		logger.InfoContext(ctx, "posthog endpoint not found, disabling posthog")
 		return &Posthog{
-			disabled: true,
-			logger:   logger,
-			client:   nil,
+			disabled:        true,
+			localEvaluation: false,
+			logger:          logger,
+			client:          nil,
 		}
 	}
 
@@ -58,16 +62,18 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to instantiate posthog client", attr.SlogError(err))
 		return &Posthog{
-			disabled: true,
-			logger:   logger,
-			client:   nil,
+			disabled:        true,
+			localEvaluation: false,
+			logger:          logger,
+			client:          nil,
 		}
 	}
 
 	return &Posthog{
-		client:   client,
-		disabled: false,
-		logger:   logger,
+		client:          client,
+		disabled:        false,
+		localEvaluation: posthogPersonalAPIKey != "",
+		logger:          logger,
 	}
 }
 
@@ -108,6 +114,90 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 	return string(j) == "true", nil
 }
 
+func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
+	if p.disabled {
+		p.logger.InfoContext(ctx, "posthog is disabled, returning false")
+		return false, nil
+	}
+	if !p.localEvaluation {
+		return false, nil
+	}
+
+	var phPersonProperties posthog.Properties
+	if len(personProperties) > 0 {
+		phPersonProperties = posthog.NewProperties()
+		for key, value := range personProperties {
+			phPersonProperties.Set(key, value)
+		}
+	}
+	sendFeatureFlagEvents := false
+	flagState, err := p.client.IsFeatureEnabled(posthog.FeatureFlagPayload{
+		Key:                   string(flag),
+		DistinctId:            distinctID,
+		Groups:                posthogGroups(groups),
+		PersonProperties:      phPersonProperties,
+		OnlyEvaluateLocally:   true,
+		SendFeatureFlagEvents: &sendFeatureFlagEvents,
+	})
+	if err != nil {
+		var inconclusive *posthog.InconclusiveMatchError
+		if errors.As(err, &inconclusive) || errors.Is(err, posthog.ErrFlagNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to locally check feature flag: %w", err)
+	}
+
+	j, err := json.Marshal(flagState)
+	if err != nil {
+		return false, fmt.Errorf("failed to unmarshal feature flag: %w", err)
+	}
+	return string(j) == "true", nil
+}
+
+func (p *Posthog) FlagPayload(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) ([]byte, error) {
+	// When posthog is disabled we have no clearance data. Return nil so callers
+	// fall back to their fail-closed default (e.g. carry the current version).
+	if p.disabled {
+		return nil, nil
+	}
+
+	var phGroups posthog.Groups
+	if len(groups) > 0 {
+		phGroups = posthog.NewGroups()
+		for groupType, groupKey := range groups {
+			phGroups.Set(groupType, groupKey)
+		}
+	}
+
+	// GetFeatureFlagPayload returns the JSON payload attached to the matched
+	// release as a string, or "" when the flag is off / has no payload / does
+	// not exist. Treat "" as "no clearance".
+	payload, err := p.client.GetFeatureFlagPayload(posthog.FeatureFlagPayload{
+		Key:        string(flag),
+		DistinctId: distinctID,
+		Groups:     phGroups,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get feature flag payload: %w", err)
+	}
+	if payload == "" {
+		return nil, nil
+	}
+
+	return []byte(payload), nil
+}
+
+func posthogGroups(groups map[string]string) posthog.Groups {
+	var phGroups posthog.Groups
+	if len(groups) > 0 {
+		phGroups = posthog.NewGroups()
+		for groupType, groupKey := range groups {
+			phGroups.Set(groupType, groupKey)
+		}
+	}
+	return phGroups
+}
+
 func (p *Posthog) IdentifyUser(ctx context.Context, distinctID string, personProperties map[string]any) error {
 	if p.disabled {
 		p.logger.InfoContext(ctx, "posthog is disabled, dropping identify")
@@ -124,6 +214,69 @@ func (p *Posthog) IdentifyUser(ctx context.Context, distinctID string, personPro
 		Properties: properties,
 	}); err != nil {
 		return fmt.Errorf("failed to enqueue identify: %w", err)
+	}
+
+	return nil
+}
+
+// GroupIdentify sets properties on a PostHog group (e.g. the "organization"
+// group), enabling group-based cohorts and dashboards. Last write wins per
+// property, so callers can refresh values idempotently. The group key must
+// match the convention the capture paths use — the organization group is
+// keyed by org SLUG (see CaptureEvent), so a mismatched key would fork the
+// group into two identities.
+func (p *Posthog) GroupIdentify(ctx context.Context, groupType string, groupKey string, groupProperties map[string]any) error {
+	if p.disabled {
+		p.logger.InfoContext(ctx, "posthog is disabled, dropping group identify")
+		return nil
+	}
+
+	properties := posthog.NewProperties()
+	for k, v := range groupProperties {
+		properties.Set(k, v)
+	}
+
+	if err := p.client.Enqueue(posthog.GroupIdentify{
+		Type:       groupType,
+		Key:        groupKey,
+		Properties: properties,
+	}); err != nil {
+		return fmt.Errorf("failed to enqueue group identify: %w", err)
+	}
+
+	return nil
+}
+
+// CaptureGroupEvent captures an event with explicit group memberships, for
+// server-initiated events emitted outside any request auth context (e.g.
+// background workers reporting per-organization metrics). No person profile
+// is created for the distinct id — these events describe the group, not a
+// user.
+func (p *Posthog) CaptureGroupEvent(ctx context.Context, eventName string, distinctID string, groups map[string]string, eventProperties map[string]any) error {
+	if p.disabled {
+		p.logger.InfoContext(ctx, "posthog is disabled, dropping event")
+		return nil
+	}
+
+	phGroups := map[string]any{}
+	for groupType, groupKey := range groups {
+		phGroups[groupType] = groupKey
+	}
+
+	properties := posthog.NewProperties().
+		Set("is_gram", true).
+		Set("$process_person_profile", false)
+	for k, v := range eventProperties {
+		properties.Set(k, v)
+	}
+
+	if err := p.client.Enqueue(posthog.Capture{
+		DistinctId: distinctID,
+		Event:      eventName,
+		Properties: properties,
+		Groups:     phGroups,
+	}); err != nil {
+		return fmt.Errorf("failed to enqueue event: %w", err)
 	}
 
 	return nil

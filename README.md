@@ -45,21 +45,21 @@ To get started on the hosted platform you can [Sign up](https://app.getgram.ai/)
   <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/agent-icons/gh-copilot.svg" alt="GitHub Copilot" height="40">
 </p>
 
-## Connect
+## Observe
 
-A single control layer for connecting your agents to MCPs for your SaaS vendors, APIs, and internal systems, with policy enforcement and granular access control built in. Private networking and tunneling deployed on demand.
+Track AI usage across teams and measure impact with either tokens or cost. Deep dive expensive sessions, create budgets and measure tool effectiveness. Built on a foundation of Opentelemetry. Exportable and interactive via platform MCP and a built in assistant.
 
 ## Secure
 
 Every prompt, response, and agent action is inspected and enforced in real time. Sensitive data is blocked, redacted, or logged before it leaves your environment. Create and enforce flexible policies to prevent prompt injection, log shadow use and detect PII secrets and other sensitive data types.
 
-## Control
+## Connect
+
+A single control layer for connecting your agents to MCPs for your SaaS vendors, APIs, and internal systems, with policy enforcement and granular access control built in. Private networking and tunneling deployed on demand.
+
+## Distribute
 
 Centralise distribution of MCPs, Skills, Plugins and Assistants to your team based on enterprise roles. Team, server, and tool level permissions enforced through RBAC and Oauth2.1. Synced to your enterprise IDP (Okta, Azure AD, Google Workspace, etc.).
-
-## Observe
-
-Track AI usage across teams and measure impact with either tokens or cost. Deep dive expensive sessions, create budgets and measure tool effectiveness. Built on a foundation of Opentelemetry. Exportable and interactive via platform MCP and a built in assistant.
 
 ## Support
 
@@ -96,6 +96,12 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and detailed cont
 - [Polar](https://polar.sh/) — usage-based billing.
 - [OpenRouter](https://openrouter.ai/) — LLM gateway.
 - [Speakeasy](https://www.speakeasy.com/) — generated SDKs. Spec hosted [here](https://app.getgram.ai/openapi.yaml).
+
+## Contributors
+
+<a href="https://github.com/speakeasy-api/gram/graphs/contributors">
+  <img alt="Gram contributors" src="https://contrib.rocks/image?repo=speakeasy-api/gram" />
+</a>
 
 <hr />
 <br />

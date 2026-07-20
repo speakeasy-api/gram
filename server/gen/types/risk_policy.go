@@ -77,6 +77,10 @@ type RiskPolicy struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfig
+	// CVSS-style severity (0.1-10) the author assigns to findings this policy
+	// produces. Descriptive only; changing it does not re-scan messages. Defaults
+	// to 5.
+	Score float64
 	// Policy version, incremented on each update.
 	Version int64
 	// When the policy was created.

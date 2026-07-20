@@ -24,6 +24,11 @@ const apiBase = "https://api.github.com"
 // project as a first publish rather than an error.
 var ErrRepoNotFound = errors.New("github repo or branch not found")
 
+// ErrFileNotFound is returned by GetFileContent when the repository, branch,
+// or file path does not exist, so callers can treat an absent file as a
+// normal condition rather than an error.
+var ErrFileNotFound = errors.New("github file not found")
+
 // validGitHubUsername matches GitHub's username rules: 1-39 chars, starting
 // with an alphanumeric, alphanumeric or hyphen thereafter. Enforced before
 // using the value in URL construction to prevent path traversal via
@@ -116,6 +121,75 @@ func (c *Client) AddCollaborator(ctx context.Context, installationID int64, owne
 	return nil
 }
 
+// HasDirectCollaborator reports whether the repo has at least one directly
+// added collaborator — i.e. someone explicitly invited via AddCollaborator,
+// as opposed to access granted implicitly through org membership or team
+// permissions. AddCollaborator's PUT typically creates a *pending*
+// invitation rather than an accepted collaborator (GitHub requires the
+// invitee to accept), and pending invitations don't show up in the
+// collaborators list at all — only in the separate invitations list — so
+// both are checked. per_page=1 on each keeps the requests cheap since only
+// presence/absence is needed.
+func (c *Client) HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
+	hasInvitation, err := c.hasPendingInvitation(ctx, installationID, owner, repo)
+	if err != nil {
+		return false, err
+	}
+	if hasInvitation {
+		return true, nil
+	}
+
+	return c.hasAcceptedDirectCollaborator(ctx, installationID, owner, repo)
+}
+
+func (c *Client) hasPendingInvitation(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "invitations")
+	url += "?per_page=1"
+
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, url, nil)
+	if err != nil {
+		return false, fmt.Errorf("list invitations: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("list invitations: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var invitations []struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&invitations); err != nil {
+		return false, fmt.Errorf("decode invitations: %w", err)
+	}
+
+	return len(invitations) > 0, nil
+}
+
+func (c *Client) hasAcceptedDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "collaborators")
+	url += "?affiliation=direct&per_page=1"
+
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, url, nil)
+	if err != nil {
+		return false, fmt.Errorf("list collaborators: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("list collaborators: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var collaborators []struct {
+		Login string `json:"login"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&collaborators); err != nil {
+		return false, fmt.Errorf("decode collaborators: %w", err)
+	}
+
+	return len(collaborators) > 0, nil
+}
+
 // PushFiles atomically commits a set of files to the given repository branch
 // using the Git Trees API.
 func (c *Client) PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error) {
@@ -195,6 +269,45 @@ func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, 
 	}
 
 	return files, nil
+}
+
+// GetFileContent returns the raw content of a single file on the given branch
+// via the Contents API — one API call, unlike GetRepoFiles' full-tree walk, so
+// it is cheap enough for read paths that only need one known file. Returns
+// ErrFileNotFound when the repo, branch, or path does not exist.
+func (c *Client) GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, filePath string) ([]byte, error) {
+	fileURL, _ := url.JoinPath(apiBase, "repos", owner, repo, "contents", filePath)
+	fileURL += "?ref=" + url.QueryEscape(branch)
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, fileURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get file content: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrFileNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get file content: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var file struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&file); err != nil {
+		return nil, fmt.Errorf("decode file content: %w", err)
+	}
+	if file.Encoding != "base64" {
+		return nil, fmt.Errorf("unexpected file content encoding %q", file.Encoding)
+	}
+	// Like the Blobs API, the Contents API wraps base64 content with newlines,
+	// which the standard decoder rejects; strip them before decoding.
+	decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(file.Content, "\n", ""))
+	if err != nil {
+		return nil, fmt.Errorf("decode base64 file content: %w", err)
+	}
+	return decoded, nil
 }
 
 func (c *Client) getBlob(ctx context.Context, installationID int64, owner, repo, sha string) ([]byte, error) {

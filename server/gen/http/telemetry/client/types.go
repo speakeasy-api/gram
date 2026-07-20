@@ -202,17 +202,6 @@ type QueryRequestBody struct {
 	SortBy string `form:"sort_by" json:"sort_by" xml:"sort_by"`
 }
 
-// QueryRiskTokensRequestBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP request body.
-type QueryRiskTokensRequestBody struct {
-	// Start time in ISO 8601 format
-	From string `form:"from" json:"from" xml:"from"`
-	// End time in ISO 8601 format
-	To string `form:"to" json:"to" xml:"to"`
-	// Optional project to scope to; defaults to every project in the organization.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-}
-
 // QueryTumDetailsRequestBody is the type of the "telemetry" service
 // "queryTumDetails" endpoint HTTP request body.
 type QueryTumDetailsRequestBody struct {
@@ -347,6 +336,15 @@ type GetToolUsageFilterOptionsRequestBody struct {
 	OptionTypes []string `form:"option_types,omitempty" json:"option_types,omitempty" xml:"option_types,omitempty"`
 }
 
+// GetMcpServerActivityRequestBody is the type of the "telemetry" service
+// "getMcpServerActivity" endpoint HTTP request body.
+type GetMcpServerActivityRequestBody struct {
+	// Size of the recent-activity window in days. A server with tool calls in the
+	// overall lookback window but none inside this window is flagged as stale.
+	// Defaults to 14.
+	RecentWindowDays int `form:"recent_window_days" json:"recent_window_days" xml:"recent_window_days"`
+}
+
 // ListHooksTracesRequestBody is the type of the "telemetry" service
 // "listHooksTraces" endpoint HTTP request body.
 type ListHooksTracesRequestBody struct {
@@ -476,16 +474,6 @@ type QueryResponseBody struct {
 	Timeseries []*QuerySeriesResponseBody `form:"timeseries,omitempty" json:"timeseries,omitempty" xml:"timeseries,omitempty"`
 }
 
-// QueryRiskTokensResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body.
-type QueryRiskTokensResponseBody struct {
-	// Timeseries bucket width in seconds. Always 86400 — the source aggregate is
-	// bucketed daily.
-	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
-	// Gap-filled daily buckets in ascending time order
-	Points []*RiskTokensPointResponseBody `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
-}
-
 // QueryTumDetailsResponseBody is the type of the "telemetry" service
 // "queryTumDetails" endpoint HTTP response body.
 type QueryTumDetailsResponseBody struct {
@@ -583,6 +571,18 @@ type GetToolUsageFilterOptionsResponseBody struct {
 	ShadowServers []*ToolUsageShadowServerFilterOptionResponseBody `form:"shadow_servers,omitempty" json:"shadow_servers,omitempty" xml:"shadow_servers,omitempty"`
 	// User identities with usage in the selected time range
 	Users []*ToolUsageUserFilterOptionResponseBody `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
+}
+
+// GetMcpServerActivityResponseBody is the type of the "telemetry" service
+// "getMcpServerActivity" endpoint HTTP response body.
+type GetMcpServerActivityResponseBody struct {
+	// One entry per MCP server (hosted or tunneled) that has received at least one
+	// tool call within the lookback window
+	Activity []*McpServerActivityResponseBody `form:"activity,omitempty" json:"activity,omitempty" xml:"activity,omitempty"`
+	// The recent-activity window size in days that was applied
+	RecentWindowDays *int `form:"recent_window_days,omitempty" json:"recent_window_days,omitempty" xml:"recent_window_days,omitempty"`
+	// The overall lookback window size in days (bounded by telemetry retention)
+	LookbackDays *int `form:"lookback_days,omitempty" json:"lookback_days,omitempty" xml:"lookback_days,omitempty"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -2635,190 +2635,6 @@ type QueryGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// QueryRiskTokensUnauthorizedResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the "unauthorized"
-// error.
-type QueryRiskTokensUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensForbiddenResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "forbidden" error.
-type QueryRiskTokensForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensBadRequestResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "bad_request" error.
-type QueryRiskTokensBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensNotFoundResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "not_found" error.
-type QueryRiskTokensNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensConflictResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "conflict" error.
-type QueryRiskTokensConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensUnsupportedMediaResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the
-// "unsupported_media" error.
-type QueryRiskTokensUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensInvalidResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "invalid" error.
-type QueryRiskTokensInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensInvariantViolationResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the
-// "invariant_violation" error.
-type QueryRiskTokensInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensUnexpectedResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "unexpected" error.
-type QueryRiskTokensUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// QueryRiskTokensGatewayErrorResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the
-// "gateway_error" error.
-type QueryRiskTokensGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // QueryTumDetailsUnauthorizedResponseBody is the type of the "telemetry"
 // service "queryTumDetails" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -4313,6 +4129,196 @@ type GetToolUsageFilterOptionsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetMcpServerActivityUnauthorizedResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMcpServerActivityUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerActivityForbiddenResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMcpServerActivityForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerActivityBadRequestResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMcpServerActivityBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerActivityNotFoundResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "not_found" error.
+type GetMcpServerActivityNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerActivityConflictResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "conflict" error.
+type GetMcpServerActivityConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerActivityUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getMcpServerActivity" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetMcpServerActivityUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerActivityInvalidResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the "invalid"
+// error.
+type GetMcpServerActivityInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerActivityInvariantViolationResponseBody is the type of the
+// "telemetry" service "getMcpServerActivity" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetMcpServerActivityInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerActivityUnexpectedResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMcpServerActivityUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMcpServerActivityGatewayErrorResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMcpServerActivityGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListHooksTracesUnauthorizedResponseBody is the type of the "telemetry"
 // service "listHooksTraces" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -5088,51 +5094,41 @@ type QueryPointResponseBody struct {
 	Measures *QueryMeasuresResponseBody `form:"measures,omitempty" json:"measures,omitempty" xml:"measures,omitempty"`
 }
 
-// RiskTokensPointResponseBody is used to define fields on response body types.
-type RiskTokensPointResponseBody struct {
-	// Bucket start time in Unix nanoseconds (string for JS precision)
-	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
-	// Tokens from sessions with at least one active risk finding created in the
-	// query window
-	RiskyTokens *int64 `form:"risky_tokens,omitempty" json:"risky_tokens,omitempty" xml:"risky_tokens,omitempty"`
-	// All session tokens in the bucket
-	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
-}
-
 // TumDetailsPointResponseBody is used to define fields on response body types.
 type TumDetailsPointResponseBody struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
-	// Billed input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
-	// Billed tokens under management
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens *int64 `form:"cache_creation_tokens,omitempty" json:"cache_creation_tokens,omitempty" xml:"cache_creation_tokens,omitempty"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens *int64 `form:"risky_message_tokens,omitempty" json:"risky_message_tokens,omitempty" xml:"risky_message_tokens,omitempty"`
-	// Tokens in tool-call messages
-	ToolMessageTokens *int64 `form:"tool_message_tokens,omitempty" json:"tool_message_tokens,omitempty" xml:"tool_message_tokens,omitempty"`
 }
 
 // TumDetailsTotalsResponseBody is used to define fields on response body types.
 type TumDetailsTotalsResponseBody struct {
-	// Billed input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
-	// Billed tokens under management
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens *int64 `form:"cache_creation_tokens,omitempty" json:"cache_creation_tokens,omitempty" xml:"cache_creation_tokens,omitempty"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens *int64 `form:"risky_message_tokens,omitempty" json:"risky_message_tokens,omitempty" xml:"risky_message_tokens,omitempty"`
-	// Tokens in tool-call messages
-	ToolMessageTokens *int64 `form:"tool_message_tokens,omitempty" json:"tool_message_tokens,omitempty" xml:"tool_message_tokens,omitempty"`
 }
 
 // TumDetailsBreakdownResponseBody is used to define fields on response body
 // types.
 type TumDetailsBreakdownResponseBody struct {
-	// The breakdown dimension key (hook_source, model, email, division_name, role)
+	// The breakdown dimension key (model, hook_source, provider, account_type,
+	// email, division_name, department_name, role, project_id) — the public
+	// telemetry dimension identifiers, so the same keys work as telemetry.query
+	// filters. project_id rows carry project UUIDs; clients map them to names.
 	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
@@ -5537,6 +5533,24 @@ type ToolUsageUserFilterOptionResponseBody struct {
 	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
 }
 
+// McpServerActivityResponseBody is used to define fields on response body
+// types.
+type McpServerActivityResponseBody struct {
+	// Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)
+	TargetType *string `form:"target_type,omitempty" json:"target_type,omitempty" xml:"target_type,omitempty"`
+	// Stable target identifier: toolset slug for hosted servers, MCP server slug
+	// for tunneled/remote servers
+	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
+	// User-facing label for the target
+	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// Number of tool calls observed across the whole lookback window
+	TotalToolCalls *int64 `form:"total_tool_calls,omitempty" json:"total_tool_calls,omitempty" xml:"total_tool_calls,omitempty"`
+	// Number of tool calls observed inside the recent-activity window
+	RecentToolCalls *int64 `form:"recent_tool_calls,omitempty" json:"recent_tool_calls,omitempty" xml:"recent_tool_calls,omitempty"`
+	// ISO 8601 timestamp of the most recent tool call
+	LastToolCallAt *string `form:"last_tool_call_at,omitempty" json:"last_tool_call_at,omitempty" xml:"last_tool_call_at,omitempty"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -5823,17 +5837,6 @@ func NewQueryRequestBody(p *telemetry.QueryPayload) *QueryRequestBody {
 	return body
 }
 
-// NewQueryRiskTokensRequestBody builds the HTTP request body from the payload
-// of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensRequestBody(p *telemetry.QueryRiskTokensPayload) *QueryRiskTokensRequestBody {
-	body := &QueryRiskTokensRequestBody{
-		From:      p.From,
-		To:        p.To,
-		ProjectID: p.ProjectID,
-	}
-	return body
-}
-
 // NewQueryTumDetailsRequestBody builds the HTTP request body from the payload
 // of the "queryTumDetails" endpoint of the "telemetry" service.
 func NewQueryTumDetailsRequestBody(p *telemetry.QueryTumDetailsPayload) *QueryTumDetailsRequestBody {
@@ -6062,6 +6065,21 @@ func NewGetToolUsageFilterOptionsRequestBody(p *telemetry.GetToolUsageFilterOpti
 		body.OptionTypes = make([]string, len(p.OptionTypes))
 		for i, val := range p.OptionTypes {
 			body.OptionTypes[i] = string(val)
+		}
+	}
+	return body
+}
+
+// NewGetMcpServerActivityRequestBody builds the HTTP request body from the
+// payload of the "getMcpServerActivity" endpoint of the "telemetry" service.
+func NewGetMcpServerActivityRequestBody(p *telemetry.GetMcpServerActivityPayload) *GetMcpServerActivityRequestBody {
+	body := &GetMcpServerActivityRequestBody{
+		RecentWindowDays: p.RecentWindowDays,
+	}
+	{
+		var zero int
+		if body.RecentWindowDays == zero {
+			body.RecentWindowDays = 14
 		}
 	}
 	return body
@@ -7963,174 +7981,6 @@ func NewQueryGatewayError(body *QueryGatewayErrorResponseBody) *goa.ServiceError
 	return v
 }
 
-// NewQueryRiskTokensResultOK builds a "telemetry" service "queryRiskTokens"
-// endpoint result from a HTTP "OK" response.
-func NewQueryRiskTokensResultOK(body *QueryRiskTokensResponseBody) *telemetry.QueryRiskTokensResult {
-	v := &telemetry.QueryRiskTokensResult{
-		IntervalSeconds: *body.IntervalSeconds,
-	}
-	v.Points = make([]*telemetry.RiskTokensPoint, len(body.Points))
-	for i, val := range body.Points {
-		if val == nil {
-			v.Points[i] = nil
-			continue
-		}
-		v.Points[i] = unmarshalRiskTokensPointResponseBodyToTelemetryRiskTokensPoint(val)
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensUnauthorized builds a telemetry service queryRiskTokens
-// endpoint unauthorized error.
-func NewQueryRiskTokensUnauthorized(body *QueryRiskTokensUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensForbidden builds a telemetry service queryRiskTokens
-// endpoint forbidden error.
-func NewQueryRiskTokensForbidden(body *QueryRiskTokensForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensBadRequest builds a telemetry service queryRiskTokens
-// endpoint bad_request error.
-func NewQueryRiskTokensBadRequest(body *QueryRiskTokensBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensNotFound builds a telemetry service queryRiskTokens
-// endpoint not_found error.
-func NewQueryRiskTokensNotFound(body *QueryRiskTokensNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensConflict builds a telemetry service queryRiskTokens
-// endpoint conflict error.
-func NewQueryRiskTokensConflict(body *QueryRiskTokensConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensUnsupportedMedia builds a telemetry service
-// queryRiskTokens endpoint unsupported_media error.
-func NewQueryRiskTokensUnsupportedMedia(body *QueryRiskTokensUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensInvalid builds a telemetry service queryRiskTokens
-// endpoint invalid error.
-func NewQueryRiskTokensInvalid(body *QueryRiskTokensInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensInvariantViolation builds a telemetry service
-// queryRiskTokens endpoint invariant_violation error.
-func NewQueryRiskTokensInvariantViolation(body *QueryRiskTokensInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensUnexpected builds a telemetry service queryRiskTokens
-// endpoint unexpected error.
-func NewQueryRiskTokensUnexpected(body *QueryRiskTokensUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewQueryRiskTokensGatewayError builds a telemetry service queryRiskTokens
-// endpoint gateway_error error.
-func NewQueryRiskTokensGatewayError(body *QueryRiskTokensGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewQueryTumDetailsTumDetailsResultOK builds a "telemetry" service
 // "queryTumDetails" endpoint result from a HTTP "OK" response.
 func NewQueryTumDetailsTumDetailsResultOK(body *QueryTumDetailsResponseBody) *telemetry.TumDetailsResult {
@@ -9578,6 +9428,175 @@ func NewGetToolUsageFilterOptionsGatewayError(body *GetToolUsageFilterOptionsGat
 	return v
 }
 
+// NewGetMcpServerActivityResultOK builds a "telemetry" service
+// "getMcpServerActivity" endpoint result from a HTTP "OK" response.
+func NewGetMcpServerActivityResultOK(body *GetMcpServerActivityResponseBody) *telemetry.GetMcpServerActivityResult {
+	v := &telemetry.GetMcpServerActivityResult{
+		RecentWindowDays: *body.RecentWindowDays,
+		LookbackDays:     *body.LookbackDays,
+	}
+	v.Activity = make([]*telemetry.McpServerActivity, len(body.Activity))
+	for i, val := range body.Activity {
+		if val == nil {
+			v.Activity[i] = nil
+			continue
+		}
+		v.Activity[i] = unmarshalMcpServerActivityResponseBodyToTelemetryMcpServerActivity(val)
+	}
+
+	return v
+}
+
+// NewGetMcpServerActivityUnauthorized builds a telemetry service
+// getMcpServerActivity endpoint unauthorized error.
+func NewGetMcpServerActivityUnauthorized(body *GetMcpServerActivityUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerActivityForbidden builds a telemetry service
+// getMcpServerActivity endpoint forbidden error.
+func NewGetMcpServerActivityForbidden(body *GetMcpServerActivityForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerActivityBadRequest builds a telemetry service
+// getMcpServerActivity endpoint bad_request error.
+func NewGetMcpServerActivityBadRequest(body *GetMcpServerActivityBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerActivityNotFound builds a telemetry service
+// getMcpServerActivity endpoint not_found error.
+func NewGetMcpServerActivityNotFound(body *GetMcpServerActivityNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerActivityConflict builds a telemetry service
+// getMcpServerActivity endpoint conflict error.
+func NewGetMcpServerActivityConflict(body *GetMcpServerActivityConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerActivityUnsupportedMedia builds a telemetry service
+// getMcpServerActivity endpoint unsupported_media error.
+func NewGetMcpServerActivityUnsupportedMedia(body *GetMcpServerActivityUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerActivityInvalid builds a telemetry service
+// getMcpServerActivity endpoint invalid error.
+func NewGetMcpServerActivityInvalid(body *GetMcpServerActivityInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerActivityInvariantViolation builds a telemetry service
+// getMcpServerActivity endpoint invariant_violation error.
+func NewGetMcpServerActivityInvariantViolation(body *GetMcpServerActivityInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerActivityUnexpected builds a telemetry service
+// getMcpServerActivity endpoint unexpected error.
+func NewGetMcpServerActivityUnexpected(body *GetMcpServerActivityUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMcpServerActivityGatewayError builds a telemetry service
+// getMcpServerActivity endpoint gateway_error error.
+func NewGetMcpServerActivityGatewayError(body *GetMcpServerActivityGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListHooksTracesResultOK builds a "telemetry" service "listHooksTraces"
 // endpoint result from a HTTP "OK" response.
 func NewListHooksTracesResultOK(body *ListHooksTracesResponseBody) *telemetry.ListHooksTracesResult {
@@ -9996,25 +10015,6 @@ func ValidateQueryResponseBody(body *QueryResponseBody) (err error) {
 	return
 }
 
-// ValidateQueryRiskTokensResponseBody runs the validations defined on
-// QueryRiskTokensResponseBody
-func ValidateQueryRiskTokensResponseBody(body *QueryRiskTokensResponseBody) (err error) {
-	if body.IntervalSeconds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
-	}
-	if body.Points == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("points", "body"))
-	}
-	for _, e := range body.Points {
-		if e != nil {
-			if err2 := ValidateRiskTokensPointResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
 // ValidateQueryTumDetailsResponseBody runs the validations defined on
 // QueryTumDetailsResponseBody
 func ValidateQueryTumDetailsResponseBody(body *QueryTumDetailsResponseBody) (err error) {
@@ -10294,6 +10294,28 @@ func ValidateGetToolUsageFilterOptionsResponseBody(body *GetToolUsageFilterOptio
 	for _, e := range body.Users {
 		if e != nil {
 			if err2 := ValidateToolUsageUserFilterOptionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetMcpServerActivityResponseBody runs the validations defined on
+// GetMcpServerActivityResponseBody
+func ValidateGetMcpServerActivityResponseBody(body *GetMcpServerActivityResponseBody) (err error) {
+	if body.Activity == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activity", "body"))
+	}
+	if body.RecentWindowDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recent_window_days", "body"))
+	}
+	if body.LookbackDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("lookback_days", "body"))
+	}
+	for _, e := range body.Activity {
+		if e != nil {
+			if err2 := ValidateMcpServerActivityResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -12964,246 +12986,6 @@ func ValidateQueryGatewayErrorResponseBody(body *QueryGatewayErrorResponseBody) 
 	return
 }
 
-// ValidateQueryRiskTokensUnauthorizedResponseBody runs the validations defined
-// on queryRiskTokens_unauthorized_response_body
-func ValidateQueryRiskTokensUnauthorizedResponseBody(body *QueryRiskTokensUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensForbiddenResponseBody runs the validations defined on
-// queryRiskTokens_forbidden_response_body
-func ValidateQueryRiskTokensForbiddenResponseBody(body *QueryRiskTokensForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensBadRequestResponseBody runs the validations defined
-// on queryRiskTokens_bad_request_response_body
-func ValidateQueryRiskTokensBadRequestResponseBody(body *QueryRiskTokensBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensNotFoundResponseBody runs the validations defined on
-// queryRiskTokens_not_found_response_body
-func ValidateQueryRiskTokensNotFoundResponseBody(body *QueryRiskTokensNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensConflictResponseBody runs the validations defined on
-// queryRiskTokens_conflict_response_body
-func ValidateQueryRiskTokensConflictResponseBody(body *QueryRiskTokensConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensUnsupportedMediaResponseBody runs the validations
-// defined on queryRiskTokens_unsupported_media_response_body
-func ValidateQueryRiskTokensUnsupportedMediaResponseBody(body *QueryRiskTokensUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensInvalidResponseBody runs the validations defined on
-// queryRiskTokens_invalid_response_body
-func ValidateQueryRiskTokensInvalidResponseBody(body *QueryRiskTokensInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensInvariantViolationResponseBody runs the validations
-// defined on queryRiskTokens_invariant_violation_response_body
-func ValidateQueryRiskTokensInvariantViolationResponseBody(body *QueryRiskTokensInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensUnexpectedResponseBody runs the validations defined
-// on queryRiskTokens_unexpected_response_body
-func ValidateQueryRiskTokensUnexpectedResponseBody(body *QueryRiskTokensUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateQueryRiskTokensGatewayErrorResponseBody runs the validations defined
-// on queryRiskTokens_gateway_error_response_body
-func ValidateQueryRiskTokensGatewayErrorResponseBody(body *QueryRiskTokensGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateQueryTumDetailsUnauthorizedResponseBody runs the validations defined
 // on queryTumDetails_unauthorized_response_body
 func ValidateQueryTumDetailsUnauthorizedResponseBody(body *QueryTumDetailsUnauthorizedResponseBody) (err error) {
@@ -15126,6 +14908,246 @@ func ValidateGetToolUsageFilterOptionsGatewayErrorResponseBody(body *GetToolUsag
 	return
 }
 
+// ValidateGetMcpServerActivityUnauthorizedResponseBody runs the validations
+// defined on getMcpServerActivity_unauthorized_response_body
+func ValidateGetMcpServerActivityUnauthorizedResponseBody(body *GetMcpServerActivityUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerActivityForbiddenResponseBody runs the validations
+// defined on getMcpServerActivity_forbidden_response_body
+func ValidateGetMcpServerActivityForbiddenResponseBody(body *GetMcpServerActivityForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerActivityBadRequestResponseBody runs the validations
+// defined on getMcpServerActivity_bad_request_response_body
+func ValidateGetMcpServerActivityBadRequestResponseBody(body *GetMcpServerActivityBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerActivityNotFoundResponseBody runs the validations
+// defined on getMcpServerActivity_not_found_response_body
+func ValidateGetMcpServerActivityNotFoundResponseBody(body *GetMcpServerActivityNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerActivityConflictResponseBody runs the validations
+// defined on getMcpServerActivity_conflict_response_body
+func ValidateGetMcpServerActivityConflictResponseBody(body *GetMcpServerActivityConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerActivityUnsupportedMediaResponseBody runs the
+// validations defined on getMcpServerActivity_unsupported_media_response_body
+func ValidateGetMcpServerActivityUnsupportedMediaResponseBody(body *GetMcpServerActivityUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerActivityInvalidResponseBody runs the validations defined
+// on getMcpServerActivity_invalid_response_body
+func ValidateGetMcpServerActivityInvalidResponseBody(body *GetMcpServerActivityInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerActivityInvariantViolationResponseBody runs the
+// validations defined on getMcpServerActivity_invariant_violation_response_body
+func ValidateGetMcpServerActivityInvariantViolationResponseBody(body *GetMcpServerActivityInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerActivityUnexpectedResponseBody runs the validations
+// defined on getMcpServerActivity_unexpected_response_body
+func ValidateGetMcpServerActivityUnexpectedResponseBody(body *GetMcpServerActivityUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMcpServerActivityGatewayErrorResponseBody runs the validations
+// defined on getMcpServerActivity_gateway_error_response_body
+func ValidateGetMcpServerActivityGatewayErrorResponseBody(body *GetMcpServerActivityGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListHooksTracesUnauthorizedResponseBody runs the validations defined
 // on listHooksTraces_unauthorized_response_body
 func ValidateListHooksTracesUnauthorizedResponseBody(body *ListHooksTracesUnauthorizedResponseBody) (err error) {
@@ -16215,21 +16237,6 @@ func ValidateQueryPointResponseBody(body *QueryPointResponseBody) (err error) {
 	return
 }
 
-// ValidateRiskTokensPointResponseBody runs the validations defined on
-// RiskTokensPointResponseBody
-func ValidateRiskTokensPointResponseBody(body *RiskTokensPointResponseBody) (err error) {
-	if body.BucketTimeUnixNano == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
-	}
-	if body.RiskyTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("risky_tokens", "body"))
-	}
-	if body.TotalTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
-	}
-	return
-}
-
 // ValidateTumDetailsPointResponseBody runs the validations defined on
 // TumDetailsPointResponseBody
 func ValidateTumDetailsPointResponseBody(body *TumDetailsPointResponseBody) (err error) {
@@ -16239,14 +16246,11 @@ func ValidateTumDetailsPointResponseBody(body *TumDetailsPointResponseBody) (err
 	if body.OutputTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
 	}
+	if body.CacheCreationTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_tokens", "body"))
+	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
-	}
-	if body.RiskyMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("risky_message_tokens", "body"))
-	}
-	if body.ToolMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_message_tokens", "body"))
 	}
 	if body.BucketTimeUnixNano == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
@@ -16263,14 +16267,11 @@ func ValidateTumDetailsTotalsResponseBody(body *TumDetailsTotalsResponseBody) (e
 	if body.OutputTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
 	}
+	if body.CacheCreationTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_tokens", "body"))
+	}
 	if body.TotalTokens == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
-	}
-	if body.RiskyMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("risky_message_tokens", "body"))
-	}
-	if body.ToolMessageTokens == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_message_tokens", "body"))
 	}
 	return
 }
@@ -16916,6 +16917,35 @@ func ValidateToolUsageUserFilterOptionResponseBody(body *ToolUsageUserFilterOpti
 		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "unknown") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "unknown"}))
 		}
+	}
+	return
+}
+
+// ValidateMcpServerActivityResponseBody runs the validations defined on
+// McpServerActivityResponseBody
+func ValidateMcpServerActivityResponseBody(body *McpServerActivityResponseBody) (err error) {
+	if body.TargetType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target_type", "body"))
+	}
+	if body.TargetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target_id", "body"))
+	}
+	if body.TargetLabel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target_label", "body"))
+	}
+	if body.TotalToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tool_calls", "body"))
+	}
+	if body.RecentToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recent_tool_calls", "body"))
+	}
+	if body.TargetType != nil {
+		if !(*body.TargetType == "hosted_mcp_server" || *body.TargetType == "tunneled_mcp_server") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_type", *body.TargetType, []any{"hosted_mcp_server", "tunneled_mcp_server"}))
+		}
+	}
+	if body.LastToolCallAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_tool_call_at", *body.LastToolCallAt, goa.FormatDateTime))
 	}
 	return
 }

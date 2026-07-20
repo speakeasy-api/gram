@@ -148,9 +148,11 @@ func ForDeploymentProcessing(
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
 		Publishers: &Publishers{
-			PresidioAnalysis:    gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
-			GitleaksAnalysis:    gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
-			CustomRulesAnalysis: gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+			PresidioAnalysis:        gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
+			GitleaksAnalysis:        gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+			PromptInjectionAnalysis: gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
+			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
+			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 		},
 	}
 }
@@ -335,16 +337,20 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
+	temporalWorker.RegisterActivity(activities.MaybeSendOpenRouterCreditsAlerts)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
+	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.CorrelateClaudePrompts)
+	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
+	temporalWorker.RegisterActivity(activities.ListStagedTelemetryProjects)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
 	temporalWorker.RegisterActivity(activities.AnalyzeSegment)
@@ -408,6 +414,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(CorrelateClaudePromptsWorkflow)
+	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
+	temporalWorker.RegisterWorkflow(StagedTelemetrySweepWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
 	// Trigger workflows
@@ -438,6 +446,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
+	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -495,6 +504,10 @@ func NewTemporalWorker(
 
 	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddStagedTelemetrySweepSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add staged telemetry sweep schedule", attr.SlogError(err))
 	}
 
 	if opts.PluginPublisher != nil {

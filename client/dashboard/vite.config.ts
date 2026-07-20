@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import process from "node:process";
 
-import { defineConfig } from "vite";
+import { defineConfig, normalizePath, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -17,15 +17,6 @@ import tailwindcss from "@tailwindcss/vite";
 const manualChunkGroups: [string, string[]][] = [
   ["lucide-react", ["lucide-react"]],
   [
-    "three",
-    [
-      "@react-three/drei",
-      "@react-three/fiber",
-      "@react-three/postprocessing",
-      "three",
-    ],
-  ],
-  [
     "externals",
     [
       "posthog-js",
@@ -38,6 +29,51 @@ const manualChunkGroups: [string, string[]][] = [
     ],
   ],
 ];
+
+const themeInitPath = path.resolve(__dirname, "src/theme-init.ts");
+const themeInitScriptPattern =
+  /<script src="\/src\/theme-init\.ts"\s*><\/script>/;
+
+function themeInitPlugin(): Plugin {
+  return {
+    name: "theme-init",
+    apply: "build",
+    buildStart() {
+      this.emitFile({
+        type: "chunk",
+        id: themeInitPath,
+        name: "theme-init",
+      });
+    },
+    transformIndexHtml: {
+      order: "post",
+      handler(html, context) {
+        if (!context.bundle) {
+          this.error("Theme bootstrap output bundle is unavailable");
+        }
+
+        const normalizedThemeInitPath = normalizePath(themeInitPath);
+        const themeInitChunk = Object.values(context.bundle).find(
+          (output) =>
+            output.type === "chunk" &&
+            output.facadeModuleId !== null &&
+            normalizePath(output.facadeModuleId) === normalizedThemeInitPath,
+        );
+        if (!themeInitChunk) {
+          this.error("Could not find the emitted theme bootstrap chunk");
+        }
+        if (!themeInitScriptPattern.test(html)) {
+          this.error("Could not find the theme bootstrap script in index.html");
+        }
+
+        return html.replace(
+          themeInitScriptPattern,
+          `<script src="/${themeInitChunk.fileName}"></script>`,
+        );
+      },
+    },
+  };
+}
 
 function packagePathRegex(packages: string[]): RegExp {
   const alternatives = packages.map((pkg) =>
@@ -107,13 +143,59 @@ export default defineConfig(({ command }) => {
   //                               playground.
 
   return {
+    experimental: {
+      // Static assets can be served through a CDN.
+      // The CDN hostname may be env-specific but this build is env-agnostic
+      // (one image is promoted dev -> prod), so instead of baking a CDN origin
+      // in via `base`, the dashboard's nginx rewrites the /assets/ URLs in
+      // index.html to the CDN host at serve time (see nginx.conf) and every
+      // other URL follows from the module that references it:
+      //
+      //   - html: keep the default root-absolute /assets/... URLs so the
+      //     nginx sub_filter can match and rewrite them.
+      //   - js/css: emit URLs relative to import.meta.url so chunk imports,
+      //     lazy-load preloads, and fonts/images referenced from CSS resolve
+      //     against whatever origin the module graph was loaded from — the
+      //     CDN when enabled, same-origin otherwise.
+      //   - workers: keep the default root-absolute URLs. Browsers reject
+      //     cross-origin new Worker(), so worker scripts must load from the
+      //     app origin even when everything else is on the CDN (CSP's
+      //     worker-src 'self' also depends on this). Detected by filename:
+      //     every worker entry (monaco's *.worker, @pierre/diffs' worker.js)
+      //     has "worker" in its emitted basename — keep it that way when
+      //     adding new workers.
+      renderBuiltUrl(filename, { hostType, type }) {
+        const isWorkerAsset = /(^|\/)[^/]*worker[^/]*\.js$/.test(filename);
+        if (
+          (type === "asset" || type === "public") &&
+          !isWorkerAsset &&
+          (hostType === "js" || hostType === "css")
+        ) {
+          return { relative: true };
+        }
+        return undefined;
+      },
+    },
     define: {
       __GRAM_SERVER_URL__: JSON.stringify(serverUrl),
       __PLAYGROUND_PROXY_URL__: JSON.stringify(isDev ? siteUrl : undefined),
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
+      // Default Gram API URL baked into the inlined elements code
+      // (src/elements/lib/api.ts); config.api.url overrides it at runtime.
+      __GRAM_API_URL__: JSON.stringify(process.env["GRAM_API_URL"] || ""),
     },
     build: {
       sourcemap: true,
+      // Fonts must stay as standalone asset files — inlining them as base64
+      // bloats the CSS bundle and defeats CDN caching of the font files.
+      // Returning undefined keeps Vite's default inlining behavior for
+      // everything else.
+      assetsInlineLimit(filePath) {
+        if (/\.(?:woff2?|ttf|otf|eot)$/i.test(filePath)) {
+          return false;
+        }
+        return undefined;
+      },
       rolldownOptions: {
         input: {
           main: path.resolve(__dirname, "index.html"),
@@ -175,7 +257,7 @@ export default defineConfig(({ command }) => {
           }
         : undefined,
     },
-    plugins: [react(), tailwindcss()],
+    plugins: [themeInitPlugin(), react(), tailwindcss()],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

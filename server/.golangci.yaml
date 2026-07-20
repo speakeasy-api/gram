@@ -61,11 +61,11 @@ linters:
       - path: cmd/|internal/dns/
         linters:
           - forbidigo
-      # riskjudgebench is a developer/benchmark CLI (not part of the server
-      # binary). Like test files, it favors terse partial structs and direct
-      # error returns over production-grade hardening, so exempt it from the
+      # riskjudgebench and dev-mcp are developer CLIs (not part of the server
+      # binary). Like test files, they favor terse partial structs and direct
+      # error returns over production-grade hardening, so exempt them from the
       # same dev-tooling linters we exempt tests from.
-      - path: cmd/riskjudgebench/
+      - path: cmd/riskjudgebench/|cmd/dev-mcp/
         linters:
           - exhaustruct
           - wrapcheck
@@ -147,6 +147,13 @@ linters:
         linters:
           - forbidigo
         text: GG001|GG002|GG011|GG012
+      # GG006/GG009 redirect tests to the testenv helpers; production code may
+      # legitimately construct discard loggers and noop meter providers, so
+      # they are only enforced in test files.
+      - path-except: _test\.go
+        linters:
+          - forbidigo
+        text: GG006|GG009
       # The testenv package is the canonical provider of the helpers that
       # GG006/GG008/GG009 redirect tests to. It necessarily constructs the
       # underlying primitives directly.

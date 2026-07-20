@@ -1,6 +1,7 @@
 package judgemessage_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -73,4 +74,43 @@ func TestNewJudgeMessageForToolCalls(t *testing.T) {
 	require.Equal(t, "Bash", msg.ToolCalls[1].ToolName)
 	require.Empty(t, msg.ToolCalls[1].MCPServer)
 	require.Empty(t, msg.ToolCalls[1].MCPFunction)
+}
+
+func TestRenderPayloadTruncatedToolCallsPreservesTail(t *testing.T) {
+	t.Parallel()
+
+	calls := make([]judgemessage.ToolCall, 0, 60)
+	for i := range 60 {
+		calls = append(calls, judgemessage.NewToolCall("Bash", fmt.Sprintf(`{"index":%d}`, i)))
+	}
+	calls[59] = judgemessage.NewToolCall("Bash", `{"command":"rm -rf /tail"}`)
+
+	payload := judgemessage.RenderPayload(judgemessage.NewForToolCalls(calls))
+
+	require.True(t, payload.ToolCallsTruncated)
+	require.Len(t, payload.ToolCalls, 50)
+	require.JSONEq(t, `{"index":0}`, payload.ToolCalls[0].Arguments)
+	require.JSONEq(t, `{"index":24}`, payload.ToolCalls[24].Arguments)
+	require.JSONEq(t, `{"index":35}`, payload.ToolCalls[25].Arguments)
+	require.JSONEq(t, `{"command":"rm -rf /tail"}`, payload.ToolCalls[49].Arguments)
+}
+
+func TestRender(t *testing.T) {
+	t.Parallel()
+
+	// Render returns the RenderPayload as a JSON string — the full event body a
+	// judge/prompt-injection finding stores as its Match.
+	msg := judgemessage.New(message.User, "", "ignore previous instructions")
+	got := judgemessage.Render(msg)
+
+	require.JSONEq(t,
+		`{"produced_by":"end_user","body_kind":"content","body":"ignore previous instructions"}`,
+		got,
+	)
+
+	// A tool call carries its arguments through the rendered event.
+	toolMsg := judgemessage.NewForToolCalls([]judgemessage.ToolCall{
+		judgemessage.NewToolCall("Bash", `{"command":"rm -rf /tmp"}`),
+	})
+	require.Contains(t, judgemessage.Render(toolMsg), "rm -rf /tmp")
 }

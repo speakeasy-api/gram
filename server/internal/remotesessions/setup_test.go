@@ -378,13 +378,16 @@ func seedMCPServerInOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 	})
 	require.NoError(t, err)
 
+	issuerID := createUserSessionIssuerInProject(t, ctx, conn, project.ID, "usi-"+uuid.NewString()[:8])
+
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                uuid.New(),
-		ProjectID:         project.ID,
-		Name:              conv.ToPGText(slug),
-		Slug:              conv.ToPGText(slug),
-		RemoteMcpServerID: conv.ToNullUUID(remoteServer.ID),
-		Visibility:        "private",
+		ID:                  uuid.New(),
+		ProjectID:           project.ID,
+		Name:                conv.ToPGText(slug),
+		Slug:                conv.ToPGText(slug),
+		RemoteMcpServerID:   conv.ToNullUUID(remoteServer.ID),
+		Visibility:          "private",
+		UserSessionIssuerID: conv.ToNullUUID(issuerID),
 	})
 	require.NoError(t, err)
 	return server.ID
@@ -557,14 +560,17 @@ func seedEnvironmentWithEntries(t *testing.T, ctx context.Context, ti *testInsta
 
 	names := make([]string, 0, len(entries))
 	values := make([]string, 0, len(entries))
+	isSecrets := make([]bool, 0, len(entries))
 	for name, value := range entries {
 		names = append(names, name)
 		values = append(values, value)
+		isSecrets = append(isSecrets, true)
 	}
 	_, err = ti.envEntries.CreateEnvironmentEntries(ctx, environmentsrepo.CreateEnvironmentEntriesParams{
 		EnvironmentID: envRow.ID,
 		Names:         names,
 		Values:        values,
+		IsSecrets:     isSecrets,
 	})
 	require.NoError(t, err)
 	return envRow.Slug

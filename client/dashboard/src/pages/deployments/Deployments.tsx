@@ -1,8 +1,16 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Heading } from "@/components/ui/heading";
+import type { Action } from "@/components/ui/more-actions";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
+import {
+  mutationKeyRedeployDeployment,
+  type RedeployDeploymentMutationVariables,
+} from "@gram/client/react-query/redeployDeployment.js";
+import { useMutationState } from "@tanstack/react-query";
 import {
   Badge,
   Button,
@@ -53,20 +61,35 @@ type DeploymentSummary = {
   externalMcpToolCount: number;
 };
 
-function DeploymentActionsDropdown({
-  deployment,
-  latest,
-}: {
-  deployment: DeploymentSummary;
-  latest: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-
+function useDeploymentActions(
+  deployment: DeploymentSummary,
+  latest: boolean,
+  { onSettled }: { onSettled?: () => void } = {},
+): Action[] {
   const redeployMutation = useRedeployDeployment({
     onSettled() {
-      setIsOpen(false);
+      onSettled?.();
     },
   });
+
+  // A redeploy can be started from either the kebab dropdown or the row's
+  // context menu, which are separate hook instances. Observe pending
+  // redeploys for this deployment across all instances via the shared
+  // mutation key so both menus show the pending label and disable together.
+  const pendingDeploymentIds = useMutationState({
+    filters: {
+      mutationKey: mutationKeyRedeployDeployment(),
+      status: "pending",
+    },
+    select: (mutation) =>
+      (
+        mutation.state.variables as
+          | RedeployDeploymentMutationVariables
+          | undefined
+      )?.request.redeployRequestBody.deploymentId,
+  });
+  const isRedeploying =
+    redeployMutation.isPending || pendingDeploymentIds.includes(deployment.id);
 
   // Find the current deployment to check its status
   const isCompletedDeployment = deployment.status === "completed";
@@ -75,7 +98,7 @@ function DeploymentActionsDropdown({
   // 1. Latest deployment (regardless of status) - shows "Retry"
   // 2. Completed deployments that are not the latest - shows "Redeploy"
   if (!latest && !isCompletedDeployment) {
-    return null;
+    return [];
   }
 
   const handleRedeploy = () => {
@@ -88,13 +111,41 @@ function DeploymentActionsDropdown({
     });
   };
 
-  const isRedeploying = redeployMutation.isPending;
   const actionText = latest ? "Retry Deployment" : "Rollback";
   const buttonText = isRedeploying
     ? latest
       ? "Retrying Deployment..."
       : "Rolling Back..."
     : actionText;
+
+  return [
+    {
+      icon: "refresh-cw",
+      label: buttonText,
+      disabled: isRedeploying,
+      onClick: handleRedeploy,
+    },
+  ];
+}
+
+function DeploymentActionsDropdown({
+  deployment,
+  latest,
+}: {
+  deployment: DeploymentSummary;
+  latest: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const actions = useDeploymentActions(deployment, latest, {
+    onSettled() {
+      setIsOpen(false);
+    },
+  });
+
+  if (actions.length === 0) {
+    return null;
+  }
 
   return (
     <RequireScope scope="project:write" level="section">
@@ -108,17 +159,47 @@ function DeploymentActionsDropdown({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onClick={handleRedeploy}
-            disabled={redeployMutation.isPending}
-            className="cursor-pointer"
-          >
-            <Icon name="refresh-cw" className="mr-2 size-4" />
-            {buttonText}
-          </DropdownMenuItem>
+          {actions.map((action, index) => (
+            <DropdownMenuItem
+              key={index}
+              onClick={action.onClick}
+              disabled={action.disabled}
+              className="cursor-pointer"
+            >
+              {action.icon && (
+                <Icon name={action.icon} className="mr-2 size-4" />
+              )}
+              {action.label}
+            </DropdownMenuItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
     </RequireScope>
+  );
+}
+
+function DeploymentRowContextMenu({
+  deployment,
+  latest,
+  children,
+}: {
+  deployment: DeploymentSummary;
+  latest: boolean;
+  children: React.ReactElement;
+}) {
+  const actions = useDeploymentActions(deployment, latest);
+
+  // Same gate as the kebab's RequireScope, checked via RBAC directly:
+  // RequireScope's component-level wrapper would insert divs around the
+  // `<tr>` (invalid table markup) and gray out rows for read-only users,
+  // so the row renders unwrapped with an empty menu instead.
+  const { hasAnyScope } = useRBAC();
+  const canWrite = hasAnyScope(["project:write"]);
+
+  return (
+    <TableRowContextMenu actions={canWrite ? actions : []}>
+      {children}
+    </TableRowContextMenu>
   );
 }
 
@@ -258,6 +339,15 @@ function DeploymentsTable({
         rowKey={(row) => row.id}
         data={deployments}
         className="mb-8 overflow-auto"
+        renderRow={(row, rowElement) => (
+          <DeploymentRowContextMenu
+            key={row.id}
+            deployment={row}
+            latest={deployments[0] === row}
+          >
+            {rowElement}
+          </DeploymentRowContextMenu>
+        )}
       />
     </>
   );

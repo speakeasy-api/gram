@@ -67,8 +67,8 @@ function PageHeaderTitle({
 // only needs to hold the exceptions where that produces the wrong text:
 //   - acronyms / non-standard casing (MCP, SDKs, OpenAPI, API)
 //   - lowercased connector words ("from")
-//   - rebrands where the display name differs from the URL segment. `slack` and
-//     `clis` are kept in the URL for backwards compatibility but were renamed.
+//   - rebrands where the display name differs from the URL segment. `slack` is
+//     kept in the URL for backwards compatibility but was renamed.
 const breadcrumbSubstitutions = {
   mcp: "MCP",
   sdks: "SDKs",
@@ -77,7 +77,6 @@ const breadcrumbSubstitutions = {
   "add-from-catalog": "Add from Catalog",
   "api-keys": "API Keys",
   slack: "Assistants",
-  clis: "Skills",
 };
 
 // One rendered crumb. Pending crumbs (substitution key present, value not yet
@@ -247,15 +246,15 @@ function PageHeaderBreadcrumbs({
   visibleElements.push(...pageElements);
 
   return (
-    // The shortcut hint is a sibling of the breadcrumb band — not nested inside
-    // it — so it pins to the true right edge of the nav bar. Nested, it would
-    // stop at the right edge of the centered max-w-[1270px] band, landing
-    // mid-bar on wide screens. Breadcrumbs are unchanged; only the hint moves.
-    <>
+    // Breadcrumbs + hint share their own justify-between row so the hint
+    // always pins to the true right edge of the nav bar, independent of the
+    // SidebarTrigger/Separator siblings in the outer header row (their width
+    // otherwise threw off the old ml-auto-on-both-siblings layout).
+    <div className="flex w-full items-center justify-between gap-2">
       <PageHeader.Title
         className={cn(fullWidth ? "max-w-full" : "", className)}
       >
-        <div className="ml-auto flex items-center gap-2 normal-case">
+        <div className="flex items-center gap-2 normal-case">
           {visibleElements.map((elem, index) => (
             <React.Fragment key={`${elem.url}-${index}`}>
               <BreadcrumbCrumb elem={elem} />
@@ -267,8 +266,8 @@ function PageHeaderBreadcrumbs({
           {stage && <ReleaseStageBadge stage={stage} />}
         </div>
       </PageHeader.Title>
-      <InsightsDockShortcutHint className="ml-auto shrink-0" />
-    </>
+      <InsightsDockShortcutHint className="shrink-0" />
+    </div>
   );
 }
 

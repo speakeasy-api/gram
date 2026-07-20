@@ -515,7 +515,7 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
-  clis: [
+  skills: [
     {
       title: "Which skills are used?",
       label: "Most-invoked skills",
@@ -627,7 +627,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "Compare clients",
       icon: "bot",
       prompt:
-        "Compare usage across different AI coding clients (Claude Code, Cursor, etc). Which is most popular?",
+        "Compare usage across different AI coding clients (Claude Code, Cursor, Codex, etc). Which is most popular?",
     },
   ],
 

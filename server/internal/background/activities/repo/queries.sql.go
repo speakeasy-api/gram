@@ -213,11 +213,81 @@ func (q *Queries) GetAllOrganizationsWithToolsets(ctx context.Context) ([]GetAll
 	return items, nil
 }
 
+const getOpenRouterCreditsAlertRecipients = `-- name: GetOpenRouterCreditsAlertRecipients :many
+SELECT
+    om.id AS organization_id,
+    om.name AS organization_name,
+    bm.alert_email,
+    EXISTS (
+        SELECT 1
+        FROM model_provider_keys mpk
+        WHERE mpk.organization_id = om.id
+          AND mpk.enabled = TRUE
+          AND mpk.deleted = FALSE
+          AND mpk.slot <> ALL($1::text[])
+    )::boolean AS chat_byok
+FROM organization_metadata om
+JOIN billing_metadata bm ON bm.organization_id = om.id
+WHERE om.id = ANY($2::text[])
+  AND om.disabled_at IS NULL
+  AND bm.alert_email IS NOT NULL
+`
+
+type GetOpenRouterCreditsAlertRecipientsParams struct {
+	InternalOnlySlots []string
+	OrganizationIds   []string
+}
+
+type GetOpenRouterCreditsAlertRecipientsRow struct {
+	OrganizationID   string
+	OrganizationName string
+	AlertEmail       pgtype.Text
+	ChatByok         bool
+}
+
+// Resolve the billing alert recipient for each supplied organization that
+// should receive an OpenRouter credit threshold warning. An org qualifies only
+// if it is not disabled and has a billing alert email configured (the address
+// set on the billing page). chat_byok reports whether the org has an enabled,
+// non-deleted customer-supplied model provider key outside the internal-only
+// slots (@internal_only_slots, the platform-initiated judge slots that never
+// carry chat completions); such a key means the platform chat key is not what
+// pays for the org's completions, so the caller suppresses chat-key warnings —
+// deliberately org-wide, matching the ticket-level "no alerts for BYOK orgs"
+// decision. The flag is returned rather than filtered on because it only
+// applies to some key types: usage on the internal key is platform-billed
+// regardless of any customer keys.
+func (q *Queries) GetOpenRouterCreditsAlertRecipients(ctx context.Context, arg GetOpenRouterCreditsAlertRecipientsParams) ([]GetOpenRouterCreditsAlertRecipientsRow, error) {
+	rows, err := q.db.Query(ctx, getOpenRouterCreditsAlertRecipients, arg.InternalOnlySlots, arg.OrganizationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetOpenRouterCreditsAlertRecipientsRow
+	for rows.Next() {
+		var i GetOpenRouterCreditsAlertRecipientsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.AlertEmail,
+			&i.ChatByok,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getOpenRouterCreditsMonitoringTargets = `-- name: GetOpenRouterCreditsMonitoringTargets :many
 SELECT
     om.id AS organization_id,
     om.slug AS organization_slug,
     om.gram_account_type,
+    k.key_type,
     k.monthly_credits,
     k.key AS api_key
 FROM organization_metadata om
@@ -233,6 +303,7 @@ type GetOpenRouterCreditsMonitoringTargetsRow struct {
 	OrganizationID   string
 	OrganizationSlug string
 	GramAccountType  string
+	KeyType          string
 	MonthlyCredits   int64
 	ApiKey           string
 }
@@ -258,6 +329,7 @@ func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, acc
 			&i.OrganizationID,
 			&i.OrganizationSlug,
 			&i.GramAccountType,
+			&i.KeyType,
 			&i.MonthlyCredits,
 			&i.ApiKey,
 		); err != nil {

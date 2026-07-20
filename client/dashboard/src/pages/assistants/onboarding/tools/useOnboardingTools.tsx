@@ -1,7 +1,7 @@
 import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
-import { defineFrontendTool, type FrontendTool } from "@gram-ai/elements";
+import { defineFrontendTool, type FrontendTool } from "@/elements";
 import { Gram } from "@gram/client";
 import { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useMemo } from "react";
@@ -1081,7 +1081,17 @@ function buildAssistantTools(deps: ToolDeps) {
       execute: async (args) => {
         const { urn_prefix, limit } = args as ListAvailableToolsArgs;
         try {
-          const res = await sdk.tools.list({ urnPrefix: urn_prefix, limit });
+          const res = await sdk.tools.list({
+            urnPrefix: urn_prefix,
+            limit,
+            toolTypes: [
+              "http",
+              "function",
+              "prompt",
+              "platform",
+              "externalmcp",
+            ],
+          });
           return okResult({
             tools: res.tools.map((t) => {
               const def =

@@ -2,10 +2,15 @@ import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { MemberFacepile } from "@/components/member-facepile";
 import { ProjectAvatar } from "@/components/project-menu";
+import { DEFAULT_DATE_RANGE_PRESET } from "@/components/observe/useDateRangeFilter";
+import { buildProjectOverviewQuery } from "@/components/project/projectOverviewQuery";
 import { RequireScope } from "@/components/require-scope";
+import { CardContextMenu } from "@/components/card-context-menu";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Heading } from "@/components/ui/heading";
+import type { Action } from "@/components/ui/more-actions";
 import { SearchBar } from "@/components/ui/search-bar";
 import {
   Tooltip,
@@ -20,6 +25,7 @@ import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { useProjectFavorites } from "@/hooks/useProjectFavorites";
 import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters } from "@/lib/dates";
+import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
 import { ChallengesEmptyState } from "@/pages/access/ChallengesTab";
 import {
@@ -31,14 +37,18 @@ import type { AccessMember } from "@gram/client/models/components/accessmember.j
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  type IconName,
 } from "@speakeasy-api/moonshine";
 import {
   ChevronDown,
@@ -54,8 +64,9 @@ import {
   ShieldCheck,
   Star,
   UserPlus,
+  type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { getActorLabel, renderVerb } from "@/lib/audit-log-format";
@@ -110,6 +121,37 @@ function OrgHomeInner() {
   const { favoriteSet, isFavorite, toggleFavorite } = useProjectFavorites(
     organization.id,
   );
+
+  // Warm the overview cache for the one project the user is most likely to
+  // open next (last visited, else `default`). Same feature gate as
+  // ProjectDashboard; staleTime dedupes re-runs and the fetch on navigation.
+  const gramClient = useGramContext();
+  const queryClient = useQueryClient();
+  const { data: featuresData } = useProductFeatures();
+  const logsEnabled = featuresData?.logsEnabled === true;
+  const prefetchProject =
+    getPreferredProject(organization.projects) ??
+    organization.projects.find((p) => p.slug === "default") ??
+    organization.projects[0];
+  const prefetchProjectSlug = prefetchProject?.slug;
+  const organizationSlug = organization.slug;
+
+  useEffect(() => {
+    if (!logsEnabled || !prefetchProjectSlug || !organizationSlug) return;
+    void queryClient.prefetchQuery(
+      buildProjectOverviewQuery(gramClient, {
+        organization: organizationSlug,
+        project: prefetchProjectSlug,
+        range: { preset: DEFAULT_DATE_RANGE_PRESET },
+      }),
+    );
+  }, [
+    logsEnabled,
+    prefetchProjectSlug,
+    organizationSlug,
+    gramClient,
+    queryClient,
+  ]);
 
   // Fetch org-wide audit log once. We use it to drive (a) the left rail
   // preview, (b) each project's "most recent action", and (c) the facepile
@@ -215,7 +257,6 @@ function OrgHomeInner() {
 
   const renderProjectItem = (project: OrgProject) => {
     const props = {
-      key: project.id,
       project,
       latestLog: latestActionByProjectSlug.get(project.slug),
       facepile: getFacepileMembers(project.slug),
@@ -223,9 +264,9 @@ function OrgHomeInner() {
       onToggleFavorite: () => toggleFavorite(project.id),
     };
     return viewMode === "grid" ? (
-      <ProjectCard {...props} />
+      <ProjectCard key={project.id} {...props} />
     ) : (
-      <ProjectRow {...props} />
+      <ProjectRow key={project.id} {...props} />
     );
   };
 
@@ -504,61 +545,64 @@ function ProjectRow({
   onToggleFavorite: () => void;
 }) {
   const { orgSlug } = useSlugs();
+  const actions = useProjectActions(project, { isFavorite, onToggleFavorite });
 
   return (
-    <div className="group hover:bg-muted/40 relative flex items-center gap-4 px-4 py-3 transition-colors">
-      {/* Decorative content: pointer-events-none routes clicks through to the
-          Link overlay below, while the actions region opts back in. */}
-      <ProjectAvatar
-        project={project}
-        className="pointer-events-none h-9 w-9 shrink-0 rounded-md"
-      />
+    <TableRowContextMenu actions={actions}>
+      <div className="group hover:bg-muted/40 relative flex items-center gap-4 px-4 py-3 transition-colors">
+        {/* Decorative content: pointer-events-none routes clicks through to the
+            Link overlay below, while the actions region opts back in. */}
+        <ProjectAvatar
+          project={project}
+          className="pointer-events-none h-9 w-9 shrink-0 rounded-md"
+        />
 
-      <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-6">
-        <div className="w-44 min-w-0 shrink-0">
-          <Type
-            variant="subheading"
-            as="div"
-            className="text-foreground truncate text-sm font-medium"
-          >
-            {project.name}
-          </Type>
-          <Type small muted className="truncate font-mono text-xs">
-            {project.slug}
-          </Type>
+        <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-6">
+          <div className="w-44 min-w-0 shrink-0">
+            <Type
+              variant="subheading"
+              as="div"
+              className="text-foreground truncate text-sm font-medium"
+            >
+              {project.name}
+            </Type>
+            <Type small muted className="truncate font-mono text-xs">
+              {project.slug}
+            </Type>
+          </div>
+
+          <div className="hidden min-w-0 flex-1 sm:block">
+            <RecentActionBlock log={latestLog} />
+          </div>
         </div>
 
-        <div className="hidden min-w-0 flex-1 sm:block">
-          <RecentActionBlock log={latestLog} />
+        <div
+          className="relative z-10 hidden md:flex"
+          onClick={(e) => {
+            // Keep clicks on the facepile from triggering the row's Link overlay.
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          <MemberFacepile members={facepile} maxFaces={5} />
         </div>
+
+        <ProjectRowActions
+          actions={actions}
+          isFavorite={isFavorite}
+          onToggleFavorite={onToggleFavorite}
+        />
+
+        {/* Anchor overlay sits on top of pointer-events-none children, so the
+            entire row is one navigation target — interactive controls above
+            opt in via pointer-events-auto. */}
+        <Link
+          to={`/${orgSlug}/projects/${project.slug}`}
+          aria-label={`Open ${project.name}`}
+          className="absolute inset-0"
+        />
       </div>
-
-      <div
-        className="relative z-10 hidden md:flex"
-        onClick={(e) => {
-          // Keep clicks on the facepile from triggering the row's Link overlay.
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-      >
-        <MemberFacepile members={facepile} maxFaces={5} />
-      </div>
-
-      <ProjectRowActions
-        project={project}
-        isFavorite={isFavorite}
-        onToggleFavorite={onToggleFavorite}
-      />
-
-      {/* Anchor overlay sits on top of pointer-events-none children, so the
-          entire row is one navigation target — interactive controls above
-          opt in via pointer-events-auto. */}
-      <Link
-        to={`/${orgSlug}/projects/${project.slug}`}
-        aria-label={`Open ${project.name}`}
-        className="absolute inset-0"
-      />
-    </div>
+    </TableRowContextMenu>
   );
 }
 
@@ -576,69 +620,125 @@ function ProjectCard({
   onToggleFavorite: () => void;
 }) {
   const { orgSlug } = useSlugs();
+  const actions = useProjectActions(project, { isFavorite, onToggleFavorite });
 
   return (
-    <div className="group border-border bg-card hover:border-foreground/20 relative flex h-full flex-col gap-4 rounded-lg border p-4 transition-all hover:shadow-sm">
-      <div className="pointer-events-none flex items-start gap-3">
-        <ProjectAvatar
-          project={project}
-          className="h-10 w-10 shrink-0 rounded-md"
-        />
-        <div className="min-w-0 flex-1">
-          <Type
-            variant="subheading"
-            as="div"
-            className="text-foreground truncate text-sm font-medium"
+    <CardContextMenu actions={actions}>
+      {/* The card div keeps `relative`, so the Link overlay below still fills
+          the card rather than the context-menu wrapper. */}
+      <div className="group border-border bg-card hover:border-foreground/20 relative flex h-full flex-col gap-4 rounded-lg border p-4 transition-all hover:shadow-sm">
+        <div className="pointer-events-none flex items-start gap-3">
+          <ProjectAvatar
+            project={project}
+            className="h-10 w-10 shrink-0 rounded-md"
+          />
+          <div className="min-w-0 flex-1">
+            <Type
+              variant="subheading"
+              as="div"
+              className="text-foreground truncate text-sm font-medium"
+            >
+              {project.name}
+            </Type>
+            <Type small muted className="truncate font-mono text-xs">
+              {project.slug}
+            </Type>
+          </div>
+        </div>
+
+        <div className="pointer-events-none min-h-[42px] flex-1">
+          <RecentActionBlock log={latestLog} />
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <div
+            className="relative z-10"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
           >
-            {project.name}
-          </Type>
-          <Type small muted className="truncate font-mono text-xs">
-            {project.slug}
-          </Type>
+            <MemberFacepile members={facepile} maxFaces={5} />
+          </div>
+          <ProjectRowActions
+            actions={actions}
+            isFavorite={isFavorite}
+            onToggleFavorite={onToggleFavorite}
+          />
         </div>
-      </div>
 
-      <div className="pointer-events-none min-h-[42px] flex-1">
-        <RecentActionBlock log={latestLog} />
-      </div>
-
-      <div className="flex items-center justify-between gap-2">
-        <div
-          className="relative z-10"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-        >
-          <MemberFacepile members={facepile} maxFaces={5} />
-        </div>
-        <ProjectRowActions
-          project={project}
-          isFavorite={isFavorite}
-          onToggleFavorite={onToggleFavorite}
+        <Link
+          to={`/${orgSlug}/projects/${project.slug}`}
+          aria-label={`Open ${project.name}`}
+          className="absolute inset-0 rounded-lg"
         />
       </div>
-
-      <Link
-        to={`/${orgSlug}/projects/${project.slug}`}
-        aria-label={`Open ${project.name}`}
-        className="absolute inset-0 rounded-lg"
-      />
-    </div>
+    </CardContextMenu>
   );
 }
 
+/**
+ * The per-project actions shared by the visible "⋯" dropdown and the
+ * right-click context menu, so both stay in sync.
+ */
+function useProjectActions(
+  project: OrgProject,
+  {
+    isFavorite,
+    onToggleFavorite,
+  }: { isFavorite: boolean; onToggleFavorite: () => void },
+): Action[] {
+  const { orgSlug } = useSlugs();
+  const navigate = useNavigate();
+
+  return [
+    {
+      icon: "star",
+      label: isFavorite ? "Remove from favorites" : "Add to favorites",
+      onClick: onToggleFavorite,
+    },
+    {
+      icon: "settings",
+      label: "Project settings",
+      onClick: () => {
+        void navigate(`/${orgSlug}/projects/${project.slug}/settings`);
+      },
+    },
+    {
+      icon: "history",
+      label: "View audit logs",
+      onClick: () => {
+        void navigate(`/${orgSlug}/audit-logs?project=${project.slug}`);
+      },
+    },
+    {
+      icon: "copy",
+      label: "Copy slug",
+      onClick: () => {
+        void navigator.clipboard?.writeText(project.slug);
+      },
+    },
+  ];
+}
+
+// Lucide equivalents of the moonshine icon names used by useProjectActions,
+// so the dropdown keeps its existing lucide icons.
+const projectActionIcons: Partial<Record<IconName, LucideIcon>> = {
+  star: Star,
+  settings: Settings,
+  history: History,
+  copy: Copy,
+};
+
 function ProjectRowActions({
-  project,
+  actions,
   isFavorite,
   onToggleFavorite,
 }: {
-  project: OrgProject;
+  actions: Action[];
   isFavorite: boolean;
   onToggleFavorite: () => void;
 }) {
-  const { orgSlug } = useSlugs();
-  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const closeAnd = (cb: () => void) => () => {
@@ -685,34 +785,28 @@ function ProjectRowActions({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem onClick={closeAnd(onToggleFavorite)}>
-            <Star className={cn("size-4", isFavorite && "fill-current")} />
-            {isFavorite ? "Remove from favorites" : "Add to favorites"}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={closeAnd(() => {
-              void navigate(`/${orgSlug}/projects/${project.slug}/settings`);
-            })}
-          >
-            <Settings className="size-4" />
-            Project settings
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={closeAnd(() => {
-              void navigate(`/${orgSlug}/audit-logs?project=${project.slug}`);
-            })}
-          >
-            <History className="size-4" />
-            View audit logs
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={closeAnd(() => {
-              void navigator.clipboard?.writeText(project.slug);
-            })}
-          >
-            <Copy className="size-4" />
-            Copy slug
-          </DropdownMenuItem>
+          {actions.map((action, index) => {
+            const ActionIcon = action.icon
+              ? projectActionIcons[action.icon]
+              : undefined;
+            return (
+              <DropdownMenuItem
+                key={index}
+                disabled={action.disabled}
+                onClick={closeAnd(action.onClick)}
+              >
+                {ActionIcon && (
+                  <ActionIcon
+                    className={cn(
+                      "size-4",
+                      action.icon === "star" && isFavorite && "fill-current",
+                    )}
+                  />
+                )}
+                {action.label}
+              </DropdownMenuItem>
+            );
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

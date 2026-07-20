@@ -62,11 +62,6 @@ func QueryTelemetryPath() string {
 	return "/rpc/telemetry.query"
 }
 
-// QueryRiskTokensTelemetryPath returns the URL path to the telemetry service queryRiskTokens HTTP endpoint.
-func QueryRiskTokensTelemetryPath() string {
-	return "/rpc/telemetry.queryRiskTokens"
-}
-
 // QueryTumDetailsTelemetryPath returns the URL path to the telemetry service queryTumDetails HTTP endpoint.
 func QueryTumDetailsTelemetryPath() string {
 	return "/rpc/telemetry.queryTumDetails"
@@ -105,6 +100,11 @@ func ListToolUsageTracesTelemetryPath() string {
 // GetToolUsageFilterOptionsTelemetryPath returns the URL path to the telemetry service getToolUsageFilterOptions HTTP endpoint.
 func GetToolUsageFilterOptionsTelemetryPath() string {
 	return "/rpc/telemetry.getToolUsageFilterOptions"
+}
+
+// GetMcpServerActivityTelemetryPath returns the URL path to the telemetry service getMcpServerActivity HTTP endpoint.
+func GetMcpServerActivityTelemetryPath() string {
+	return "/rpc/telemetry.getMcpServerActivity"
 }
 
 // ListHooksTracesTelemetryPath returns the URL path to the telemetry service listHooksTraces HTTP endpoint.

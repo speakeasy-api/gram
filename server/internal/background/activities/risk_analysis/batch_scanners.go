@@ -69,7 +69,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
-			findings := a.scanPromptInjection(ctx, args, subMessages, subContents)
+			findings := a.scanPromptInjection(ctx, args, requestID, subMessages, subContents)
 			promptInjectionFindings = scatterFindings(n, indices, findings)
 		})
 	}

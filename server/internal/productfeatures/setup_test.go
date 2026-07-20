@@ -5,19 +5,23 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -77,17 +81,32 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 	// "returns false after feature is disabled"). Override the org ID with
 	// a fresh UUID per test so cache keys are unique. organization_features
 	// has no FK on organization_id, and ShouldEnforce skips RBAC for the
-	// non-enterprise account type used in tests, so this needs no extra setup.
+	// non-enterprise account type used in tests. The synthetic org does need
+	// an organization_metadata row: audited toggles append to the outbox,
+	// whose organization_id carries a foreign key.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok, "auth context not found")
 	authCtx.ActiveOrganizationID = uuid.NewString()
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
+	err = testrepo.New(conn).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID:                 authCtx.ActiveOrganizationID,
+		Name:               "Product Features Test Org",
+		Slug:               authCtx.ActiveOrganizationID,
+		GramAccountType:    "free",
+		WorkosID:           conv.PtrToPGText(nil),
+		Whitelisted:        false,
+		FreeTrialStartedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		FreeTrialEndsAt:    conv.ToPGTimestamptz(time.Now().UTC().Add(14 * 24 * time.Hour)),
+		DisabledAt:         conv.PtrToPGTimestamptz(nil),
+	})
+	require.NoError(t, err)
+
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine)
+	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine, audit.NewLogger())
 
 	return ctx, &testInstance{
 		service:        svc,

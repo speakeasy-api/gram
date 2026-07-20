@@ -683,41 +683,6 @@ func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken str
 	return v, nil
 }
 
-// BuildQueryRiskTokensPayload builds the payload for the telemetry
-// queryRiskTokens endpoint from CLI flags.
-func BuildQueryRiskTokensPayload(telemetryQueryRiskTokensBody string, telemetryQueryRiskTokensSessionToken string) (*telemetry.QueryRiskTokensPayload, error) {
-	var err error
-	var body QueryRiskTokensRequestBody
-	{
-		err = json.Unmarshal([]byte(telemetryQueryRiskTokensBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
-		if body.ProjectID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if telemetryQueryRiskTokensSessionToken != "" {
-			sessionToken = &telemetryQueryRiskTokensSessionToken
-		}
-	}
-	v := &telemetry.QueryRiskTokensPayload{
-		From:      body.From,
-		To:        body.To,
-		ProjectID: body.ProjectID,
-	}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
 // BuildQueryTumDetailsPayload builds the payload for the telemetry
 // queryTumDetails endpoint from CLI flags.
 func BuildQueryTumDetailsPayload(telemetryQueryTumDetailsBody string, telemetryQueryTumDetailsSessionToken string) (*telemetry.QueryTumDetailsPayload, error) {
@@ -1277,6 +1242,51 @@ func BuildGetToolUsageFilterOptionsPayload(telemetryGetToolUsageFilterOptionsBod
 		v.OptionTypes = make([]telemetry.ToolUsageFilterOptionType, len(body.OptionTypes))
 		for i, val := range body.OptionTypes {
 			v.OptionTypes[i] = telemetry.ToolUsageFilterOptionType(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetMcpServerActivityPayload builds the payload for the telemetry
+// getMcpServerActivity endpoint from CLI flags.
+func BuildGetMcpServerActivityPayload(telemetryGetMcpServerActivityBody string, telemetryGetMcpServerActivityApikeyToken string, telemetryGetMcpServerActivitySessionToken string, telemetryGetMcpServerActivityProjectSlugInput string) (*telemetry.GetMcpServerActivityPayload, error) {
+	var err error
+	var body GetMcpServerActivityRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetMcpServerActivityBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"recent_window_days\": 2\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetMcpServerActivityApikeyToken != "" {
+			apikeyToken = &telemetryGetMcpServerActivityApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetMcpServerActivitySessionToken != "" {
+			sessionToken = &telemetryGetMcpServerActivitySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetMcpServerActivityProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetMcpServerActivityProjectSlugInput
+		}
+	}
+	v := &telemetry.GetMcpServerActivityPayload{
+		RecentWindowDays: body.RecentWindowDays,
+	}
+	{
+		var zero int
+		if v.RecentWindowDays == zero {
+			v.RecentWindowDays = 14
 		}
 	}
 	v.ApikeyToken = apikeyToken

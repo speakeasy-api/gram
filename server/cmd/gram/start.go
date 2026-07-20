@@ -80,6 +80,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
@@ -87,6 +88,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/otelforwarding"
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
@@ -97,10 +99,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
-	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/skills"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/templates"
@@ -113,6 +117,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/triggers"
 
+	"github.com/speakeasy-api/gram/server/internal/tokenexchange"
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp"
@@ -477,7 +482,7 @@ func newStartCommand() *cli.Command {
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
 
-			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider)
 			if err != nil {
 				return err
 			}
@@ -724,6 +729,7 @@ func newStartCommand() *cli.Command {
 				logger,
 				guardianPolicy,
 				openRouter,
+				modelkeys.NewResolver(db, encryptionClient, openRouter),
 				captureStrategy,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
@@ -758,20 +764,22 @@ func newStartCommand() *cli.Command {
 			accessStore := accesscontrol.NewRedisStore(cache.NewRedisCacheAdapter(redisClient), accesscontrol.AlphaTTL)
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore)
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, slackClient)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, slackClient)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+			skillTools := platformtoolsruntime.AssistantSkillTools(db)
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
 			// mcpService captures this map by reference now; the remaining
-			// insights tools (chat/orgs/risk/deployments) are merged in once
+			// insights tools (chat/orgs/risk/deployments/skills) are merged in once
 			// their backing services exist further down.
 			managedInsightsTools := append([]platformtools.ExternalTool{}, platformtoolsruntime.ManagedAssistantLogsTools(telemSvc)...)
 			platformToolsets := map[string]platformtools.Toolset{}
 			// Runner-callable platform tools the runtime must be able to execute
 			// (trigger tools are wired separately via WithTriggerTools).
 			assistantPlatformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
+			assistantPlatformExtras = append(assistantPlatformExtras, skillTools...)
 
 			platformSvc := platformtoolsruntime.NewService(
 				logger,
@@ -866,14 +874,13 @@ func newStartCommand() *cli.Command {
 			)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger)
-			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver)
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
-			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
 
 			otelForwardClient := otelforwarding.NewClient(logger, db, encryptionClient, cache.NewRedisCacheAdapter(redisClient))
@@ -913,7 +920,7 @@ func newStartCommand() *cli.Command {
 			// Stop and flush the publishers before closing the Pub/Sub client
 			// they publish through. runShutdown executes shutdown funcs
 			// concurrently, so this ordering must be enforced inside a single
-			// func — appending the two separately would race the publisher
+			// func - appending the two separately would race the publisher
 			// flush against the client close and could drop in-flight messages.
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
 				stopErr := shutdown(ctx)
@@ -927,7 +934,7 @@ func newStartCommand() *cli.Command {
 			// Marketplace proxy routes (URL-based marketplace.json + git Smart
 			// HTTP for plugin source clones). Mounted via the outermost
 			// mux.Use middleware so /m/ and /p/ paths short-circuit the Goa
-			// mux. Public base URL is server-url by definition — the proxy
+			// mux. Public base URL is server-url by definition - the proxy
 			// lives on this server, so the plugin sources we embed in the
 			// rendered manifest must point back at it. nil when no App is
 			// configured.
@@ -955,6 +962,15 @@ func newStartCommand() *cli.Command {
 				logger.InfoContext(ctx, "marketplace proxy: disabled (no github app configured)")
 			}
 
+			// Hooks binary artifacts (checksum-verifying proxy in front of the
+			// pinned GitHub release). Served from this domain so bootstrap
+			// scripts never need GitHub egress; mounted like the marketplace
+			// proxy — dispatched ahead of the Goa mux with its own recovery
+			// wrap — but not gated on the GitHub App, since release assets are
+			// public.
+			hooksArtifactServer := plugins.NewHooksArtifactServer(logger, guardianPolicy.Client())
+			hooksArtifactRoutes := middleware.NewRecovery(logger)(hooksArtifactServer.Routes())
+
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -964,6 +980,10 @@ func newStartCommand() *cli.Command {
 					}
 					if marketplaceServer != nil && marketplaceServer.IsMarketplaceRoute(r) {
 						marketplaceRoutes.ServeHTTP(w, r)
+						return
+					}
+					if hooksArtifactServer.IsHooksReleaseRoute(r) {
+						hooksArtifactRoutes.ServeHTTP(w, r)
 						return
 					}
 
@@ -1008,7 +1028,8 @@ func newStartCommand() *cli.Command {
 			hookJudgeLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
 			hookPIScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Classify)
 
-			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter)
+			hookPromptJudge := ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, hookJudgeLimiter).Evaluate
+			hookPromptPolicyScanner := promptpolicy.NewScanner(logger, hookPromptJudge)
 			celEngine, err := celenv.New()
 			if err != nil {
 				return fmt.Errorf("create cel engine: %w", err)
@@ -1021,7 +1042,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create custom rules scanner: %w", err)
 			}
-			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, celEngine)
+			riskScanner, err := risk.NewScanner(logger, tracerProvider, meterProvider, db, customRulesScanner, hookPIIScanner, hookPIScanner, hookPromptPolicyScanner, featureFlags, celEngine)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -1063,6 +1084,7 @@ func newStartCommand() *cli.Command {
 				c.String("jwt-signing-key"),
 			))
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
+			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
 			otelforwarding.Attach(mux, otelforwarding.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, otelForwardClient))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			auth.Attach(mux, auth.NewService(
@@ -1086,9 +1108,6 @@ func newStartCommand() *cli.Command {
 			))
 			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)
-			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
-			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-
 			pluginsGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
 				Client:         ghClient,
 				Org:            c.String("plugins-github-org"),
@@ -1097,15 +1116,22 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("plugins github config: %w", err)
 			}
+			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
+			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"))
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
-			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url")))
-			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine))
+			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
+			plugins.Attach(mux, pluginsSvc)
+			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
+			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger)
+			skills.Attach(mux, skillsService)
+			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil)
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))
@@ -1117,10 +1143,11 @@ func newStartCommand() *cli.Command {
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
-			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
-			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
+			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, cache.NewRedisCacheAdapter(redisClient))
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), remoteSessionsService))
+			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
 			tunneledmcp.Attach(mux, tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient)))
@@ -1182,8 +1209,17 @@ func newStartCommand() *cli.Command {
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantRiskTools(riskService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDeploymentsTools(deploymentsService)...)
+			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantSkillsTools(skillsService)...)
+			// One-off fetches on a cold cache; a pooled client would only hold
+			// idle connections to the marketing site. Bound the whole request
+			// so a stalled marketing-site response can't hang the fetch; the
+			// client is dedicated to this tool, so a per-client timeout is safe.
+			changelogClient := guardianPolicy.Client()
+			changelogClient.Timeout = platformchangelog.FetchTimeout
+			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChangelogTools(changelogClient)...)
 			maps.Copy(platformToolsets, platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 				AssistantMemoryTools:          memoryTools,
+				AssistantSkillTools:           skillTools,
 				AssistantTriggerTools:         triggerTools,
 				ManagedAssistantInsightsTools: managedInsightsTools,
 			}))
@@ -1196,7 +1232,7 @@ func newStartCommand() *cli.Command {
 				// timeout so the backend retires an idle connection AFTER the LB
 				// would, never before. If the backend closes first the LB can
 				// still have an outstanding request on that connection and the
-				// client sees a TCP RST — the transient reset this change set is
+				// client sees a TCP RST - the transient reset this change set is
 				// hardening against. GCLB's backend keepalive is a fixed 600s and
 				// not configurable, and Google explicitly requires the backend's
 				// value to be > 600s, so 620s. No WriteTimeout: it is an absolute
@@ -1295,7 +1331,7 @@ func newStartCommand() *cli.Command {
 
 				// The HTTP server is now fully drained, so no new risk signals are
 				// produced. Flush the throttle's queued trailing signals here while the
-				// Temporal client is still open — runShutdown closes it concurrently.
+				// Temporal client is still open - runShutdown closes it concurrently.
 				if err := riskSignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(err))
 				}

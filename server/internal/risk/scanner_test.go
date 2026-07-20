@@ -185,7 +185,6 @@ func insertRealtimeBlockPolicy(t *testing.T, ti *testInstance, ctx context.Conte
 func recommendedScopeFlags(ctx context.Context, enabled bool) *feature.InMemory {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagPromptInjectionUseClassifier, authCtx.ActiveOrganizationID, true)
 	flags.SetFlag(feature.FlagRiskRecommendedScopes, authCtx.ActiveOrganizationID, enabled)
 	return flags
 }

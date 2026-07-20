@@ -332,35 +332,10 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQuery", "type": "query"}`)
 	})
 
-	Method("queryRiskTokens", func() {
-		Description("Org-scoped daily token usage split by risk involvement: tokens from sessions with at least one active risk finding in the window versus all session tokens. Powers the token-usage panel's risk breakdown on the costs page.")
+	Method("queryTumDetails", func() {
+		Description("Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.")
 
 		// Org-scoped like telemetry.query; project_id optionally narrows the
-		// slice to one of the caller's projects.
-		Security(security.Session)
-
-		Payload(func() {
-			Extend(TelemetryWindowPayload)
-			security.SessionPayload()
-		})
-
-		Result(QueryRiskTokensResult)
-
-		HTTP(func() {
-			POST("/rpc/telemetry.queryRiskTokens")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "queryRiskTokens")
-		Meta("openapi:extension:x-speakeasy-name-override", "queryRiskTokens")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQueryRiskTokens", "type": "query"}`)
-	})
-
-	Method("queryTumDetails", func() {
-		Description("Org-scoped daily usage details for the billing page's metrics table, computed in one pass: token type sums, session/tool-call/active-user counts, attribution slices (MCP tools, skills, unattributed users), and message-level stats (tokens in messages with active risk findings, tokens in tool-call messages).")
-
-		// Org-scoped like queryRiskTokens; project_id optionally narrows the
 		// slice to one of the caller's projects.
 		Security(security.Session)
 
@@ -579,6 +554,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:operationId", "getToolUsageFilterOptions")
 		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageFilterOptions")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageFilterOptions", "type": "query"}`)
+	})
+
+	Method("getMcpServerActivity", func() {
+		Description("Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetMcpServerActivityPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetMcpServerActivityResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getMcpServerActivity")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMcpServerActivity")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMcpServerActivity")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMcpServerActivity", "type": "query"}`)
 	})
 
 	Method("listHooksTraces", func() {
@@ -1450,10 +1454,10 @@ var QueryFilter = Type("QueryFilter", func() {
 	Required("dimension", "values")
 })
 
-// TelemetryWindowPayload is deliberately shared by queryRiskTokens and
-// queryTumDetails: both take exactly an org-scoped time window with an
-// optional project filter, and a single neutrally-named type keeps the
-// generated SDK from surfacing one endpoint's payload under the other's name.
+// TelemetryWindowPayload is an org-scoped time window with an optional
+// project filter, named neutrally so future window-shaped endpoints can
+// share it without the generated SDK surfacing one endpoint's payload under
+// another's name (queryTumDetails is the current consumer).
 var TelemetryWindowPayload = Type("TelemetryWindowPayload", func() {
 	Description("An org-scoped time window, optionally narrowed to one project")
 
@@ -1472,36 +1476,16 @@ var TelemetryWindowPayload = Type("TelemetryWindowPayload", func() {
 	Required("from", "to")
 })
 
-var RiskTokensPoint = Type("RiskTokensPoint", func() {
-	Description("One UTC day of token usage split by risk involvement")
-
-	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
-	Attribute("risky_tokens", Int64, "Tokens from sessions with at least one active risk finding created in the query window")
-	Attribute("total_tokens", Int64, "All session tokens in the bucket")
-
-	Required("bucket_time_unix_nano", "risky_tokens", "total_tokens")
-})
-
-var QueryRiskTokensResult = Type("QueryRiskTokensResult", func() {
-	Description("Result of the token-by-risk breakdown query")
-
-	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the source aggregate is bucketed daily.")
-	Attribute("points", ArrayOf(RiskTokensPoint), "Gap-filled daily buckets in ascending time order")
-
-	Required("interval_seconds", "points")
-})
-
 // The per-metric fields shared by the daily points and the range totals.
-// Every measure comes from billing-native sources — the billed token
-// aggregate and per-message chat stats — never the analytics aggregates,
-// so the page reports exactly the billed population.
+// Every measure describes the observed agent traffic (the tokens-under-
+// management population) with cache reads excluded, so total_tokens =
+// input + output + cache_creation.
 func tumDetailsMeasures() {
-	Attribute("input_tokens", Int64, "Billed input tokens")
-	Attribute("output_tokens", Int64, "Billed output tokens")
-	Attribute("total_tokens", Int64, "Billed tokens under management")
-	Attribute("risky_message_tokens", Int64, "Tokens in messages carrying at least one active risk finding")
-	Attribute("tool_message_tokens", Int64, "Tokens in tool-call messages")
-	Required("input_tokens", "output_tokens", "total_tokens", "risky_message_tokens", "tool_message_tokens")
+	Attribute("input_tokens", Int64, "Observed input tokens (cache reads excluded)")
+	Attribute("output_tokens", Int64, "Observed output tokens")
+	Attribute("cache_creation_tokens", Int64, "Observed cache-write tokens — prompt content entering the provider cache, counted once")
+	Attribute("total_tokens", Int64, "Tokens under management: input + output + cache writes")
+	Required("input_tokens", "output_tokens", "cache_creation_tokens", "total_tokens")
 }
 
 var TumDetailsPoint = Type("TumDetailsPoint", func() {
@@ -1531,14 +1515,14 @@ var TumDetailsBreakdownRow = Type("TumDetailsBreakdownRow", func() {
 var TumDetailsBreakdown = Type("TumDetailsBreakdown", func() {
 	Description("Per-dimension billed token breakdown for the usage details table")
 
-	Attribute("key", String, "The breakdown dimension key (hook_source, model, email, division_name, role)")
+	Attribute("key", String, "The breakdown dimension key (model, hook_source, provider, account_type, email, division_name, department_name, role, project_id) — the public telemetry dimension identifiers, so the same keys work as telemetry.query filters. project_id rows carry project UUIDs; clients map them to names.")
 	Attribute("rows", ArrayOf(TumDetailsBreakdownRow), "Top values by tokens in descending order, with the remainder rolled into 'Other'")
 
 	Required("key", "rows")
 })
 
 var TumDetailsResult = Type("TumDetailsResult", func() {
-	Description("Result of the billing usage details query. Everything derives from the billed population (registered completion surfaces), matching the invoiced totals exactly.")
+	Description("Result of the billing usage details query. Everything derives from the tokens-under-management population — observed agent traffic with cache reads excluded — computed live from the telemetry aggregate. Matches the billed totals for cycles billed under this definition; cycles finalized before the observed-traffic redefinition serve immutable snapshot totals on the usage endpoint that can differ from this live compute.")
 
 	Attribute("interval_seconds", Int64, "Timeseries bucket width in seconds. Always 86400 — the details are bucketed daily.")
 	Attribute("points", ArrayOf(TumDetailsPoint), "Gap-filled daily buckets in ascending time order")
@@ -2264,6 +2248,46 @@ var ToolUsageTargetToolBreakdownRow = Type("ToolUsageTargetToolBreakdownRow", fu
 	Attribute("failure_rate", Float64, "Fraction of completed tool usage events for the target and tool that failed")
 
 	Required("target_type", "target_kind", "target_id", "target_label", "tool_name", "event_count", "success_count", "failure_count", "failure_rate")
+})
+
+var GetMcpServerActivityPayload = Type("GetMcpServerActivityPayload", func() {
+	Description("Payload for per-MCP-server tool-call activity used by the Distribute MCP listing indicators")
+
+	Attribute("recent_window_days", Int, "Size of the recent-activity window in days. A server with tool calls in the overall lookback window but none inside this window is flagged as stale. Defaults to 14.", func() {
+		Minimum(1)
+		Maximum(90)
+		Default(14)
+	})
+})
+
+var GetMcpServerActivityResult = Type("GetMcpServerActivityResult", func() {
+	Description("Per-MCP-server tool-call activity. Only servers with at least one tool call inside the lookback window are returned; a server absent from the list has never received a tool call (within the telemetry retention window).")
+
+	Attribute("activity", ArrayOf(McpServerActivity), "One entry per MCP server (hosted or tunneled) that has received at least one tool call within the lookback window")
+	Attribute("recent_window_days", Int, "The recent-activity window size in days that was applied")
+	Attribute("lookback_days", Int, "The overall lookback window size in days (bounded by telemetry retention)")
+
+	Required("activity", "recent_window_days", "lookback_days")
+})
+
+var McpServerActivityTargetType = Type("McpServerActivityTargetType", String, func() {
+	Description("MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.")
+	Enum("hosted_mcp_server", "tunneled_mcp_server")
+})
+
+var McpServerActivity = Type("McpServerActivity", func() {
+	Description("Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers)")
+
+	Attribute("target_type", McpServerActivityTargetType, "Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)")
+	Attribute("target_id", String, "Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers")
+	Attribute("target_label", String, "User-facing label for the target")
+	Attribute("total_tool_calls", Int64, "Number of tool calls observed across the whole lookback window")
+	Attribute("recent_tool_calls", Int64, "Number of tool calls observed inside the recent-activity window")
+	Attribute("last_tool_call_at", String, "ISO 8601 timestamp of the most recent tool call", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("target_type", "target_id", "target_label", "total_tool_calls", "recent_tool_calls")
 })
 
 var HooksBreakdownRowType = Type("HooksBreakdownRow", func() {

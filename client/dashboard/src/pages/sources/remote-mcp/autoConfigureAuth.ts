@@ -1,4 +1,5 @@
 import type { Gram } from "@gram/client";
+import { type RequestOptions } from "@gram/client/lib/sdks.js";
 import {
   type McpServer,
   type McpServerVisibility,
@@ -24,6 +25,11 @@ type AutoConfigureAuthInput = {
   authedFetch: AuthedFetch;
   remoteMcpServer: RemoteMcpServer;
   mcpServer: McpServer;
+  /**
+   * Per-request SDK options (e.g. a gram-project header for cross-project
+   * installs) applied to every management API call made during auto-config.
+   */
+  options?: RequestOptions;
 };
 
 export type AutoConfigureAuthResult =
@@ -47,6 +53,7 @@ export async function autoConfigureRemoteMcpAuth({
   authedFetch,
   remoteMcpServer,
   mcpServer,
+  options,
 }: AutoConfigureAuthInput): Promise<AutoConfigureAuthResult> {
   // Every remote-backed server gets its USI at setup; auto-config only attaches
   // a client under it, never creates one. No USI means nothing to anchor a
@@ -59,11 +66,15 @@ export async function autoConfigureRemoteMcpAuth({
   let protectedResourceMetadata: ProtectedResourceMetadata | undefined;
   try {
     const protectedResource =
-      await client.remoteMcp.discoverProtectedResourceMetadata({
-        discoverProtectedResourceMetadataRequestBody: {
-          remoteMcpServerId: remoteMcpServer.id,
+      await client.remoteMcp.discoverProtectedResourceMetadata(
+        {
+          discoverProtectedResourceMetadataRequestBody: {
+            remoteMcpServerId: remoteMcpServer.id,
+          },
         },
-      });
+        undefined,
+        options,
+      );
     protectedResourceMetadata = protectedResource.metadata;
     if (
       !protectedResource.available ||
@@ -81,11 +92,15 @@ export async function autoConfigureRemoteMcpAuth({
 
   let draft: RemoteSessionIssuerDraft;
   try {
-    draft = await client.remoteSessionIssuers.discover({
-      discoverRemoteSessionIssuerRequestBody: {
-        issuer: protectedResourceMetadata.authorizationServers[0],
+    draft = await client.remoteSessionIssuers.discover(
+      {
+        discoverRemoteSessionIssuerRequestBody: {
+          issuer: protectedResourceMetadata.authorizationServers[0],
+        },
       },
-    });
+      undefined,
+      options,
+    );
   } catch (error) {
     console.info("Remote MCP auth-server discovery failed.", {
       remoteMcpServerId: remoteMcpServer.id,
@@ -104,6 +119,7 @@ export async function autoConfigureRemoteMcpAuth({
       client,
       mcpServer.projectId,
       draft.issuer,
+      options,
     );
   } catch (error) {
     console.info("Remote MCP matching issuer lookup failed.", {
@@ -175,26 +191,31 @@ export async function autoConfigureRemoteMcpAuth({
   try {
     const remoteSessionIssuer =
       existingIssuer ??
-      (await client.remoteSessionIssuers.create({
-        createRemoteSessionIssuerForm: {
-          slug: resourceSlug,
-          issuer: draft.issuer,
-          name: deriveRemoteSessionIssuerNameFromUrl(draft.issuer) ?? undefined,
-          authorizationEndpoint: draft.authorizationEndpoint,
-          tokenEndpoint: draft.tokenEndpoint,
-          registrationEndpoint: draft.registrationEndpoint,
-          jwksUri: draft.jwksUri,
-          scopesSupported: draft.scopesSupported ?? [],
-          grantTypesSupported: draft.grantTypesSupported ?? [],
-          responseTypesSupported: draft.responseTypesSupported ?? [],
-          tokenEndpointAuthMethodsSupported:
-            draft.tokenEndpointAuthMethodsSupported ?? [],
-          clientIdMetadataDocumentSupported:
-            draft.clientIdMetadataDocumentSupported,
-          oidc: draft.oidc,
-          passthrough: draft.passthrough,
+      (await client.remoteSessionIssuers.create(
+        {
+          createRemoteSessionIssuerForm: {
+            slug: resourceSlug,
+            issuer: draft.issuer,
+            name:
+              deriveRemoteSessionIssuerNameFromUrl(draft.issuer) ?? undefined,
+            authorizationEndpoint: draft.authorizationEndpoint,
+            tokenEndpoint: draft.tokenEndpoint,
+            registrationEndpoint: draft.registrationEndpoint,
+            jwksUri: draft.jwksUri,
+            scopesSupported: draft.scopesSupported ?? [],
+            grantTypesSupported: draft.grantTypesSupported ?? [],
+            responseTypesSupported: draft.responseTypesSupported ?? [],
+            tokenEndpointAuthMethodsSupported:
+              draft.tokenEndpointAuthMethodsSupported ?? [],
+            clientIdMetadataDocumentSupported:
+              draft.clientIdMetadataDocumentSupported,
+            oidc: draft.oidc,
+            passthrough: draft.passthrough,
+          },
         },
-      }));
+        undefined,
+        options,
+      ));
 
     if (!existingIssuer) {
       createdRemoteSessionIssuerId = remoteSessionIssuer.id;
@@ -202,24 +223,28 @@ export async function autoConfigureRemoteMcpAuth({
 
     // Attach the freshly-registered upstream client to the server's permanent
     // USI.
-    await client.remoteSessionClients.create({
-      createRemoteSessionClientForm: {
-        remoteSessionIssuerId: remoteSessionIssuer.id,
-        userSessionIssuerIds: [userSessionIssuerId],
-        clientId: registered.clientId,
-        clientSecret: registered.clientSecret || undefined,
-        tokenEndpointAuthMethod:
-          narrowTokenEndpointAuthMethod(registered.tokenEndpointAuthMethod) ??
-          preferredAuthMethod,
-        scope: scopes.length > 0 ? scopes : undefined,
+    await client.remoteSessionClients.create(
+      {
+        createRemoteSessionClientForm: {
+          remoteSessionIssuerId: remoteSessionIssuer.id,
+          userSessionIssuerIds: [userSessionIssuerId],
+          clientId: registered.clientId,
+          clientSecret: registered.clientSecret || undefined,
+          tokenEndpointAuthMethod:
+            narrowTokenEndpointAuthMethod(registered.tokenEndpointAuthMethod) ??
+            preferredAuthMethod,
+          scope: scopes.length > 0 ? scopes : undefined,
+        },
       },
-    });
+      undefined,
+      options,
+    );
 
-    const updatedMcpServer = await pointMcpServerAtUserSessionIssuer(
+    const updatedMcpServer = await setMcpServerVisibility(
       client,
       mcpServer,
-      userSessionIssuerId,
       "private",
+      options,
     );
 
     return {
@@ -238,6 +263,7 @@ export async function autoConfigureRemoteMcpAuth({
     await cleanupCreatedRemoteSessionIssuer(
       client,
       createdRemoteSessionIssuerId,
+      options,
     );
     return skipped(
       "Automatic authentication setup failed. You can configure it from the Authentication tab.",
@@ -247,35 +273,43 @@ export async function autoConfigureRemoteMcpAuth({
 }
 
 // Full-record replace: updateMcpServer nulls omitted fields, so re-send the
-// server's existing references alongside the new issuer linkage.
-export async function pointMcpServerAtUserSessionIssuer(
+// server's existing references alongside the new visibility.
+async function setMcpServerVisibility(
   client: Gram,
   mcpServer: McpServer,
-  userSessionIssuerId: string,
   visibility: McpServerVisibility,
+  options?: RequestOptions,
 ): Promise<McpServer> {
-  return await client.mcpServers.update({
-    updateMcpServerForm: {
-      id: mcpServer.id,
-      name: mcpServer.name ?? undefined,
-      remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-      toolsetId: mcpServer.toolsetId ?? undefined,
-      environmentId: mcpServer.environmentId ?? undefined,
-      toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-      visibility,
-      userSessionIssuerId,
+  return await client.mcpServers.update(
+    {
+      updateMcpServerForm: {
+        id: mcpServer.id,
+        name: mcpServer.name ?? undefined,
+        remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
+        toolsetId: mcpServer.toolsetId ?? undefined,
+        environmentId: mcpServer.environmentId ?? undefined,
+        toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
+        visibility,
+      },
     },
-  });
+    undefined,
+    options,
+  );
 }
 
 async function findMatchingIssuer(
   client: Gram,
   projectId: string,
   discoveredIssuer: string,
+  options?: RequestOptions,
 ): Promise<RemoteSessionIssuer | null> {
   const normalized = normalizeIssuerURL(discoveredIssuer);
   let organizationMatch: RemoteSessionIssuer | null = null;
-  const pages = await client.remoteSessionIssuers.list({ limit: 100 });
+  const pages = await client.remoteSessionIssuers.list(
+    { limit: 100 },
+    undefined,
+    options,
+  );
 
   for await (const page of pages) {
     for (const issuer of page.result.items) {
@@ -312,10 +346,15 @@ function normalizeIssuerURL(value: string): string {
 async function cleanupCreatedRemoteSessionIssuer(
   client: Gram,
   remoteSessionIssuerId: string | undefined,
+  options?: RequestOptions,
 ): Promise<void> {
   if (!remoteSessionIssuerId) return;
   try {
-    await client.remoteSessionIssuers.delete({ id: remoteSessionIssuerId });
+    await client.remoteSessionIssuers.delete(
+      { id: remoteSessionIssuerId },
+      undefined,
+      options,
+    );
   } catch (error) {
     console.info("Failed to clean up auto-created remote session issuer.", {
       remoteSessionIssuerId,

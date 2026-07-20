@@ -1,3 +1,10 @@
+#:schema https://mise.en.dev/schema/mise.json
+
+min_version = "2026.7.6"
+
+[settings]
+pin = true
+
 # 💡 TIP
 #
 # If you want to override anything in this file, create an adjacent file called
@@ -24,7 +31,6 @@ uv = "0.11.25"
 yq = "4.53.3"
 hk = "1.46.0"
 pkl = "0.31.1"
-"github:speakeasy-api/madprocs" = "0.1.33"
 "github:temporalio/cli" = "1.7.2"
 "github:pb33f/openapi-changes" = "0.2.9"
 "github:sqlc-dev/sqlc" = "1.31.1"
@@ -32,6 +38,8 @@ pkl = "0.31.1"
 buf = "1.71.0"
 ruff = "0.15.20"
 "github:ast-grep/ast-grep" = "0.44.0"
+pitchfork = "2.16.0"
+"npm:@playwright/cli" = "0.1.17"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
@@ -102,6 +110,8 @@ GRAM_CONTROL_PORT = "8081"
 GRAM_CONTROL_ADDRESS = ":{{env.GRAM_CONTROL_PORT}}"
 GRAM_WORKER_CONTROL_PORT = "8082"
 GRAM_WORKER_CONTROL_ADDRESS = ":{{env.GRAM_WORKER_CONTROL_PORT}}"
+GRAM_STREAMS_CONTROL_PORT = "8087"
+GRAM_STREAMS_CONTROL_ADDRESS = ":{{env.GRAM_STREAMS_CONTROL_PORT}}"
 ## The following variable can be one of: local, test, prod
 GRAM_ENVIRONMENT = "local"
 GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
@@ -119,6 +129,10 @@ GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 GRAM_REDIS_ENABLE_TRACING = "false"
 ## Local-only value; real deployments inject this via secrets.
 GRAM_TUNNEL_FORWARD_TOKEN = "local-dev-tunnel-forward-token"
+TUNNEL_GATEWAY_PUBLIC_PORT = "8090"
+TUNNEL_GATEWAY_PUBLIC_ADDR = ":{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
+TUNNEL_GATEWAY_FORWARD_PORT = "8091"
+TUNNEL_GATEWAY_FORWARD_ADDR = ":{{env.TUNNEL_GATEWAY_FORWARD_PORT}}"
 OPENROUTER_DEV_KEY = "unset"
 ## The dev-idp is a top-level project (dev-idp/) backed by SQLite.
 ## GRAM_DEVIDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
@@ -157,6 +171,7 @@ WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/mock-workos"
 ## The following variables are only needed if you want to do one of the following:
 ## - Run the server with SSL enabled and not rely on SSL termination at a load balancer.
 ## - Local development with SSL enabled.
+GRAM_HTTP_SCHEME = "https"
 GRAM_SSL_CERT_FILE = "{{config_root}}/local/ssl/certs/local.pem"
 GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 ## GitHub App for plugin publishing (leave unset to disable)
@@ -185,11 +200,18 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 JAEGER_WEB_PORT = "16686"
 PROMETHEUS_PORT = "9099"
-GRAM_LOG_PRETTY = 1
-## This config is used by the Elements SDK and CLI to point to the correct Gram
-## API server
+GRAM_LOG_PRETTY = { default = "1" }
+## Default Gram API URL baked into the dashboard's inlined Elements code and
+## used by the CLI to point to the correct Gram API server
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
 VITE_DEV_HOSTNAMES = "localhost"
+## Base URL of the CDN serving the dashboard's static assets (e.g.
+## https://cdn.dev.getgram.ai). Not a build-time setting: the dashboard
+## container's nginx reads it at runtime to rewrite /assets/ URLs in
+## index.html to the CDN host (see client/dashboard/nginx.conf and the
+## renderBuiltUrl comment in client/dashboard/vite.config.ts). Unset locally
+## and by default in production — assets are then served same-origin.
+# GRAM_CDN_URL = "https://cdn.dev.getgram.ai"
 TEMPORAL_WEB_PORT = "8233"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing
@@ -200,12 +222,11 @@ TEMPORAL_WEB_PORT = "8233"
 ## For a list of feature flags, check `server/internal/feature/flags.go`.
 # GRAM_LOCAL_FEATURE_FLAGS_CSV = "{{config_root}}/server/flags.csv"
 ## Set to 1 to disable air hot reload and run server/worker directly
-GRAM_DISABLE_AIR = 0
 PUBSUB_EMULATOR_PORT = "8088"
 PUBSUB_EMULATOR_HOST = "localhost:{{env.PUBSUB_EMULATOR_PORT}}"
 ## During local development, you can disable BigQuery writes to avoid the extra
 ## dependency on a GCP project.
-DISABLE_BIGQUERY_WRITES = 1
+DISABLE_BIGQUERY_WRITES = { default = "1" }
 
 ####################################
 ## Gram Functions runner settings ##
@@ -230,21 +251,18 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ########################################
 ## Gram Assistant runtime settings ##
 ########################################
-GRAM_ASSISTANT_RUNTIME_PROVIDER = "flyio"
+## Where assistant runtimes run.
+## Allowed values: local, flyio, gke.
+## The local provider starts runtime containers on demand on this machine's
+## Docker daemon. Build the image with `mise run build:assistants-runtime-image`.
+GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
 
 ##################
 ## MCP Registry ##
 ##################
-PULSE_REGISTRY_TENANT = "unset"
-PULSE_REGISTRY_KEY = "unset"
-
-##############
-## Elements ##
-##############
-## Used for local development only
-## Storybook runs internally on 6007, but the protocol sniffing proxy serves on 6006
-ELEMENTS_STORYBOOK_PORT = "6007"
-VITE_GRAM_ELEMENTS_STORYBOOK_URL = "https://localhost:{{env.ELEMENTS_STORYBOOK_PORT}}"
+PULSE_REGISTRY_TENANT = { default = "unset" }
+PULSE_REGISTRY_KEY = { default = "unset" }
 
 ##########
 ## Risk ##
@@ -277,11 +295,14 @@ GRAM_ADMIN_OIDC_EMULATOR_URL = "http://{{env.GRAM_ADMIN_OIDC_EMULATOR_HOST}}:{{e
 GRAM_ADMIN_OIDC_CLIENT_ID = "gram-local.apps.googleusercontent.com"
 GRAM_ADMIN_OIDC_CLIENT_SECRET = "GOCSPX-example_secret"
 GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"
+## Used for admin local development as a fake Google IDP
+MOCK_OIDC_PORT = "4000"
+MOCK_OIDC_ADDRESS = ":{{env.MOCK_OIDC_PORT}}"
 
 ########################
 ## Svix configuration ##
 ########################
-GRAM_SVIX_API_KEY = "unset"
+GRAM_SVIX_API_KEY = { default = "unset" }
 
 ################
 ## GCP config ##

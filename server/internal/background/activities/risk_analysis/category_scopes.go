@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -24,7 +25,7 @@ var sourceCategories = map[string][]categories.Category{
 	shadowmcp.SourceDestructiveTool: {categories.CategoryDestructiveTool},
 	SourceCLIDestructive:            {categories.CategoryCLIDestructive},
 	SourceCustom:                    {categories.CategoryCustom},
-	SourceLLMJudge:                  {categories.CategoryPromptPolicy},
+	promptpolicy.Source:                  {categories.CategoryPromptPolicy},
 }
 
 // SourceCategories returns the categories a detector source can emit.

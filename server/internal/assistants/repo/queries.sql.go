@@ -1148,7 +1148,7 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	return id, err
 }
 
-const listActiveAssistantRuntimesForImageRecycle = `-- name: ListActiveAssistantRuntimesForImageRecycle :many
+const listActiveAssistantRuntimes = `-- name: ListActiveAssistantRuntimes :many
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = $1
@@ -1166,7 +1166,7 @@ WHERE r.state = $1
 ORDER BY r.updated_at ASC
 `
 
-type ListActiveAssistantRuntimesForImageRecycleRow struct {
+type ListActiveAssistantRuntimesRow struct {
 	ID                  uuid.UUID
 	AssistantThreadID   uuid.UUID
 	AssistantID         uuid.UUID
@@ -1177,22 +1177,20 @@ type ListActiveAssistantRuntimesForImageRecycleRow struct {
 	WarmUntil           pgtype.Timestamptz
 }
 
-// Returns live v2 runtime rows that carry backend metadata so a deploy-time
-// sweep can roll their machines onto the current runtime image. Only `active`
-// rows qualify: `starting` rows are mid-boot and already pull the current
-// image, while expiring/stopped rows are torn down or recycled lazily on the
-// next admission. Rows orphaned by a deleted assistant are excluded: they
-// belong to the deleted-assistant janitor, and recycling them would bump
-// updated_at and postpone the inactivity-based reap.
-func (q *Queries) ListActiveAssistantRuntimesForImageRecycle(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesForImageRecycleRow, error) {
-	rows, err := q.db.Query(ctx, listActiveAssistantRuntimesForImageRecycle, activeState)
+// Returns live v2 runtime rows that carry backend metadata for runtime
+// reconciliation sweeps. Only `active` rows qualify: `starting` rows are
+// mid-boot, while expiring/stopped rows are already being torn down or await
+// re-admission. Rows orphaned by a deleted assistant belong to the
+// deleted-assistant janitor and are excluded here.
+func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesRow, error) {
+	rows, err := q.db.Query(ctx, listActiveAssistantRuntimes, activeState)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListActiveAssistantRuntimesForImageRecycleRow
+	var items []ListActiveAssistantRuntimesRow
 	for rows.Next() {
-		var i ListActiveAssistantRuntimesForImageRecycleRow
+		var i ListActiveAssistantRuntimesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AssistantThreadID,
@@ -1796,6 +1794,84 @@ func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistant
 	return items, nil
 }
 
+const loadAssistantSkills = `-- name: LoadAssistantSkills :many
+SELECT
+  sd.assistant_id,
+  sd.skill_id,
+  sd.pinned_version_id,
+  s.name,
+  resolved.id AS resolved_version_id,
+  resolved.description
+FROM skill_distributions sd
+JOIN assistants a
+  ON a.id = sd.assistant_id
+  AND a.project_id = sd.project_id
+  AND a.deleted IS FALSE
+JOIN skills s
+  ON s.id = sd.skill_id
+  AND s.project_id = sd.project_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id, sv.description
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.assistant_id = ANY($1::uuid[])
+  AND sd.project_id = $2
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.assistant_id IS NOT NULL
+  AND sd.revoked_at IS NULL
+ORDER BY s.name ASC, s.id ASC
+`
+
+type LoadAssistantSkillsParams struct {
+	AssistantIds []uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+type LoadAssistantSkillsRow struct {
+	AssistantID       uuid.NullUUID
+	SkillID           uuid.UUID
+	PinnedVersionID   uuid.NullUUID
+	Name              string
+	ResolvedVersionID uuid.UUID
+	Description       pgtype.Text
+}
+
+// The active/resolvable predicates in LoadAssistantSkills and
+// LoadAttachedAssistantSkill must stay identical.
+func (q *Queries) LoadAssistantSkills(ctx context.Context, arg LoadAssistantSkillsParams) ([]LoadAssistantSkillsRow, error) {
+	rows, err := q.db.Query(ctx, loadAssistantSkills, arg.AssistantIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LoadAssistantSkillsRow
+	for rows.Next() {
+		var i LoadAssistantSkillsRow
+		if err := rows.Scan(
+			&i.AssistantID,
+			&i.SkillID,
+			&i.PinnedVersionID,
+			&i.Name,
+			&i.ResolvedVersionID,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const loadAssistantThreadForBootstrap = `-- name: LoadAssistantThreadForBootstrap :one
 SELECT
   t.id,
@@ -1937,6 +2013,48 @@ func (q *Queries) LoadAssistantToolsets(ctx context.Context, arg LoadAssistantTo
 		return nil, err
 	}
 	return items, nil
+}
+
+const loadAttachedAssistantSkill = `-- name: LoadAttachedAssistantSkill :one
+SELECT resolved.content
+FROM skill_distributions sd
+JOIN assistants a
+  ON a.id = sd.assistant_id
+  AND a.project_id = sd.project_id
+  AND a.deleted IS FALSE
+JOIN skills s
+  ON s.id = sd.skill_id
+  AND s.project_id = sd.project_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id, sv.content
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.assistant_id = $1
+  AND sd.project_id = $2
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.assistant_id IS NOT NULL
+  AND sd.revoked_at IS NULL
+  AND s.name = $3
+`
+
+type LoadAttachedAssistantSkillParams struct {
+	AssistantID uuid.NullUUID
+	ProjectID   uuid.UUID
+	Name        string
+}
+
+func (q *Queries) LoadAttachedAssistantSkill(ctx context.Context, arg LoadAttachedAssistantSkillParams) (string, error) {
+	row := q.db.QueryRow(ctx, loadAttachedAssistantSkill, arg.AssistantID, arg.ProjectID, arg.Name)
+	var content string
+	err := row.Scan(&content)
+	return content, err
 }
 
 const loadThreadContext = `-- name: LoadThreadContext :one
@@ -2733,6 +2851,94 @@ func (q *Queries) RevertExpireAssistantRuntimeToActive(ctx context.Context, arg 
 		arg.ExpiringState,
 	)
 	return err
+}
+
+const revokeSkillDistributionsByAssistant = `-- name: RevokeSkillDistributionsByAssistant :many
+UPDATE skill_distributions sd
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM skill_distributions prev
+JOIN skills s ON s.id = prev.skill_id AND s.project_id = prev.project_id
+JOIN assistants a ON a.id = prev.assistant_id AND a.project_id = prev.project_id
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = prev.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE prev.id = sd.id
+  AND sd.project_id = $1
+  AND sd.assistant_id = $2
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.revoked_at IS NULL
+RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id,
+  s.name AS skill_name, s.display_name AS skill_display_name, a.organization_id
+`
+
+type RevokeSkillDistributionsByAssistantParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.NullUUID
+}
+
+type RevokeSkillDistributionsByAssistantRow struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	SkillID           uuid.UUID
+	PinnedVersionID   uuid.NullUUID
+	PluginID          uuid.NullUUID
+	AssistantID       uuid.NullUUID
+	Channel           string
+	CreatedByUserID   string
+	RevokedAt         pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	PreviousUpdatedAt pgtype.Timestamptz
+	ResolvedVersionID uuid.UUID
+	SkillName         string
+	SkillDisplayName  string
+	OrganizationID    string
+}
+
+// Returns pre-revocation state and skill identity for per-edge audit events.
+func (q *Queries) RevokeSkillDistributionsByAssistant(ctx context.Context, arg RevokeSkillDistributionsByAssistantParams) ([]RevokeSkillDistributionsByAssistantRow, error) {
+	rows, err := q.db.Query(ctx, revokeSkillDistributionsByAssistant, arg.ProjectID, arg.AssistantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokeSkillDistributionsByAssistantRow
+	for rows.Next() {
+		var i RevokeSkillDistributionsByAssistantRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SkillID,
+			&i.PinnedVersionID,
+			&i.PluginID,
+			&i.AssistantID,
+			&i.Channel,
+			&i.CreatedByUserID,
+			&i.RevokedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PreviousUpdatedAt,
+			&i.ResolvedVersionID,
+			&i.SkillName,
+			&i.SkillDisplayName,
+			&i.OrganizationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setAssistantRuntimeActive = `-- name: SetAssistantRuntimeActive :exec

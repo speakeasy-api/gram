@@ -1,7 +1,7 @@
 import { OpenApiSourceInput } from "@/components/OpenApiSourceInput";
 import { Spinner } from "@/components/ui/spinner";
 import { useUploadOpenAPISteps } from "@/pages/onboarding/upload-openapi-utils";
-import { UploadedDocument } from "@/pages/onboarding/Wizard";
+import { UploadedDocument } from "@/components/uploaded-document";
 import { Button, Dialog } from "@speakeasy-api/moonshine";
 import React from "react";
 import { toast } from "sonner";

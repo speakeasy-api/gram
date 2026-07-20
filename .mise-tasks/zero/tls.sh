@@ -46,10 +46,9 @@ detect_tls() {
 }
 
 show_urls() {
-  printf "\t%s: %s\n\t%s: %s\n\t%s: %s\n" \
+  printf "\t%s: %s\n\t%s: %s\n" \
     GRAM_SERVER_URL "$GRAM_SERVER_URL" \
-    GRAM_SITE_URL "$GRAM_SITE_URL" \
-    VITE_GRAM_ELEMENTS_STORYBOOK_URL "$VITE_GRAM_ELEMENTS_STORYBOOK_URL" >&2;
+    GRAM_SITE_URL "$GRAM_SITE_URL" >&2;
 }
 
 turn_off_tls() {
@@ -58,6 +57,7 @@ turn_off_tls() {
 
   mise set --file mise.local.toml GRAM_SSL_CERT_FILE=
   mise set --file mise.local.toml GRAM_SSL_KEY_FILE=
+  mise set --file mise.local.toml GRAM_HTTP_SCHEME=http
 }
 
 turn_on_tls() {
@@ -66,7 +66,7 @@ turn_on_tls() {
 
   mise set --file mise.local.toml GRAM_SSL_CERT_FILE="{{config_root}}/local/ssl/certs/local.pem"
   mise set --file mise.local.toml GRAM_SSL_KEY_FILE="{{config_root}}/local/ssl/keys/local-key.pem"
-
+  mise set --file mise.local.toml GRAM_HTTP_SCHEME=https
 }
 
 trust_local_ca() {
@@ -84,7 +84,6 @@ trust_local_ca() {
       echo "Quick recommendation: for fast local development, switch to HTTP to avoid browser certificate warnings:" >&2
       echo "  mise set --file mise.local.toml GRAM_SERVER_URL=http://localhost:8080" >&2
       echo "  mise set --file mise.local.toml GRAM_SITE_URL=http://localhost:5173" >&2
-      echo "  mise set --file mise.local.toml VITE_GRAM_ELEMENTS_STORYBOOK_URL=http://localhost:6006" >&2
       echo "Then re-run ./zero and use http://localhost:5173 in your browser." >&2
       echo "" >&2
     fi
@@ -188,10 +187,13 @@ cert_names() {
   site_host="$(extract_hostname "$GRAM_SITE_URL")"
   server_host="$(extract_hostname "$GRAM_SERVER_URL")"
 
+  # host.docker.internal lets local assistant runtime containers dial the
+  # server over TLS through Docker's host gateway alias.
   printf "%s\n" \
     "$site_host" \
     "$server_host" \
     "localhost" \
+    "host.docker.internal" \
     "127.0.0.1" \
     "::1" \
     | awk 'NF && !seen[$0]++'
@@ -215,6 +217,9 @@ gen_keypair() {
     echo "WARN: root CA not found at $root_ca" >&2
   else
     mise set --file mise.local.toml NODE_EXTRA_CA_CERTS="$root_ca"
+    # Mounted into local assistant runtime containers so runners trust the
+    # local server certificate.
+    mise set --file mise.local.toml GRAM_ASSISTANT_RUNTIME_LOCAL_CA_FILE="$root_ca"
   fi
 
   echo "  cert => $CERT_PATH"

@@ -45,15 +45,9 @@ type Service interface {
 	// filters (e.g. group by department_name, then drill in by filtering
 	// department_name and grouping by role).
 	Query(context.Context, *QueryPayload) (res *QueryResult, err error)
-	// Org-scoped daily token usage split by risk involvement: tokens from sessions
-	// with at least one active risk finding in the window versus all session
-	// tokens. Powers the token-usage panel's risk breakdown on the costs page.
-	QueryRiskTokens(context.Context, *QueryRiskTokensPayload) (res *QueryRiskTokensResult, err error)
-	// Org-scoped daily usage details for the billing page's metrics table,
-	// computed in one pass: token type sums, session/tool-call/active-user counts,
-	// attribution slices (MCP tools, skills, unattributed users), and
-	// message-level stats (tokens in messages with active risk findings, tokens in
-	// tool-call messages).
+	// Org-scoped daily usage details for the billing page, computed in one pass:
+	// the tokens-under-management daily token-type split (observed agent traffic;
+	// cache reads excluded) and per-dimension breakdowns over the same population.
 	QueryTumDetails(context.Context, *QueryTumDetailsPayload) (res *TumDetailsResult, err error)
 	// Org-scoped list of individual chat sessions for a slice of usage, filtered
 	// by the same allowlisted dimensions as telemetry.query. Returns per-session
@@ -72,6 +66,11 @@ type Service interface {
 	ListToolUsageTraces(context.Context, *ListToolUsageTracesPayload) (res *ListToolUsageTracesResult, err error)
 	// Get filter options for target-aware MCP and tool usage metrics
 	GetToolUsageFilterOptions(context.Context, *GetToolUsageFilterOptionsPayload) (res *GetToolUsageFilterOptionsResult, err error)
+	// Get per-MCP-server tool-call activity for the Distribute MCP listing.
+	// Returns, for every MCP server with usage in the lookback window, its total
+	// and recent tool-call counts plus the last tool-call time, so the listing can
+	// flag servers that have never received a tool call or that have gone quiet.
+	GetMcpServerActivity(context.Context, *GetMcpServerActivityPayload) (res *GetMcpServerActivityResult, err error)
 	// List hook traces aggregated by trace_id with user information
 	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)
 }
@@ -98,7 +97,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryRiskTokens", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
+var MethodNames = [21]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -261,6 +260,30 @@ type GetHooksSummaryResult struct {
 	SkillTimeSeries []*SkillTimeSeriesPoint
 	// Per-user skill breakdown
 	SkillBreakdown []*SkillBreakdownRow
+}
+
+// GetMcpServerActivityPayload is the payload type of the telemetry service
+// getMcpServerActivity method.
+type GetMcpServerActivityPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Size of the recent-activity window in days. A server with tool calls in the
+	// overall lookback window but none inside this window is flagged as stale.
+	// Defaults to 14.
+	RecentWindowDays int
+}
+
+// GetMcpServerActivityResult is the result type of the telemetry service
+// getMcpServerActivity method.
+type GetMcpServerActivityResult struct {
+	// One entry per MCP server (hosted or tunneled) that has received at least one
+	// tool call within the lookback window
+	Activity []*McpServerActivity
+	// The recent-activity window size in days that was applied
+	RecentWindowDays int
+	// The overall lookback window size in days (bounded by telemetry retention)
+	LookbackDays int
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -730,6 +753,29 @@ type LogFilter struct {
 	Values []string
 }
 
+// Tool-call activity for one MCP server, keyed by the same target identifier
+// used elsewhere (toolset slug for hosted servers, MCP server slug for
+// tunneled/remote servers)
+type McpServerActivity struct {
+	// Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)
+	TargetType McpServerActivityTargetType
+	// Stable target identifier: toolset slug for hosted servers, MCP server slug
+	// for tunneled/remote servers
+	TargetID string
+	// User-facing label for the target
+	TargetLabel string
+	// Number of tool calls observed across the whole lookback window
+	TotalToolCalls int64
+	// Number of tool calls observed inside the recent-activity window
+	RecentToolCalls int64
+	// ISO 8601 timestamp of the most recent tool call
+	LastToolCallAt *string
+}
+
+// MCP server activity target type. Only the two server-backed kinds this
+// endpoint reports are valid, unlike the broader tool-usage target types.
+type McpServerActivityTargetType string
+
 // Model usage statistics
 type ModelUsage struct {
 	// Model name
@@ -925,28 +971,6 @@ type QueryResult struct {
 	Timeseries []*QuerySeries
 }
 
-// QueryRiskTokensPayload is the payload type of the telemetry service
-// queryRiskTokens method.
-type QueryRiskTokensPayload struct {
-	SessionToken *string
-	// Start time in ISO 8601 format
-	From string
-	// End time in ISO 8601 format
-	To string
-	// Optional project to scope to; defaults to every project in the organization.
-	ProjectID *string
-}
-
-// QueryRiskTokensResult is the result type of the telemetry service
-// queryRiskTokens method.
-type QueryRiskTokensResult struct {
-	// Timeseries bucket width in seconds. Always 86400 — the source aggregate is
-	// bucketed daily.
-	IntervalSeconds int64
-	// Gap-filled daily buckets in ascending time order
-	Points []*RiskTokensPoint
-}
-
 // One row of the grouped table: measures aggregated over the full time range
 // for a single group value.
 type QueryRow struct {
@@ -982,17 +1006,6 @@ type QueryTumDetailsPayload struct {
 	To string
 	// Optional project to scope to; defaults to every project in the organization.
 	ProjectID *string
-}
-
-// One UTC day of token usage split by risk involvement
-type RiskTokensPoint struct {
-	// Bucket start time in Unix nanoseconds (string for JS precision)
-	BucketTimeUnixNano string
-	// Tokens from sessions with at least one active risk finding created in the
-	// query window
-	RiskyTokens int64
-	// All session tokens in the bucket
-	TotalTokens int64
 }
 
 // Aggregated usage summary for a role
@@ -1673,7 +1686,10 @@ type TopUser struct {
 
 // Per-dimension billed token breakdown for the usage details table
 type TumDetailsBreakdown struct {
-	// The breakdown dimension key (hook_source, model, email, division_name, role)
+	// The breakdown dimension key (model, hook_source, provider, account_type,
+	// email, division_name, department_name, role, project_id) — the public
+	// telemetry dimension identifiers, so the same keys work as telemetry.query
+	// filters. project_id rows carry project UUIDs; clients map them to names.
 	Key string
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
@@ -1694,16 +1710,15 @@ type TumDetailsBreakdownRow struct {
 type TumDetailsPoint struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano string
-	// Billed input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens int64
-	// Billed tokens under management
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens int64
-	// Tokens in tool-call messages
-	ToolMessageTokens int64
 }
 
 // TumDetailsResult is the result type of the telemetry service queryTumDetails
@@ -1722,16 +1737,15 @@ type TumDetailsResult struct {
 
 // Whole-range totals for the billing usage details
 type TumDetailsTotals struct {
-	// Billed input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens int64
-	// Billed tokens under management
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens int64
-	// Tokens in tool-call messages
-	ToolMessageTokens int64
 }
 
 // A linked AI account for a user. The identity is (provider, email): the same

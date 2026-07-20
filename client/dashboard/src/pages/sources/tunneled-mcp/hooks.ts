@@ -1,6 +1,9 @@
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { formatTunneledMcpDisplay } from "@/lib/sources";
-import { createDefaultMcpEndpoint } from "@/lib/mcpEndpoints";
+import {
+  createDefaultMcpEndpoint,
+  DEFAULT_ENDPOINT_FAILED_MESSAGE,
+} from "@/lib/mcpEndpoints";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { invalidateAllGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
@@ -8,11 +11,13 @@ import { invalidateAllListTunneledMcpServerConnections } from "@gram/client/reac
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
+import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import {
   useMutation,
   useQueryClient,
   type UseMutationResult,
 } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 export type CreateTunneledMcpSourceVariables = {
   name: string;
@@ -70,7 +75,11 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
           : new Error(String(linkError));
       }
 
-      await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      if (orgSlug) {
+        await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      } else {
+        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+      }
 
       return {
         tunneledMcpServer,
@@ -83,6 +92,7 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
         invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });
@@ -111,12 +121,17 @@ export function useLinkMcpServerToTunneled(): UseMutationResult<
         },
       });
 
-      await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      if (orgSlug) {
+        await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      } else {
+        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
+      }
     },
     onSuccess: async () => {
       await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });
@@ -205,6 +220,7 @@ export function useDeleteTunneledMcpSource(): UseMutationResult<
         }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });

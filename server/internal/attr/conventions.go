@@ -250,6 +250,7 @@ const (
 	OpenAPIVersionKey                 = attribute.Key("gram.openapi.version")
 	OpenRouterKeyLimitKey             = attribute.Key("gram.openrouter.key.limit")
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
+	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
 	OpenRouterResponseBodyKey         = attribute.Key("gram.openrouter.response.body")
 	OrganizationAccountTypeKey        = attribute.Key("gram.org.account_type")
 	OrganizationInviteIDKey           = attribute.Key("gram.org.invite.id")
@@ -300,6 +301,9 @@ const (
 	RiskScanMaxAttemptsKey            = attribute.Key("gram.risk.scan.max_attempts")
 	RiskScanBatchIndexKey             = attribute.Key("gram.risk.scan.batch_index")
 	RiskScanTextSizeKey               = attribute.Key("gram.risk.scan.text_size_bytes")
+	RiskScanRequestIDKey              = attribute.Key("gram.risk.scan.request_id")
+	RiskScanEngineKey                 = attribute.Key("gram.risk.scan.engine")
+	RiskScanGateReasonKey             = attribute.Key("gram.risk.scan.gate_reason")
 	SecretNameKey                     = attribute.Key("gram.secret.name")
 	SecurityPlacementKey              = attribute.Key("gram.security.placement")
 	SecuritySchemeKey                 = attribute.Key("gram.security.scheme")
@@ -328,6 +332,10 @@ const (
 	VisibilityKey                     = attribute.Key("gram.visibility")
 
 	// Hooks
+	// HookDecisionKey carries the policy verdict the hook endpoint returned to
+	// the agent (allow/deny) on hook metrics, independent of the processing
+	// outcome (accepted/failure/unauthorized) in OutcomeKey.
+	HookDecisionKey             = attribute.Key("gram.hook.decision")
 	HookEventKey                = attribute.Key("gram.hook.event")
 	HookErrorKey                = attribute.Key("gram.hook.error")
 	HookIsInterruptKey          = attribute.Key("gram.hook.is_interrupt")
@@ -335,6 +343,13 @@ const (
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 	HookHasPluginAuthKey        = attribute.Key("gram.hook.has_plugin_auth")
 	HookHostnameKey             = attribute.Key("gram.hook.hostname")
+	// HookReplayedKey is set (true) on telemetry rows for events redelivered
+	// from a device's offline spool after control-plane downtime, so
+	// dashboards can separate downtime backlog from live traffic. The row's
+	// timestamp is the event's original occurred_at when the envelope
+	// carried one; envelopes without it fall back to arrival time
+	// (canonicalEventTime), so a replayed row can also be now-stamped.
+	HookReplayedKey = attribute.Key("gram.hook.replayed")
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -434,6 +449,13 @@ const (
 
 	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration.config_id")
 	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
+
+	ResilienceBreakerStateKey           = attribute.Key("gram.circuit_breaker.state")
+	ResilienceBreakerPreviousStateKey   = attribute.Key("gram.circuit_breaker.previous_state")
+	ResilienceBreakerTransitionCauseKey = attribute.Key("gram.circuit_breaker.transition_cause")
+	ResilienceNamespaceKey              = attribute.Key("gram.resilience.namespace")
+	ResiliencePartitionKey              = attribute.Key("gram.resilience.partition")
+	ResilienceSubsetKey                 = attribute.Key("gram.resilience.subset")
 )
 
 const (
@@ -565,6 +587,8 @@ func SlogHookServerNameOverrideID(v string) slog.Attr {
 	return slog.String(string(HookServerNameOverrideIDKey), v)
 }
 
+func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
+
 func HookEvent(v string) attribute.KeyValue { return HookEventKey.String(v) }
 func SlogHookEvent(v string) slog.Attr      { return slog.String(string(HookEventKey), v) }
 
@@ -579,6 +603,9 @@ func SlogHookHasPluginAuth(v bool) slog.Attr      { return slog.Bool(string(Hook
 
 func HookHostname(v string) attribute.KeyValue { return HookHostnameKey.String(v) }
 func SlogHookHostname(v string) slog.Attr      { return slog.String(string(HookHostnameKey), v) }
+
+func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
+func SlogHookReplayed(v bool) slog.Attr      { return slog.Bool(string(HookReplayedKey), v) }
 
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
 func SlogServerAddress(v string) slog.Attr      { return slog.String(string(ServerAddressKey), v) }
@@ -1072,6 +1099,9 @@ func SlogOpenAPIVersion(v string) slog.Attr      { return slog.String(string(Ope
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
 func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenRouterKeyLimitKey), v) }
 
+func OpenRouterKeyType(v string) attribute.KeyValue { return OpenRouterKeyTypeKey.String(v) }
+func SlogOpenRouterKeyType(v string) slog.Attr      { return slog.String(string(OpenRouterKeyTypeKey), v) }
+
 func OpenRouterKeyPreviousLimit(v int) attribute.KeyValue {
 	return OpenRouterKeyPreviousLimitKey.Int(v)
 }
@@ -1309,6 +1339,21 @@ func SlogRiskScanBatchIndex(v int) slog.Attr      { return slog.Int(string(RiskS
 
 func RiskScanTextSize(v int) attribute.KeyValue { return RiskScanTextSizeKey.Int(v) }
 func SlogRiskScanTextSize(v int) slog.Attr      { return slog.Int(string(RiskScanTextSizeKey), v) }
+
+func RiskScanRequestID(v string) attribute.KeyValue { return RiskScanRequestIDKey.String(v) }
+func SlogRiskScanRequestID(v string) slog.Attr {
+	return slog.String(string(RiskScanRequestIDKey), v)
+}
+
+func RiskScanEngine(v string) attribute.KeyValue { return RiskScanEngineKey.String(v) }
+func SlogRiskScanEngine(v string) slog.Attr      { return slog.String(string(RiskScanEngineKey), v) }
+
+func RiskScanGateReason[V ~string](v V) attribute.KeyValue {
+	return RiskScanGateReasonKey.String(string(v))
+}
+func SlogRiskScanGateReason(v string) slog.Attr {
+	return slog.String(string(RiskScanGateReasonKey), v)
+}
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
@@ -1788,4 +1833,38 @@ func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {
 
 func SlogAIIntegrationUsagePollNextAfter(v time.Time) slog.Attr {
 	return slog.Time(string(AIIntegrationUsagePollNextAfterKey), v)
+}
+
+func ResilienceBreakerState(v string) attribute.KeyValue { return ResilienceBreakerStateKey.String(v) }
+func SlogResilienceBreakerState(v string) slog.Attr {
+	return slog.String(string(ResilienceBreakerStateKey), v)
+}
+
+func ResilienceBreakerPreviousState(v string) attribute.KeyValue {
+	return ResilienceBreakerPreviousStateKey.String(v)
+}
+func SlogResilienceBreakerPreviousState(v string) slog.Attr {
+	return slog.String(string(ResilienceBreakerPreviousStateKey), v)
+}
+
+func ResilienceBreakerTransitionCause(v string) attribute.KeyValue {
+	return ResilienceBreakerTransitionCauseKey.String(v)
+}
+func SlogResilienceBreakerTransitionCause(v string) slog.Attr {
+	return slog.String(string(ResilienceBreakerTransitionCauseKey), v)
+}
+
+func ResilienceNamespace(v string) attribute.KeyValue { return ResilienceNamespaceKey.String(v) }
+func SlogResilienceNamespace(v string) slog.Attr {
+	return slog.String(string(ResilienceNamespaceKey), v)
+}
+
+func ResiliencePartition(v string) attribute.KeyValue { return ResiliencePartitionKey.String(v) }
+func SlogResiliencePartition(v string) slog.Attr {
+	return slog.String(string(ResiliencePartitionKey), v)
+}
+
+func ResilienceSubset(v string) attribute.KeyValue { return ResilienceSubsetKey.String(v) }
+func SlogResilienceSubset(v string) slog.Attr {
+	return slog.String(string(ResilienceSubsetKey), v)
 }

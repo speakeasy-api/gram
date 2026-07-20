@@ -238,8 +238,12 @@ type Plugin struct {
 	Slug string
 	// Optional description.
 	Description *string
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool
 	// Number of active servers in this plugin.
 	ServerCount *int64
+	// Number of active skills in this plugin.
+	SkillCount *int64
 	// Number of role/user assignments.
 	AssignmentCount *int64
 	// Servers included in this plugin.
@@ -312,6 +316,16 @@ type PublishStatusResult struct {
 	// Present once a marketplace token has been minted, which happens
 	// automatically on the first publish.
 	MarketplaceURL *string
+	// Slug of the generated Claude Code observability plugin in the published
+	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+	ClaudeObservabilityPlugin *string
+	// Slug of the generated Codex observability plugin in the published
+	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+	CodexObservabilityPlugin *string
+	// Whether the repo has at least one directly-added GitHub collaborator
+	// (excludes access granted via org membership/teams). Absent when the project
+	// is not connected.
+	HasCollaborators *bool
 	// Whether the project's current plugin state matches what was last published
 	// to GitHub. Absent when the project is not connected, or when the connection
 	// predates content fingerprinting (freshness can't be determined).
@@ -319,6 +333,11 @@ type PublishStatusResult struct {
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string
+	// Version stamped into the currently published plugin.json manifests (e.g.
+	// 0.1.1783692954) — the version plugin clients such as Claude Code report for
+	// installed plugins. Absent when the project is not connected or the live
+	// version could not be determined.
+	LiveVersion *string
 }
 
 // RemovePluginServerPayload is the payload type of the plugins service
@@ -367,6 +386,11 @@ type UpdateMarketplaceSettingsResult struct {
 	// Whether the marketplace was automatically republished to GitHub as part of
 	// this update.
 	Republished bool
+	// True when the new name reached the MCP plugins and marketplace manifests but
+	// the observability (hooks) plugin could not be updated yet because the
+	// organization is not approved for the latest hooks version; it will update
+	// automatically once the organization is rolled forward.
+	HooksUpdateDeferred *bool
 }
 
 // UpdatePluginPayload is the payload type of the plugins service updatePlugin

@@ -5,6 +5,8 @@ import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
+import { MCPActivityIndicator } from "./MCPActivityIndicator";
+import type { McpActivityStatus } from "./mcp-activity";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import {
@@ -15,7 +17,6 @@ import {
   Package,
 } from "lucide-react";
 import { useMemo } from "react";
-import { useNavigate } from "react-router";
 import {
   useCatalogIconMap,
   useExternalMcpOAuthConfigStatus,
@@ -23,9 +24,16 @@ import {
 import { ToolCollectionBadge } from "../tool-collection-badge";
 import { Badge } from "@speakeasy-api/moonshine";
 
-export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
+export function MCPCard({
+  toolset,
+  activityStatus,
+  recentWindowDays,
+}: {
+  toolset: ToolsetEntry;
+  activityStatus?: McpActivityStatus | null;
+  recentWindowDays?: number;
+}): JSX.Element {
   const routes = useRoutes();
-  const navigate = useNavigate();
   const { installPageUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
   const { data: deploymentResult } = useLatestDeployment();
@@ -48,7 +56,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
 
   const handleClick = () => {
     if (oauthStatus === "required-unconfigured") {
-      void navigate(`${routes.mcp.details.href(toolset.slug)}#authentication`);
+      routes.mcp.details.authentication.goTo(toolset.slug);
     } else {
       routes.mcp.details.goTo(toolset.slug);
     }
@@ -136,10 +144,18 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
 
       {/* Footer row with status indicator and open link */}
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        <MCPStatusIndicator
-          mcpEnabled={toolset.mcpEnabled}
-          mcpIsPublic={toolset.mcpIsPublic}
-        />
+        <div className="flex items-center gap-2">
+          <MCPStatusIndicator
+            mcpEnabled={toolset.mcpEnabled}
+            mcpIsPublic={toolset.mcpIsPublic}
+          />
+          {activityStatus && (
+            <MCPActivityIndicator
+              status={activityStatus}
+              recentWindowDays={recentWindowDays}
+            />
+          )}
+        </div>
         {oauthStatus === "required-unconfigured" ? (
           <div className="text-warning flex items-center gap-1 text-sm">
             <span>Set up</span>

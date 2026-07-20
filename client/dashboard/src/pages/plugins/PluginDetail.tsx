@@ -1,12 +1,12 @@
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
+import { RequireScope } from "@/components/require-scope";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button as UiButton } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { DotCard } from "@/components/ui/dot-card";
-import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
@@ -23,32 +23,55 @@ import {
 } from "@gram/client/react-query/publishStatus";
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
+import { useDeletePluginMutation } from "@gram/client/react-query/deletePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
+import { useMembers } from "@gram/client/react-query/members";
+import { useRoles } from "@gram/client/react-query/roles";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import {
+  Badge,
   Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   Icon,
   Stack,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Network, Trash2 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { Network, Puzzle, Sparkles, Trash2 } from "lucide-react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useNavigate, useParams } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { toast } from "sonner";
-import { InstallInstructionsButton } from "./InstallInstructionsDialog";
+import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
+import { downloadPluginPackage } from "./downloadPluginPackage";
+import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
+import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
+import { PluginSkillsSection } from "./PluginSkillsSection";
+import { PluginAssignmentsList } from "./PluginAssignmentsList";
+import { describePrincipal, memberMapByUrn, roleMapByUrn } from "./principals";
 import { PublishDialog } from "./PublishDialog";
+import { SectionEmptyState } from "./SectionEmptyState";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
 // a Remote MCP-backed mcp_server. The kind determines whether it is submitted
@@ -66,14 +89,28 @@ function serverOptionKey(kind: ServerOptionKind, id: string): string {
 
 export default function PluginDetail(): JSX.Element | null {
   const { pluginId } = useParams<{ pluginId: string }>();
+  const project = useProject();
   const queryClient = useQueryClient();
+  const routes = useRoutes();
+  const navigate = useNavigate();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
+  const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isAssignmentsOpen, setIsAssignmentsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  // The component stays mounted when only :pluginId changes, so a stale query
+  // from a previous plugin would filter the new plugin's lists.
+  useEffect(() => setSearch(""), [pluginId]);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
-  const { data: publishStatus } = usePublishStatus();
+  // Polled so the publish-freshness badges/banner pick up the Temporal
+  // generator-rollout schedule's auto-sync without a manual refresh.
+  const { data: publishStatus } = usePublishStatus(undefined, undefined, {
+    refetchInterval: 5_000,
+  });
 
   const client = useSdkClient();
 
@@ -84,19 +121,58 @@ export default function PluginDetail(): JSX.Element | null {
     [toolsetsData?.toolsets],
   );
 
-  // Remote MCP-backed mcp_servers for this project. Only remote-backed,
-  // non-disabled servers are publishable today.
+  // Remote MCP-backed mcp_servers for this project. All of them back the
+  // cards of already-attached plugin servers (an attached server that's been
+  // disabled or lost its endpoints must still resolve for display), while
+  // only non-disabled servers with at least one endpoint are publishable —
+  // mirroring the backend's AddPluginServer check, so the picker never
+  // offers a server the API would reject.
   const { data: mcpServersData, isLoading: isLoadingMcpServers } =
     useMcpServers({});
+  const { data: mcpEndpointsData, isLoading: isLoadingMcpEndpoints } =
+    useMcpEndpoints({});
   const mcpServers = useMemo(
     () =>
-      (mcpServersData?.mcpServers ?? []).filter(
-        (s) => !!s.remoteMcpServerId && s.visibility !== "disabled",
-      ),
+      (mcpServersData?.mcpServers ?? []).filter((s) => !!s.remoteMcpServerId),
     [mcpServersData],
   );
+  const publishableMcpServers = useMemo(() => {
+    const serverIdsWithEndpoint = new Set(
+      (mcpEndpointsData?.mcpEndpoints ?? []).map((e) => e.mcpServerId),
+    );
+    return mcpServers.filter(
+      (s) => s.visibility !== "disabled" && serverIdsWithEndpoint.has(s.id),
+    );
+  }, [mcpServers, mcpEndpointsData]);
 
-  const isLoadingServers = isLoadingToolsets || isLoadingMcpServers;
+  const isLoadingServers =
+    isLoadingToolsets || isLoadingMcpServers || isLoadingMcpEndpoints;
+
+  // Roles and members resolve the plugin's assignment principal URNs to human
+  // names in the summary below (and seed the assignment sheet). React Query
+  // dedupes these with the sheet's own calls.
+  const { data: rolesData } = useRoles();
+  const { data: membersData } = useMembers();
+  const roleByUrn = useMemo(
+    () => roleMapByUrn(rolesData?.roles ?? []),
+    [rolesData?.roles],
+  );
+  const memberByUrn = useMemo(
+    () => memberMapByUrn(membersData?.members ?? []),
+    [membersData?.members],
+  );
+
+  // Assignments only gate delivery for the device agent (agent.getPlugins);
+  // marketplace installs (Claude/Cursor/Codex) ship every published plugin. So
+  // only surface the section for device-agent orgs: those enrolled in the
+  // program (the gram-device-agent flag) or with devices that have actually
+  // synced (productFeatures.deviceAgent — member-readable, unlike the admin-only
+  // synced-users list, so non-admin viewers see the section too).
+  const isDeviceAgentEnabled =
+    useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
+  const { data: productFeatures } = useProductFeatures();
+  const showAssignments =
+    isDeviceAgentEnabled || (productFeatures?.deviceAgent ?? false);
 
   // Invalidate publish status too so the dirty/up-to-date affordance reflects
   // the edit the moment a mutation lands.
@@ -178,6 +254,15 @@ export default function PluginDetail(): JSX.Element | null {
     },
   });
 
+  const deleteMutation = useDeletePluginMutation({
+    onSuccess: async () => {
+      setIsDeleteOpen(false);
+      await invalidateAll();
+      offerPublish("Plugin deleted");
+      void navigate(routes.plugins.href());
+    },
+  });
+
   const addServerMutation = useAddPluginServerMutation({
     onSuccess: () => {
       setIsAddServerOpen(false);
@@ -216,6 +301,13 @@ export default function PluginDetail(): JSX.Element | null {
     });
   };
 
+  const handleDelete = () => {
+    deleteMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: { id: pluginId! },
+    });
+  };
+
   const handleAddServer: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -245,19 +337,7 @@ export default function PluginDetail(): JSX.Element | null {
   const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
     setIsDownloadMenuOpen(false);
     try {
-      const { headers, result } = await client.plugins.downloadPluginPackage({
-        pluginId: pluginId!,
-        platform,
-      });
-      const blob = await new Response(result).blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        headers["content-disposition"]?.[0]?.match(/filename="(.+)"/)?.[1] ??
-        "plugin.zip";
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadPluginPackage(client, pluginId!, platform);
     } catch (_err) {
       toast.error("Failed to download plugin package");
     }
@@ -275,14 +355,15 @@ export default function PluginDetail(): JSX.Element | null {
     return map;
   }, [mcpServers]);
 
-  // Merge toolsets and Remote MCP-backed servers into one selectable list.
+  // Merge toolsets and publishable Remote MCP-backed servers into one
+  // selectable list.
   const serverOptions = useMemo<ServerOption[]>(() => {
     const opts: ServerOption[] = toolsets.map((t) => ({
       kind: "toolset",
       id: t.id,
       name: t.name,
     }));
-    for (const s of mcpServers) {
+    for (const s of publishableMcpServers) {
       opts.push({
         kind: "mcpServer",
         id: s.id,
@@ -290,11 +371,17 @@ export default function PluginDetail(): JSX.Element | null {
       });
     }
     return opts;
-  }, [toolsets, mcpServers]);
+  }, [toolsets, publishableMcpServers]);
 
   if (!plugin) return null;
 
+  const isDefaultPlugin = plugin.isDefault ?? false;
+  const description =
+    plugin.description ??
+    (isDefaultPlugin ? DEFAULT_PLUGIN_DESCRIPTION : "No description");
+
   const servers = plugin.servers ?? [];
+  const assignments = plugin.assignments ?? [];
 
   // Exclude servers already added to the plugin, keyed per backend.
   const addedToolsetIds = new Set(
@@ -309,6 +396,84 @@ export default function PluginDetail(): JSX.Element | null {
       : !addedMcpServerIds.has(o.id),
   );
 
+  // Client-side search across the page's entry lists. Servers match on their
+  // displayed name; assignments match on the resolved principal label (role
+  // name, member name, email, "Everyone") plus the member's email. Skills are
+  // filtered inside PluginSkillsSection with the same query.
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredServers = normalizedSearch
+    ? servers.filter((s) =>
+        s.displayName.toLowerCase().includes(normalizedSearch),
+      )
+    : servers;
+  const filteredAssignments = normalizedSearch
+    ? assignments.filter((a) => {
+        const { label } = describePrincipal(
+          a.principalUrn,
+          roleByUrn,
+          memberByUrn,
+        );
+        const email = memberByUrn.get(a.principalUrn)?.email ?? "";
+        return (
+          label.toLowerCase().includes(normalizedSearch) ||
+          email.toLowerCase().includes(normalizedSearch)
+        );
+      })
+    : assignments;
+
+  // Precomputed section bodies keep the JSX below free of nested ternaries
+  // while distinguishing "nothing added yet" from "no search matches".
+  let serversContent: JSX.Element;
+  if (servers.length === 0) {
+    serversContent = <SectionEmptyState title="No servers added yet" />;
+  } else if (filteredServers.length === 0) {
+    serversContent = <SectionEmptyState title="No servers match your search" />;
+  } else {
+    serversContent = (
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {filteredServers.map((server) => (
+          <PluginServerCard
+            key={server.id}
+            server={server}
+            toolset={
+              server.toolsetId ? toolsetById.get(server.toolsetId) : undefined
+            }
+            mcpServer={
+              server.mcpServerId
+                ? mcpServerById.get(server.mcpServerId)
+                : undefined
+            }
+            isLoading={isLoadingServers}
+            onRemove={() => handleRemoveServer(server)}
+            lastPublishedAt={publishStatus?.lastPublishedAt}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  let assignmentsContent: JSX.Element;
+  if (assignments.length === 0) {
+    assignmentsContent = (
+      <SectionEmptyState
+        title="Not assigned to anyone yet"
+        subtitle="Assign this plugin to roles, users, or emails to deliver it to their devices."
+      />
+    );
+  } else if (filteredAssignments.length === 0) {
+    assignmentsContent = (
+      <SectionEmptyState title="No assignments match your search" />
+    );
+  } else {
+    assignmentsContent = (
+      <PluginAssignmentsList
+        assignments={filteredAssignments}
+        roleByUrn={roleByUrn}
+        memberByUrn={memberByUrn}
+      />
+    );
+  }
+
   return (
     <Page>
       <Page.Header>
@@ -316,96 +481,185 @@ export default function PluginDetail(): JSX.Element | null {
           substitutions={{ [pluginId ?? ""]: plugin.name }}
         />
       </Page.Header>
-      <Page.Body>
-        {/* Plugin metadata */}
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="start"
-          className="mb-6"
-        >
-          <div>
-            <Heading variant="h4">{plugin.name}</Heading>
-            <Type muted small className="mt-1">
-              {plugin.description ?? "No description"}
-            </Type>
-            <Type muted small className="mt-1">
-              Slug: <code>{plugin.slug}</code>
-            </Type>
-            <PublishFreshnessIndicator publishStatus={publishStatus} />
-          </div>
-          <Stack direction="horizontal" gap={2} align="center">
-            <PublishStatusControl
-              publishStatus={publishStatus}
-              isPending={publishMutation.isPending}
-              onRepublish={() => handlePublish([])}
-              onOpenDialog={() => setIsPublishDialogOpen(true)}
-            />
-            <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
-              Edit
-            </Button>
-          </Stack>
-        </Stack>
-
-        {/* Marketplace banner — durable path to the install instructions, so the
-            published marketplace URL is reachable without going back to the list.
-            Gated only on a connected repo URL (mirrors the plugins list); the
-            owner/name display and install button degrade independently so partial
-            metadata never hides the whole entrypoint. */}
-        {publishStatus?.connected && publishStatus.repoUrl && (
-          <div className="bg-muted/30 border-border/60 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                Marketplace
-              </span>
-              <a
-                href={publishStatus.repoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-primary text-foreground font-mono text-sm hover:underline"
-              >
-                {publishStatus.repoOwner && publishStatus.repoName
-                  ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
-                  : publishStatus.repoUrl}
-              </a>
+      <Page.Body fullWidth noPadding>
+        {/* Hero — full-width grey band, separated from the servers list by a
+            bottom border. Page.Body runs full-width/no-padding so this band
+            reaches the pane edges; the band's own content stays centered in the
+            same max-w-7xl column as the sections below. */}
+        <div className="border-border mb-8 border-b bg-neutral-50 px-8 pt-8 pb-8 dark:bg-neutral-900/40">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-6">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="bg-primary/5 flex h-14 w-14 shrink-0 items-center justify-center rounded-xl dark:bg-neutral-800">
+                <Puzzle className="text-muted-foreground h-7 w-7" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-bold">{plugin.name}</h1>
+                  {isDefaultPlugin && (
+                    <Badge variant="information">
+                      <Badge.Text>Default</Badge.Text>
+                    </Badge>
+                  )}
+                </div>
+                <Type muted small className="mt-1 font-mono">
+                  {plugin.slug}
+                </Type>
+                <Type small className="mt-4 max-w-xl">
+                  {description}
+                </Type>
+                <PublishFreshnessIndicator publishStatus={publishStatus} />
+              </div>
             </div>
-            {publishStatus.repoOwner && publishStatus.repoName && (
-              <InstallInstructionsButton
-                repoOwner={publishStatus.repoOwner}
-                repoName={publishStatus.repoName}
-                marketplaceUrl={publishStatus.marketplaceUrl}
+            <Stack
+              direction="horizontal"
+              gap={2}
+              align="center"
+              className="shrink-0"
+            >
+              <DropdownMenu
+                open={isDownloadMenuOpen}
+                onOpenChange={setIsDownloadMenuOpen}
+              >
+                <DropdownMenuTrigger asChild>
+                  <Button variant="primary">
+                    <Button.Text>Install</Button.Text>
+                    <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
+                    <Button.RightIcon>
+                      <Icon name="chevron-down" className="h-4 w-4" />
+                    </Button.RightIcon>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      // Defer until after the dropdown has fully closed to
+                      // avoid a Radix focus-trap/body-lock conflict between
+                      // the closing menu and the opening sheet (same pattern
+                      // as MCPDetails.tsx).
+                      setTimeout(() => setIsInstallSheetOpen(true), 0);
+                    }}
+                    disabled={
+                      !publishStatus?.connected ||
+                      !publishStatus.repoOwner ||
+                      !publishStatus.repoName
+                    }
+                  >
+                    <div className="flex flex-col">
+                      <span>GitHub installation (preferred)</span>
+                      {(!publishStatus?.connected ||
+                        !publishStatus.repoOwner ||
+                        !publishStatus.repoName) && (
+                        <span className="text-muted-foreground text-xs">
+                          Requires marketplace setup
+                        </span>
+                      )}
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void handleDownload("claude");
+                    }}
+                  >
+                    Download as zip — Claude
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void handleDownload("cursor");
+                    }}
+                  >
+                    Download as zip — Cursor
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void handleDownload("codex");
+                    }}
+                  >
+                    Download as zip — Codex
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {publishStatus?.connected &&
+                publishStatus.repoOwner &&
+                publishStatus.repoName && (
+                  <InstallInstructionsDialog
+                    open={isInstallSheetOpen}
+                    onOpenChange={setIsInstallSheetOpen}
+                    repoOwner={publishStatus.repoOwner}
+                    repoName={publishStatus.repoName}
+                    marketplaceUrl={publishStatus.marketplaceUrl}
+                    candidatePlugins={[
+                      {
+                        name: plugin.name,
+                        slug: plugin.slug,
+                        description: plugin.description,
+                      },
+                    ]}
+                  />
+                )}
+              <PublishStatusControl
+                publishStatus={publishStatus}
+                isPending={publishMutation.isPending}
+                onRepublish={() => handlePublish([])}
+                onOpenDialog={() => setIsPublishDialogOpen(true)}
               />
-            )}
+              {/* Low-frequency, destructive-leaning actions are tucked behind an
+                overflow menu so the hero bar stays down to the two primary
+                actions (Install / Publish) and doesn't wrap on narrow widths. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="secondary" aria-label="More actions">
+                    <Button.Icon>
+                      <Icon name="ellipsis" className="h-4 w-4" />
+                    </Button.Icon>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setIsEditOpen(true)}>
+                    Edit name
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => setIsDeleteOpen(true)}
+                  >
+                    Delete plugin
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </Stack>
           </div>
-        )}
+        </div>
 
-        {/* Servers section */}
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="center"
-          className="mb-3"
-        >
-          <Heading variant="h5">MCP Servers</Heading>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setIsAddServerOpen(true)}
-          >
-            Add Server
-          </Button>
-        </Stack>
-        {servers.length === 0 ? (
-          <Stack
-            gap={2}
-            className="bg-background mb-8 rounded-md border p-8"
-            align="center"
-            justify="center"
-          >
-            <Type variant="body">No servers added yet</Type>
+        {/* Everything below the hero re-centers in the max-w-7xl column that
+            Page.Body would normally provide (disabled here via fullWidth). */}
+        <div className="mx-auto w-full max-w-7xl px-8 pb-24">
+          {/* One search box narrows every entry list on the page (servers,
+            assignments, skills) rather than a per-section input. */}
+          <Page.Toolbar className="mb-8">
+            <Page.Toolbar.Search
+              value={search}
+              onChange={setSearch}
+              placeholder="Search servers, skills, and assignments"
+            />
+          </Page.Toolbar>
+
+          {/* Servers section */}
+          <div className="mb-3 flex items-center gap-3">
+            <div className="border-border flex-1 border-t" />
+            <Type
+              small
+              muted
+              className="shrink-0 font-mono text-xs tracking-wide uppercase"
+            >
+              MCP Servers
+            </Type>
+            <div className="border-border flex-1 border-t" />
+          </div>
+          <div className="mb-3 flex justify-end">
             <Button
-              size="sm"
               variant="secondary"
+              size="sm"
               onClick={() => setIsAddServerOpen(true)}
             >
               <Button.LeftIcon>
@@ -413,74 +667,102 @@ export default function PluginDetail(): JSX.Element | null {
               </Button.LeftIcon>
               <Button.Text>Add Server</Button.Text>
             </Button>
-          </Stack>
-        ) : (
-          <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
-            {servers.map((server) => (
-              <PluginServerCard
-                key={server.id}
-                server={server}
-                toolset={
-                  server.toolsetId
-                    ? toolsetById.get(server.toolsetId)
-                    : undefined
-                }
-                mcpServer={
-                  server.mcpServerId
-                    ? mcpServerById.get(server.mcpServerId)
-                    : undefined
-                }
-                isLoading={isLoadingServers}
-                onRemove={() => handleRemoveServer(server)}
-              />
-            ))}
           </div>
-        )}
+          <div className="mb-8">{serversContent}</div>
 
-        {/* Download section */}
-        <Heading variant="h5" className="mb-3">
-          Download
-        </Heading>
-        <div>
-          <DropdownMenu
-            open={isDownloadMenuOpen}
-            onOpenChange={setIsDownloadMenuOpen}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button variant="secondary" size="sm">
-                <Button.LeftIcon>
-                  <Icon name="download" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Download Plugin</Button.Text>
-                <Button.RightIcon>
-                  <Icon name="chevron-down" className="h-4 w-4" />
-                </Button.RightIcon>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem
-                onClick={() => {
-                  void handleDownload("claude");
-                }}
-              >
-                Claude
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  void handleDownload("cursor");
-                }}
-              >
-                Cursor
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  void handleDownload("codex");
-                }}
-              >
-                Codex
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Assignments only affect device-agent delivery, so the section is
+            hidden for marketplace-only orgs (see showAssignments). */}
+          {showAssignments && (
+            <>
+              <div className="mb-3 flex items-center gap-3">
+                <div className="border-border flex-1 border-t" />
+                <div className="flex shrink-0 items-center gap-2">
+                  <Type
+                    small
+                    muted
+                    className="font-mono text-xs tracking-wide uppercase"
+                  >
+                    Assignments
+                  </Type>
+                  {assignments.length > 0 && (
+                    <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                      {assignments.length}
+                    </span>
+                  )}
+                </div>
+                <div className="border-border flex-1 border-t" />
+              </div>
+              <div className="mb-3 flex items-center justify-between gap-4">
+                <Type small muted className="max-w-md">
+                  Controls delivery to devices running the Speakeasy agent.
+                  Marketplace installs (Claude, Cursor, Codex) receive every
+                  published plugin regardless.
+                </Type>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsAssignmentsOpen(true)}
+                >
+                  <Button.LeftIcon>
+                    <Icon name="users" className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Manage assignments</Button.Text>
+                </Button>
+              </div>
+              <div className="mb-8">{assignmentsContent}</div>
+            </>
+          )}
+
+          {/* Skills ride the same publish flow as servers, so changes offer a
+            republish. Orgs without the skills feature keep the teaser. */}
+          {productFeatures?.skillsEnabled ? (
+            <RequireScope
+              scope="skill:read"
+              resourceId={project.id}
+              level="section"
+            >
+              <PluginSkillsSection
+                pluginId={pluginId!}
+                searchQuery={search}
+                onMutated={(message) => offerPublish(message)}
+              />
+            </RequireScope>
+          ) : (
+            <>
+              <div className="mb-3 flex items-center gap-3">
+                <div className="border-border flex-1 border-t" />
+                <Type
+                  small
+                  muted
+                  className="shrink-0 font-mono text-xs tracking-wide uppercase"
+                >
+                  Skills
+                </Type>
+                <div className="border-border flex-1 border-t" />
+              </div>
+              <div className="mb-8">
+                <div className="border-border flex items-center gap-4 rounded-xl border border-dashed p-6 opacity-60">
+                  <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
+                    <Sparkles className="text-muted-foreground h-7 w-7" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Type variant="subheading" as="div">
+                        Skills
+                      </Type>
+                      <Badge variant="neutral">
+                        <Badge.Text>Coming soon</Badge.Text>
+                      </Badge>
+                    </div>
+                    <Type small muted>
+                      Bundle reusable skills alongside your MCP servers in this
+                      plugin.
+                    </Type>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Edit Dialog */}
@@ -520,6 +802,34 @@ export default function PluginDetail(): JSX.Element | null {
                 </Button>
               </Dialog.Footer>
             </form>
+          </Dialog.Content>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Delete Plugin</Dialog.Title>
+              <Dialog.Description>
+                Are you sure you want to delete &quot;{plugin.name}&quot;? This
+                will remove it from all assigned users on the next publish.
+              </Dialog.Description>
+            </Dialog.Header>
+            <Dialog.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => setIsDeleteOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive-primary"
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+              >
+                Delete
+              </Button>
+            </Dialog.Footer>
           </Dialog.Content>
         </Dialog>
 
@@ -594,6 +904,17 @@ export default function PluginDetail(): JSX.Element | null {
           onPublish={handlePublish}
           isPending={publishMutation.isPending}
         />
+        <PluginAssignmentsSheet
+          pluginId={pluginId!}
+          pluginName={plugin.name}
+          assignments={assignments}
+          open={isAssignmentsOpen}
+          onOpenChange={setIsAssignmentsOpen}
+          onSaved={() => {
+            void invalidateAll();
+            offerPublish("Assignments updated");
+          }}
+        />
       </Page.Body>
     </Page>
   );
@@ -648,8 +969,8 @@ function PublishStatusControl({
         {isPending
           ? "Publishing..."
           : hasUnpublishedChanges
-            ? "Publish changes"
-            : "Re-publish"}
+            ? "Sync changes"
+            : "Sync"}
       </Button.Text>
     </Button>
   );
@@ -657,10 +978,13 @@ function PublishStatusControl({
 
 // Shows the published freshness of a connected project under the plugin
 // metadata: an explicit "Unpublished changes" vs "Up to date" badge, paired
-// with the last-published time. The timestamp shows in both states (it's still
-// useful to know when the last publish happened while there are pending
-// changes). Renders nothing when not connected, or when freshness is unknown
-// and there's no publish timestamp to show.
+// with the last-published time and the manifest version currently live in the
+// published repo. The timestamp shows in both states (it's still useful to
+// know when the last publish happened while there are pending changes), and
+// the live version is what plugin clients report for installed plugins (e.g.
+// Claude Code's /plugin listing), so it's the value to compare against when
+// debugging sync lag. Renders nothing when not connected, or when freshness
+// is unknown and there's nothing published to show.
 function PublishFreshnessIndicator({
   publishStatus,
 }: {
@@ -673,27 +997,73 @@ function PublishFreshnessIndicator({
   const hasUnpublishedChanges = publishStatus.upToDate === false;
   const isUpToDate = publishStatus.upToDate === true;
 
-  const lastPublished = publishStatus.lastPublishedAt ? (
-    <Type muted small>
-      Published{" "}
-      {formatDistanceToNow(publishStatus.lastPublishedAt, {
-        addSuffix: true,
-      })}
-    </Type>
-  ) : null;
+  // Each row is omitted when its value is unknown rather than guessed. The
+  // live version is rendered in its own mono cell so the long timestamp-based
+  // patch (e.g. 0.1.1783944246) can't collide with adjacent text.
+  const rows: { label: string; value: JSX.Element }[] = [];
+
+  if (publishStatus.lastPublishedAt) {
+    rows.push({
+      label: "Last published",
+      value: (
+        <Type small>
+          {formatDistanceToNow(publishStatus.lastPublishedAt, {
+            addSuffix: true,
+          })}
+        </Type>
+      ),
+    });
+  }
+
+  // Manifest versions come straight from GitHub and occasionally carry a stray
+  // BOM / zero-width / control char that renders as a tofu box — strip anything
+  // outside the semver charset before display.
+  const cleanVersion = publishStatus.liveVersion
+    ?.replace(/[^\w.\-+]/g, "")
+    .trim();
+  if (cleanVersion) {
+    rows.push({
+      label: "Current version",
+      value: (
+        <div className="flex items-center gap-1">
+          <Badge variant="information">
+            <Badge.Text className="font-mono">{cleanVersion}</Badge.Text>
+          </Badge>
+          <CopyButton
+            size="inline"
+            text={cleanVersion}
+            tooltip="Copy version"
+          />
+        </div>
+      ),
+    });
+  }
+
+  if (hasUnpublishedChanges || isUpToDate) {
+    rows.push({
+      label: "Sync status",
+      value: hasUnpublishedChanges ? (
+        <Badge variant="warning">Requires syncing</Badge>
+      ) : (
+        <Badge variant="success">Up to date</Badge>
+      ),
+    });
+  }
 
   // Freshness unknown and nothing published yet — nothing meaningful to show.
-  if (!hasUnpublishedChanges && !isUpToDate && !lastPublished) return null;
+  if (rows.length === 0) return null;
 
   return (
-    <Stack direction="horizontal" gap={2} align="center" className="mt-2">
-      {hasUnpublishedChanges ? (
-        <Badge variant="warning">Unpublished changes</Badge>
-      ) : isUpToDate ? (
-        <Badge variant="secondary">Up to date</Badge>
-      ) : null}
-      {lastPublished}
-    </Stack>
+    <div className="mt-4 grid w-fit grid-cols-[max-content_1fr] items-center gap-x-8 gap-y-2">
+      {rows.map((row) => (
+        <Fragment key={row.label}>
+          <Type muted small>
+            {row.label}
+          </Type>
+          <div>{row.value}</div>
+        </Fragment>
+      ))}
+    </div>
   );
 }
 
@@ -703,18 +1073,27 @@ function PluginServerCard({
   mcpServer,
   isLoading,
   onRemove,
+  lastPublishedAt,
 }: {
   server: PluginServer;
   toolset: ToolsetEntry | undefined;
   mcpServer: McpServer | undefined;
   isLoading: boolean;
   onRemove: () => void;
+  /** Undefined when the marketplace has never been published. */
+  lastPublishedAt: Date | undefined;
 }) {
   const routes = useRoutes();
 
   // Remote MCP-backed servers reference an mcp_server; toolset-backed servers
   // reference a toolset. Exactly one backend is set per row.
   const isRemote = !!server.mcpServerId;
+  // Approximates per-server publish freshness from the project-wide
+  // fingerprint: publish itself isn't scoped to a single server, but a
+  // server added after the last publish timestamp can't possibly be in the
+  // pushed repo yet.
+  const notYetPublished =
+    !lastPublishedAt || server.createdAt > lastPublishedAt;
   // The card is clickable only once its backing resource resolves.
   const isClickable = isRemote ? !!mcpServer : !!toolset;
 
@@ -743,11 +1122,24 @@ function PluginServerCard({
         >
           {server.displayName}
         </Type>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          {notYetPublished ? (
+            <Badge
+              variant="warning"
+              className="text-xs"
+              title="Added since the marketplace was last published"
+            >
+              Unpublished
+            </Badge>
+          ) : (
+            <Badge variant="success" className="text-xs">
+              Published
+            </Badge>
+          )}
           {isRemote ? (
             // Remote MCP servers have no Gram-side tool catalog, so the
             // tool-collection badge is omitted.
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="neutral" className="text-xs">
               Remote MCP
             </Badge>
           ) : toolset ? (

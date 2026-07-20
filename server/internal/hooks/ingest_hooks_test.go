@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -27,6 +29,24 @@ import (
 // made-up policy UUID would fail the row's risk_policies reference.
 type ingestUserScopedShadowMCPScanner struct {
 	userID string
+}
+
+type sessionCacheDeadlineRecorder struct {
+	cache.Cache
+	remaining chan time.Duration
+}
+
+func (r *sessionCacheDeadlineRecorder) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	deadline, ok := ctx.Deadline()
+	if ok {
+		r.remaining <- time.Until(deadline)
+	} else {
+		r.remaining <- 0
+	}
+	if err := r.Cache.Set(ctx, key, value, ttl); err != nil {
+		return fmt.Errorf("set cache: %w", err)
+	}
+	return nil
 }
 
 func (s ingestUserScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
@@ -86,6 +106,193 @@ func TestIngest_RequiresCurrentSchemaVersion(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, result)
 	require.Contains(t, err.Error(), "unsupported hook schema_version")
+}
+
+// A keyless request on the optional-auth ingest endpoint is acknowledged
+// without processing: hook senders must stay non-blocking for machines that
+// never signed in, and without credentials there is no org to attribute the
+// event to. Even a shadow-MCP-shaped tool request comes back "allow".
+func TestIngest_NoCredentialsFailsOpen(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestHooksService(t)
+
+	toolName := "mcp__local_server__search"
+	toolCallID := "call-keyless"
+	serverIdentity := "local-server"
+	payload := canonicalIngestPayload("claude", "tool.requested", "keyless-session")
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"query": "secret"},
+		},
+		Mcp: &gen.HookMCPData{
+			ServerIdentity: &serverIdentity,
+		},
+	}
+
+	result, err := ti.service.Ingest(t.Context(), payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "allow", result.Decision)
+}
+
+// A request that presents an API key must have it validated: a rejected key
+// is a hard 401 so the sender's credential-recovery path (org-key retry,
+// established-machine fail-closed ratchet) can react, instead of the event
+// being silently accepted or dropped.
+func TestIngest_RejectedCredentialsUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestHooksService(t)
+
+	badKey := "gram_key_expired_or_invalid"
+	slug := "default"
+	payload := canonicalIngestPayload("claude", "session.started", "bad-key-session")
+	payload.ApikeyToken = &badKey
+	payload.ProjectSlugInput = &slug
+
+	result, err := ti.service.Ingest(t.Context(), payload)
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, strings.ToLower(err.Error()), "unauthorized")
+}
+
+// A shared plugins-* key carries no usable identity of its own, but the
+// session may already be attributed through the OTEL/device-bridge metadata
+// cache. User-scoped shadow-MCP policies must see that cached identity during
+// enforcement — not only at persistence time — or per-user blocking silently
+// skips every event the shared key sends without a self-reported email.
+func TestIngest_ShadowMCPPolicyUsesCachedSessionIdentityForSharedKey(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	authCtx.APIKeyName = "plugins-hooks-20260708-120102-abc123"
+	authCtx.OrgWidePluginHooksKey = true
+
+	cachedUserID := "user_cached_owner"
+	sessionID := "canonical-shadow-mcp-cached-identity"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID: sessionID,
+		UserID:    cachedUserID,
+		UserEmail: "cached-dev@example.com",
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}, 0))
+
+	// The policy only exists for the cached user: a deny proves enforcement
+	// resolved the actor from the session cache rather than running
+	// unattributed.
+	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: cachedUserID}
+
+	toolName := "mcp__local_server__search"
+	serverIdentity := "local-server"
+	toolCallID := "call-cached-identity"
+	payload := canonicalIngestPayload("claude", "tool.requested", sessionID)
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"query": "secret"},
+		},
+		Mcp: &gen.HookMCPData{
+			ServerIdentity: &serverIdentity,
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+}
+
+// A shared-key event may self-report an email that matches no Gram user (a
+// personal or provider-account address). That claim cannot key user-scoped
+// policies, so enforcement must still recover the session's cached identity
+// rather than running unattributed.
+func TestIngest_ShadowMCPPolicyRecoversCachedIdentityForUnresolvableSharedKeyEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	authCtx.APIKeyName = "plugins-hooks-20260708-120102-abc123"
+	authCtx.OrgWidePluginHooksKey = true
+
+	cachedUserID := "user_cached_owner"
+	sessionID := "canonical-shadow-mcp-unresolvable-email"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID: sessionID,
+		UserID:    cachedUserID,
+		UserEmail: "cached-dev@example.com",
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}, 0))
+
+	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: cachedUserID}
+
+	toolName := "mcp__local_server__search"
+	serverIdentity := "local-server"
+	toolCallID := "call-unresolvable-email"
+	unresolvable := "personal-address@example.net"
+	payload := canonicalIngestPayload("claude", "tool.requested", sessionID)
+	payload.Source.UserEmail = &unresolvable
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"query": "secret"},
+		},
+		Mcp: &gen.HookMCPData{
+			ServerIdentity: &serverIdentity,
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+}
+
+// A personal key already identifies the developer: a self-reported email that
+// matches no Gram user must fall back to the key owner rather than strip
+// user-scoped policy checks from the event.
+func TestIngest_ShadowMCPPolicyFallsBackToOwnerForUnresolvablePersonalKeyEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+
+	toolName := "mcp__local_server__search"
+	serverIdentity := "local-server"
+	toolCallID := "call-personal-unresolvable"
+	unresolvable := "personal-address@example.net"
+	payload := canonicalIngestPayload("claude", "tool.requested", "canonical-shadow-mcp-personal-unresolvable")
+	payload.Source.UserEmail = &unresolvable
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"query": "secret"},
+		},
+		Mcp: &gen.HookMCPData{
+			ServerIdentity: &serverIdentity,
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
 }
 
 func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
@@ -174,6 +381,120 @@ func TestIngest_DuplicateDeliveryDoesNotMintSecondBlockRow(t *testing.T) {
 	require.NotNil(t, retry.Message)
 	require.NotContains(t, *retry.Message, "/blocks/",
 		"a duplicate delivery must not mint a second block row and URL")
+}
+
+// The canonical ingest path attributes events to the payload's self-reported
+// user email when present: plugins publish with an org-wide hooks key whose
+// token owner is the publishing admin, so the sender's own identity must win.
+func TestIngest_SelfReportedUserEmailWinsAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-self-email-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	selfEmail := "dev@example.com"
+	prompt := "hello from the dev machine"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Source.UserEmail = &selfEmail
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &prompt},
+	}
+
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, selfEmail, msgs[0].ExternalUserID.String,
+		"chat message must attribute to the self-reported email, not the token owner")
+}
+
+// A shared plugin key with no self-reported email must not attribute events to
+// the key's owner (the admin who published the plugin); the event stays
+// unattributed instead.
+func TestResolveCanonicalActor_SharedPluginKeyDoesNotUseOwnerIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	payload := canonicalIngestPayload("claude", "prompt.submitted", "actor-test")
+
+	pluginKeyCtx := *authCtx
+	pluginKeyCtx.APIKeyName = "plugins-hooks-20260708-120102-abc123"
+	pluginKeyCtx.OrgWidePluginHooksKey = true
+	actor := ti.service.resolveCanonicalActor(ctx, payload, &pluginKeyCtx)
+	require.Empty(t, actor.UserID, "shared plugin key owner must not become the actor")
+	require.Empty(t, actor.Email)
+
+	personalKeyCtx := *authCtx
+	personalKeyCtx.APIKeyName = "my-personal-key"
+	actor = ti.service.resolveCanonicalActor(ctx, payload, &personalKeyCtx)
+	require.Equal(t, authCtx.UserID, actor.UserID, "personal keys keep token-owner attribution")
+
+	selfEmail := "dev@example.com"
+	payload.Source.UserEmail = &selfEmail
+	actor = ti.service.resolveCanonicalActor(ctx, payload, &pluginKeyCtx)
+	require.Equal(t, selfEmail, actor.Email, "self-reported email attributes shared-key events")
+
+	legacyPersonalKeyCtx := *authCtx
+	legacyPersonalKeyCtx.APIKeyName = "plugins-hooks"
+	legacyPersonalKeyCtx.OrgWidePluginHooksKey = false
+	payload.Source.UserEmail = nil
+	actor = ti.service.resolveCanonicalActor(ctx, payload, &legacyPersonalKeyCtx)
+	require.Equal(t, authCtx.UserID, actor.UserID,
+		"a legacy personal key with a formerly-unrestricted plugins-* name keeps owner attribution")
+}
+
+func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	authCtx.APIKeyName = "plugins-hooks-20260713-104500-c0d3e1"
+	authCtx.OrgWidePluginHooksKey = true
+	remaining := make(chan time.Duration, 1)
+	ti.service.cache = &sessionCacheDeadlineRecorder{Cache: ti.service.cache, remaining: remaining}
+
+	userID := "user_codex_session_actor"
+	userEmail := "codex-session@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+
+	sessionID := "canonical-codex-session-" + uuid.NewString()
+	started := canonicalIngestPayload("codex", "session.started", sessionID)
+	started.Source.UserEmail = &userEmail
+	result, err := ti.service.Ingest(ctx, started)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	var cached SessionMetadata
+	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey(sessionID), &cached))
+	require.Equal(t, userID, cached.UserID)
+	require.Equal(t, userEmail, cached.UserEmail)
+	writeBudget := <-remaining
+	require.Positive(t, writeBudget, "session cache write must carry a deadline")
+	require.LessOrEqual(t, writeBudget, canonicalSessionCacheWriteTimeout)
+
+	later := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	actor := ti.service.resolveCanonicalActor(ctx, later, authCtx)
+	require.Equal(t, userID, actor.UserID,
+		"later shared-key events must recover the actor learned at SessionStart")
+	require.Equal(t, userEmail, actor.Email)
 }
 
 func TestCanonicalShadowMCPEvidence_PrefersStdioCommand(t *testing.T) {
@@ -897,4 +1218,147 @@ func TestTelemetryHookEventName_TranslatesCanonicalVocabulary(t *testing.T) {
 	// Skill activation is layered onto an ordinary tool event; the raw
 	// provider name must not erase it.
 	require.Equal(t, "skill.activated", telemetryHookEventName(withRaw("claude", "skill.activated", "PostToolUse")))
+}
+
+// TestIngest_ReplayedFlagPersistsOnChatMessage pins the DNO-499 contract: a
+// message redelivered from a device's offline spool (X-Gram-Replayed)
+// persists chat_messages.replayed=true and a live message does not — the bit
+// risk-results reads surface so findings from retroactive scanning stay
+// distinguishable from live ones.
+func TestIngest_ReplayedFlagPersistsOnChatMessage(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "replayed-flag-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	replayedPrompt := "replayed prompt from downtime backlog"
+	replayed := true
+	replayedPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	replayedPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &replayedPrompt},
+	}
+	replayedPayload.Replayed = &replayed
+	res, err := ti.service.Ingest(ctx, replayedPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	livePrompt := "live prompt after recovery"
+	livePayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	livePayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &livePrompt},
+	}
+	res, err = ti.service.Ingest(ctx, livePayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+	replayedByContent := make(map[string]bool, len(msgs))
+	for _, m := range msgs {
+		replayedByContent[m.Content] = m.Replayed
+	}
+	require.True(t, replayedByContent[replayedPrompt], "a replayed delivery must persist replayed=true")
+	require.False(t, replayedByContent[livePrompt], "a live delivery must persist replayed=false")
+}
+
+// TestIngest_ReplayedMessageSortsByOccurredAt pins the DNO-536 contract: rows
+// persist with the event's original occurred_at as created_at, so downtime
+// backlog replayed AFTER a live event still sorts BEFORE it in transcript
+// order — arrival order must not decide conversation order. A future
+// occurred_at (skewed device clock) is clamped to arrival time so it cannot
+// sort past rows that come after it.
+func TestIngest_ReplayedMessageSortsByOccurredAt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "occurred-at-order-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+
+	// The live event arrives FIRST but occurred later — the recovery case:
+	// the send that proves the control plane is back precedes the drain.
+	livePrompt := "i need you"
+	liveAt := time.Now().UTC().Format(time.RFC3339Nano)
+	livePayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	livePayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &livePrompt},
+	}
+	livePayload.Event.OccurredAt = &liveAt
+	res, err := ti.service.Ingest(ctx, livePayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	// The backlog event arrives SECOND but occurred five minutes earlier.
+	backlogPrompt := "nothing, just chilling"
+	backlogAt := time.Now().UTC().Add(-5 * time.Minute).Format(time.RFC3339Nano)
+	replayed := true
+	backlogPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	backlogPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &backlogPrompt},
+	}
+	backlogPayload.Event.OccurredAt = &backlogAt
+	backlogPayload.Replayed = &replayed
+	res, err = ti.service.Ingest(ctx, backlogPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	// A skewed clock cannot push a row into the future.
+	skewedPrompt := "from the future"
+	skewedAt := time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano)
+	skewedPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	skewedPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &skewedPrompt},
+	}
+	skewedPayload.Event.OccurredAt = &skewedAt
+	res, err = ti.service.Ingest(ctx, skewedPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	// Nor arbitrarily far into the past: occurred_at is client-controlled,
+	// and without a floor one hostile/broken clock would pin a row to the
+	// head of the transcript forever. The floor mirrors the client spool's
+	// 14-day expiry — no legitimate replay is older.
+	ancientPrompt := "from the distant past"
+	ancientAt := time.Now().UTC().Add(-30 * 24 * time.Hour).Format(time.RFC3339Nano)
+	ancientPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	ancientPayload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &ancientPrompt},
+	}
+	ancientPayload.Event.OccurredAt = &ancientAt
+	res, err = ti.service.Ingest(ctx, ancientPayload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 4)
+	require.Equal(t, ancientPrompt, msgs[0].Content, "a floored past event still sorts oldest")
+	require.Equal(t, backlogPrompt, msgs[1].Content, "the older backlog message must sort before the live event despite arriving second")
+	require.Equal(t, livePrompt, msgs[2].Content)
+	require.Equal(t, skewedPrompt, msgs[3].Content)
+
+	wantBacklogAt, err := time.Parse(time.RFC3339Nano, backlogAt)
+	require.NoError(t, err)
+	require.WithinDuration(t, wantBacklogAt, msgs[1].CreatedAt.Time, time.Second, "created_at must carry the event's occurred_at")
+	require.WithinDuration(t, time.Now(), msgs[3].CreatedAt.Time, 30*time.Second, "a future occurred_at must be clamped to arrival time")
+	require.WithinDuration(t, time.Now().Add(-14*24*time.Hour), msgs[0].CreatedAt.Time, 30*time.Second, "a far-past occurred_at must be floored to the 14-day backdate bound")
 }

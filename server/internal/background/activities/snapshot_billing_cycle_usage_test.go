@@ -2,12 +2,12 @@ package activities_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -64,20 +63,20 @@ func (c *captureLoopsClient) FailNext(n int) {
 	c.failNext = n
 }
 
-func setupSnapshotBillingCycleUsageTest(t *testing.T, dbName string) (act *activities.SnapshotBillingCycleUsage, conn *pgxpool.Pool, telemetryQueries *telemetryrepo.Queries, orgID string, projectID uuid.UUID) {
+func setupSnapshotBillingCycleUsageTest(t *testing.T, dbName string) (act *activities.SnapshotBillingCycleUsage, conn *pgxpool.Pool, chConn clickhouse.Conn, orgID string, projectID uuid.UUID) {
 	t.Helper()
-	act, conn, telemetryQueries, orgID, projectID, _ = setupSnapshotBillingCycleUsageTestWithEmail(t, dbName)
-	return act, conn, telemetryQueries, orgID, projectID
+	act, conn, chConn, orgID, projectID, _ = setupSnapshotBillingCycleUsageTestWithEmail(t, dbName)
+	return act, conn, chConn, orgID, projectID
 }
 
-func setupSnapshotBillingCycleUsageTestWithEmail(t *testing.T, dbName string) (act *activities.SnapshotBillingCycleUsage, conn *pgxpool.Pool, telemetryQueries *telemetryrepo.Queries, orgID string, projectID uuid.UUID, captured *captureLoopsClient) {
+func setupSnapshotBillingCycleUsageTestWithEmail(t *testing.T, dbName string) (act *activities.SnapshotBillingCycleUsage, conn *pgxpool.Pool, chConn clickhouse.Conn, orgID string, projectID uuid.UUID, captured *captureLoopsClient) {
 	t.Helper()
 	ctx := t.Context()
 
 	conn, err := infra.CloneTestDatabase(t, dbName)
 	require.NoError(t, err)
 
-	chConn, err := infra.NewClickhouseClient(t)
+	chConn, err = infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
 	redisClient, err := infra.NewRedisClient(t, 0)
@@ -109,67 +108,57 @@ func setupSnapshotBillingCycleUsageTestWithEmail(t *testing.T, dbName string) (a
 		email.NewService(testenv.NewLogger(t), captured),
 	)
 
-	return act, conn, telemetryrepo.New(chConn), orgID, project.ID, captured
+	return act, conn, chConn, orgID, project.ID, captured
 }
 
-// insertTUMTelemetryRow inserts a raw telemetry_logs row. The
-// chat_token_summaries materialized view derives the chat id from
-// attributes["gen_ai.conversation.id"].
-func insertTUMTelemetryRow(t *testing.T, ctx context.Context, queries *telemetryrepo.Queries, projectID string, timestamp time.Time, gramURN string, attributes map[string]any) {
+// insertStoredSession seeds an observed Claude Code session directly into the
+// tokens-under-management population (attribute_metrics_summaries), with the
+// tokens landing as input so the TUM measure counts exactly totalTokens.
+//
+// It writes the aggregate row directly rather than a raw telemetry_logs row
+// routed through attribute_metrics_summaries_mv: the MV only admits event time
+// >= its ingestion cutoff (2026-07-14 00:00:00 UTC; see
+// server/clickhouse/schema.sql), but these tests read the *active billing
+// cycle* anchored to the real wall clock. Seeding directly at timestamp (real
+// now) keeps the row inside the active cycle regardless of where the cutoff
+// sits. generation 0 / is_active 1 match a live MV row.
+func insertStoredSession(t *testing.T, ctx context.Context, chConn clickhouse.Conn, projectID string, timestamp time.Time, totalTokens int) {
 	t.Helper()
 
-	attrsJSON, err := json.Marshal(attributes)
+	err := chConn.Exec(ctx, `
+		INSERT INTO attribute_metrics_summaries
+		SELECT
+			toUUID(?) AS gram_project_id,
+			toStartOfHour(fromUnixTimestamp64Nano(?)) AS time_bucket,
+			'' AS department_name, '' AS job_title, '' AS employee_type,
+			'' AS division_name, '' AS cost_center_name,
+			'' AS user_email, 'claude-4.6' AS model, 'claude-code' AS hook_source,
+			[]::Array(String) AS roles, []::Array(String) AS groups,
+			uniqExactIfState(toString('stored-session'), toUInt8(1)) AS total_chats,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS total_output_tokens,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_read_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_creation_input_tokens,
+			sumIfState(toFloat64(0), toUInt8(1)) AS total_cost,
+			countIfState(toUInt8(0)) AS total_tool_calls,
+			uniqExactIfState(toString(''), toUInt8(0)) AS unique_tool_calls,
+			'' AS account_type, '' AS provider, '' AS billing_mode,
+			'' AS query_source, '' AS skill_name, '' AS agent_name,
+			'' AS mcp_server_name, '' AS mcp_tool_name,
+			toUInt8(0) AS generation, toUInt8(1) AS is_active
+	`, projectID, timestamp.UnixNano(), totalTokens, totalTokens)
 	require.NoError(t, err)
-
-	err = queries.InsertTelemetryLog(ctx, telemetryrepo.InsertTelemetryLogParams{
-		ID:                   uuid.NewString(),
-		TimeUnixNano:         timestamp.UnixNano(),
-		ObservedTimeUnixNano: timestamp.UnixNano(),
-		SeverityText:         nil,
-		Body:                 "tum snapshot test",
-		TraceID:              nil,
-		SpanID:               nil,
-		Attributes:           string(attrsJSON),
-		ResourceAttributes:   "{}",
-		GramProjectID:        projectID,
-		GramDeploymentID:     nil,
-		GramFunctionID:       nil,
-		GramURN:              gramURN,
-		ServiceName:          "gram-test",
-		ServiceVersion:       nil,
-		GramChatID:           nil,
-	})
-	require.NoError(t, err)
-}
-
-// insertStoredSession inserts token-usage rows plus a tool-call row for a chat
-// so the session qualifies as "stored" and counts toward TUM.
-func insertStoredSession(t *testing.T, ctx context.Context, queries *telemetryrepo.Queries, projectID string, timestamp time.Time, totalTokens int) {
-	t.Helper()
-
-	chatID := uuid.NewString()
-	insertTUMTelemetryRow(t, ctx, queries, projectID, timestamp, "chat:completion", map[string]any{
-		"gen_ai.conversation.id":     chatID,
-		"gen_ai.usage.input_tokens":  totalTokens / 2,
-		"gen_ai.usage.output_tokens": totalTokens - totalTokens/2,
-		"gen_ai.usage.total_tokens":  totalTokens,
-		"gram.resource.urn":          "chat:completion",
-	})
-	insertTUMTelemetryRow(t, ctx, queries, projectID, timestamp, "tools:http:petstore:listPets", map[string]any{
-		"gen_ai.conversation.id":    chatID,
-		"gram.tool.urn":             "tools:http:petstore:listPets",
-		"http.response.status_code": 200,
-	})
 }
 
 func TestSnapshotBillingCycleUsage_SnapshotsTrailingCycles(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	act, conn, telemetryQueries, orgID, projectID := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_cycles")
+	act, conn, chConn, orgID, projectID := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_cycles")
 	queries := usagerepo.New(conn)
 
-	insertStoredSession(t, ctx, telemetryQueries, projectID.String(), time.Now().UTC(), 450)
+	insertStoredSession(t, ctx, chConn, projectID.String(), time.Now().UTC(), 450)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		if !assert.NoError(c, act.Do(ctx, []string{orgID})) {
@@ -283,10 +272,10 @@ func TestSnapshotBillingCycleUsage_IncludesDeletedProjects(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	act, conn, telemetryQueries, orgID, projectID := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_deleted_project")
+	act, conn, chConn, orgID, projectID := setupSnapshotBillingCycleUsageTest(t, "snapshot_billing_deleted_project")
 	queries := usagerepo.New(conn)
 
-	insertStoredSession(t, ctx, telemetryQueries, projectID.String(), time.Now().UTC(), 300)
+	insertStoredSession(t, ctx, chConn, projectID.String(), time.Now().UTC(), 300)
 
 	// Deleting the project mid-cycle must not erase its usage from the
 	// billing record: the tokens were consumed while it was live.

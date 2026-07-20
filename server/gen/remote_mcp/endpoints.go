@@ -23,6 +23,11 @@ type Endpoints struct {
 	DiscoverProtectedResourceMetadata goa.Endpoint
 	VerifyURL                         goa.Endpoint
 	DeleteServer                      goa.Endpoint
+	ListServerHeaders                 goa.Endpoint
+	GetServerHeader                   goa.Endpoint
+	CreateServerHeader                goa.Endpoint
+	UpdateServerHeader                goa.Endpoint
+	DeleteServerHeader                goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "remoteMcp" service with endpoints.
@@ -37,6 +42,11 @@ func NewEndpoints(s Service) *Endpoints {
 		DiscoverProtectedResourceMetadata: NewDiscoverProtectedResourceMetadataEndpoint(s, a.APIKeyAuth),
 		VerifyURL:                         NewVerifyURLEndpoint(s, a.APIKeyAuth),
 		DeleteServer:                      NewDeleteServerEndpoint(s, a.APIKeyAuth),
+		ListServerHeaders:                 NewListServerHeadersEndpoint(s, a.APIKeyAuth),
+		GetServerHeader:                   NewGetServerHeaderEndpoint(s, a.APIKeyAuth),
+		CreateServerHeader:                NewCreateServerHeaderEndpoint(s, a.APIKeyAuth),
+		UpdateServerHeader:                NewUpdateServerHeaderEndpoint(s, a.APIKeyAuth),
+		DeleteServerHeader:                NewDeleteServerHeaderEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -49,6 +59,11 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DiscoverProtectedResourceMetadata = m(e.DiscoverProtectedResourceMetadata)
 	e.VerifyURL = m(e.VerifyURL)
 	e.DeleteServer = m(e.DeleteServer)
+	e.ListServerHeaders = m(e.ListServerHeaders)
+	e.GetServerHeader = m(e.GetServerHeader)
+	e.CreateServerHeader = m(e.CreateServerHeader)
+	e.UpdateServerHeader = m(e.UpdateServerHeader)
+	e.DeleteServerHeader = m(e.DeleteServerHeader)
 }
 
 // NewCreateServerEndpoint returns an endpoint function that calls the method
@@ -82,7 +97,7 @@ func NewCreateServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -141,7 +156,7 @@ func NewListServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -200,7 +215,7 @@ func NewGetServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -259,7 +274,7 @@ func NewUpdateServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -319,7 +334,7 @@ func NewDiscoverProtectedResourceMetadataEndpoint(s Service, authAPIKeyFn securi
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -378,7 +393,7 @@ func NewVerifyURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -437,7 +452,7 @@ func NewDeleteServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -462,5 +477,300 @@ func NewDeleteServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return nil, s.DeleteServer(ctx, p)
+	}
+}
+
+// NewListServerHeadersEndpoint returns an endpoint function that calls the
+// method "listServerHeaders" of service "remoteMcp".
+func NewListServerHeadersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListServerHeadersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListServerHeaders(ctx, p)
+	}
+}
+
+// NewGetServerHeaderEndpoint returns an endpoint function that calls the
+// method "getServerHeader" of service "remoteMcp".
+func NewGetServerHeaderEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetServerHeaderPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetServerHeader(ctx, p)
+	}
+}
+
+// NewCreateServerHeaderEndpoint returns an endpoint function that calls the
+// method "createServerHeader" of service "remoteMcp".
+func NewCreateServerHeaderEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateServerHeaderPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateServerHeader(ctx, p)
+	}
+}
+
+// NewUpdateServerHeaderEndpoint returns an endpoint function that calls the
+// method "updateServerHeader" of service "remoteMcp".
+func NewUpdateServerHeaderEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateServerHeaderPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateServerHeader(ctx, p)
+	}
+}
+
+// NewDeleteServerHeaderEndpoint returns an endpoint function that calls the
+// method "deleteServerHeader" of service "remoteMcp".
+func NewDeleteServerHeaderEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteServerHeaderPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteServerHeader(ctx, p)
 	}
 }

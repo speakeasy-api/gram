@@ -41,31 +41,46 @@ describe("autoConfigureRemoteMcpAuth", () => {
     });
     // The server already owns its USI from setup — auto-config never makes one.
     expect(client.userSessionIssuers.create).not.toHaveBeenCalled();
-    expect(client.remoteSessionIssuers.create).toHaveBeenCalledWith({
-      createRemoteSessionIssuerForm: expect.objectContaining({
-        issuer: "https://idp.example.com",
-        name: "idp.example.com",
-        authorizationEndpoint: "https://idp.example.com/authorize",
-        tokenEndpoint: "https://idp.example.com/token",
-        registrationEndpoint: "https://idp.example.com/register",
-      }),
-    });
-    expect(client.remoteSessionClients.create).toHaveBeenCalledWith({
-      createRemoteSessionClientForm: expect.objectContaining({
-        remoteSessionIssuerId: "created-issuer",
-        userSessionIssuerIds: ["server-usi"],
-        clientId: "client-from-dcr",
-        clientSecret: "secret-from-dcr",
-        tokenEndpointAuthMethod: "client_secret_post",
-      }),
-    });
-    expect(client.mcpServers.update).toHaveBeenCalledWith({
-      updateMcpServerForm: expect.objectContaining({
-        id: "mcp-server-1",
-        visibility: "private",
-        userSessionIssuerId: "server-usi",
-      }),
-    });
+    expect(client.remoteSessionIssuers.create).toHaveBeenCalledWith(
+      {
+        createRemoteSessionIssuerForm: expect.objectContaining({
+          issuer: "https://idp.example.com",
+          name: "idp.example.com",
+          authorizationEndpoint: "https://idp.example.com/authorize",
+          tokenEndpoint: "https://idp.example.com/token",
+          registrationEndpoint: "https://idp.example.com/register",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    expect(client.remoteSessionClients.create).toHaveBeenCalledWith(
+      {
+        createRemoteSessionClientForm: expect.objectContaining({
+          remoteSessionIssuerId: "created-issuer",
+          userSessionIssuerIds: ["server-usi"],
+          clientId: "client-from-dcr",
+          clientSecret: "secret-from-dcr",
+          tokenEndpointAuthMethod: "client_secret_post",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    expect(client.mcpServers.update).toHaveBeenCalledWith(
+      {
+        updateMcpServerForm: expect.objectContaining({
+          id: "mcp-server-1",
+          visibility: "private",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    // The update payload must not carry the issuer.
+    expect(
+      client.mcpServers.update.mock.calls[0]?.[0]?.updateMcpServerForm,
+    ).not.toHaveProperty("userSessionIssuerId");
   });
 
   it("reuses a project issuer over an org issuer and stores resource scopes", async () => {
@@ -98,23 +113,30 @@ describe("autoConfigureRemoteMcpAuth", () => {
       scope: "resource.read resource.write",
       tokenEndpointAuthMethod: "client_secret_post",
     });
-    expect(client.remoteSessionClients.create).toHaveBeenCalledWith({
-      createRemoteSessionClientForm: expect.objectContaining({
-        remoteSessionIssuerId: "project-issuer",
-        userSessionIssuerIds: ["server-usi"],
-        clientId: "client-from-dcr",
-        clientSecret: "secret-from-dcr",
-        tokenEndpointAuthMethod: "client_secret_post",
-        scope: ["resource.read", "resource.write"],
-      }),
-    });
-    expect(client.mcpServers.update).toHaveBeenCalledWith({
-      updateMcpServerForm: expect.objectContaining({
-        id: "mcp-server-1",
-        visibility: "private",
-        userSessionIssuerId: "server-usi",
-      }),
-    });
+    expect(client.remoteSessionClients.create).toHaveBeenCalledWith(
+      {
+        createRemoteSessionClientForm: expect.objectContaining({
+          remoteSessionIssuerId: "project-issuer",
+          userSessionIssuerIds: ["server-usi"],
+          clientId: "client-from-dcr",
+          clientSecret: "secret-from-dcr",
+          tokenEndpointAuthMethod: "client_secret_post",
+          scope: ["resource.read", "resource.write"],
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    expect(client.mcpServers.update).toHaveBeenCalledWith(
+      {
+        updateMcpServerForm: expect.objectContaining({
+          id: "mcp-server-1",
+          visibility: "private",
+        }),
+      },
+      undefined,
+      undefined,
+    );
   });
 
   it("does not normalize issuer matches beyond trailing slashes", async () => {
@@ -137,12 +159,16 @@ describe("autoConfigureRemoteMcpAuth", () => {
 
     expect(result.status).toBe("configured");
     expect(client.remoteSessionIssuers.create).toHaveBeenCalled();
-    expect(client.remoteSessionClients.create).toHaveBeenCalledWith({
-      createRemoteSessionClientForm: expect.objectContaining({
-        remoteSessionIssuerId: "created-issuer",
-        userSessionIssuerIds: ["server-usi"],
-      }),
-    });
+    expect(client.remoteSessionClients.create).toHaveBeenCalledWith(
+      {
+        createRemoteSessionClientForm: expect.objectContaining({
+          remoteSessionIssuerId: "created-issuer",
+          userSessionIssuerIds: ["server-usi"],
+        }),
+      },
+      undefined,
+      undefined,
+    );
   });
 
   it("skips before discovery when the server has no user session issuer", async () => {
@@ -279,9 +305,13 @@ describe("autoConfigureRemoteMcpAuth", () => {
     });
     // The freshly-created issuer is rolled back; the server's permanent USI is
     // never deleted.
-    expect(client.remoteSessionIssuers.delete).toHaveBeenCalledWith({
-      id: "created-issuer",
-    });
+    expect(client.remoteSessionIssuers.delete).toHaveBeenCalledWith(
+      {
+        id: "created-issuer",
+      },
+      undefined,
+      undefined,
+    );
     expect(client.userSessionIssuers.delete).not.toHaveBeenCalled();
     expect(client.mcpServers.update).not.toHaveBeenCalled();
   });
@@ -391,7 +421,6 @@ function remoteMcpServer(): RemoteMcpServer {
     projectId: "project-1",
     url: "https://remote.example.com/mcp",
     transportType: "streamable-http",
-    headers: [],
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };

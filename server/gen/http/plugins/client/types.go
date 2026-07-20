@@ -104,8 +104,12 @@ type GetPluginResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -127,8 +131,12 @@ type CreatePluginResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -150,8 +158,12 @@ type UpdatePluginResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -227,6 +239,16 @@ type GetPublishStatusResponseBody struct {
 	// Present once a marketplace token has been minted, which happens
 	// automatically on the first publish.
 	MarketplaceURL *string `form:"marketplace_url,omitempty" json:"marketplace_url,omitempty" xml:"marketplace_url,omitempty"`
+	// Slug of the generated Claude Code observability plugin in the published
+	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+	ClaudeObservabilityPlugin *string `form:"claude_observability_plugin,omitempty" json:"claude_observability_plugin,omitempty" xml:"claude_observability_plugin,omitempty"`
+	// Slug of the generated Codex observability plugin in the published
+	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+	CodexObservabilityPlugin *string `form:"codex_observability_plugin,omitempty" json:"codex_observability_plugin,omitempty" xml:"codex_observability_plugin,omitempty"`
+	// Whether the repo has at least one directly-added GitHub collaborator
+	// (excludes access granted via org membership/teams). Absent when the project
+	// is not connected.
+	HasCollaborators *bool `form:"has_collaborators,omitempty" json:"has_collaborators,omitempty" xml:"has_collaborators,omitempty"`
 	// Whether the project's current plugin state matches what was last published
 	// to GitHub. Absent when the project is not connected, or when the connection
 	// predates content fingerprinting (freshness can't be determined).
@@ -234,6 +256,11 @@ type GetPublishStatusResponseBody struct {
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string `form:"last_published_at,omitempty" json:"last_published_at,omitempty" xml:"last_published_at,omitempty"`
+	// Version stamped into the currently published plugin.json manifests (e.g.
+	// 0.1.1783692954) — the version plugin clients such as Claude Code report for
+	// installed plugins. Absent when the project is not connected or the live
+	// version could not be determined.
+	LiveVersion *string `form:"live_version,omitempty" json:"live_version,omitempty" xml:"live_version,omitempty"`
 }
 
 // PublishPluginsResponseBody is the type of the "plugins" service
@@ -264,6 +291,11 @@ type UpdateMarketplaceSettingsResponseBody struct {
 	// Whether the marketplace was automatically republished to GitHub as part of
 	// this update.
 	Republished *bool `form:"republished,omitempty" json:"republished,omitempty" xml:"republished,omitempty"`
+	// True when the new name reached the MCP plugins and marketplace manifests but
+	// the observability (hooks) plugin could not be updated yet because the
+	// organization is not approved for the latest hooks version; it will update
+	// automatically once the organization is rolled forward.
+	HooksUpdateDeferred *bool `form:"hooks_update_deferred,omitempty" json:"hooks_update_deferred,omitempty" xml:"hooks_update_deferred,omitempty"`
 }
 
 // ListPluginsUnauthorizedResponseBody is the type of the "plugins" service
@@ -3242,8 +3274,12 @@ type PluginResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
 	// Servers included in this plugin.
@@ -3583,7 +3619,9 @@ func NewGetPluginPluginOK(body *GetPluginResponseBody) *plugins.Plugin {
 		Name:            *body.Name,
 		Slug:            *body.Slug,
 		Description:     body.Description,
+		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
+		SkillCount:      body.SkillCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3770,7 +3808,9 @@ func NewCreatePluginPluginCreated(body *CreatePluginResponseBody) *plugins.Plugi
 		Name:            *body.Name,
 		Slug:            *body.Slug,
 		Description:     body.Description,
+		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
+		SkillCount:      body.SkillCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3957,7 +3997,9 @@ func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
 		Name:            *body.Name,
 		Slug:            *body.Slug,
 		Description:     body.Description,
+		IsDefault:       body.IsDefault,
 		ServerCount:     body.ServerCount,
+		SkillCount:      body.SkillCount,
 		AssignmentCount: body.AssignmentCount,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -5418,14 +5460,18 @@ func NewDownloadCodexInstallScriptGatewayError(body *DownloadCodexInstallScriptG
 // "getPublishStatus" endpoint result from a HTTP "OK" response.
 func NewGetPublishStatusPublishStatusResultOK(body *GetPublishStatusResponseBody) *plugins.PublishStatusResult {
 	v := &plugins.PublishStatusResult{
-		Configured:      *body.Configured,
-		Connected:       *body.Connected,
-		RepoOwner:       body.RepoOwner,
-		RepoName:        body.RepoName,
-		RepoURL:         body.RepoURL,
-		MarketplaceURL:  body.MarketplaceURL,
-		UpToDate:        body.UpToDate,
-		LastPublishedAt: body.LastPublishedAt,
+		Configured:                *body.Configured,
+		Connected:                 *body.Connected,
+		RepoOwner:                 body.RepoOwner,
+		RepoName:                  body.RepoName,
+		RepoURL:                   body.RepoURL,
+		MarketplaceURL:            body.MarketplaceURL,
+		ClaudeObservabilityPlugin: body.ClaudeObservabilityPlugin,
+		CodexObservabilityPlugin:  body.CodexObservabilityPlugin,
+		HasCollaborators:          body.HasCollaborators,
+		UpToDate:                  body.UpToDate,
+		LastPublishedAt:           body.LastPublishedAt,
+		LiveVersion:               body.LiveVersion,
 	}
 
 	return v
@@ -5907,7 +5953,8 @@ func NewGetMarketplaceSettingsGatewayError(body *GetMarketplaceSettingsGatewayEr
 // "updateMarketplaceSettings" endpoint result from a HTTP "OK" response.
 func NewUpdateMarketplaceSettingsResultOK(body *UpdateMarketplaceSettingsResponseBody) *plugins.UpdateMarketplaceSettingsResult {
 	v := &plugins.UpdateMarketplaceSettingsResult{
-		Republished: *body.Republished,
+		Republished:         *body.Republished,
+		HooksUpdateDeferred: body.HooksUpdateDeferred,
 	}
 	v.Settings = unmarshalMarketplaceSettingsResultResponseBodyToPluginsMarketplaceSettingsResult(body.Settings)
 

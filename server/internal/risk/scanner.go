@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -35,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
 
 // RiskScanner checks text against blocking risk policies.
@@ -91,8 +91,8 @@ type ShadowMCPPolicy struct {
 //
 // CAVEAT: via %{match} the value does reach the agent's permission prompt
 // (Claude permissionDecisionReason/SystemMessage; Cursor/Codex UserMessage/
-// AgentMessage) and therefore the local agent transcript. That is by design —
-// the human needs to see what tripped the challenge — but it means the
+// AgentMessage) and therefore the local agent transcript. That is by design -
+// the human needs to see what tripped the challenge - but it means the
 // "never leaves the server" invariant is scoped to Gram's own persistence, not
 // the agent host. Any Gram-side ingestion that captures permission-prompt or
 // transcript content (e.g. a future session-replay path) MUST scrub %{match}
@@ -107,7 +107,7 @@ type ScanResult struct {
 	Description string
 	UserMessage *string // optional override for the rendered block/warn message
 
-	// Sensitive — see the type doc. Only for the ephemeral warn render.
+	// Sensitive - see the type doc. Only for the ephemeral warn render.
 	MatchedValue string
 	Entity       string
 
@@ -174,8 +174,8 @@ type Scanner struct {
 	gitleaks          *gitleaks.Scanner           // warm at startup, reused across scans
 	customRuleScanner *customruleanalyzer.Scanner // required; evaluates custom CEL detection rules
 	piiScanner        ra.PIIScanner               // nil if Presidio is unavailable
-	piScanner         *promptinjection.Scanner    // never nil; stub-classifier when L1 disabled
-	judge             ra.PromptJudge              // nil-safe; guarded at the call site
+	piScanner         *promptinjection.Scanner    // never nil
+	promptPolicy      *promptpolicy.Scanner       // nil-safe; owns prompt policy finding decisions
 	flags             feature.Provider            // nil disables prompt_based enforcement
 	metrics           *scannerMetrics
 	celEng            *celenv.Engine
@@ -183,8 +183,8 @@ type Scanner struct {
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
-// is not available in the server process. piScanner must be non-nil; pass a
-// scanner built with a nil engine to run L0 heuristics only.
+// is not available in the server process. piScanner must be non-nil; a nil
+// classifier fails open through NoopClassifier.
 // Primes the gitleaks detector to avoid per-scan rule compilation on the
 // real-time hook path; returns an error if the detector cannot be built
 // (init relies on viper global state and should never realistically fail,
@@ -197,12 +197,12 @@ func NewScanner(
 	customRuleScanner *customruleanalyzer.Scanner,
 	piiScanner ra.PIIScanner,
 	piScanner *promptinjection.Scanner,
-	judge ra.PromptJudge,
+	promptPolicy *promptpolicy.Scanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
 ) (*Scanner, error) {
 	if piScanner == nil {
-		piScanner = promptinjection.NewScanner(logger, promptinjection.NoopEngine)
+		piScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 	}
 
 	gitleaksScanner := gitleaks.NewScanner()
@@ -223,7 +223,7 @@ func NewScanner(
 		gitleaks:          gitleaksScanner,
 		piiScanner:        piiScanner,
 		piScanner:         piScanner,
-		judge:             judge,
+		promptPolicy:      promptPolicy,
 		flags:             flags,
 		metrics:           newScannerMetrics(meterProvider, logger),
 		celEng:            celEng,
@@ -285,8 +285,8 @@ func (s *Scanner) ScanForEnforcement(
 	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
 	// fan-out) so prompt_based policies don't each repeat the slug lookup and
 	// so the lookup is never cancelled by a sibling match. Gated on the exact
-	// condition under which the fan-out would run the judge — a prompt_based
-	// policy whose message_types apply to this message — so the lookup is
+	// condition under which the fan-out would run the judge - a prompt_based
+	// policy whose message_types apply to this message - so the lookup is
 	// skipped entirely for scans that can never enforce one. message_types gates
 	// candidacy; scope_include narrows further per-message in scanPolicy.
 	inMessageScope := func(p repo.RiskPolicy) bool {
@@ -302,18 +302,8 @@ func (s *Scanner) ScanForEnforcement(
 		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
 	}
 
-	// Same once-per-scan resolution for the L1 prompt-injection engine: gate on
-	// a standard policy whose prompt_injection source applies to this message,
-	// so the slug/flag lookup is skipped for scans that can never run L1.
-	piEngineOn := false
-	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType != ra.PolicyTypePromptBased &&
-			slices.Contains(p.Sources, ra.SourcePromptInjection) &&
-			(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
-	}) {
-		piEngineOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptInjectionUseClassifier)
-	}
-
+	// Same once-per-scan resolution for the recommended-scopes flag: category
+	// detection scopes compose only when the project has opted in.
 	recommendedScopesOn := false
 	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
 		return inMessageScope(p)
@@ -322,7 +312,7 @@ func (s *Scanner) ScanForEnforcement(
 	}
 
 	// Fan out across policies. The first goroutine that finds a match returns
-	// errMatchFound, which causes errgroup to cancel its context — sibling
+	// errMatchFound, which causes errgroup to cancel its context - sibling
 	// goroutines stop their in-flight Presidio HTTP calls early instead of
 	// finishing uselessly. Gitleaks scans serialize inside s.gitleaks (the v8
 	// detector is not concurrent-safe); the real win is Presidio fan-out.
@@ -346,7 +336,7 @@ func (s *Scanner) ScanForEnforcement(
 		}
 
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, text, messageType, toolName, promptPoliciesOn, piEngineOn, recommendedScopesOn)
+			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, recommendedScopesOn)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -470,10 +460,10 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // scanPolicy runs a policy's sources sequentially. Gitleaks holds a mutex
 // (the v8 detector mutates internal state), so concurrent gitleaks calls
 // serialize anyway, and PresidioClient.AnalyzeBatch is invoked with a single
-// text per call — its internal worker pool only fans out when n > 1, so
+// text per call - its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool, recommendedScopesOn bool) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool, recommendedScopesOn bool) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -519,10 +509,10 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	categoryScope := ra.NewCategoryScope(app, s.recommended, specified, recommendedScopesOn)
 
 	if policy.PolicyType == ra.PolicyTypePromptBased {
-		if !categoryScope.SourceInScope(view, ra.SourceLLMJudge) {
+		if !categoryScope.SourceInScope(view, promptpolicy.Source) {
 			return nil, nil
 		}
-		return s.scanPromptPolicy(ctx, policy, text, messageType, toolName, promptPoliciesOn), nil
+		return s.scanPromptPolicy(ctx, policy, userID, text, messageType, toolName, promptPoliciesOn), nil
 	}
 
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
@@ -615,7 +605,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				}
 			}
 		case ra.SourcePromptInjection:
-			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), judgemessage.New(messageType, toolName, text), piEngineOn)
+			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), userID, judgemessage.New(messageType, toolName, text))
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
@@ -660,35 +650,34 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 // filtered policies to those whose message_types apply to this message, so the
 // judge runs for whatever message types the policy declares. Returns nil when
 // the judge does not match (including fail-open on judge error).
-func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
-	cfg := ra.ParseJudgeConfig(policy.ModelConfig)
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
+	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !promptPoliciesOn {
 		return nil
 	}
-	if s.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
-		return promptPolicyUnavailableResult(policy, messageType, cfg)
+	prompt := ""
+	if policy.Prompt.Valid {
+		prompt = policy.Prompt.String
 	}
-
-	verdict := s.judge.Evaluate(ctx, ra.JudgeInput{
-		OrgID:     policy.OrganizationID,
-		ProjectID: policy.ProjectID.String(),
-		Prompt:    policy.Prompt.String,
+	var findings []scanners.Finding
+	if s.promptPolicy != nil {
 		// text is the type-appropriate body the hook layer already flattened:
 		// the prompt for user messages, tool-input JSON for tool_request,
 		// tool-output JSON for tool_response.
-		Message: judgemessage.New(messageType, toolName, text),
-		Config:  cfg,
-	})
-	if verdict == nil || !verdict.Matched {
+		findings = s.promptPolicy.Scan(ctx, policy.OrganizationID, policy.ProjectID.String(), userID, prompt, cfg, judgemessage.New(messageType, toolName, text))
+	} else {
+		findings = promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
+	}
+	if len(findings) == 0 {
 		return nil
 	}
 
-	finding := ra.JudgeFinding(*verdict)
+	finding := findings[0]
 	return &ScanResult{
 		Action:      policy.Action,
 		PolicyID:    policy.ID.String(),
 		PolicyName:  policy.Name,
-		Source:      ra.SourceLLMJudge,
+		Source:      promptpolicy.Source,
 		MessageType: messageType,
 		RuleID:      finding.RuleID,
 		Description: finding.Description,
@@ -702,26 +691,6 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 
 func (s *Scanner) projectFlagEnabled(ctx context.Context, orgID string, projectID uuid.UUID, flag feature.Flag) bool {
 	return policyflags.ProjectFlagEnabled(ctx, s.logger, s.repo, s.flags, orgID, projectID, flag)
-}
-
-func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.Type, cfg ra.JudgeConfig) *ScanResult {
-	if cfg.FailOpen {
-		return nil
-	}
-	return &ScanResult{
-		Action:      policy.Action,
-		PolicyID:    policy.ID.String(),
-		PolicyName:  policy.Name,
-		Source:      ra.SourceLLMJudge,
-		MessageType: messageType,
-		RuleID:      ra.RuleLLMJudge,
-		Description: "Policy judge was unavailable; flagged by fail-closed policy.",
-		UserMessage: conv.FromPGText[string](policy.UserMessage),
-		// No literal match for a fail-closed judge result.
-		MatchedValue:    "",
-		Entity:          ra.RuleLLMJudge,
-		CallFingerprint: "",
-	}
 }
 
 func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]scanners.Finding, error) {

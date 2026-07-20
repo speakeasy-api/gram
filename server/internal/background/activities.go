@@ -42,9 +42,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
-	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -55,9 +55,11 @@ import (
 )
 
 type Publishers struct {
-	PresidioAnalysis    gcp.Publisher[*riskv1.PresidioAnalysis]
-	GitleaksAnalysis    gcp.Publisher[*riskv1.GitleaksAnalysis]
-	CustomRulesAnalysis gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	PresidioAnalysis        gcp.Publisher[*riskv1.PresidioAnalysis]
+	GitleaksAnalysis        gcp.Publisher[*riskv1.GitleaksAnalysis]
+	PromptInjectionAnalysis gcp.Publisher[*riskv1.PromptInjectionAnalysis]
+	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
+	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
 }
 
 type Activities struct {
@@ -68,8 +70,11 @@ type Activities struct {
 	customDomainIngress             *activities.CustomDomainIngress
 	defaultCustomDomainProvisioner  k8s.ProvisionerKind
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
+	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	correlateClaudePrompts          *activities.CorrelateClaudePrompts
+	promoteStagedTelemetry          *activities.PromoteStagedTelemetry
+	listStagedTelemetryProjects     *activities.ListStagedTelemetryProjects
 	generateChatTitle               *activities.GenerateChatTitle
 	getAllOrganizations             *activities.GetAllOrganizations
 	processDeployment               *activities.ProcessDeployment
@@ -78,6 +83,7 @@ type Activities struct {
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
 	snapshotBillingCycleUsage       *activities.SnapshotBillingCycleUsage
+	forwardTokenUsageToPostHog      *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
 	transitionDeployment            *activities.TransitionDeployment
 	validateDeployment              *activities.ValidateDeployment
@@ -171,10 +177,12 @@ func NewActivities(
 		piScanner,
 		shadowMCPClient,
 		telemetryRepo,
-		riskjudge.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter),
+		ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate,
 		features,
 		publishers.PresidioAnalysis,
 		publishers.GitleaksAnalysis,
+		publishers.PromptInjectionAnalysis,
+		publishers.PromptPolicyAnalysis,
 		publishers.CustomRulesAnalysis,
 		customRuleScanner,
 		celEng,
@@ -192,8 +200,11 @@ func NewActivities(
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
 		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
+		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		correlateClaudePrompts:          activities.NewCorrelateClaudePrompts(logger, db, chConn),
+		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter),
+		listStagedTelemetryProjects:     activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:             activities.NewGetAllOrganizations(logger, db),
 		processDeployment:               activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
@@ -202,6 +213,7 @@ func NewActivities(
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		snapshotBillingCycleUsage:       activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
+		forwardTokenUsageToPostHog:      activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
@@ -232,7 +244,7 @@ func NewActivities(
 		listWorkOSOrganizations:         activities.NewListWorkOSOrganizations(logger, workosClient),
 		backfillWorkOSOrganization:      activities.NewBackfillWorkOSOrganization(logger, db, workosClient),
 		backfillWorkOSGlobalRoles:       activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient),
-		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient),
+		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter),
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
@@ -302,6 +314,10 @@ func (a *Activities) FireOpenRouterCreditsMetrics(ctx context.Context, metrics [
 	return a.fireOpenRouterCreditsMetrics.Do(ctx, metrics)
 }
 
+func (a *Activities) MaybeSendOpenRouterCreditsAlerts(ctx context.Context, metrics []activities.OpenRouterCreditsMetric) error {
+	return a.sendOpenRouterCreditsAlerts.Do(ctx, metrics)
+}
+
 func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {
 	candidates, err := a.getAIIntegrationsCandidates.Do(ctx, input)
 	if err != nil {
@@ -320,6 +336,10 @@ func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) e
 
 func (a *Activities) SnapshotBillingCycleUsage(ctx context.Context, orgIDs []string) error {
 	return a.snapshotBillingCycleUsage.Do(ctx, orgIDs)
+}
+
+func (a *Activities) ForwardTokenUsageToPostHog(ctx context.Context, orgIDs []string) error {
+	return a.forwardTokenUsageToPostHog.Do(ctx, orgIDs)
 }
 
 func (a *Activities) GetAllOrganizations(ctx context.Context) ([]string, error) {
@@ -352,6 +372,14 @@ func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.Gen
 
 func (a *Activities) CorrelateClaudePrompts(ctx context.Context, input activities.CorrelateClaudePromptsArgs) (*activities.CorrelateClaudePromptsResult, error) {
 	return a.correlateClaudePrompts.Do(ctx, input)
+}
+
+func (a *Activities) PromoteStagedTelemetry(ctx context.Context, input activities.PromoteStagedTelemetryArgs) (*activities.PromoteStagedTelemetryResult, error) {
+	return a.promoteStagedTelemetry.Do(ctx, input)
+}
+
+func (a *Activities) ListStagedTelemetryProjects(ctx context.Context) ([]activities.PromoteStagedTelemetryArgs, error) {
+	return a.listStagedTelemetryProjects.Do(ctx)
 }
 
 func (a *Activities) SegmentChat(ctx context.Context, input resolution_activities.SegmentChatArgs) (*resolution_activities.SegmentChatOutput, error) {

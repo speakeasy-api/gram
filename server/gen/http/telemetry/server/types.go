@@ -202,17 +202,6 @@ type QueryRequestBody struct {
 	SortBy *string `form:"sort_by,omitempty" json:"sort_by,omitempty" xml:"sort_by,omitempty"`
 }
 
-// QueryRiskTokensRequestBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP request body.
-type QueryRiskTokensRequestBody struct {
-	// Start time in ISO 8601 format
-	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
-	// End time in ISO 8601 format
-	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
-	// Optional project to scope to; defaults to every project in the organization.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-}
-
 // QueryTumDetailsRequestBody is the type of the "telemetry" service
 // "queryTumDetails" endpoint HTTP request body.
 type QueryTumDetailsRequestBody struct {
@@ -347,6 +336,15 @@ type GetToolUsageFilterOptionsRequestBody struct {
 	OptionTypes []string `form:"option_types,omitempty" json:"option_types,omitempty" xml:"option_types,omitempty"`
 }
 
+// GetMcpServerActivityRequestBody is the type of the "telemetry" service
+// "getMcpServerActivity" endpoint HTTP request body.
+type GetMcpServerActivityRequestBody struct {
+	// Size of the recent-activity window in days. A server with tool calls in the
+	// overall lookback window but none inside this window is flagged as stale.
+	// Defaults to 14.
+	RecentWindowDays *int `form:"recent_window_days,omitempty" json:"recent_window_days,omitempty" xml:"recent_window_days,omitempty"`
+}
+
 // ListHooksTracesRequestBody is the type of the "telemetry" service
 // "listHooksTraces" endpoint HTTP request body.
 type ListHooksTracesRequestBody struct {
@@ -476,16 +474,6 @@ type QueryResponseBody struct {
 	Timeseries []*QuerySeriesResponseBody `form:"timeseries" json:"timeseries" xml:"timeseries"`
 }
 
-// QueryRiskTokensResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body.
-type QueryRiskTokensResponseBody struct {
-	// Timeseries bucket width in seconds. Always 86400 — the source aggregate is
-	// bucketed daily.
-	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
-	// Gap-filled daily buckets in ascending time order
-	Points []*RiskTokensPointResponseBody `form:"points" json:"points" xml:"points"`
-}
-
 // QueryTumDetailsResponseBody is the type of the "telemetry" service
 // "queryTumDetails" endpoint HTTP response body.
 type QueryTumDetailsResponseBody struct {
@@ -583,6 +571,18 @@ type GetToolUsageFilterOptionsResponseBody struct {
 	ShadowServers []*ToolUsageShadowServerFilterOptionResponseBody `form:"shadow_servers" json:"shadow_servers" xml:"shadow_servers"`
 	// User identities with usage in the selected time range
 	Users []*ToolUsageUserFilterOptionResponseBody `form:"users" json:"users" xml:"users"`
+}
+
+// GetMcpServerActivityResponseBody is the type of the "telemetry" service
+// "getMcpServerActivity" endpoint HTTP response body.
+type GetMcpServerActivityResponseBody struct {
+	// One entry per MCP server (hosted or tunneled) that has received at least one
+	// tool call within the lookback window
+	Activity []*McpServerActivityResponseBody `form:"activity" json:"activity" xml:"activity"`
+	// The recent-activity window size in days that was applied
+	RecentWindowDays int `form:"recent_window_days" json:"recent_window_days" xml:"recent_window_days"`
+	// The overall lookback window size in days (bounded by telemetry retention)
+	LookbackDays int `form:"lookback_days" json:"lookback_days" xml:"lookback_days"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -2635,190 +2635,6 @@ type QueryGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// QueryRiskTokensUnauthorizedResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the "unauthorized"
-// error.
-type QueryRiskTokensUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// QueryRiskTokensForbiddenResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "forbidden" error.
-type QueryRiskTokensForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// QueryRiskTokensBadRequestResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "bad_request" error.
-type QueryRiskTokensBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// QueryRiskTokensNotFoundResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "not_found" error.
-type QueryRiskTokensNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// QueryRiskTokensConflictResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "conflict" error.
-type QueryRiskTokensConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// QueryRiskTokensUnsupportedMediaResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the
-// "unsupported_media" error.
-type QueryRiskTokensUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// QueryRiskTokensInvalidResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "invalid" error.
-type QueryRiskTokensInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// QueryRiskTokensInvariantViolationResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the
-// "invariant_violation" error.
-type QueryRiskTokensInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// QueryRiskTokensUnexpectedResponseBody is the type of the "telemetry" service
-// "queryRiskTokens" endpoint HTTP response body for the "unexpected" error.
-type QueryRiskTokensUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// QueryRiskTokensGatewayErrorResponseBody is the type of the "telemetry"
-// service "queryRiskTokens" endpoint HTTP response body for the
-// "gateway_error" error.
-type QueryRiskTokensGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // QueryTumDetailsUnauthorizedResponseBody is the type of the "telemetry"
 // service "queryTumDetails" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -4313,6 +4129,196 @@ type GetToolUsageFilterOptionsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetMcpServerActivityUnauthorizedResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMcpServerActivityUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerActivityForbiddenResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMcpServerActivityForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerActivityBadRequestResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMcpServerActivityBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerActivityNotFoundResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "not_found" error.
+type GetMcpServerActivityNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerActivityConflictResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "conflict" error.
+type GetMcpServerActivityConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerActivityUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getMcpServerActivity" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetMcpServerActivityUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerActivityInvalidResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the "invalid"
+// error.
+type GetMcpServerActivityInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerActivityInvariantViolationResponseBody is the type of the
+// "telemetry" service "getMcpServerActivity" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetMcpServerActivityInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerActivityUnexpectedResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMcpServerActivityUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerActivityGatewayErrorResponseBody is the type of the "telemetry"
+// service "getMcpServerActivity" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMcpServerActivityGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListHooksTracesUnauthorizedResponseBody is the type of the "telemetry"
 // service "listHooksTraces" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -4974,51 +4980,41 @@ type QueryPointResponseBody struct {
 	Measures *QueryMeasuresResponseBody `form:"measures" json:"measures" xml:"measures"`
 }
 
-// RiskTokensPointResponseBody is used to define fields on response body types.
-type RiskTokensPointResponseBody struct {
-	// Bucket start time in Unix nanoseconds (string for JS precision)
-	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
-	// Tokens from sessions with at least one active risk finding created in the
-	// query window
-	RiskyTokens int64 `form:"risky_tokens" json:"risky_tokens" xml:"risky_tokens"`
-	// All session tokens in the bucket
-	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
-}
-
 // TumDetailsPointResponseBody is used to define fields on response body types.
 type TumDetailsPointResponseBody struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano string `form:"bucket_time_unix_nano" json:"bucket_time_unix_nano" xml:"bucket_time_unix_nano"`
-	// Billed input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
-	// Billed tokens under management
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64 `form:"cache_creation_tokens" json:"cache_creation_tokens" xml:"cache_creation_tokens"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens int64 `form:"risky_message_tokens" json:"risky_message_tokens" xml:"risky_message_tokens"`
-	// Tokens in tool-call messages
-	ToolMessageTokens int64 `form:"tool_message_tokens" json:"tool_message_tokens" xml:"tool_message_tokens"`
 }
 
 // TumDetailsTotalsResponseBody is used to define fields on response body types.
 type TumDetailsTotalsResponseBody struct {
-	// Billed input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
-	// Billed tokens under management
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64 `form:"cache_creation_tokens" json:"cache_creation_tokens" xml:"cache_creation_tokens"`
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
-	// Tokens in messages carrying at least one active risk finding
-	RiskyMessageTokens int64 `form:"risky_message_tokens" json:"risky_message_tokens" xml:"risky_message_tokens"`
-	// Tokens in tool-call messages
-	ToolMessageTokens int64 `form:"tool_message_tokens" json:"tool_message_tokens" xml:"tool_message_tokens"`
 }
 
 // TumDetailsBreakdownResponseBody is used to define fields on response body
 // types.
 type TumDetailsBreakdownResponseBody struct {
-	// The breakdown dimension key (hook_source, model, email, division_name, role)
+	// The breakdown dimension key (model, hook_source, provider, account_type,
+	// email, division_name, department_name, role, project_id) — the public
+	// telemetry dimension identifiers, so the same keys work as telemetry.query
+	// filters. project_id rows carry project UUIDs; clients map them to names.
 	Key string `form:"key" json:"key" xml:"key"`
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
@@ -5412,6 +5408,24 @@ type ToolUsageUserFilterOptionResponseBody struct {
 	UserKind string `form:"user_kind" json:"user_kind" xml:"user_kind"`
 	// Number of tool usage events observed for the user identity
 	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
+}
+
+// McpServerActivityResponseBody is used to define fields on response body
+// types.
+type McpServerActivityResponseBody struct {
+	// Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)
+	TargetType string `form:"target_type" json:"target_type" xml:"target_type"`
+	// Stable target identifier: toolset slug for hosted servers, MCP server slug
+	// for tunneled/remote servers
+	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
+	// User-facing label for the target
+	TargetLabel string `form:"target_label" json:"target_label" xml:"target_label"`
+	// Number of tool calls observed across the whole lookback window
+	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
+	// Number of tool calls observed inside the recent-activity window
+	RecentToolCalls int64 `form:"recent_tool_calls" json:"recent_tool_calls" xml:"recent_tool_calls"`
+	// ISO 8601 timestamp of the most recent tool call
+	LastToolCallAt *string `form:"last_tool_call_at,omitempty" json:"last_tool_call_at,omitempty" xml:"last_tool_call_at,omitempty"`
 }
 
 // HookTraceSummaryResponseBody is used to define fields on response body types.
@@ -5822,27 +5836,6 @@ func NewQueryResponseBody(res *telemetry.QueryResult) *QueryResponseBody {
 	return body
 }
 
-// NewQueryRiskTokensResponseBody builds the HTTP response body from the result
-// of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensResponseBody(res *telemetry.QueryRiskTokensResult) *QueryRiskTokensResponseBody {
-	body := &QueryRiskTokensResponseBody{
-		IntervalSeconds: res.IntervalSeconds,
-	}
-	if res.Points != nil {
-		body.Points = make([]*RiskTokensPointResponseBody, len(res.Points))
-		for i, val := range res.Points {
-			if val == nil {
-				body.Points[i] = nil
-				continue
-			}
-			body.Points[i] = marshalTelemetryRiskTokensPointToRiskTokensPointResponseBody(val)
-		}
-	} else {
-		body.Points = []*RiskTokensPointResponseBody{}
-	}
-	return body
-}
-
 // NewQueryTumDetailsResponseBody builds the HTTP response body from the result
 // of the "queryTumDetails" endpoint of the "telemetry" service.
 func NewQueryTumDetailsResponseBody(res *telemetry.TumDetailsResult) *QueryTumDetailsResponseBody {
@@ -6171,6 +6164,28 @@ func NewGetToolUsageFilterOptionsResponseBody(res *telemetry.GetToolUsageFilterO
 		}
 	} else {
 		body.Users = []*ToolUsageUserFilterOptionResponseBody{}
+	}
+	return body
+}
+
+// NewGetMcpServerActivityResponseBody builds the HTTP response body from the
+// result of the "getMcpServerActivity" endpoint of the "telemetry" service.
+func NewGetMcpServerActivityResponseBody(res *telemetry.GetMcpServerActivityResult) *GetMcpServerActivityResponseBody {
+	body := &GetMcpServerActivityResponseBody{
+		RecentWindowDays: res.RecentWindowDays,
+		LookbackDays:     res.LookbackDays,
+	}
+	if res.Activity != nil {
+		body.Activity = make([]*McpServerActivityResponseBody, len(res.Activity))
+		for i, val := range res.Activity {
+			if val == nil {
+				body.Activity[i] = nil
+				continue
+			}
+			body.Activity[i] = marshalTelemetryMcpServerActivityToMcpServerActivityResponseBody(val)
+		}
+	} else {
+		body.Activity = []*McpServerActivityResponseBody{}
 	}
 	return body
 }
@@ -7784,147 +7799,6 @@ func NewQueryGatewayErrorResponseBody(res *goa.ServiceError) *QueryGatewayErrorR
 	return body
 }
 
-// NewQueryRiskTokensUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensUnauthorizedResponseBody(res *goa.ServiceError) *QueryRiskTokensUnauthorizedResponseBody {
-	body := &QueryRiskTokensUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewQueryRiskTokensForbiddenResponseBody builds the HTTP response body from
-// the result of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensForbiddenResponseBody(res *goa.ServiceError) *QueryRiskTokensForbiddenResponseBody {
-	body := &QueryRiskTokensForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewQueryRiskTokensBadRequestResponseBody builds the HTTP response body from
-// the result of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensBadRequestResponseBody(res *goa.ServiceError) *QueryRiskTokensBadRequestResponseBody {
-	body := &QueryRiskTokensBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewQueryRiskTokensNotFoundResponseBody builds the HTTP response body from
-// the result of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensNotFoundResponseBody(res *goa.ServiceError) *QueryRiskTokensNotFoundResponseBody {
-	body := &QueryRiskTokensNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewQueryRiskTokensConflictResponseBody builds the HTTP response body from
-// the result of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensConflictResponseBody(res *goa.ServiceError) *QueryRiskTokensConflictResponseBody {
-	body := &QueryRiskTokensConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewQueryRiskTokensUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensUnsupportedMediaResponseBody(res *goa.ServiceError) *QueryRiskTokensUnsupportedMediaResponseBody {
-	body := &QueryRiskTokensUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewQueryRiskTokensInvalidResponseBody builds the HTTP response body from the
-// result of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensInvalidResponseBody(res *goa.ServiceError) *QueryRiskTokensInvalidResponseBody {
-	body := &QueryRiskTokensInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewQueryRiskTokensInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "queryRiskTokens" endpoint of the "telemetry"
-// service.
-func NewQueryRiskTokensInvariantViolationResponseBody(res *goa.ServiceError) *QueryRiskTokensInvariantViolationResponseBody {
-	body := &QueryRiskTokensInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewQueryRiskTokensUnexpectedResponseBody builds the HTTP response body from
-// the result of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensUnexpectedResponseBody(res *goa.ServiceError) *QueryRiskTokensUnexpectedResponseBody {
-	body := &QueryRiskTokensUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewQueryRiskTokensGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "queryRiskTokens" endpoint of the "telemetry" service.
-func NewQueryRiskTokensGatewayErrorResponseBody(res *goa.ServiceError) *QueryRiskTokensGatewayErrorResponseBody {
-	body := &QueryRiskTokensGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewQueryTumDetailsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "queryTumDetails" endpoint of the "telemetry" service.
 func NewQueryTumDetailsUnauthorizedResponseBody(res *goa.ServiceError) *QueryTumDetailsUnauthorizedResponseBody {
@@ -9087,6 +8961,156 @@ func NewGetToolUsageFilterOptionsGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
+// NewGetMcpServerActivityUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getMcpServerActivity" endpoint of the
+// "telemetry" service.
+func NewGetMcpServerActivityUnauthorizedResponseBody(res *goa.ServiceError) *GetMcpServerActivityUnauthorizedResponseBody {
+	body := &GetMcpServerActivityUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerActivityForbiddenResponseBody builds the HTTP response body
+// from the result of the "getMcpServerActivity" endpoint of the "telemetry"
+// service.
+func NewGetMcpServerActivityForbiddenResponseBody(res *goa.ServiceError) *GetMcpServerActivityForbiddenResponseBody {
+	body := &GetMcpServerActivityForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerActivityBadRequestResponseBody builds the HTTP response body
+// from the result of the "getMcpServerActivity" endpoint of the "telemetry"
+// service.
+func NewGetMcpServerActivityBadRequestResponseBody(res *goa.ServiceError) *GetMcpServerActivityBadRequestResponseBody {
+	body := &GetMcpServerActivityBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerActivityNotFoundResponseBody builds the HTTP response body
+// from the result of the "getMcpServerActivity" endpoint of the "telemetry"
+// service.
+func NewGetMcpServerActivityNotFoundResponseBody(res *goa.ServiceError) *GetMcpServerActivityNotFoundResponseBody {
+	body := &GetMcpServerActivityNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerActivityConflictResponseBody builds the HTTP response body
+// from the result of the "getMcpServerActivity" endpoint of the "telemetry"
+// service.
+func NewGetMcpServerActivityConflictResponseBody(res *goa.ServiceError) *GetMcpServerActivityConflictResponseBody {
+	body := &GetMcpServerActivityConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerActivityUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getMcpServerActivity" endpoint of the
+// "telemetry" service.
+func NewGetMcpServerActivityUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMcpServerActivityUnsupportedMediaResponseBody {
+	body := &GetMcpServerActivityUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerActivityInvalidResponseBody builds the HTTP response body
+// from the result of the "getMcpServerActivity" endpoint of the "telemetry"
+// service.
+func NewGetMcpServerActivityInvalidResponseBody(res *goa.ServiceError) *GetMcpServerActivityInvalidResponseBody {
+	body := &GetMcpServerActivityInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerActivityInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getMcpServerActivity" endpoint of the
+// "telemetry" service.
+func NewGetMcpServerActivityInvariantViolationResponseBody(res *goa.ServiceError) *GetMcpServerActivityInvariantViolationResponseBody {
+	body := &GetMcpServerActivityInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerActivityUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getMcpServerActivity" endpoint of the "telemetry"
+// service.
+func NewGetMcpServerActivityUnexpectedResponseBody(res *goa.ServiceError) *GetMcpServerActivityUnexpectedResponseBody {
+	body := &GetMcpServerActivityUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerActivityGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getMcpServerActivity" endpoint of the
+// "telemetry" service.
+func NewGetMcpServerActivityGatewayErrorResponseBody(res *goa.ServiceError) *GetMcpServerActivityGatewayErrorResponseBody {
+	body := &GetMcpServerActivityGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListHooksTracesUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listHooksTraces" endpoint of the "telemetry" service.
 func NewListHooksTracesUnauthorizedResponseBody(res *goa.ServiceError) *ListHooksTracesUnauthorizedResponseBody {
@@ -9510,19 +9534,6 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string) *telemetry.Qu
 	return v
 }
 
-// NewQueryRiskTokensPayload builds a telemetry service queryRiskTokens
-// endpoint payload.
-func NewQueryRiskTokensPayload(body *QueryRiskTokensRequestBody, sessionToken *string) *telemetry.QueryRiskTokensPayload {
-	v := &telemetry.QueryRiskTokensPayload{
-		From:      *body.From,
-		To:        *body.To,
-		ProjectID: body.ProjectID,
-	}
-	v.SessionToken = sessionToken
-
-	return v
-}
-
 // NewQueryTumDetailsPayload builds a telemetry service queryTumDetails
 // endpoint payload.
 func NewQueryTumDetailsPayload(body *QueryTumDetailsRequestBody, sessionToken *string) *telemetry.QueryTumDetailsPayload {
@@ -9771,6 +9782,23 @@ func NewGetToolUsageFilterOptionsPayload(body *GetToolUsageFilterOptionsRequestB
 		for i, val := range body.OptionTypes {
 			v.OptionTypes[i] = telemetry.ToolUsageFilterOptionType(val)
 		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetMcpServerActivityPayload builds a telemetry service
+// getMcpServerActivity endpoint payload.
+func NewGetMcpServerActivityPayload(body *GetMcpServerActivityRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetMcpServerActivityPayload {
+	v := &telemetry.GetMcpServerActivityPayload{}
+	if body.RecentWindowDays != nil {
+		v.RecentWindowDays = *body.RecentWindowDays
+	}
+	if body.RecentWindowDays == nil {
+		v.RecentWindowDays = 14
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -10109,27 +10137,6 @@ func ValidateQueryRequestBody(body *QueryRequestBody) (err error) {
 	return
 }
 
-// ValidateQueryRiskTokensRequestBody runs the validations defined on
-// QueryRiskTokensRequestBody
-func ValidateQueryRiskTokensRequestBody(body *QueryRiskTokensRequestBody) (err error) {
-	if body.From == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
-	}
-	if body.To == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
-	}
-	if body.From != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
-	}
-	if body.To != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-	}
-	return
-}
-
 // ValidateQueryTumDetailsRequestBody runs the validations defined on
 // QueryTumDetailsRequestBody
 func ValidateQueryTumDetailsRequestBody(body *QueryTumDetailsRequestBody) (err error) {
@@ -10370,6 +10377,22 @@ func ValidateGetToolUsageFilterOptionsRequestBody(body *GetToolUsageFilterOption
 	for _, e := range body.OptionTypes {
 		if !(e == "hosted_servers" || e == "shadow_servers" || e == "users") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"hosted_servers", "shadow_servers", "users"}))
+		}
+	}
+	return
+}
+
+// ValidateGetMcpServerActivityRequestBody runs the validations defined on
+// GetMcpServerActivityRequestBody
+func ValidateGetMcpServerActivityRequestBody(body *GetMcpServerActivityRequestBody) (err error) {
+	if body.RecentWindowDays != nil {
+		if *body.RecentWindowDays < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.recent_window_days", *body.RecentWindowDays, 1, true))
+		}
+	}
+	if body.RecentWindowDays != nil {
+		if *body.RecentWindowDays > 90 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.recent_window_days", *body.RecentWindowDays, 90, false))
 		}
 	}
 	return

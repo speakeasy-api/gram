@@ -13,23 +13,19 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type TumDetailsTotals = {
   /**
-   * Billed input tokens
+   * Observed cache-write tokens — prompt content entering the provider cache, counted once
+   */
+  cacheCreationTokens: number;
+  /**
+   * Observed input tokens (cache reads excluded)
    */
   inputTokens: number;
   /**
-   * Billed output tokens
+   * Observed output tokens
    */
   outputTokens: number;
   /**
-   * Tokens in messages carrying at least one active risk finding
-   */
-  riskyMessageTokens: number;
-  /**
-   * Tokens in tool-call messages
-   */
-  toolMessageTokens: number;
-  /**
-   * Billed tokens under management
+   * Tokens under management: input + output + cache writes
    */
   totalTokens: number;
 };
@@ -40,18 +36,16 @@ export const TumDetailsTotals$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    cache_creation_tokens: z.int(),
     input_tokens: z.int(),
     output_tokens: z.int(),
-    risky_message_tokens: z.int(),
-    tool_message_tokens: z.int(),
     total_tokens: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "cache_creation_tokens": "cacheCreationTokens",
       "input_tokens": "inputTokens",
       "output_tokens": "outputTokens",
-      "risky_message_tokens": "riskyMessageTokens",
-      "tool_message_tokens": "toolMessageTokens",
       "total_tokens": "totalTokens",
     });
   }),

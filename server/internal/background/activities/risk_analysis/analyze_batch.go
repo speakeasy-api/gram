@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -45,10 +46,12 @@ type AnalyzeBatch struct {
 	piiScanner             PIIScanner
 	promptInjectionScanner *promptinjection.Scanner
 	shadowMCPScanner       *shadowmcpscan.Scanner
-	judge                  PromptJudge
+	judge                  promptpolicy.Evaluator
 	flags                  feature.Provider
 	presidioPub            gcp.Publisher[*riskv1.PresidioAnalysis]
 	gitleaksPub            gcp.Publisher[*riskv1.GitleaksAnalysis]
+	promptInjectionPub     gcp.Publisher[*riskv1.PromptInjectionAnalysis]
+	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	customRuleScanner      *customruleanalyzer.Scanner
 	cliDestructiveScanner  *clidestructive.Scanner
@@ -67,10 +70,12 @@ func NewAnalyzeBatch(
 	promptInjectionScanner *promptinjection.Scanner,
 	shadowMCPClient *shadowmcp.Client,
 	mcpMatchLookup MCPMatchLookup,
-	judge PromptJudge,
+	judge promptpolicy.Evaluator,
 	flags feature.Provider,
 	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
 	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],
+	promptInjectionPub gcp.Publisher[*riskv1.PromptInjectionAnalysis],
+	promptPolicyPub gcp.Publisher[*riskv1.PromptPolicyAnalysis],
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
 	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
@@ -82,7 +87,7 @@ func NewAnalyzeBatch(
 		piiScanner = &StubPIIScanner{}
 	}
 	if promptInjectionScanner == nil {
-		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopEngine)
+		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 	}
 	recommended, err := CompileRecommended(celEng)
 	if err != nil {
@@ -102,6 +107,8 @@ func NewAnalyzeBatch(
 		flags:                  flags,
 		presidioPub:            presidioPub,
 		gitleaksPub:            gitleaksPub,
+		promptInjectionPub:     promptInjectionPub,
+		promptPolicyPub:        promptPolicyPub,
 		customRulesPub:         customRulesPub,
 		customRuleScanner:      customRuleScanner,
 		cliDestructiveScanner:  clidestructive.NewScanner(),

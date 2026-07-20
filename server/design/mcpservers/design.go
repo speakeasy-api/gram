@@ -106,6 +106,32 @@ var _ = Service("mcpServers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpServers"}`)
 	})
 
+	Method("listMcpServersForOrg", func() {
+		Description("List all MCP servers across the organization")
+
+		// Session-only, unlike the rest of the service: this dashboard flow has
+		// no project selector, and API-key auth is not RBAC-enforced, so a
+		// project-scoped producer key could otherwise enumerate MCP servers
+		// across every project in the organization.
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListMcpServersResult)
+
+		HTTP(func() {
+			GET("/rpc/mcpServers.listForOrg")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMcpServersForOrg")
+		Meta("openapi:extension:x-speakeasy-name-override", "listForOrg")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMcpServersForOrg"}`)
+	})
+
 	Method("updateMcpServer", func() {
 		Description("Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.")
 
@@ -202,9 +228,6 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
 		Format(FormatUUID)
 	})
-	Attribute("user_session_issuer_id", String, "The ID of the user session issuer that gates OAuth-based MCP client authentication. When set, MCP clients are required to authenticate against this issuer before connecting.", func() {
-		Format(FormatUUID)
-	})
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to use as the backend", func() {
 		Format(FormatUUID)
 	})
@@ -223,16 +246,13 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 })
 
 var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
-	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
+	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
 
 	Attribute("id", String, "The ID of the MCP server to update", func() {
 		Format(FormatUUID)
 	})
 	Attribute("name", String, "A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.")
 	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
-		Format(FormatUUID)
-	})
-	Attribute("user_session_issuer_id", String, "The ID of the user session issuer that gates OAuth-based MCP client authentication. Omit to disable issuer-gated OAuth.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("remote_mcp_server_id", String, "The ID of the remote MCP server to use as the backend", func() {

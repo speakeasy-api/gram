@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/accountidentity"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -240,7 +241,7 @@ func TestSourceCategoriesConsistentWithClassify(t *testing.T) {
 		categories.CategoryShadowMCP:       finding(shadowmcp.SourceShadowMCP, "shadow_mcp"),
 		categories.CategoryDestructiveTool: finding(shadowmcp.SourceDestructiveTool, destructivetool.Rule),
 		categories.CategoryCLIDestructive:  finding(SourceCLIDestructive, "cli_destructive.rm_rf"),
-		categories.CategoryPromptPolicy:    finding(SourceLLMJudge, RuleLLMJudge),
+		categories.CategoryPromptPolicy:    finding(promptpolicy.Source, promptpolicy.Rule),
 		categories.CategoryCustom:          finding(SourceCustom, "custom.test"),
 	}
 
@@ -305,7 +306,7 @@ func TestPromptPolicyUsesPromptPolicyCategoryMask(t *testing.T) {
 	messages := []batchMessage{msg(message.User)}
 	masks := masksFor(t, true, nil, messages)
 	require.True(t, masks.InScope(0, categories.CategoryPromptPolicy))
-	require.True(t, masks.AdmitsAny(0, sourceCategories[SourceLLMJudge]))
+	require.True(t, masks.AdmitsAny(0, sourceCategories[promptpolicy.Source]))
 }
 
 func TestCategoryScopesDoesNotAffectCustomRegistryScope(t *testing.T) {

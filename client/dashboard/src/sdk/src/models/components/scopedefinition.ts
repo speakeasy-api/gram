@@ -22,6 +22,8 @@ export const ExclusionScope = {
   McpBlockedConnect: "mcp:blocked_connect",
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentBlockedWrite: "environment:blocked_write",
+  SkillBlockedRead: "skill:blocked_read",
+  SkillBlockedWrite: "skill:blocked_write",
   RiskPolicyBypass: "risk_policy:bypass",
 } as const;
 /**
@@ -37,6 +39,7 @@ export const ResourceType = {
   Project: "project",
   Mcp: "mcp",
   Environment: "environment",
+  Skill: "skill",
   RiskPolicy: "risk_policy",
   Chat: "chat",
 } as const;
@@ -67,6 +70,10 @@ export const Slug = {
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
   EnvironmentBlockedWrite: "environment:blocked_write",
+  SkillRead: "skill:read",
+  SkillBlockedRead: "skill:blocked_read",
+  SkillWrite: "skill:write",
+  SkillBlockedWrite: "skill:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",

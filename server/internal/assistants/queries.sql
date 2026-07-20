@@ -126,6 +126,70 @@ WHERE at.assistant_id = ANY(@assistant_ids::UUID[])
   AND at.project_id = @project_id
 ORDER BY at.created_at;
 
+-- The active/resolvable predicates in LoadAssistantSkills and
+-- LoadAttachedAssistantSkill must stay identical.
+-- name: LoadAssistantSkills :many
+SELECT
+  sd.assistant_id,
+  sd.skill_id,
+  sd.pinned_version_id,
+  s.name,
+  resolved.id AS resolved_version_id,
+  resolved.description
+FROM skill_distributions sd
+JOIN assistants a
+  ON a.id = sd.assistant_id
+  AND a.project_id = sd.project_id
+  AND a.deleted IS FALSE
+JOIN skills s
+  ON s.id = sd.skill_id
+  AND s.project_id = sd.project_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id, sv.description
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.assistant_id = ANY(@assistant_ids::uuid[])
+  AND sd.project_id = @project_id
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.assistant_id IS NOT NULL
+  AND sd.revoked_at IS NULL
+ORDER BY s.name ASC, s.id ASC;
+
+-- name: LoadAttachedAssistantSkill :one
+SELECT resolved.content
+FROM skill_distributions sd
+JOIN assistants a
+  ON a.id = sd.assistant_id
+  AND a.project_id = sd.project_id
+  AND a.deleted IS FALSE
+JOIN skills s
+  ON s.id = sd.skill_id
+  AND s.project_id = sd.project_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.id, sv.content
+  FROM skill_versions sv
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.assistant_id = @assistant_id
+  AND sd.project_id = @project_id
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.assistant_id IS NOT NULL
+  AND sd.revoked_at IS NULL
+  AND s.name = @name;
+
 -- name: ClearAssistantToolsets :exec
 DELETE FROM assistant_toolsets
 WHERE assistant_id = @assistant_id
@@ -327,6 +391,32 @@ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = @assistant_id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: RevokeSkillDistributionsByAssistant :many
+-- Returns pre-revocation state and skill identity for per-edge audit events.
+UPDATE skill_distributions sd
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM skill_distributions prev
+JOIN skills s ON s.id = prev.skill_id AND s.project_id = prev.project_id
+JOIN assistants a ON a.id = prev.assistant_id AND a.project_id = prev.project_id
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  WHERE sv.skill_id = prev.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE prev.id = sd.id
+  AND sd.project_id = @project_id
+  AND sd.assistant_id = @assistant_id
+  AND sd.channel = 'assistant'
+  AND sd.plugin_id IS NULL
+  AND sd.revoked_at IS NULL
+RETURNING sd.*, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id,
+  s.name AS skill_name, s.display_name AS skill_display_name, a.organization_id;
 
 -- name: UpsertAssistantChat :exec
 -- user_id is the conversation owner — stamped on first insert so reads can
@@ -909,14 +999,12 @@ WHERE id = @runtime_id
   AND state = @active_state
   AND deleted IS FALSE;
 
--- name: ListActiveAssistantRuntimesForImageRecycle :many
--- Returns live v2 runtime rows that carry backend metadata so a deploy-time
--- sweep can roll their machines onto the current runtime image. Only `active`
--- rows qualify: `starting` rows are mid-boot and already pull the current
--- image, while expiring/stopped rows are torn down or recycled lazily on the
--- next admission. Rows orphaned by a deleted assistant are excluded: they
--- belong to the deleted-assistant janitor, and recycling them would bump
--- updated_at and postpone the inactivity-based reap.
+-- name: ListActiveAssistantRuntimes :many
+-- Returns live v2 runtime rows that carry backend metadata for runtime
+-- reconciliation sweeps. Only `active` rows qualify: `starting` rows are
+-- mid-boot, while expiring/stopped rows are already being torn down or await
+-- re-admission. Rows orphaned by a deleted assistant belong to the
+-- deleted-assistant janitor and are excluded here.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = @active_state

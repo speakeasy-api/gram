@@ -32,7 +32,7 @@ import type { UserSummary } from "@gram/client/models/components/usersummary.js"
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@/elements";
 import {
   defineFilters,
   useFilterState,
@@ -1294,8 +1294,8 @@ function EmployeeCostTable({
   );
 
   return (
-    <section className="bg-card flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <section className="bg-card flex flex-col">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <h3 className="font-semibold">
             {isCost ? "Cost" : "Usage"} by {isRoleView ? "Role" : "Employee"}

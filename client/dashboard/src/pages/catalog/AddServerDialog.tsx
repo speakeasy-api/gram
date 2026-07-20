@@ -1,10 +1,8 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { useSdkClient } from "@/contexts/Sdk";
-import { cn, getServerURL } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
@@ -14,9 +12,7 @@ import {
   ArrowRight,
   Check,
   Circle,
-  ExternalLink,
   Loader2,
-  MessageCircle,
   Plug,
   Plus,
   Server as ServerIcon,
@@ -25,166 +21,20 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
-  type ConfigurePhase,
   type CompletePhase,
-  type DeployingPhase,
-  type ErrorPhase,
-  type ExternalMcpReleaseWorkflow,
+  type ConfigurePhase,
+  headerValueKey,
+  type RemoteMcpInstallWorkflow,
   type SelectRemotesPhase,
-  type ServerToolsetStatus,
-  useExternalMcpReleaseWorkflow,
-} from "./useExternalMcpReleaseWorkflow";
-import { filterToHttpRemotes } from "./remotes";
-
-/** Friendly display names and descriptions for known remote endpoints */
-const REMOTE_DISPLAY_INFO: Record<
-  string,
-  { name: string; description: string }
-> = {
-  // Salesforce Industry Clouds
-  "insurance-cloud": {
-    name: "Insurance Cloud",
-    description: "Policy management, claims processing, and underwriting",
-  },
-  "health-cloud": {
-    name: "Health Cloud",
-    description: "Patient care coordination and healthcare management",
-  },
-  "consumer-goods-cloud": {
-    name: "Consumer Goods Cloud",
-    description: "Retail execution, trade promotion, and field operations",
-  },
-  "manufacturing-cloud": {
-    name: "Manufacturing Cloud",
-    description: "Sales agreements, account forecasting, and production",
-  },
-  "automotive-cloud": {
-    name: "Automotive Cloud",
-    description: "Vehicle sales, service, and driver engagement",
-  },
-  "communications-cloud": {
-    name: "Communications Cloud",
-    description: "Order management and telecom service configuration",
-  },
-  "media-cloud": {
-    name: "Media Cloud",
-    description: "Ad sales, content distribution, and subscriber management",
-  },
-  "financial-services-cloud": {
-    name: "Financial Services Cloud",
-    description: "Wealth management, banking, and financial planning",
-  },
-  "nonprofit-cloud": {
-    name: "Nonprofit Cloud",
-    description: "Fundraising, grants, and program management",
-  },
-  "education-cloud": {
-    name: "Education Cloud",
-    description: "Student lifecycle, admissions, and learning management",
-  },
-  "public-sector": {
-    name: "Public Sector",
-    description: "Government services, permits, and case management",
-  },
-  "energy-utilities-cloud": {
-    name: "Energy & Utilities Cloud",
-    description: "Meter data, field service, and customer programs",
-  },
-  "loyalty-management": {
-    name: "Loyalty Management",
-    description: "Points, rewards, and member engagement programs",
-  },
-  "pricing-ngp": {
-    name: "Industries Pricing",
-    description: "Dynamic pricing, quotes, and product configuration",
-  },
-  "rebate-management": {
-    name: "Rebate Management",
-    description: "Rebate programs, calculations, and payouts",
-  },
-  "document-generation": {
-    name: "Document Generation",
-    description: "Automated document creation and templates",
-  },
-  omnistudio: {
-    name: "OmniStudio",
-    description: "Guided flows, data integration, and UI components",
-  },
-  core: {
-    name: "Salesforce Core",
-    description: "Standard CRM objects and platform features",
-  },
-  // Salesforce Platform APIs
-  "sobject-all": {
-    name: "SObject All",
-    description: "Full CRUD access to all Salesforce objects",
-  },
-  "sobject-reads": {
-    name: "SObject Reads",
-    description: "Read-only access to Salesforce objects",
-  },
-  "sobject-mutations": {
-    name: "SObject Mutations",
-    description: "Create and update Salesforce records",
-  },
-  "sobject-deletes": {
-    name: "SObject Deletes",
-    description: "Delete Salesforce records",
-  },
-  "invocable-actions": {
-    name: "Invocable Actions",
-    description: "Execute Flows, Apex actions, and quick actions",
-  },
-  invocable_actions: {
-    name: "Invocable Actions",
-    description: "Execute Flows, Apex actions, and quick actions",
-  },
-  "salesforce-api-context": {
-    name: "API Context",
-    description: "Org info, user details, and API limits",
-  },
-  "data-cloud-queries": {
-    name: "Data Cloud Queries",
-    description: "Query unified customer profiles and segments",
-  },
-  "tableau-next": {
-    name: "Tableau Next",
-    description: "Analytics, dashboards, and data visualization",
-  },
-  "revenue-cloud": {
-    name: "Revenue Cloud",
-    description: "CPQ, billing, and subscription management",
-  },
-};
-
-/** Get friendly display info for a remote URL */
-function getRemoteDisplayInfo(url: string): {
-  name: string;
-  description: string;
-} {
-  try {
-    const parsedUrl = new URL(url);
-    const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
-    const endpoint = pathParts[pathParts.length - 1] || "";
-
-    // Check for known endpoints
-    const info = REMOTE_DISPLAY_INFO[endpoint.toLowerCase()];
-    if (info) return info;
-
-    // Fallback: format the endpoint name nicely
-    const formattedName = endpoint
-      .split("-")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-
-    return {
-      name: formattedName || endpoint,
-      description: parsedUrl.host,
-    };
-  } catch {
-    return { name: url, description: "" };
-  }
-}
+  type ServerConfig,
+  type ServerInstallStatus,
+  useRemoteMcpInstallWorkflow,
+} from "./useRemoteMcpInstallWorkflow";
+import {
+  collectibleHeaders,
+  filterToHttpRemotes,
+  getRemoteDisplayInfo,
+} from "./remotes";
 
 export interface AddServerDialogProps {
   servers: PulseMCPServer[];
@@ -196,22 +46,26 @@ export interface AddServerDialogProps {
     status: "succeeded" | "failed";
     succeededCount: number;
     failedCount: number;
-    firstCompletedToolsetSlug?: string;
-    firstCompletedMcpSlug?: string;
+    firstCompletedMcpServerId?: string;
+    firstCompletedMcpServerParam?: string;
+    firstCompletedMcpEndpointUrl?: string;
+    completedMcpServerIds?: string[];
     error?: string;
   }) => void;
   projectSlug?: string;
   /** When true, shows a summary view instead of individual name inputs in the configure phase. */
   bulk?: boolean;
-  /** When true, starts deployment as soon as the default configuration is ready. */
-  autoStartDeployment?: boolean;
+  /** When true, starts the install as soon as the default configuration is ready. */
+  autoStartInstall?: boolean;
   /** When true, runs the workflow without rendering the dialog UI. */
   headless?: boolean;
 }
 
 /**
- * Hook to fetch server details (including remotes) for all servers.
- * This enriches the server objects with remote endpoint data from the registry.
+ * Hook to fetch server details (including remotes and their header
+ * requirements) for all servers. The catalog list response can omit remotes or
+ * strip their headers, so the details call is the authoritative source for the
+ * endpoint data the install flow needs.
  */
 function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
   const client = useSdkClient();
@@ -253,13 +107,6 @@ function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
       try {
         result = await Promise.all(
           servers.map(async (server) => {
-            // The catalog list omits per-tool definitions, so we fetch details
-            // for the tools (and remotes, when the list entry lacked them) that
-            // the add/release flow needs. Skip once a server is already enriched.
-            if (server.tools) {
-              return server;
-            }
-
             try {
               if (!server.registryId) {
                 return server;
@@ -269,15 +116,12 @@ function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
                 serverSpecifier: server.registrySpecifier,
               });
 
-              // Merge tools (and remotes, when the list entry lacked them)
-              // from details into the server object.
               return {
                 ...server,
-                remotes:
-                  server.remotes && server.remotes.length > 0
-                    ? server.remotes
-                    : (details.remotes as ExternalMCPRemote[] | undefined),
-                tools: details.tools,
+                remotes: mergeRemoteHeaders(
+                  server.remotes,
+                  details.remotes as ExternalMCPRemote[] | undefined,
+                ),
               };
             } catch (err) {
               // If we can't fetch details for a specific server, just use original
@@ -306,6 +150,25 @@ function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
   return { enrichedServers, isLoading, error };
 }
 
+// Keep the list entry's remote selection but adopt header requirements from
+// the details response when the list variant lacked them.
+function mergeRemoteHeaders(
+  existing: ExternalMCPRemote[] | undefined,
+  fromDetails: ExternalMCPRemote[] | undefined,
+): ExternalMCPRemote[] | undefined {
+  if (!existing || existing.length === 0) return fromDetails ?? existing;
+  if (!fromDetails || fromDetails.length === 0) return existing;
+
+  const detailsByUrl = new Map(fromDetails.map((r) => [r.url, r]));
+  return existing.map((remote) => {
+    if (remote.headers && remote.headers.length > 0) return remote;
+    const detailed = detailsByUrl.get(remote.url);
+    return detailed?.headers?.length
+      ? { ...remote, headers: detailed.headers }
+      : remote;
+  });
+}
+
 export function AddServerDialog({
   servers,
   open,
@@ -314,10 +177,9 @@ export function AddServerDialog({
   onInstallFinished,
   projectSlug,
   bulk,
-  autoStartDeployment,
+  autoStartInstall,
   headless,
 }: AddServerDialogProps): JSX.Element | null {
-  const telemetry = useTelemetry();
   // Fetch server details (including remotes) when dialog opens
   const {
     enrichedServers,
@@ -325,48 +187,47 @@ export function AddServerDialog({
     error: detailsError,
   } = useEnrichedServers(servers, open);
 
-  // Use enriched servers (with remotes) for the workflow
-  const releaseState = useExternalMcpReleaseWorkflow({
+  // Use enriched servers (with remotes) for the workflow. Callers that run
+  // without a visible dialog can never answer the selectRemotes phase, so
+  // multi-remote servers install every endpoint for them.
+  const releaseState = useRemoteMcpInstallWorkflow({
     servers: enrichedServers,
     projectSlug,
-    onboardExternalMcpToUserSessions:
-      telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
-      false,
+    autoSelectRemotes: !!(autoStartInstall || headless),
   });
   const serversKey = servers.map((s) => s.registrySpecifier).join(",");
-  const autoDeployStartedRef = useRef(false);
+  const autoStartRef = useRef(false);
   const finishedRef = useRef(false);
 
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
       releaseState.reset();
-      autoDeployStartedRef.current = false;
+      autoStartRef.current = false;
       finishedRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset when dialog open/close state changes, not on every releaseState update
   }, [open]);
 
   useEffect(() => {
-    autoDeployStartedRef.current = false;
+    autoStartRef.current = false;
     finishedRef.current = false;
   }, [projectSlug, serversKey]);
 
   useEffect(() => {
     if (
       !open ||
-      !autoStartDeployment ||
-      autoDeployStartedRef.current ||
+      !autoStartInstall ||
+      autoStartRef.current ||
       releaseState.phase !== "configure" ||
-      releaseState.isInstallStateLoading ||
-      !releaseState.canDeploy
+      !releaseState.canInstall
     ) {
       return;
     }
 
-    autoDeployStartedRef.current = true;
-    void releaseState.startDeployment();
-  }, [autoStartDeployment, open, releaseState]);
+    autoStartRef.current = true;
+    void releaseState.startInstall();
+  }, [autoStartInstall, open, releaseState]);
 
   // Clean up Radix body scroll-lock on unmount (e.g. when navigating away mid-dialog)
   useEffect(() => {
@@ -375,23 +236,23 @@ export function AddServerDialog({
     };
   }, []);
 
-  // Notify parent when all toolsets are done
-  const allToolsetsDone =
+  // Notify parent when all installs are done
+  const allInstallsDone =
     releaseState.phase === "complete" &&
-    releaseState.toolsetStatuses.length > 0 &&
-    releaseState.toolsetStatuses.every(
+    releaseState.statuses.length > 0 &&
+    releaseState.statuses.every(
       (s) => s.status === "completed" || s.status === "failed",
     );
   const prevAllDoneRef = useRef(false);
   useEffect(() => {
-    if (allToolsetsDone && !prevAllDoneRef.current) {
+    if (allInstallsDone && !prevAllDoneRef.current) {
       prevAllDoneRef.current = true;
       onServersAdded?.();
     }
-    if (!allToolsetsDone) {
+    if (!allInstallsDone) {
       prevAllDoneRef.current = false;
     }
-  }, [allToolsetsDone, onServersAdded]);
+  }, [allInstallsDone, onServersAdded]);
 
   useEffect(() => {
     if (!open || !onInstallFinished || finishedRef.current) return;
@@ -408,32 +269,38 @@ export function AddServerDialog({
       return;
     }
 
-    if (releaseState.phase === "error") {
+    // Dead-end guard: when no server has a compatible endpoint, canInstall
+    // never becomes true and the install never starts. Interactive users see
+    // the warning in the configure step, but headless/auto-start callers would
+    // wait forever — report the failure instead.
+    if (
+      releaseState.phase === "configure" &&
+      releaseState.serverConfigs.length > 0 &&
+      releaseState.serverConfigs.every((config) => config.remotes.length === 0)
+    ) {
       finishedRef.current = true;
       onInstallFinished({
         projectSlug,
         status: "failed",
         succeededCount: 0,
         failedCount: servers.length,
-        error: releaseState.error,
+        error:
+          "None of the selected servers expose a compatible remote endpoint.",
       });
       return;
     }
 
     if (releaseState.phase !== "complete") return;
 
-    const statuses = releaseState.toolsetStatuses;
-    const allDone =
-      statuses.length > 0 &&
-      statuses.every((s) => s.status === "completed" || s.status === "failed");
-    if (!allDone) return;
+    const statuses = releaseState.statuses;
+    if (statuses.length === 0) return;
 
     const succeededCount = statuses.filter(
       (s) => s.status === "completed",
     ).length;
     const failedCount = statuses.filter((s) => s.status === "failed").length;
     const firstCompleted = statuses.find(
-      (s) => s.status === "completed" && s.toolsetSlug && s.mcpSlug,
+      (s) => s.status === "completed" && s.mcpServerParam,
     );
 
     finishedRef.current = true;
@@ -442,8 +309,12 @@ export function AddServerDialog({
       status: failedCount === 0 ? "succeeded" : "failed",
       succeededCount,
       failedCount,
-      firstCompletedToolsetSlug: firstCompleted?.toolsetSlug,
-      firstCompletedMcpSlug: firstCompleted?.mcpSlug,
+      firstCompletedMcpServerId: firstCompleted?.mcpServerId,
+      firstCompletedMcpServerParam: firstCompleted?.mcpServerParam,
+      firstCompletedMcpEndpointUrl: firstCompleted?.mcpEndpointUrl,
+      completedMcpServerIds: statuses.flatMap((s) =>
+        s.status === "completed" && s.mcpServerId ? [s.mcpServerId] : [],
+      ),
       error: statuses
         .filter((s) => s.status === "failed" && s.error)
         .map((s) => `${s.name}: ${s.error}`)
@@ -513,37 +384,7 @@ export function AddServerDialog({
   if (enrichedServers.length === 0 && !open) return null;
 
   const isSingle = enrichedServers.length === 1;
-  // Check if we came from multi-remote flow (some servers have selectedRemotes)
-  const hasConfiguredMultiRemote =
-    releaseState.phase === "configure" &&
-    releaseState.serverConfigs.some((c) => c.selectedRemotes);
-  const allAlreadyInstalled =
-    releaseState.phase === "configure" &&
-    releaseState.serverConfigs.length > 0 &&
-    releaseState.serverConfigs.every((c) =>
-      releaseState.isServerAlreadyInstalled(c.server),
-    );
-  const hasInstalledServers =
-    releaseState.phase === "configure" &&
-    releaseState.serverConfigs.some((c) =>
-      releaseState.isServerAlreadyInstalled(c.server),
-    );
-  const title = (() => {
-    if (releaseState.phase === "complete") return "Added to Project";
-    if (releaseState.phase === "error") return "Deployment Error";
-    if (releaseState.phase === "selectRemotes") {
-      const config =
-        releaseState.multiRemoteConfigs[releaseState.currentServerIndex];
-      return `Configure ${config?.server.title ?? config?.server.registrySpecifier ?? "Server"}`;
-    }
-    if (allAlreadyInstalled) {
-      return isSingle ? "Install as Fork" : "Install as Forks";
-    }
-    if (hasConfiguredMultiRemote) return "One more step";
-    return isSingle
-      ? "Add to Project"
-      : `Add ${enrichedServers.length} servers to project`;
-  })();
+  const title = dialogTitle(releaseState, isSingle, enrichedServers.length);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -551,14 +392,7 @@ export function AddServerDialog({
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>
-            <PhaseDescription
-              phase={releaseState.phase}
-              isSingle={isSingle}
-              hasConfiguredMultiRemote={hasConfiguredMultiRemote}
-              allAlreadyInstalled={allAlreadyInstalled}
-              hasInstalledServers={hasInstalledServers}
-              projectSlug={releaseState.projectSlug}
-            />
+            {phaseDescription(releaseState.phase, isSingle)}
           </Dialog.Description>
         </Dialog.Header>
         <PhaseContent
@@ -572,62 +406,42 @@ export function AddServerDialog({
   );
 }
 
-function PhaseDescription({
-  phase,
-  isSingle,
-  hasConfiguredMultiRemote,
-  allAlreadyInstalled,
-  hasInstalledServers,
-  projectSlug,
-}: {
-  phase: ExternalMcpReleaseWorkflow["phase"];
-  isSingle: boolean;
-  hasConfiguredMultiRemote: boolean;
-  allAlreadyInstalled: boolean;
-  hasInstalledServers: boolean;
-  projectSlug?: string;
-}) {
-  const routes = useRoutes(projectSlug ? { projectSlug } : undefined);
-  const viewSourcesLink = (
-    <routes.sources.Link className="text-primary">
-      View sources
-    </routes.sources.Link>
-  );
+function dialogTitle(
+  releaseState: RemoteMcpInstallWorkflow,
+  isSingle: boolean,
+  serverCount: number,
+): string {
+  switch (releaseState.phase) {
+    case "complete":
+      return "Added to Project";
+    case "installing":
+      return "Adding to Project";
+    case "selectRemotes": {
+      const config =
+        releaseState.multiRemoteConfigs[releaseState.currentServerIndex];
+      return `Configure ${config?.server.title ?? config?.server.registrySpecifier ?? "Server"}`;
+    }
+    case "configure":
+      return isSingle
+        ? "Add to Project"
+        : `Add ${serverCount} servers to project`;
+  }
+}
 
+function phaseDescription(
+  phase: RemoteMcpInstallWorkflow["phase"],
+  isSingle: boolean,
+): string {
   switch (phase) {
     case "selectRemotes":
       return "This server has multiple endpoints. Select which ones to include.";
     case "configure":
-      if (allAlreadyInstalled) {
-        return (
-          <>
-            {isSingle
-              ? "This source is already installed in your project. Installing it again will create a fork with its own name and MCP URL."
-              : "These sources are already installed in your project. Installing them again will create forks with their own names and MCP URLs."}{" "}
-            {viewSourcesLink}
-          </>
-        );
-      }
-      if (hasInstalledServers) {
-        return (
-          <>
-            Some selected sources are already in your project. Those entries
-            will be installed as forks while the rest are deployed normally.{" "}
-            {viewSourcesLink}
-          </>
-        );
-      }
-      if (hasConfiguredMultiRemote) {
-        return "Name the remaining servers before adding to your project.";
-      }
       return isSingle
         ? "Add this MCP server to your project."
         : "Configure and add these MCP servers to your project.";
-    case "deploying":
-      return "Deploying MCP server configuration...";
+    case "installing":
+      return "Creating MCP servers...";
     case "complete":
-      return "";
-    case "error":
       return "";
   }
 }
@@ -638,7 +452,7 @@ function PhaseContent({
   bulk,
   onClose,
 }: {
-  releaseState: ExternalMcpReleaseWorkflow;
+  releaseState: RemoteMcpInstallWorkflow;
   isSingle: boolean;
   bulk?: boolean;
   onClose: () => void;
@@ -659,8 +473,8 @@ function PhaseContent({
           onClose={onClose}
         />
       );
-    case "deploying":
-      return <DeployingPhaseContent releaseState={releaseState} />;
+    case "installing":
+      return <InstallStatusList statuses={releaseState.statuses} />;
     case "complete":
       return (
         <CompletePhaseContent
@@ -669,15 +483,11 @@ function PhaseContent({
           onClose={onClose}
         />
       );
-    case "error":
-      return (
-        <ErrorPhaseContent releaseState={releaseState} onClose={onClose} />
-      );
   }
 }
 
 /** Routes scoped to the target project (which may differ from the current project). */
-function useTargetRoutes(releaseState: ExternalMcpReleaseWorkflow) {
+function useTargetRoutes(releaseState: RemoteMcpInstallWorkflow) {
   return useRoutes(
     releaseState.projectSlug
       ? { projectSlug: releaseState.projectSlug }
@@ -755,7 +565,7 @@ function SelectRemotesPhaseContent({
 
         {/* Name input */}
         <div className="flex flex-col gap-2">
-          <Label>Source name</Label>
+          <Label>Server name</Label>
           <Input
             placeholder={
               currentConfig.server.title ??
@@ -865,47 +675,51 @@ function ConfigurePhaseContent({
   bulk?: boolean;
   onClose: () => void;
 }) {
-  // Filter out multi-remote servers that were already configured in selectRemotes phase
+  // Multi-remote servers were already named in the selectRemotes phase; only
+  // servers with a single endpoint still need a name input here.
   const singleRemoteConfigs = releaseState.serverConfigs.filter(
-    (c) => !c.selectedRemotes,
+    (c) => (c.server.remotes ?? []).length <= 1,
   );
-  const hasOnlySingleRemote = singleRemoteConfigs.length > 0;
   const effectiveIsSingle = singleRemoteConfigs.length === 1;
+  const hasHeaderInputs = releaseState.serverConfigs.some(
+    (config) => configCollectibleHeaderCount(config) > 0,
+  );
+  // Headers the upstream marks required gate the primary button, but a Skip
+  // action always lets the user install now and fill values in from the
+  // server's Settings tab later. Bulk installs never collect header values.
+  const missingRequiredHeaders = bulk
+    ? 0
+    : releaseState.serverConfigs.reduce(
+        (count, config) => count + missingRequiredHeaderCount(config),
+        0,
+      );
+  // When every server came through the selectRemotes phase and none needs
+  // header values, there is nothing left to configure — install immediately.
+  const nothingToConfigure =
+    singleRemoteConfigs.length === 0 && !hasHeaderInputs;
 
-  const allAlreadyInstalled =
-    releaseState.serverConfigs.length > 0 &&
-    releaseState.serverConfigs.every((c) =>
-      releaseState.isServerAlreadyInstalled(c.server),
-    );
-  const hasInstalledServers = releaseState.serverConfigs.some((c) =>
-    releaseState.isServerAlreadyInstalled(c.server),
-  );
-  const needsDeployment = releaseState.serverConfigs.some(
-    (c) => !releaseState.isServerAlreadyInstalled(c.server),
-  );
+  const canSubmit = releaseState.canInstall && missingRequiredHeaders === 0;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && releaseState.canDeploy) {
+    if (e.key === "Enter" && canSubmit) {
       e.preventDefault();
-      void releaseState.startDeployment();
+      void releaseState.startInstall();
     }
   };
 
-  // Auto-deploy when all servers were multi-remote (already configured in selectRemotes)
   useEffect(() => {
-    if (!hasOnlySingleRemote && releaseState.canDeploy && needsDeployment) {
-      void releaseState.startDeployment();
+    if (nothingToConfigure && releaseState.canInstall) {
+      void releaseState.startInstall();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger on deploy readiness changes, not on every releaseState update
-  }, [hasOnlySingleRemote, needsDeployment, releaseState.canDeploy]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger on install readiness changes, not on every releaseState update
+  }, [nothingToConfigure, releaseState.canInstall]);
 
-  // If all servers were multi-remote, show loading state while auto-deploying
-  if (!hasOnlySingleRemote && needsDeployment) {
+  if (nothingToConfigure && releaseState.serverConfigs.length > 0) {
     return (
       <div className="flex items-center justify-center gap-2 py-4">
         <Loader2 className="h-4 w-4 animate-spin" />
         <Type small muted>
-          Starting deployment...
+          Starting install...
         </Type>
       </div>
     );
@@ -927,6 +741,7 @@ function ConfigurePhaseContent({
             singleRemoteConfigs={singleRemoteConfigs}
           />
         )}
+        {!bulk && <HeaderValueSections releaseState={releaseState} />}
       </Stack>
       <Dialog.Footer>
         <div className="flex gap-2">
@@ -935,30 +750,52 @@ function ConfigurePhaseContent({
               Back
             </Button>
           )}
-          {(!releaseState.goBack || allAlreadyInstalled) && (
-            <Button variant="tertiary" onClick={onClose}>
-              Cancel
+          <Button variant="tertiary" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          {missingRequiredHeaders > 0 && (
+            <Button
+              variant="secondary"
+              disabled={!releaseState.canInstall}
+              onClick={() => {
+                void releaseState.startInstall();
+              }}
+            >
+              <Button.Text>Skip for now</Button.Text>
             </Button>
           )}
+          <Button
+            disabled={!canSubmit}
+            onClick={() => {
+              void releaseState.startInstall();
+            }}
+          >
+            <Button.Text>Add to Project</Button.Text>
+          </Button>
         </div>
-        <Button
-          disabled={!releaseState.canDeploy}
-          onClick={() => {
-            void releaseState.startDeployment();
-          }}
-        >
-          <Button.Text>
-            {needsDeployment
-              ? hasInstalledServers
-                ? "Deploy and install"
-                : "Deploy"
-              : releaseState.serverConfigs.length === 1
-                ? "Install as fork"
-                : "Install selected"}
-          </Button.Text>
-        </Button>
       </Dialog.Footer>
     </div>
+  );
+}
+
+function configIndexOf(releaseState: ConfigurePhase, config: ServerConfig) {
+  return releaseState.serverConfigs.indexOf(config);
+}
+
+function AlreadyInstalledHint({
+  releaseState,
+  config,
+}: {
+  releaseState: ConfigurePhase;
+  config: ServerConfig;
+}) {
+  if (!releaseState.isServerAlreadyInstalled(config.server)) return null;
+  return (
+    <Type small muted>
+      Already in this project — adding it again creates another server.
+    </Type>
   );
 }
 
@@ -967,22 +804,16 @@ function SingleServerConfig({
   singleRemoteConfigs,
 }: {
   releaseState: ConfigurePhase;
-  singleRemoteConfigs: ConfigurePhase["serverConfigs"];
+  singleRemoteConfigs: ServerConfig[];
 }) {
   const config = singleRemoteConfigs[0];
   if (!config) return null;
-  const isAlreadyInstalled = releaseState.isServerAlreadyInstalled(
-    config.server,
-  );
 
-  // Find the original index in serverConfigs
-  const originalIndex = releaseState.serverConfigs.findIndex(
-    (c) => c.server.registrySpecifier === config.server.registrySpecifier,
-  );
+  const originalIndex = configIndexOf(releaseState, config);
 
   return (
     <div className="flex flex-col gap-2">
-      <Label>Source name</Label>
+      <Label>Server name</Label>
       <Input
         placeholder={config.server.title || config.server.registrySpecifier}
         value={config.name}
@@ -992,11 +823,8 @@ function SingleServerConfig({
           })
         }
       />
-      {isAlreadyInstalled && (
-        <Type small muted>
-          Installing again will create a fork of the existing source.
-        </Type>
-      )}
+      {config.remotes.length === 0 && <NoRemoteWarning />}
+      <AlreadyInstalledHint releaseState={releaseState} config={config} />
     </div>
   );
 }
@@ -1006,48 +834,61 @@ function BatchServerConfig({
   singleRemoteConfigs,
 }: {
   releaseState: ConfigurePhase;
-  singleRemoteConfigs: ConfigurePhase["serverConfigs"];
+  singleRemoteConfigs: ServerConfig[];
 }) {
   return (
     <div className="max-h-80 space-y-3 overflow-y-auto">
       {singleRemoteConfigs.map((config) => {
-        // Find the original index in serverConfigs
-        const originalIndex = releaseState.serverConfigs.findIndex(
-          (c) => c.server.registrySpecifier === config.server.registrySpecifier,
-        );
+        const originalIndex = configIndexOf(releaseState, config);
         return (
           <div
             key={config.server.registrySpecifier}
-            className="flex items-center gap-3 rounded-lg border p-3"
+            className="flex flex-col gap-2 rounded-lg border p-3"
           >
-            <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center rounded">
-              {config.server.iconUrl ? (
-                <img
-                  src={config.server.iconUrl}
-                  alt=""
-                  className="h-4 w-4 rounded"
+            <div className="flex items-center gap-3">
+              <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center rounded">
+                {config.server.iconUrl ? (
+                  <img
+                    src={config.server.iconUrl}
+                    alt=""
+                    className="h-4 w-4 rounded"
+                  />
+                ) : (
+                  <ServerIcon className="text-muted-foreground h-3 w-3" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <Input
+                  placeholder={
+                    config.server.title || config.server.registrySpecifier
+                  }
+                  value={config.name}
+                  onChange={(e) =>
+                    releaseState.updateServerConfig(originalIndex, {
+                      name: e.target.value,
+                    })
+                  }
+                  className="text-sm"
                 />
-              ) : (
-                <ServerIcon className="text-muted-foreground h-3 w-3" />
-              )}
+              </div>
             </div>
-            <div className="min-w-0 flex-1">
-              <Input
-                placeholder={
-                  config.server.title || config.server.registrySpecifier
-                }
-                value={config.name}
-                onChange={(e) =>
-                  releaseState.updateServerConfig(originalIndex, {
-                    name: e.target.value,
-                  })
-                }
-                className="text-sm"
-              />
-            </div>
+            {config.remotes.length === 0 && <NoRemoteWarning />}
+            <AlreadyInstalledHint releaseState={releaseState} config={config} />
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function NoRemoteWarning() {
+  return (
+    <div className="border-destructive/30 bg-destructive/5 flex items-start gap-2 rounded-md border p-2">
+      <AlertCircle className="text-destructive mt-0.5 h-4 w-4 shrink-0" />
+      <Type small className="text-destructive/80">
+        This server does not expose a compatible remote endpoint and cannot be
+        added.
+      </Type>
     </div>
   );
 }
@@ -1061,7 +902,6 @@ function BulkInstallSummary({
   const alreadyInstalledCount = releaseState.serverConfigs.filter((c) =>
     releaseState.isServerAlreadyInstalled(c.server),
   ).length;
-  const newCount = totalServers - alreadyInstalledCount;
 
   return (
     <div className="space-y-3">
@@ -1081,60 +921,199 @@ function BulkInstallSummary({
       </div>
       {alreadyInstalledCount > 0 && (
         <Type small muted>
-          {alreadyInstalledCount} already installed (will be forked)
-          {newCount > 0 && `, ${newCount} new`}.
+          {alreadyInstalledCount} already in this project (a new server is
+          created for each).
         </Type>
       )}
     </div>
   );
 }
 
-// --- Deploying Phase ---
+// --- Header inputs ---
 
-function DeployingPhaseContent({
+function configCollectibleHeaderCount(config: ServerConfig): number {
+  return config.remotes.reduce(
+    (count, remote) => count + collectibleHeaders(remote).length,
+    0,
+  );
+}
+
+function missingRequiredHeaderCount(config: ServerConfig): number {
+  return config.remotes.reduce(
+    (count, remote) =>
+      count +
+      collectibleHeaders(remote).filter(
+        (header) =>
+          (header.isRequired ?? false) &&
+          !config.headerValues[headerValueKey(remote.url, header.name)]?.trim(),
+      ).length,
+    0,
+  );
+}
+
+/**
+ * Optional upstream header values, collected per endpoint. Values left blank
+ * are simply not saved — headers can always be configured later from the
+ * server's Settings tab.
+ */
+function HeaderValueSections({
   releaseState,
 }: {
-  releaseState: DeployingPhase;
+  releaseState: ConfigurePhase;
 }) {
-  const logsEndRef = useRef<HTMLDivElement>(null);
+  const configsWithHeaders = releaseState.serverConfigs.filter(
+    (config) => configCollectibleHeaderCount(config) > 0,
+  );
+  if (configsWithHeaders.length === 0) return null;
 
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [releaseState.deploymentLogs.length]);
-
-  const statusText = (() => {
-    const s = releaseState.deploymentStatus;
-    if (!s || s === "created") return "Waiting for deployment to start...";
-    if (s === "pending") return "Processing deployment...";
-    return "Deploying...";
-  })();
+  const showServerName = releaseState.serverConfigs.length > 1;
 
   return (
-    <div className="space-y-4 py-2">
-      <Stack direction="horizontal" gap={2} align="center">
-        <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
-        <Type small muted>
-          {statusText}
+    <div className="flex flex-col gap-3">
+      <div>
+        <Label>Upstream headers</Label>
+        <Type small muted className="block">
+          Values are stored on the server and sent with every upstream request.
+          You can skip this step — headers can always be configured later in the
+          server's Settings tab.
         </Type>
-      </Stack>
-      {releaseState.deploymentLogs.length > 0 && (
-        <div className="bg-muted/30 max-h-48 space-y-1 overflow-y-auto rounded-lg border p-3 font-mono text-xs">
-          {releaseState.deploymentLogs.map((log) => (
-            <div
-              key={log.id}
-              className={`break-all ${log.event.includes("error") ? "text-destructive" : ""}`}
-            >
-              {log.message}
-            </div>
+      </div>
+      <div className="max-h-64 space-y-3 overflow-y-auto">
+        {configsWithHeaders.map((config) => (
+          <HeaderValueConfig
+            key={config.server.registrySpecifier}
+            releaseState={releaseState}
+            config={config}
+            showServerName={showServerName}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HeaderValueConfig({
+  releaseState,
+  config,
+  showServerName,
+}: {
+  releaseState: ConfigurePhase;
+  config: ServerConfig;
+  showServerName: boolean;
+}) {
+  const configIndex = configIndexOf(releaseState, config);
+  const remotesWithHeaders = config.remotes.filter(
+    (remote) => collectibleHeaders(remote).length > 0,
+  );
+  const showRemoteName = config.remotes.length > 1;
+
+  return (
+    <div className="flex flex-col gap-3">
+      {showServerName && (
+        <Type small className="font-medium">
+          {config.name || config.server.registrySpecifier}
+        </Type>
+      )}
+      {remotesWithHeaders.map((remote) => (
+        <div key={remote.url} className="flex flex-col gap-2">
+          {showRemoteName && (
+            <Type small muted>
+              {getRemoteDisplayInfo(remote.url).name}
+            </Type>
+          )}
+          {collectibleHeaders(remote).map((header) => (
+            <HeaderValueField
+              key={header.name}
+              label={header.name}
+              required={header.isRequired ?? false}
+              secret={header.isSecret ?? false}
+              description={header.description}
+              placeholder={header.placeholder}
+              value={
+                config.headerValues[headerValueKey(remote.url, header.name)] ??
+                ""
+              }
+              onChange={(value) =>
+                releaseState.setHeaderValue(
+                  configIndex,
+                  remote.url,
+                  header.name,
+                  value,
+                )
+              }
+            />
           ))}
-          <div ref={logsEndRef} />
         </div>
+      ))}
+    </div>
+  );
+}
+
+function HeaderValueField({
+  label,
+  required,
+  secret,
+  description,
+  placeholder,
+  value,
+  onChange,
+}: {
+  label: string;
+  required: boolean;
+  secret: boolean;
+  description?: string;
+  placeholder?: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-baseline gap-2">
+        <Type small className="font-mono">
+          {label}
+        </Type>
+        {required && (
+          <Type small muted>
+            required
+          </Type>
+        )}
+      </div>
+      <Input
+        type={secret ? "password" : "text"}
+        placeholder={placeholder ?? description ?? ""}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {description && (
+        <Type small muted>
+          {description}
+        </Type>
       )}
     </div>
   );
 }
 
-// --- Complete Phase ---
+// --- Installing / Complete Phases ---
+
+function InstallStatusList({ statuses }: { statuses: ServerInstallStatus[] }) {
+  return (
+    <div className="space-y-1.5 py-2">
+      {statuses.map((status) => (
+        <div
+          key={status.key}
+          className="flex items-center gap-3 rounded-lg border p-2"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Type small className="truncate">
+              {status.name}
+            </Type>
+          </div>
+          <InstallStatusIcon status={status.status} />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function CompletePhaseContent({
   releaseState,
@@ -1144,20 +1123,20 @@ function CompletePhaseContent({
   isSingle: boolean;
   onClose: () => void;
 }) {
-  const allDone = releaseState.toolsetStatuses.every(
-    (s) => s.status === "completed" || s.status === "failed",
-  );
-  const allSucceeded = releaseState.toolsetStatuses.every(
+  const allSucceeded = releaseState.statuses.every(
     (s) => s.status === "completed",
   );
-  const successCount = releaseState.toolsetStatuses.filter(
+  const successCount = releaseState.statuses.filter(
     (s) => s.status === "completed",
   ).length;
+  const firstCompleted = releaseState.statuses.find(
+    (s) => s.status === "completed" && s.mcpServerParam,
+  );
 
   return (
     <div className="space-y-4 pb-2">
       {/* Success header when all done */}
-      {allDone && allSucceeded && (
+      {allSucceeded && (
         <div className="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20">
             <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -1172,17 +1151,17 @@ function CompletePhaseContent({
         </div>
       )}
 
-      {/* Toolset creation progress - only show during creation or if there were failures */}
-      {(!allDone || !allSucceeded) && (
+      {/* Per-server results — only shown if something failed */}
+      {!allSucceeded && (
         <div>
           <Type small muted className="mb-2">
-            {allDone ? "Results" : "Adding servers..."}
+            Results
           </Type>
           <div className="space-y-1.5">
-            {releaseState.toolsetStatuses.map((ts) => (
-              <ToolsetStatusRow
-                key={ts.slug}
-                status={ts}
+            {releaseState.statuses.map((status) => (
+              <InstallStatusRow
+                key={status.key}
+                status={status}
                 releaseState={releaseState}
               />
             ))}
@@ -1190,42 +1169,28 @@ function CompletePhaseContent({
         </div>
       )}
 
-      {/* Next steps — only shown when all toolsets are done */}
-      {allDone &&
-        (() => {
-          const firstCompleted = releaseState.toolsetStatuses.find(
-            (s) => s.status === "completed" && s.toolsetSlug && s.mcpSlug,
-          );
-          if (firstCompleted) {
-            return (
-              <SingleServerNextSteps
-                toolsetSlug={firstCompleted.toolsetSlug!}
-                mcpSlug={firstCompleted.mcpSlug!}
-                releaseState={releaseState}
-              />
-            );
-          }
-          return (
-            <Dialog.Footer>
-              <Button variant="tertiary" onClick={onClose}>
-                <Button.Text>Close</Button.Text>
-              </Button>
-            </Dialog.Footer>
-          );
-        })()}
+      {firstCompleted ? (
+        <NextSteps status={firstCompleted} releaseState={releaseState} />
+      ) : (
+        <Dialog.Footer>
+          <Button variant="tertiary" onClick={onClose}>
+            <Button.Text>Close</Button.Text>
+          </Button>
+        </Dialog.Footer>
+      )}
     </div>
   );
 }
 
-function ToolsetStatusRow({
+function InstallStatusRow({
   status,
   releaseState,
 }: {
-  status: ServerToolsetStatus;
+  status: ServerInstallStatus;
   releaseState: CompletePhase;
 }) {
   const routes = useTargetRoutes(releaseState);
-  const isCompleted = status.status === "completed" && status.toolsetSlug;
+  const isCompleted = status.status === "completed" && status.mcpServerParam;
 
   const content = (
     <div className="flex items-center gap-3 rounded-lg border p-2">
@@ -1233,34 +1198,39 @@ function ToolsetStatusRow({
         <Type small className="truncate">
           {status.name}
         </Type>
+        {status.error && (
+          <Type small className="text-destructive/80 truncate">
+            {status.error}
+          </Type>
+        )}
       </div>
       <div className="flex items-center gap-2">
         {isCompleted && (
           <ArrowRight className="text-muted-foreground h-3 w-3" />
         )}
-        <ToolsetStatusIcon status={status.status} />
+        <InstallStatusIcon status={status.status} />
       </div>
     </div>
   );
 
   if (isCompleted) {
     return (
-      <routes.mcp.details.Link
-        params={[status.toolsetSlug!]}
+      <routes.mcp.x.Link
+        params={[status.mcpServerParam!]}
         className="block no-underline transition-opacity hover:no-underline hover:opacity-80"
       >
         {content}
-      </routes.mcp.details.Link>
+      </routes.mcp.x.Link>
     );
   }
 
   return content;
 }
 
-function ToolsetStatusIcon({
+function InstallStatusIcon({
   status,
 }: {
-  status: ServerToolsetStatus["status"];
+  status: ServerInstallStatus["status"];
 }) {
   switch (status) {
     case "pending":
@@ -1276,13 +1246,11 @@ function ToolsetStatusIcon({
   }
 }
 
-function SingleServerNextSteps({
-  toolsetSlug,
-  mcpSlug,
+function NextSteps({
+  status,
   releaseState,
 }: {
-  toolsetSlug: string;
-  mcpSlug: string;
+  status: ServerInstallStatus;
   releaseState: CompletePhase;
 }) {
   const routes = useTargetRoutes(releaseState);
@@ -1304,42 +1272,28 @@ function SingleServerNextSteps({
             <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
         </routes.sources.Link>
-        <routes.elements.Link
-          className="no-underline hover:no-underline"
-          queryParams={{ toolset: toolsetSlug }}
-        >
-          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-500/10 dark:bg-violet-500/20">
-              <MessageCircle className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+        {status.mcpEndpointUrl && (
+          <a
+            href={`${status.mcpEndpointUrl}/install`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="no-underline hover:no-underline"
+          >
+            <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 dark:bg-emerald-500/20">
+                <Plug className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="flex-1">
+                <Type className="text-sm font-medium no-underline">
+                  Connect via Claude, Cursor, Codex
+                </Type>
+              </div>
+              <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
             </div>
-            <div className="flex-1">
-              <Type className="text-sm font-medium no-underline">
-                Deploy as chat
-              </Type>
-            </div>
-            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
-          </div>
-        </routes.elements.Link>
-        <a
-          href={`${getServerURL()}/mcp/${mcpSlug}/install`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="no-underline hover:no-underline"
-        >
-          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 dark:bg-emerald-500/20">
-              <Plug className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div className="flex-1">
-              <Type className="text-sm font-medium no-underline">
-                Connect via Claude, Cursor
-              </Type>
-            </div>
-            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
-          </div>
-        </a>
-        <routes.mcp.details.Link
-          params={[toolsetSlug]}
+          </a>
+        )}
+        <routes.mcp.x.Link
+          params={[status.mcpServerParam!]}
           className="no-underline hover:no-underline"
         >
           <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
@@ -1353,64 +1307,8 @@ function SingleServerNextSteps({
             </div>
             <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
-        </routes.mcp.details.Link>
+        </routes.mcp.x.Link>
       </div>
-    </div>
-  );
-}
-
-// --- Error Phase ---
-
-function ErrorPhaseContent({
-  releaseState,
-  onClose,
-}: {
-  releaseState: ErrorPhase;
-  onClose: () => void;
-}) {
-  const routes = useTargetRoutes(releaseState);
-
-  return (
-    <div className="space-y-4 py-2">
-      <div className="border-destructive/30 bg-destructive/5 flex items-start gap-3 rounded-lg border p-3">
-        <AlertCircle className="text-destructive mt-0.5 h-5 w-5 shrink-0" />
-        <div className="flex-1">
-          <Type className="text-destructive font-medium">
-            Deployment failed
-          </Type>
-          <Type small className="text-destructive/80 mt-1">
-            {releaseState.error}
-          </Type>
-        </div>
-      </div>
-      {releaseState.deploymentLogs.length > 0 && (
-        <div className="bg-muted/30 max-h-48 space-y-1 overflow-y-auto rounded-lg border p-3 font-mono text-xs">
-          {releaseState.deploymentLogs.map((log) => (
-            <div
-              key={log.id}
-              className={`break-all ${log.event.includes("error") ? "text-destructive" : ""}`}
-            >
-              {log.message}
-            </div>
-          ))}
-        </div>
-      )}
-      <Dialog.Footer>
-        {releaseState.deploymentId && (
-          <routes.deployments.deployment.Link
-            params={[releaseState.deploymentId]}
-            className="no-underline hover:no-underline"
-          >
-            <Button variant="secondary">
-              <ExternalLink className="h-4 w-4" />
-              <Button.Text>View Deployment</Button.Text>
-            </Button>
-          </routes.deployments.deployment.Link>
-        )}
-        <Button variant="tertiary" onClick={onClose}>
-          <Button.Text>Close</Button.Text>
-        </Button>
-      </Dialog.Footer>
     </div>
   );
 }

@@ -94,18 +94,35 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newGuardianPolicy(c *cli.Context, tracerProvider trace.TracerProvider) (policy *guardian.Policy, err error) {
+func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (policy *guardian.Policy, err error) {
+	breaker := guardian.NewNoopBreaker(logger, meterProvider)
+	limiter := guardian.NewNoopLimiter(logger, meterProvider)
+
 	// In local development, allow loopback addresses for internal tool-to-tool communication
 	if c.String("environment") == "local" {
-		policy, err = guardian.NewUnsafePolicy(tracerProvider, []string{}) // Allow all traffic for local development
+		policy, err = guardian.NewUnsafePolicy(
+			tracerProvider,
+			[]string{}, // Allow all traffic for local development
+			guardian.WithBreaker(breaker),
+			guardian.WithLimiter(limiter),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
 		}
 	} else {
-		policy = guardian.NewDefaultPolicy(tracerProvider)
+		policy = guardian.NewDefaultPolicy(
+			tracerProvider,
+			guardian.WithBreaker(breaker),
+			guardian.WithLimiter(limiter),
+		)
 	}
 	if s := c.StringSlice("disallowed-cidr-blocks"); s != nil {
-		policy, err = guardian.NewUnsafePolicy(tracerProvider, s)
+		policy, err = guardian.NewUnsafePolicy(
+			tracerProvider,
+			s,
+			guardian.WithBreaker(breaker),
+			guardian.WithLimiter(limiter),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create unsafe http guardian policy: %w", err)
 		}
@@ -500,9 +517,8 @@ func newBillingProvider(
 // the dev-idp's mock-workos emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
-		Endpoint:   c.String("workos-endpoint"),
-		HTTPClient: nil,
-		ClientID:   c.String("idp-client-id"),
+		Endpoint: c.String("workos-endpoint"),
+		ClientID: c.String("idp-client-id"),
 	}
 }
 
@@ -781,6 +797,7 @@ func newTriggersApp(
 	telemetryLogger *telemetry.Logger,
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
+	siteURL *url.URL,
 	slackClient *slack_client.SlackClient,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
@@ -812,6 +829,7 @@ func newTriggersApp(
 		}),
 		auditLogger,
 		serverURL,
+		siteURL,
 		slackClient,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
@@ -1002,6 +1020,18 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "gitleaksAnalysis", pub: gitleaksAnalysis})
 
+	promptInjectionAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PromptInjectionAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for prompt injection analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "promptInjectionAnalysis", pub: promptInjectionAnalysis})
+
+	promptPolicyAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PromptPolicyAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for prompt policy analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "promptPolicyAnalysis", pub: promptPolicyAnalysis})
+
 	customRulesAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.CustomRulesAnalysis{})
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for custom rules analysis: %w", err)
@@ -1019,9 +1049,11 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 
 	return &background.Publishers{
-		PresidioAnalysis:    presidioAnalysis,
-		GitleaksAnalysis:    gitleaksAnalysis,
-		CustomRulesAnalysis: customRulesAnalysis,
+		PresidioAnalysis:        presidioAnalysis,
+		GitleaksAnalysis:        gitleaksAnalysis,
+		PromptInjectionAnalysis: promptInjectionAnalysis,
+		PromptPolicyAnalysis:    promptPolicyAnalysis,
+		CustomRulesAnalysis:     customRulesAnalysis,
 	}, shutdown, nil
 }
 

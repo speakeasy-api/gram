@@ -10,6 +10,14 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type PublishStatusResult = {
   /**
+   * Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+   */
+  claudeObservabilityPlugin?: string | undefined;
+  /**
+   * Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
+   */
+  codexObservabilityPlugin?: string | undefined;
+  /**
    * Whether GitHub publishing is configured on the server.
    */
   configured: boolean;
@@ -18,9 +26,17 @@ export type PublishStatusResult = {
    */
   connected: boolean;
   /**
+   * Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.
+   */
+  hasCollaborators?: boolean | undefined;
+  /**
    * When the project was last published to GitHub. Absent when the project is not connected.
    */
   lastPublishedAt?: Date | undefined;
+  /**
+   * Version stamped into the currently published plugin.json manifests (e.g. 0.1.1783692954) — the version plugin clients such as Claude Code report for installed plugins. Absent when the project is not connected or the live version could not be determined.
+   */
+  liveVersion?: string | undefined;
   /**
    * Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.
    */
@@ -49,11 +65,15 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    claude_observability_plugin: z.optional(z.string()),
+    codex_observability_plugin: z.optional(z.string()),
     configured: z.boolean(),
     connected: z.boolean(),
+    has_collaborators: z.optional(z.boolean()),
     last_published_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    live_version: z.optional(z.string()),
     marketplace_url: z.optional(z.string()),
     repo_name: z.optional(z.string()),
     repo_owner: z.optional(z.string()),
@@ -62,7 +82,11 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "claude_observability_plugin": "claudeObservabilityPlugin",
+      "codex_observability_plugin": "codexObservabilityPlugin",
+      "has_collaborators": "hasCollaborators",
       "last_published_at": "lastPublishedAt",
+      "live_version": "liveVersion",
       "marketplace_url": "marketplaceUrl",
       "repo_name": "repoName",
       "repo_owner": "repoOwner",

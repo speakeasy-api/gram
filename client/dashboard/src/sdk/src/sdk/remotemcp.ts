@@ -3,25 +3,40 @@
  */
 
 import { remoteMcpCreateServer } from "../funcs/remoteMcpCreateServer.js";
+import { remoteMcpCreateServerHeader } from "../funcs/remoteMcpCreateServerHeader.js";
 import { remoteMcpDeleteServer } from "../funcs/remoteMcpDeleteServer.js";
+import { remoteMcpDeleteServerHeader } from "../funcs/remoteMcpDeleteServerHeader.js";
 import { remoteMcpDiscoverProtectedResourceMetadata } from "../funcs/remoteMcpDiscoverProtectedResourceMetadata.js";
 import { remoteMcpGetServer } from "../funcs/remoteMcpGetServer.js";
+import { remoteMcpGetServerHeader } from "../funcs/remoteMcpGetServerHeader.js";
+import { remoteMcpListServerHeaders } from "../funcs/remoteMcpListServerHeaders.js";
 import { remoteMcpListServers } from "../funcs/remoteMcpListServers.js";
 import { remoteMcpUpdateServer } from "../funcs/remoteMcpUpdateServer.js";
+import { remoteMcpUpdateServerHeader } from "../funcs/remoteMcpUpdateServerHeader.js";
 import { remoteMcpVerifyURL } from "../funcs/remoteMcpVerifyURL.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { ListServerHeadersResult } from "../models/components/listserverheadersresult.js";
 import { ListServersResult } from "../models/components/listserversresult.js";
 import { ProtectedResourceMetadataDiscovery } from "../models/components/protectedresourcemetadatadiscovery.js";
 import { RemoteMcpServer } from "../models/components/remotemcpserver.js";
+import { RemoteMcpServerHeader } from "../models/components/remotemcpserverheader.js";
 import { VerifyURLResult } from "../models/components/verifyurlresult.js";
 import {
   CreateRemoteMcpServerRequest,
   CreateRemoteMcpServerSecurity,
 } from "../models/operations/createremotemcpserver.js";
 import {
+  CreateRemoteMcpServerHeaderRequest,
+  CreateRemoteMcpServerHeaderSecurity,
+} from "../models/operations/createremotemcpserverheader.js";
+import {
   DeleteRemoteMcpServerRequest,
   DeleteRemoteMcpServerSecurity,
 } from "../models/operations/deleteremotemcpserver.js";
+import {
+  DeleteRemoteMcpServerHeaderRequest,
+  DeleteRemoteMcpServerHeaderSecurity,
+} from "../models/operations/deleteremotemcpserverheader.js";
 import {
   DiscoverRemoteMcpProtectedResourceMetadataRequest,
   DiscoverRemoteMcpProtectedResourceMetadataSecurity,
@@ -31,6 +46,14 @@ import {
   GetRemoteMcpServerSecurity,
 } from "../models/operations/getremotemcpserver.js";
 import {
+  GetRemoteMcpServerHeaderRequest,
+  GetRemoteMcpServerHeaderSecurity,
+} from "../models/operations/getremotemcpserverheader.js";
+import {
+  ListRemoteMcpServerHeadersRequest,
+  ListRemoteMcpServerHeadersSecurity,
+} from "../models/operations/listremotemcpserverheaders.js";
+import {
   ListRemoteMcpServersRequest,
   ListRemoteMcpServersSecurity,
 } from "../models/operations/listremotemcpservers.js";
@@ -38,6 +61,10 @@ import {
   UpdateRemoteMcpServerRequest,
   UpdateRemoteMcpServerSecurity,
 } from "../models/operations/updateremotemcpserver.js";
+import {
+  UpdateRemoteMcpServerHeaderRequest,
+  UpdateRemoteMcpServerHeaderSecurity,
+} from "../models/operations/updateremotemcpserverheader.js";
 import {
   VerifyRemoteMcpURLRequest,
   VerifyRemoteMcpURLSecurity,
@@ -65,6 +92,25 @@ export class RemoteMcp extends ClientSDK {
   }
 
   /**
+   * createServerHeader remoteMcp
+   *
+   * @remarks
+   * Create a header on a remote MCP server
+   */
+  async createServerHeader(
+    request: CreateRemoteMcpServerHeaderRequest,
+    security?: CreateRemoteMcpServerHeaderSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteMcpServerHeader> {
+    return unwrapAsync(remoteMcpCreateServerHeader(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * deleteServer remoteMcp
    *
    * @remarks
@@ -76,6 +122,25 @@ export class RemoteMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteMcpDeleteServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deleteServerHeader remoteMcp
+   *
+   * @remarks
+   * Delete a remote MCP server header
+   */
+  async deleteServerHeader(
+    request: DeleteRemoteMcpServerHeaderRequest,
+    security?: DeleteRemoteMcpServerHeaderSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(remoteMcpDeleteServerHeader(
       this,
       request,
       security,
@@ -122,6 +187,44 @@ export class RemoteMcp extends ClientSDK {
   }
 
   /**
+   * getServerHeader remoteMcp
+   *
+   * @remarks
+   * Get a remote MCP server header by ID
+   */
+  async getServerHeader(
+    request: GetRemoteMcpServerHeaderRequest,
+    security?: GetRemoteMcpServerHeaderSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteMcpServerHeader> {
+    return unwrapAsync(remoteMcpGetServerHeader(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listServerHeaders remoteMcp
+   *
+   * @remarks
+   * List the headers configured for a remote MCP server
+   */
+  async listServerHeaders(
+    request: ListRemoteMcpServerHeadersRequest,
+    security?: ListRemoteMcpServerHeadersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListServerHeadersResult> {
+    return unwrapAsync(remoteMcpListServerHeaders(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listServers remoteMcp
    *
    * @remarks
@@ -152,6 +255,25 @@ export class RemoteMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteMcpServer> {
     return unwrapAsync(remoteMcpUpdateServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateServerHeader remoteMcp
+   *
+   * @remarks
+   * Update a remote MCP server header
+   */
+  async updateServerHeader(
+    request: UpdateRemoteMcpServerHeaderRequest,
+    security?: UpdateRemoteMcpServerHeaderSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteMcpServerHeader> {
+    return unwrapAsync(remoteMcpUpdateServerHeader(
       this,
       request,
       security,

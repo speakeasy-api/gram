@@ -11,7 +11,7 @@
     "/client/dashboard/src/components/tools-badge.tsx",
     "/client/dashboard/src/lib/constants.ts",
     "/client/dashboard/src/sdk/**",
-    "/elements/docs/**",
+    "/hooks/sdk/**",
     "/infra/gen/**",
     "/infra/gen/**/*",
     "/pnpm-lock.yaml",
@@ -26,16 +26,6 @@
       "options": {
         "sortTailwindcss": {
           "stylesheet": "./client/dashboard/src/styles/globals.css",
-          "functions": ["clsx", "cn"],
-          "preserveWhitespace": true
-        }
-      }
-    },
-    {
-      "files": ["elements/**"],
-      "options": {
-        "sortTailwindcss": {
-          "stylesheet": "elements/src/global.css",
           "functions": ["clsx", "cn"],
           "preserveWhitespace": true
         }

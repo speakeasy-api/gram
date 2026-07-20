@@ -130,6 +130,23 @@ func (q *Queries) ForceSoftDeleteChat(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const forceSoftDeleteUserSessionIssuer = `-- name: ForceSoftDeleteUserSessionIssuer :exec
+UPDATE user_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type ForceSoftDeleteUserSessionIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test-only fixture for defensive paths that handle a dangling soft-delete FK.
+func (q *Queries) ForceSoftDeleteUserSessionIssuer(ctx context.Context, arg ForceSoftDeleteUserSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteUserSessionIssuer, arg.ID, arg.ProjectID)
+	return err
+}
+
 const getDeploymentFunctionInfraOverrides = `-- name: GetDeploymentFunctionInfraOverrides :many
 SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = $1
 `
@@ -233,6 +250,26 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertPluginAssignmentFixture = `-- name: InsertPluginAssignmentFixture :exec
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
+VALUES ($1, $2, $3)
+`
+
+type InsertPluginAssignmentFixtureParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// Test-only fixture: writes a plugin_assignments row with an EXPLICIT
+// organization_id so tests can seed a cross-tenant/stale assignment that the
+// org-scoped AddPluginAssignment (INSERT ... SELECT filtered by org) refuses to
+// create.
+func (q *Queries) InsertPluginAssignmentFixture(ctx context.Context, arg InsertPluginAssignmentFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertPluginAssignmentFixture, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
+	return err
 }
 
 const listDeploymentFunctionsResources = `-- name: ListDeploymentFunctionsResources :many
@@ -476,6 +513,24 @@ func (q *Queries) SetDeploymentFunctionInfraOverrides(ctx context.Context, arg S
 	return err
 }
 
+const setFunctionToolVariables = `-- name: SetFunctionToolVariables :exec
+UPDATE function_tool_definitions
+SET variables = $1
+WHERE id = $2
+  AND project_id = $3
+`
+
+type SetFunctionToolVariablesParams struct {
+	Variables []byte
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionToolVariablesParams) error {
+	_, err := q.db.Exec(ctx, setFunctionToolVariables, arg.Variables, arg.ID, arg.ProjectID)
+	return err
+}
+
 const setOrgWebhookConfig = `-- name: SetOrgWebhookConfig :exec
 UPDATE organization_metadata
 SET svix_app_id = $1,
@@ -509,6 +564,24 @@ type UpdateChatMessageCreatedAtParams struct {
 
 func (q *Queries) UpdateChatMessageCreatedAt(ctx context.Context, arg UpdateChatMessageCreatedAtParams) error {
 	_, err := q.db.Exec(ctx, updateChatMessageCreatedAt, arg.CreatedAt, arg.ID)
+	return err
+}
+
+const updateRiskPolicyBypassRequestTimestamps = `-- name: UpdateRiskPolicyBypassRequestTimestamps :exec
+UPDATE risk_policy_bypass_requests
+SET created_at = $1, updated_at = $1
+WHERE id = $2
+  AND project_id = $3
+`
+
+type UpdateRiskPolicyBypassRequestTimestampsParams struct {
+	RequestedAt pgtype.Timestamptz
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) UpdateRiskPolicyBypassRequestTimestamps(ctx context.Context, arg UpdateRiskPolicyBypassRequestTimestampsParams) error {
+	_, err := q.db.Exec(ctx, updateRiskPolicyBypassRequestTimestamps, arg.RequestedAt, arg.ID, arg.ProjectID)
 	return err
 }
 

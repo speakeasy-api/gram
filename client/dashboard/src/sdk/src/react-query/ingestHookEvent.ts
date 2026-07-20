@@ -23,17 +23,13 @@ import {
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
-import {
-  IngestHookEventRequest,
-  IngestHookEventSecurity,
-} from "../models/operations/ingesthookevent.js";
+import { IngestHookEventRequest } from "../models/operations/ingesthookevent.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type IngestHookEventMutationVariables = {
   request: IngestHookEventRequest;
-  security?: IngestHookEventSecurity | undefined;
   options?: RequestOptions;
 };
 
@@ -91,7 +87,6 @@ export function buildIngestHookEventMutation(
     mutationKey: mutationKeyIngestHookEvent(),
     mutationFn: function ingestHookEventMutationFn({
       request,
-      security,
       options,
     }): Promise<IngestHookEventMutationData> {
       const mergedOptions = {
@@ -109,7 +104,6 @@ export function buildIngestHookEventMutation(
       return unwrapAsync(hooksIngest(
         client$,
         request,
-        security,
         mergedOptions,
       ));
     },

@@ -32,6 +32,10 @@ export type Plugin = {
    */
   id: string;
   /**
+   * Whether this is the project's fallback plugin that new servers attach to.
+   */
+  isDefault?: boolean | undefined;
+  /**
    * Display name.
    */
   name: string;
@@ -43,6 +47,10 @@ export type Plugin = {
    * Servers included in this plugin.
    */
   servers?: Array<PluginServer> | undefined;
+  /**
+   * Number of active skills in this plugin.
+   */
+  skillCount?: number | undefined;
   /**
    * URL-safe identifier, unique per org.
    */
@@ -61,9 +69,11 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
     ),
     description: z.optional(z.string()),
     id: z.string(),
+    is_default: z.optional(z.boolean()),
     name: z.string(),
     server_count: z.optional(z.int()),
     servers: z.optional(z.array(PluginServer$inboundSchema)),
+    skill_count: z.optional(z.int()),
     slug: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -74,7 +84,9 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
     return remap$(v, {
       "assignment_count": "assignmentCount",
       "created_at": "createdAt",
+      "is_default": "isDefault",
       "server_count": "serverCount",
+      "skill_count": "skillCount",
       "updated_at": "updatedAt",
     });
   }),

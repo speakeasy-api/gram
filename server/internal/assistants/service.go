@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -30,12 +32,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -129,6 +132,7 @@ type assistantRecord struct {
 	Instructions    string
 	Toolsets        []assistantToolsetRow
 	MCPServers      []assistantMCPServerRow
+	Skills          []assistantSkillRow
 	WarmTTLSeconds  int
 	MaxConcurrency  int
 	Status          string
@@ -206,6 +210,14 @@ type assistantMCPServerRow struct {
 	EnvironmentSlug pgtype.Text
 }
 
+type assistantSkillRow struct {
+	SkillID           uuid.UUID
+	PinnedVersionID   uuid.NullUUID
+	Name              string
+	ResolvedVersionID uuid.UUID
+	Description       string
+}
+
 func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistantRecord {
 	return assistantRecord{
 		ID:              row.ID,
@@ -217,6 +229,7 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -237,6 +250,7 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -257,6 +271,7 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -277,6 +292,7 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -297,6 +313,7 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -363,6 +380,7 @@ type ServiceCore struct {
 	logger            *slog.Logger
 	tracer            trace.Tracer
 	db                *pgxpool.Pool
+	audit             *audit.Logger
 	guardianPolicy    *guardian.Policy
 	encryptionClient  *encryption.Client
 	runtime           RuntimeBackend
@@ -390,6 +408,7 @@ func NewServiceCore(
 	serverURL *url.URL,
 	telemetryLogger *telemetry.Logger,
 	contextWindow *openrouter.ContextWindowResolver,
+	auditLogger *audit.Logger,
 ) *ServiceCore {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/assistants")
 	turnClassified, err := meter.Int64Counter(
@@ -405,6 +424,7 @@ func NewServiceCore(
 		logger:            logger,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
 		db:                db,
+		audit:             auditLogger,
 		guardianPolicy:    guardianPolicy,
 		encryptionClient:  encryptionClient,
 		runtime:           newTelemetryRuntimeBackend(runtime, telemetryLogger),
@@ -559,9 +579,62 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	//     attempts after CAS active->expiring without reaching Stop or
 	//     Revert. Without this the row blocks the partial unique index
 	//     ReserveAssistantRuntime depends on.
-	// 'active' rows are never reaped: an idle runtime keeps its VM until the
-	// assistant is deleted.
+	// Healthy 'active' rows are never reaped: an idle runtime keeps its VM
+	// until the assistant is deleted. The local reconciliation below is the
+	// narrow exception for a row whose container no longer exists.
 	queries := assistantrepo.New(s.db)
+	// Local containers can be removed outside Gram (docker rm, daemon reset,
+	// pruning). Reconcile those rows before the age-based SQL sweep: unlike a
+	// healthy idle runtime, a definitively missing container can never make
+	// progress. Stop only the row; the next admission recreates the container
+	// against the preserved workspace volume.
+	if checker, ok := s.runtime.(runtimeLivenessChecker); ok && s.runtime.SupportsBackend(runtimeBackendLocal) {
+		rows, err := queries.ListActiveAssistantRuntimes(ctx, runtimeStateActive)
+		if err != nil {
+			return out, fmt.Errorf("list active assistant runtimes for liveness reconciliation: %w", err)
+		}
+		for _, row := range rows {
+			if row.Backend != runtimeBackendLocal {
+				continue
+			}
+			record := assistantRuntimeRecord{
+				ID:                  row.ID,
+				AssistantThreadID:   row.AssistantThreadID,
+				AssistantID:         row.AssistantID,
+				ProjectID:           row.ProjectID,
+				Backend:             row.Backend,
+				BackendMetadataJSON: row.BackendMetadataJson,
+				State:               row.State,
+				WarmUntil:           row.WarmUntil,
+			}
+			exists, err := checker.RuntimeExists(ctx, record)
+			if err != nil {
+				s.logger.WarnContext(ctx, "check assistant runtime existence failed",
+					attr.SlogAssistantID(row.AssistantID.String()),
+					attr.SlogProjectID(row.ProjectID.String()),
+					attr.SlogAssistantRuntimeID(row.ID.String()),
+					attr.SlogError(err),
+				)
+				continue
+			}
+			if exists {
+				continue
+			}
+			if err := queries.StopAssistantRuntime(ctx, assistantrepo.StopAssistantRuntimeParams{
+				State:         runtimeStateStopped,
+				ProjectID:     row.ProjectID,
+				RuntimeID:     row.ID,
+				StartingState: runtimeStateStarting,
+				ActiveState:   runtimeStateActive,
+				ExpiringState: runtimeStateExpiring,
+			}); err != nil {
+				return out, fmt.Errorf("stop vanished local assistant runtime: %w", err)
+			}
+			affected[row.AssistantID] = struct{}{}
+			out.StaleRuntimesStopped++
+		}
+	}
+
 	runtimeAssistantIDs, err := queries.ReapStuckAssistantRuntimes(ctx, assistantrepo.ReapStuckAssistantRuntimesParams{
 		StoppedState:   runtimeStateStopped,
 		StartingState:  runtimeStateStarting,
@@ -789,7 +862,7 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		switch {
 		case row.Tunneled:
 			return nil, assistantValidationError("mcp server %q is tunnel-backed and cannot be attached to an assistant", row.Slug.String)
-		case row.Visibility == mcpservers.VisibilityDisabled:
+		case row.Visibility == visibility.Disabled:
 			return nil, assistantValidationError("mcp server %q is disabled", row.Slug.String)
 		case !row.HasGramEndpoint:
 			return nil, assistantValidationError("mcp server %q has no Gram-hosted MCP endpoint", row.Slug.String)
@@ -899,6 +972,30 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 	return out, nil
 }
 
+func (s *ServiceCore) loadAssistantSkills(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantSkillRow, error) {
+	out := map[uuid.UUID][]assistantSkillRow{}
+	if len(assistantIDs) == 0 {
+		return out, nil
+	}
+	rows, err := assistantrepo.New(s.db).LoadAssistantSkills(ctx, assistantrepo.LoadAssistantSkillsParams{AssistantIds: assistantIDs, ProjectID: projectID})
+	if err != nil {
+		return nil, fmt.Errorf("load assistant skills: %w", err)
+	}
+	for _, row := range rows {
+		if !row.AssistantID.Valid {
+			continue
+		}
+		out[row.AssistantID.UUID] = append(out[row.AssistantID.UUID], assistantSkillRow{
+			SkillID:           row.SkillID,
+			PinnedVersionID:   row.PinnedVersionID,
+			Name:              row.Name,
+			ResolvedVersionID: row.ResolvedVersionID,
+			Description:       conv.FromPGTextOrEmpty[string](row.Description),
+		})
+	}
+	return out, nil
+}
+
 // hydrateAssistantToolSources loads both attachment kinds — toolsets and
 // directly-attached mcp_servers — onto a single assistant record. Every read
 // that feeds the runtime (dispatch, bootstrap, reconcile) and every API read
@@ -915,6 +1012,16 @@ func (s *ServiceCore) hydrateAssistantToolSources(ctx context.Context, projectID
 		return err
 	}
 	record.MCPServers = mcpServers[record.ID]
+
+	return nil
+}
+
+func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid.UUID, record *assistantRecord) error {
+	skills, err := s.loadAssistantSkills(ctx, projectID, []uuid.UUID{record.ID})
+	if err != nil {
+		return err
+	}
+	record.Skills = skills[record.ID]
 	return nil
 }
 
@@ -1033,6 +1140,13 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		}
 		mcpServers = append(mcpServers, ref)
 	}
+	skills := make([]*types.AssistantSkillRef, 0, len(record.Skills))
+	for _, row := range record.Skills {
+		skills = append(skills, &types.AssistantSkillRef{
+			SkillID: row.SkillID.String(), PinnedVersionID: conv.FromNullableUUID(row.PinnedVersionID),
+			ResolvedVersionID: row.ResolvedVersionID.String(),
+		})
+	}
 	return &types.Assistant{
 		ID:              record.ID.String(),
 		ProjectID:       record.ProjectID.String(),
@@ -1042,6 +1156,7 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		Instructions:    record.Instructions,
 		Toolsets:        toolsets,
 		McpServers:      mcpServers,
+		Skills:          skills,
 		WarmTTLSeconds:  record.WarmTTLSeconds,
 		MaxConcurrency:  record.MaxConcurrency,
 		Status:          record.Status,
@@ -1139,9 +1254,14 @@ func (s *ServiceCore) ListAssistants(ctx context.Context, projectID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
+	skillRefs, err := s.loadAssistantSkills(ctx, projectID, ids)
+	if err != nil {
+		return nil, err
+	}
 	for i := range out {
 		out[i].Toolsets = refs[out[i].ID]
 		out[i].MCPServers = mcpRefs[out[i].ID]
+		out[i].Skills = skillRefs[out[i].ID]
 	}
 	return out, nil
 }
@@ -1156,6 +1276,9 @@ func (s *ServiceCore) GetAssistant(ctx context.Context, projectID uuid.UUID, ass
 	}
 	record := assistantRecordFromGetRow(row)
 	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
+		return assistantRecord{}, err
+	}
+	if err := s.hydrateAssistantSkills(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
 	return record, nil
@@ -1243,16 +1366,62 @@ func (s *ServiceCore) UpdateAssistant(
 	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
+	if err := s.hydrateAssistantSkills(ctx, projectID, &record); err != nil {
+		return assistantRecord{}, err
+	}
 	return record, nil
 }
 
-func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, assistantID uuid.UUID) error {
-	err := assistantrepo.New(s.db).DeleteAssistant(ctx, assistantrepo.DeleteAssistantParams{
+func (s *ServiceCore) revokeAssistantSkillDistributions(ctx context.Context, tx pgx.Tx, projectID, assistantID uuid.UUID, actor urn.Principal, actorDisplayName *string) error {
+	rows, err := assistantrepo.New(tx).RevokeSkillDistributionsByAssistant(ctx, assistantrepo.RevokeSkillDistributionsByAssistantParams{
+		ProjectID: projectID, AssistantID: uuid.NullUUID{UUID: assistantID, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("revoke assistant skill distributions: %w", err)
+	}
+	for _, row := range rows {
+		after := &audit.SkillDistributionSnapshot{
+			ID: row.ID.String(), ProjectID: row.ProjectID.String(), SkillID: row.SkillID.String(),
+			PluginID: conv.FromNullableUUID(row.PluginID), AssistantID: conv.FromNullableUUID(row.AssistantID),
+			PinnedVersionID: conv.FromNullableUUID(row.PinnedVersionID), ResolvedVersionID: row.ResolvedVersionID.String(),
+			Channel: row.Channel, CreatedByUserID: row.CreatedByUserID,
+			RevokedAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.RevokedAt)), CreatedAt: conv.FromPGTimestamptz(row.CreatedAt),
+			UpdatedAt: conv.FromPGTimestamptz(row.UpdatedAt),
+		}
+		before := *after
+		before.RevokedAt = nil
+		before.UpdatedAt = conv.FromPGTimestamptz(row.PreviousUpdatedAt)
+		if err := s.audit.LogSkillUndistribute(ctx, tx, audit.LogSkillUndistributeEvent{
+			OrganizationID: row.OrganizationID, ProjectID: projectID, Actor: actor,
+			ActorDisplayName: actorDisplayName, ActorSlug: nil, SkillURN: urn.NewSkill(row.SkillID),
+			SkillName: row.SkillName, SkillDisplayName: row.SkillDisplayName,
+			DistributionSnapshotBefore: &before, DistributionSnapshotAfter: after,
+		}); err != nil {
+			return fmt.Errorf("log assistant skill undistribution: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, assistantID uuid.UUID, actor urn.Principal, actorDisplayName *string) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin delete assistant tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := assistantrepo.New(tx)
+	err = queries.DeleteAssistant(ctx, assistantrepo.DeleteAssistantParams{
 		AssistantID: assistantID,
 		ProjectID:   projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("delete assistant: %w", err)
+	}
+	if err := s.revokeAssistantSkillDistributions(ctx, tx, projectID, assistantID, actor, actorDisplayName); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit delete assistant tx: %w", err)
 	}
 
 	// Best-effort: tear down per-assistant backend resources (e.g. Fly app)
@@ -1480,7 +1649,7 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 	}
 
 	queries := assistantrepo.New(s.db)
-	rows, err := queries.ListActiveAssistantRuntimesForImageRecycle(ctx, runtimeStateActive)
+	rows, err := queries.ListActiveAssistantRuntimes(ctx, runtimeStateActive)
 	if err != nil {
 		return RecycleAssistantRuntimeImagesResult{}, fmt.Errorf("list active assistant runtimes for image recycle: %w", err)
 	}
@@ -2697,6 +2866,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -2706,6 +2876,9 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 	if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
+	}
+	if err := s.hydrateAssistantSkills(ctx, assistant.ProjectID, &assistant); err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant skills").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	runtimeServerURL := s.runtime.ServerURL()
@@ -2727,7 +2900,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// assistant can tell the user which integration is broken.
 	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
 
-	instructions, err := composeInstructions(assistant.Instructions, thread)
+	instructions, err := composeInstructions(assistant.Instructions, thread, assistant.Skills)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -2781,7 +2954,7 @@ Two MCP auth events may appear in thread, each as <message-context> block with E
 
 - EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
-func composeInstructions(base string, thread assistantThreadRecord) (string, error) {
+func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillRow) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
 	if err != nil {
 		return "", err
@@ -2793,6 +2966,16 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	parts := make([]string, 0, 4)
 	if base != "" {
 		parts = append(parts, base)
+	}
+	if len(skills) > 0 {
+		lines := make([]string, 0, len(skills)+1)
+		lines = append(lines, "## Skills")
+		for _, skill := range skills {
+			name := strings.Join(strings.Fields(skill.Name), " ")
+			description := conv.TruncateString(strings.Join(strings.Fields(skill.Description), " "), 200)
+			lines = append(lines, "- Name: "+strconv.Quote(name)+"; description: "+strconv.Quote(description)+". Call mcp__p-assistants_skills_load with name "+strconv.Quote(name)+" before relying on this skill.")
+		}
+		parts = append(parts, strings.Join(lines, "\n"))
 	}
 	parts = append(parts, mcpAuthAddendum)
 	if guidance := adapter.OutputChannelGuidance(); guidance != "" {
@@ -2876,7 +3059,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		if m.EndpointSlug == "" {
 			continue
 		}
-		if m.Visibility == mcpservers.VisibilityDisabled {
+		if m.Visibility == visibility.Disabled {
 			logger.WarnContext(ctx, "skipping disabled assistant mcp server",
 				attr.SlogMcpServerID(m.MCPServerID.String()),
 			)
@@ -3034,6 +3217,7 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -3108,6 +3292,8 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	nextGen := currentGen + 1
 	empty := conv.ToPGTextEmpty("")
 	base := chatrepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "user",

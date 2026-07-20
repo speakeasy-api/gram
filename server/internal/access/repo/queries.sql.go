@@ -662,6 +662,7 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE our.organization_id = $1
   AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
 ORDER BY users.email, users.id
 `
 
@@ -1383,6 +1384,66 @@ func (q *Queries) ListPrincipalGrantsByResource(ctx context.Context, arg ListPri
 	var items []ListPrincipalGrantsByResourceRow
 	for rows.Next() {
 		var i ListPrincipalGrantsByResourceRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Effect,
+			&i.Selectors,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPrincipalGrantsByResourceIDs = `-- name: ListPrincipalGrantsByResourceIDs :many
+SELECT principal_urn, scope, effect, selectors
+FROM principal_grants
+WHERE organization_id = $1
+  AND scope = $2
+  AND selectors @> jsonb_build_object(
+    'resource_kind', $3::text
+  )
+  AND selectors->>'resource_id' = ANY($4::text[])
+ORDER BY principal_urn
+`
+
+type ListPrincipalGrantsByResourceIDsParams struct {
+	OrganizationID string
+	Scope          string
+	ResourceKind   string
+	ResourceIds    []string
+}
+
+type ListPrincipalGrantsByResourceIDsRow struct {
+	PrincipalUrn urn.Principal
+	Scope        string
+	Effect       pgtype.Text
+	Selectors    []byte
+}
+
+// Returns grant rows for a set of resources under one scope in an org. Batched
+// form of ListPrincipalGrantsByResource that stays scoped to the caller's
+// resource ids, so listing one project's resources never loads the whole org.
+// Callers group the results by the selector's resource_id.
+func (q *Queries) ListPrincipalGrantsByResourceIDs(ctx context.Context, arg ListPrincipalGrantsByResourceIDsParams) ([]ListPrincipalGrantsByResourceIDsRow, error) {
+	rows, err := q.db.Query(ctx, listPrincipalGrantsByResourceIDs,
+		arg.OrganizationID,
+		arg.Scope,
+		arg.ResourceKind,
+		arg.ResourceIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPrincipalGrantsByResourceIDsRow
+	for rows.Next() {
+		var i ListPrincipalGrantsByResourceIDsRow
 		if err := rows.Scan(
 			&i.PrincipalUrn,
 			&i.Scope,

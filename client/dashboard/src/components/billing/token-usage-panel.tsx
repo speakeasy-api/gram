@@ -1,4 +1,3 @@
-import { type RiskTokensPoint } from "@gram/client/models/components/risktokenspoint.js";
 import { type TumDetailsPoint } from "@gram/client/models/components/tumdetailspoint.js";
 import {
   BarElement,
@@ -16,24 +15,24 @@ import { Bar } from "react-chartjs-2";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import {
-  CHART_COLORS,
-  CLEAN_COLOR,
-  OTHER_COLOR,
-  RISKY_COLOR,
-  type StackMode,
-} from "./breakdown-options";
+import { CHART_COLORS, OTHER_COLOR, type StackMode } from "./breakdown-options";
+import { ToggleButton } from "./toggle-button";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 
 // Vercel-style consumption breakdown for tokens under management: a stacked
 // bar chart of tokens over the selected billing cycle, stacked by a chosen
-// dimension, by token type, or by risk involvement, with client-side
-// granularity roll-up (the caller fetches daily buckets) and a cumulative
-// view. Everything renders from the billing details response (points +
-// per-dimension rows, both scoped server-side to the billed completion
-// population) — plus, for the headline total, the billed per-day series the
-// usage endpoint already returns.
+// dimension or by token type, with client-side granularity roll-up (the
+// caller fetches daily buckets) and a cumulative view. Everything renders
+// from the billing details response (points + per-dimension rows, both
+// scoped server-side to the observed agent traffic, cache reads excluded) —
+// plus, for the headline total, the billed per-day series the usage endpoint
+// already returns. On a cycle finalized before a billing-definition change,
+// that sealed series is the invoiced record and can differ from the live
+// details data, so switching from the total view to a token-type or
+// dimension stacking can change the displayed sum — deliberate: the total
+// view shows what was billed, the breakdowns show the current population's
+// shape.
 
 // Pointer movement under this many pixels counts as a click, not a drag.
 const DRAG_THRESHOLD_PX = 5;
@@ -46,14 +45,17 @@ const GRANULARITIES: { value: Granularity; label: string }[] = [
   { value: "month", label: "Monthly" },
 ];
 
-// Billed completions carry no cache attributes (input + output = total), so
-// the token-type view has exactly these two series.
+// The tokens-under-management token types: input + output + cache writes
+// sum to the total. Cache READS are excluded from the population entirely
+// (a cache read re-observes already-counted prompt content), so they are
+// not a series here.
 const TOKEN_TYPES: {
   label: string;
   value: (p: TumDetailsPoint) => number;
 }[] = [
   { label: "Input", value: (p) => p.inputTokens },
   { label: "Output", value: (p) => p.outputTokens },
+  { label: "Cache write", value: (p) => p.cacheCreationTokens },
 ];
 
 const compactTokens = new Intl.NumberFormat("en-US", {
@@ -164,36 +166,6 @@ function stacksByGroup(
     .filter((s) => [...s.byBucket.values()].some((v) => v > 0));
 }
 
-// Two stacks — tokens from sessions with risk findings vs the remainder,
-// taken against the same details totals the other stackings use so the
-// stacked height matches across modes.
-function stacksByRisk(
-  riskPoints: RiskTokensPoint[],
-  points: TumDetailsPoint[],
-  granularity: Granularity,
-): Stack[] {
-  const risky = new Map<number, number>();
-  for (const p of riskPoints) {
-    addTo(
-      risky,
-      floorBucket(bucketMs(p.bucketTimeUnixNano), granularity),
-      p.riskyTokens,
-    );
-  }
-  const clean = new Map<number, number>();
-  for (const [bucket, total] of bucketPointValues(
-    points,
-    granularity,
-    (p) => p.totalTokens,
-  )) {
-    addTo(clean, bucket, Math.max(0, total - (risky.get(bucket) ?? 0)));
-  }
-  return [
-    { label: "Sessions with risk findings", byBucket: risky },
-    { label: "Sessions without risk findings", byBucket: clean },
-  ].filter((s) => s.byBucket.size > 0);
-}
-
 // A single stack of all tokens per bucket — the no-breakdown view. Prefers
 // the BILLED per-day series (the exact numbers on the usage card) when the
 // caller has it; the details totals stand in otherwise.
@@ -221,42 +193,12 @@ function stacksByTokenType(
   })).filter((s) => [...s.byBucket.values()].some((v) => v > 0));
 }
 
-function ToggleButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "rounded px-2 py-0.5 text-xs transition-colors",
-        active
-          ? "bg-muted text-foreground font-medium"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
-  );
+// The header info copy for the panel.
+function headerHint(): string {
+  return "Tokens under management — the agent traffic the platform observes from your users' sessions (including Claude Code, Cowork, Cursor, and Codex): input, output, and cache-write tokens. Cache reads are excluded (re-read cached content isn't new traffic), and so is inference the platform itself runs (risk-policy analysis, hosted chat).";
 }
 
-// The header info copy per stacking mode.
-function headerHint(stackBy: StackMode): string {
-  if (stackBy === "risk") {
-    return "Tokens split by whether the session had at least one active risk finding (see Secure → Risk) during the period. Computed from per-session token totals, so numbers can differ slightly from the dimension views.";
-  }
-  return "Tokens from LLM completions that run through the platform — the usage billed as tokens under management. Agent telemetry observed via OTEL (Claude Code, Cursor, Codex) is not billed and not included here; see the Insights pages for it.";
-}
-
-// The stacks for the modes fed by the details points (risk mode reads the
-// dedicated risk endpoint's points instead).
+// The stacks for the modes fed by the details points.
 function pointStacks(
   mode: StackMode,
   points: TumDetailsPoint[],
@@ -270,17 +212,13 @@ function pointStacks(
     case "tokenType":
       return stacksByTokenType(points, granularity);
     case "group":
-    case "risk": // unreachable — risk is handled by the caller
       return stacksByGroup(points, groups, granularity);
   }
 }
 
-// The bar color for a stack: risk mode uses a fixed risky/clean pair, the
-// client-side "Other" roll-up stays neutral, everything else walks the palette.
-function stackColor(label: string, index: number, stackBy: StackMode): string {
-  if (stackBy === "risk") {
-    return index === 0 ? RISKY_COLOR : CLEAN_COLOR;
-  }
+// The bar color for a stack: the client-side "Other" roll-up stays neutral,
+// everything else walks the palette.
+function stackColor(label: string, index: number): string {
   if (label === "Other") return OTHER_COLOR;
   return CHART_COLORS[index % CHART_COLORS.length]!;
 }
@@ -296,7 +234,6 @@ export function TokenUsagePanel({
   billedSeries,
   stackBy,
   breakdownPicker,
-  riskPoints,
   loading,
   onSelectRange,
 }: {
@@ -311,11 +248,9 @@ export function TokenUsagePanel({
   billedSeries: number[] | null;
   // How the bars stack — controlled by the caller's breakdown picker.
   stackBy: StackMode;
-  // The unified breakdown selector (dimensions + token type + risk), rendered
-  // at the head of the control row.
+  // The unified breakdown selector (dimensions + token type), rendered at
+  // the head of the control row.
   breakdownPicker: ReactNode;
-  // Daily tokens split by risk involvement; null while unavailable.
-  riskPoints: RiskTokensPoint[] | null;
   loading: boolean;
   // Called when a bar is clicked with the bucket's time range — the caller
   // narrows the page's period to it (drill-down). Bars aren't clickable
@@ -339,22 +274,14 @@ export function TokenUsagePanel({
   // on the same mouseup) doesn't ALSO drill into the release bar.
   const didDragRef = useRef(false);
 
-  // Guard the async gap: risk mode before the risk data lands renders as the
-  // dimension stacking rather than an empty chart.
-  const effectiveStackBy: StackMode =
-    stackBy === "risk" && !riskPoints ? "group" : stackBy;
-
   const chart = useMemo(() => {
-    const stacks =
-      effectiveStackBy === "risk"
-        ? stacksByRisk(riskPoints ?? [], points, granularity)
-        : pointStacks(
-            effectiveStackBy,
-            points,
-            groups,
-            billedSeries,
-            granularity,
-          );
+    const stacks = pointStacks(
+      stackBy,
+      points,
+      groups,
+      billedSeries,
+      granularity,
+    );
     // The time axis comes from every bucket the server returned (gap-filled
     // with zeros), not just buckets with usage — zero days must keep their
     // slot so the axis stays continuous.
@@ -375,7 +302,7 @@ export function TokenUsagePanel({
           values[j] = values[j]! + values[j - 1]!;
         }
       }
-      const base = stackColor(s.label, i, effectiveStackBy);
+      const base = stackColor(s.label, i);
       return {
         label: s.label,
         data: values,
@@ -396,9 +323,8 @@ export function TokenUsagePanel({
     points,
     groups,
     billedSeries,
-    riskPoints,
     granularity,
-    effectiveStackBy,
+    stackBy,
     cumulative,
     focusLabel,
     hiddenLabels,
@@ -540,7 +466,7 @@ export function TokenUsagePanel({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-1.5 text-sm font-semibold">
           Token Usage Time Series
-          <SimpleTooltip tooltip={headerHint(effectiveStackBy)}>
+          <SimpleTooltip tooltip={headerHint()}>
             <Info className="text-muted-foreground size-3.5" />
           </SimpleTooltip>
         </div>
@@ -616,11 +542,7 @@ export function TokenUsagePanel({
                         hidden && "opacity-40",
                       )}
                       style={{
-                        backgroundColor: stackColor(
-                          d.label,
-                          i,
-                          effectiveStackBy,
-                        ),
+                        backgroundColor: stackColor(d.label, i),
                       }}
                     />
                     {d.label}

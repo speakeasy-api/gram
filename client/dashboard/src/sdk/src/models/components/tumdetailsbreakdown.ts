@@ -16,7 +16,7 @@ import {
  */
 export type TumDetailsBreakdown = {
   /**
-   * The breakdown dimension key (hook_source, model, email, division_name, role)
+   * The breakdown dimension key (model, hook_source, provider, account_type, email, division_name, department_name, role, project_id) — the public telemetry dimension identifiers, so the same keys work as telemetry.query filters. project_id rows carry project UUIDs; clients map them to names.
    */
   key: string;
   /**

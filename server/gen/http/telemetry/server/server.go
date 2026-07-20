@@ -30,7 +30,6 @@ type Server struct {
 	GetObservabilityOverview  http.Handler
 	GetProjectOverview        http.Handler
 	Query                     http.Handler
-	QueryRiskTokens           http.Handler
 	QueryTumDetails           http.Handler
 	ListSessions              http.Handler
 	ListFilterOptions         http.Handler
@@ -39,6 +38,7 @@ type Server struct {
 	GetToolUsageSummary       http.Handler
 	ListToolUsageTraces       http.Handler
 	GetToolUsageFilterOptions http.Handler
+	GetMcpServerActivity      http.Handler
 	ListHooksTraces           http.Handler
 }
 
@@ -80,7 +80,6 @@ func New(
 			{"GetObservabilityOverview", "POST", "/rpc/telemetry.getObservabilityOverview"},
 			{"GetProjectOverview", "POST", "/rpc/telemetry.getProjectOverview"},
 			{"Query", "POST", "/rpc/telemetry.query"},
-			{"QueryRiskTokens", "POST", "/rpc/telemetry.queryRiskTokens"},
 			{"QueryTumDetails", "POST", "/rpc/telemetry.queryTumDetails"},
 			{"ListSessions", "POST", "/rpc/telemetry.listSessions"},
 			{"ListFilterOptions", "POST", "/rpc/telemetry.listFilterOptions"},
@@ -89,6 +88,7 @@ func New(
 			{"GetToolUsageSummary", "POST", "/rpc/telemetry.getToolUsageSummary"},
 			{"ListToolUsageTraces", "POST", "/rpc/telemetry.listToolUsageTraces"},
 			{"GetToolUsageFilterOptions", "POST", "/rpc/telemetry.getToolUsageFilterOptions"},
+			{"GetMcpServerActivity", "POST", "/rpc/telemetry.getMcpServerActivity"},
 			{"ListHooksTraces", "POST", "/rpc/telemetry.listHooksTraces"},
 		},
 		SearchLogs:                NewSearchLogsHandler(e.SearchLogs, mux, decoder, encoder, errhandler, formatter),
@@ -102,7 +102,6 @@ func New(
 		GetObservabilityOverview:  NewGetObservabilityOverviewHandler(e.GetObservabilityOverview, mux, decoder, encoder, errhandler, formatter),
 		GetProjectOverview:        NewGetProjectOverviewHandler(e.GetProjectOverview, mux, decoder, encoder, errhandler, formatter),
 		Query:                     NewQueryHandler(e.Query, mux, decoder, encoder, errhandler, formatter),
-		QueryRiskTokens:           NewQueryRiskTokensHandler(e.QueryRiskTokens, mux, decoder, encoder, errhandler, formatter),
 		QueryTumDetails:           NewQueryTumDetailsHandler(e.QueryTumDetails, mux, decoder, encoder, errhandler, formatter),
 		ListSessions:              NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
 		ListFilterOptions:         NewListFilterOptionsHandler(e.ListFilterOptions, mux, decoder, encoder, errhandler, formatter),
@@ -111,6 +110,7 @@ func New(
 		GetToolUsageSummary:       NewGetToolUsageSummaryHandler(e.GetToolUsageSummary, mux, decoder, encoder, errhandler, formatter),
 		ListToolUsageTraces:       NewListToolUsageTracesHandler(e.ListToolUsageTraces, mux, decoder, encoder, errhandler, formatter),
 		GetToolUsageFilterOptions: NewGetToolUsageFilterOptionsHandler(e.GetToolUsageFilterOptions, mux, decoder, encoder, errhandler, formatter),
+		GetMcpServerActivity:      NewGetMcpServerActivityHandler(e.GetMcpServerActivity, mux, decoder, encoder, errhandler, formatter),
 		ListHooksTraces:           NewListHooksTracesHandler(e.ListHooksTraces, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -131,7 +131,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetObservabilityOverview = m(s.GetObservabilityOverview)
 	s.GetProjectOverview = m(s.GetProjectOverview)
 	s.Query = m(s.Query)
-	s.QueryRiskTokens = m(s.QueryRiskTokens)
 	s.QueryTumDetails = m(s.QueryTumDetails)
 	s.ListSessions = m(s.ListSessions)
 	s.ListFilterOptions = m(s.ListFilterOptions)
@@ -140,6 +139,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetToolUsageSummary = m(s.GetToolUsageSummary)
 	s.ListToolUsageTraces = m(s.ListToolUsageTraces)
 	s.GetToolUsageFilterOptions = m(s.GetToolUsageFilterOptions)
+	s.GetMcpServerActivity = m(s.GetMcpServerActivity)
 	s.ListHooksTraces = m(s.ListHooksTraces)
 }
 
@@ -159,7 +159,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetObservabilityOverviewHandler(mux, h.GetObservabilityOverview)
 	MountGetProjectOverviewHandler(mux, h.GetProjectOverview)
 	MountQueryHandler(mux, h.Query)
-	MountQueryRiskTokensHandler(mux, h.QueryRiskTokens)
 	MountQueryTumDetailsHandler(mux, h.QueryTumDetails)
 	MountListSessionsHandler(mux, h.ListSessions)
 	MountListFilterOptionsHandler(mux, h.ListFilterOptions)
@@ -168,6 +167,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetToolUsageSummaryHandler(mux, h.GetToolUsageSummary)
 	MountListToolUsageTracesHandler(mux, h.ListToolUsageTraces)
 	MountGetToolUsageFilterOptionsHandler(mux, h.GetToolUsageFilterOptions)
+	MountGetMcpServerActivityHandler(mux, h.GetMcpServerActivity)
 	MountListHooksTracesHandler(mux, h.ListHooksTraces)
 }
 
@@ -762,59 +762,6 @@ func NewQueryHandler(
 	})
 }
 
-// MountQueryRiskTokensHandler configures the mux to serve the "telemetry"
-// service "queryRiskTokens" endpoint.
-func MountQueryRiskTokensHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/telemetry.queryRiskTokens", f)
-}
-
-// NewQueryRiskTokensHandler creates a HTTP handler which loads the HTTP
-// request and calls the "telemetry" service "queryRiskTokens" endpoint.
-func NewQueryRiskTokensHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeQueryRiskTokensRequest(mux, decoder)
-		encodeResponse = EncodeQueryRiskTokensResponse(encoder)
-		encodeError    = EncodeQueryRiskTokensError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "queryRiskTokens")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
 // MountQueryTumDetailsHandler configures the mux to serve the "telemetry"
 // service "queryTumDetails" endpoint.
 func MountQueryTumDetailsHandler(mux goahttp.Muxer, h http.Handler) {
@@ -1217,6 +1164,59 @@ func NewGetToolUsageFilterOptionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getToolUsageFilterOptions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMcpServerActivityHandler configures the mux to serve the "telemetry"
+// service "getMcpServerActivity" endpoint.
+func MountGetMcpServerActivityHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getMcpServerActivity", f)
+}
+
+// NewGetMcpServerActivityHandler creates a HTTP handler which loads the HTTP
+// request and calls the "telemetry" service "getMcpServerActivity" endpoint.
+func NewGetMcpServerActivityHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMcpServerActivityRequest(mux, decoder)
+		encodeResponse = EncodeGetMcpServerActivityResponse(encoder)
+		encodeError    = EncodeGetMcpServerActivityError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMcpServerActivity")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {
