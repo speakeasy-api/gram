@@ -527,7 +527,7 @@ jobs:
 
       - name: Extract assistant runtime metadata for GCR
         id: assistantMetaGcr
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-assistant-runtime
           tags: |
@@ -557,7 +557,7 @@ jobs:
 
       - name: "[DEV] Extract assistant runtime metadata"
         id: assistantMetaDev
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.assistantFlyCreateDev.outputs.flyAppRegistry }}
           tags: |
@@ -587,7 +587,7 @@ jobs:
 
       - name: "[PROD] Extract assistant runtime metadata"
         id: assistantMetaProd
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.assistantFlyCreateProd.outputs.flyAppRegistry }}
           tags: |
@@ -668,7 +668,7 @@ jobs:
 
       - name: "[DEV] Extract collector metadata"
         id: collectorMetaDev
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.collectorFlyCreateDev.outputs.flyAppRegistry }}
           tags: |
@@ -705,7 +705,7 @@ jobs:
 
       - name: "[PROD] Extract collector metadata"
         id: collectorMetaProd
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.collectorFlyCreateProd.outputs.flyAppRegistry }}
           tags: |
@@ -1838,7 +1838,7 @@ jobs:
       - name: Extract Docker metadata
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: |
             ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
