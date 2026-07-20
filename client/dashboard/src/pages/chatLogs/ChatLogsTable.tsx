@@ -251,13 +251,10 @@ export function ChatLogsTable({
                         <AccountTypeIcon accountType={chat.accountType} />
                         <span className="max-w-[120px] truncate">
                           {chat.assistantName ? (
-                            <>
-                              <Icon
-                                name="bot"
-                                className="mr-1 inline size-3.5"
-                              />
+                            <span className="inline-flex items-center gap-1">
+                              <Icon name="bot" className="size-3.5" />
                               {chat.assistantName}
-                            </>
+                            </span>
                           ) : (
                             chatOwnerLabel(
                               membersData?.members,
