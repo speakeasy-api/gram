@@ -105,6 +105,18 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: LockMCPServerToolMetadataWrite :exec
+-- Acquire a transaction-scoped advisory lock keyed on the MCP server ID so
+-- tool metadata mutations on the same server serialize across processes.
+--
+-- Two things depend on this. The authoritative write touches an unbounded set
+-- of rows in two branches, so competing full syncs with different tool sets can
+-- take row locks in opposing orders and deadlock. And every mutation reads the
+-- collection before and after itself to build its audit snapshots, which under
+-- READ COMMITTED would otherwise straddle another transaction's commit and
+-- record a transition that never happened.
+SELECT pg_advisory_xact_lock(hashtextextended(@mcp_server_id::text, 0));
+
 -- name: SetMCPServerToolMetadata :many
 -- Authoritative write of an MCP server's tool metadata collection: every tool in
 -- @tools is upserted and every stored tool absent from @tools is soft-deleted, in a

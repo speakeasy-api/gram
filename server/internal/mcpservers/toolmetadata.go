@@ -36,9 +36,10 @@ const pgCardinalityViolation = "21000"
 // the payload already holds a live stored entry.
 const pgUniqueViolation = "23505"
 
-// toolMetadataInput is the jsonb element shape consumed by
-// SetMCPServerToolMetadata's jsonb_to_recordset column list. Field names and
-// order must track that column list.
+// toolMetadataInput is the jsonb element shape the batch writes unpack with
+// jsonb_array_elements and ->> accessors. The json tags must track the key
+// names those accessors read; see SetMCPServerToolMetadata for why the queries
+// unpack the payload that way rather than with jsonb_to_recordset.
 type toolMetadataInput struct {
 	ToolName        string  `json:"tool_name"`
 	Title           *string `json:"title"`
@@ -156,6 +157,12 @@ func (s *Service) SetToolMetadataBatch(ctx context.Context, payload *gen.SetTool
 
 	txRepo := repo.New(dbtx)
 
+	// Taken before the collection is read, so this mutation's before and after
+	// snapshots bracket it alone.
+	if err := txRepo.LockMCPServerToolMetadataWrite(ctx, serverID.String()); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock tool metadata for write").LogError(ctx, logger)
+	}
+
 	server, err := loadMCPServerForToolMetadata(ctx, txRepo, serverID, *authCtx.ProjectID, logger)
 	if err != nil {
 		return nil, err
@@ -253,6 +260,12 @@ func (s *Service) AddToolMetadataBatch(ctx context.Context, payload *gen.AddTool
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// Taken before the collection is read, so this mutation's before and after
+	// snapshots bracket it alone.
+	if err := txRepo.LockMCPServerToolMetadataWrite(ctx, serverID.String()); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock tool metadata for write").LogError(ctx, logger)
+	}
 
 	server, err := loadMCPServerForToolMetadata(ctx, txRepo, serverID, *authCtx.ProjectID, logger)
 	if err != nil {
@@ -352,8 +365,16 @@ func (s *Service) ListToolMetadata(ctx context.Context, payload *gen.ListToolMet
 
 	r := repo.New(s.db)
 
-	if _, err := loadMCPServerForToolMetadata(ctx, r, serverID, *authCtx.ProjectID, logger); err != nil {
+	server, err := loadMCPServerForToolMetadata(ctx, r, serverID, *authCtx.ProjectID, logger)
+	if err != nil {
 		return nil, err
+	}
+
+	// Rejected on the same terms as the writes. A toolset-backed server can
+	// never hold tool metadata, so answering 200 with an empty list would read
+	// as "none recorded yet" and invite a write that is itself rejected.
+	if !server.RemoteMcpServerID.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "tool metadata is only supported for MCP servers backed by a remote MCP server").LogError(ctx, logger)
 	}
 
 	rows, err := r.ListMCPServerToolMetadata(ctx, repo.ListMCPServerToolMetadataParams{
@@ -397,6 +418,12 @@ func (s *Service) SetToolMetadata(ctx context.Context, payload *gen.SetToolMetad
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// Taken before the collection is read, so this mutation's before and after
+	// snapshots bracket it alone.
+	if err := txRepo.LockMCPServerToolMetadataWrite(ctx, serverID.String()); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock tool metadata for write").LogError(ctx, logger)
+	}
 
 	server, err := loadMCPServerForToolMetadata(ctx, txRepo, serverID, *authCtx.ProjectID, logger)
 	if err != nil {
@@ -458,6 +485,13 @@ func (s *Service) DeleteToolMetadata(ctx context.Context, payload *gen.DeleteToo
 		return err
 	}
 
+	// Trimmed on the same terms as SetToolMetadata: names are stored trimmed,
+	// so a padded name would otherwise miss and report a misleading 404.
+	name := strings.TrimSpace(payload.ToolName)
+	if name == "" {
+		return oops.E(oops.CodeBadRequest, errEmptyToolName, "invalid tool name").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -465,6 +499,12 @@ func (s *Service) DeleteToolMetadata(ctx context.Context, payload *gen.DeleteToo
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// Taken before the collection is read, so this mutation's before and after
+	// snapshots bracket it alone.
+	if err := txRepo.LockMCPServerToolMetadataWrite(ctx, serverID.String()); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock tool metadata for write").LogError(ctx, logger)
+	}
 
 	server, err := loadMCPServerForToolMetadata(ctx, txRepo, serverID, *authCtx.ProjectID, logger)
 	if err != nil {
@@ -479,7 +519,7 @@ func (s *Service) DeleteToolMetadata(ctx context.Context, payload *gen.DeleteToo
 	if _, err := txRepo.DeleteMCPServerToolMetadata(ctx, repo.DeleteMCPServerToolMetadataParams{
 		McpServerID: serverID,
 		ProjectID:   *authCtx.ProjectID,
-		ToolName:    payload.ToolName,
+		ToolName:    name,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "tool metadata not found").LogError(ctx, logger)
