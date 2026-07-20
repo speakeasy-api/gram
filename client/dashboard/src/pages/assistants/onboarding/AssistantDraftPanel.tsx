@@ -2,6 +2,7 @@ import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantSessionsList } from "@/components/assistants/sessions-list";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { EditInstructionsDialog } from "@/components/assistants/edit-instructions-dialog";
+import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,15 +12,18 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
+import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useTriggers } from "@gram/client/react-query/triggers.js";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
+import { AssistantSkillsSection } from "./AssistantSkillsSection";
 import { useAssistantDraft } from "./useAssistantDraft";
 
 const DETAIL_TABS = ["overview", "sessions", "triggers"] as const;
@@ -34,7 +38,9 @@ function toDetailTab(value: string): DetailTab {
 export function AssistantDraftPanel(): JSX.Element {
   const draft = useAssistantDraft();
   const routes = useRoutes();
+  const project = useProject();
   const queryClient = useQueryClient();
+  const { data: productFeatures } = useProductFeatures();
   const [activeTab, setActiveTab] = useQueryState(
     "tab",
     parseAsStringLiteral(DETAIL_TABS).withDefault("overview"),
@@ -189,6 +195,16 @@ export function AssistantDraftPanel(): JSX.Element {
                   </Type>
                 )}
               </Section>
+
+              {productFeatures?.skillsEnabled === true && (
+                <RequireScope
+                  scope="skill:read"
+                  resourceId={project.id}
+                  level="section"
+                >
+                  <AssistantSkillsSection />
+                </RequireScope>
+              )}
 
               <Section
                 title={`MCP Servers (${
