@@ -1126,7 +1126,7 @@ func NewGetMcpServerActivityEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
