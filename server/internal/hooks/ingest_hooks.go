@@ -753,6 +753,8 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 			parse = parseCursorHookEvent
 		case "codex":
 			parse = parseCodexHookEvent
+		case "opencode":
+			parse = parseOpencodeHookEvent
 		}
 		if parse != nil {
 			if event, ok := parse(raw); ok {
