@@ -5,6 +5,7 @@ import {
   promptSubmitted,
   sessionEnded,
   sessionStarted,
+  toGramToolName,
   toolCompleted,
   toolFailed,
   toolRequested,
@@ -129,5 +130,47 @@ describe("mapping", () => {
   it("falls back to ctx.fallbackSession when no session id is given", () => {
     const body = sessionStarted({ id: "" }, ctx);
     expect(body.session.id).toBe(ctx.fallbackSession);
+  });
+
+  it("normalizes MCP tool-call names to the canonical mcp__ form", () => {
+    const mcpCtx: Ctx = { ...ctx, mcpServers: ["context7", "github"] };
+    const body = toolRequested(
+      { tool: "context7_query-docs", sessionID: "s1", callID: "c1" },
+      {},
+      mcpCtx,
+    );
+    expect(body.data?.tool_call?.name).toBe("mcp__context7__query-docs");
+  });
+});
+
+describe("toGramToolName", () => {
+  const servers = ["context7", "my_server"];
+
+  it("rewrites <server>_<tool> into mcp__<server>__<tool>", () => {
+    expect(toGramToolName("context7_query-docs", servers)).toBe(
+      "mcp__context7__query-docs",
+    );
+  });
+
+  it("prefers the longest matching server prefix (server names with _)", () => {
+    // "my_server" must win over a hypothetical "my" so the tool isn't
+    // mis-split on the first underscore.
+    expect(toGramToolName("my_server_run", ["my", "my_server"])).toBe(
+      "mcp__my_server__run",
+    );
+  });
+
+  it("leaves native tools (no matching server) unchanged", () => {
+    expect(toGramToolName("bash", servers)).toBe("bash");
+    expect(toGramToolName("edit", servers)).toBe("edit");
+  });
+
+  it("is a no-op when no MCP servers are configured", () => {
+    expect(toGramToolName("context7_query-docs", [])).toBe(
+      "context7_query-docs",
+    );
+    expect(toGramToolName("context7_query-docs", undefined)).toBe(
+      "context7_query-docs",
+    );
   });
 });

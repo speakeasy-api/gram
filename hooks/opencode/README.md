@@ -44,6 +44,14 @@ agent.
   dead network never blocks the coding session.
 - **Idempotency**: each event gets its own `idempotency_key`, reused across
   its own retries via the `Idempotency-Key` header.
+- **MCP tool-name normalization**: opencode names an MCP tool call
+  `<server>_<tool>` (e.g. `context7_query-docs`), but Gram's shadow-MCP scanner
+  and MCP attribution only recognize the `mcp__<server>__<tool>` convention
+  (`toolref.IsMCPToolName`). At startup the plugin fetches the configured MCP
+  server list (`client.mcp.status()`) and rewrites matching tool-call names
+  into that form; native tools (`bash`, `edit`, …) are left untouched. Without
+  this, opencode MCP calls are treated as native tools and skip shadow-MCP
+  detection entirely.
 
 ## Event coverage
 

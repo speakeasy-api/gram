@@ -45,6 +45,35 @@ export interface Ctx {
   fallbackSession: string;
   adapterVersion: string;
   userEmail?: string;
+  // Configured MCP server names (keys of client.mcp.status()), used to
+  // normalize opencode MCP tool-call names into Gram's canonical form.
+  // Undefined/empty disables normalization (fail-open).
+  mcpServers?: readonly string[];
+}
+
+// opencode names an MCP tool call "<server>_<tool>" (single underscore, e.g.
+// "context7_query-docs"). Gram's shadow-MCP scanner and all MCP attribution
+// only recognize Claude Code's "mcp__<server>__<tool>" form
+// (toolref.IsMCPToolName in server/internal/toolref), so an un-normalized name
+// is treated as a native tool and skipped by shadow-MCP detection. Rewrite
+// opencode MCP calls into that form; native tools whose prefix matches no
+// configured server are returned unchanged.
+export function toGramToolName(
+  rawName: string,
+  mcpServers: readonly string[] | undefined,
+): string {
+  if (!mcpServers || mcpServers.length === 0) return rawName;
+  // Longest matching server prefix wins so a server name containing "_"
+  // (e.g. "my_server") isn't mis-split on the first underscore.
+  let best = "";
+  for (const server of mcpServers) {
+    if (rawName.startsWith(`${server}_`) && server.length > best.length) {
+      best = server;
+    }
+  }
+  if (best === "") return rawName;
+  const fn = rawName.slice(best.length + 1);
+  return fn ? `mcp__${best}__${fn}` : rawName;
 }
 
 function base(
@@ -102,7 +131,13 @@ export function toolRequested(
     "tool.requested",
     "tool.execute.before",
     { id: input.sessionID },
-    { tool_call: { id: input.callID, name: input.tool, input: args } },
+    {
+      tool_call: {
+        id: input.callID,
+        name: toGramToolName(input.tool, ctx.mcpServers),
+        input: args,
+      },
+    },
     ctx,
   );
 }
@@ -119,7 +154,7 @@ export function toolCompleted(
     {
       tool_call: {
         id: input.callID,
-        name: input.tool,
+        name: toGramToolName(input.tool, ctx.mcpServers),
         input: input.args,
         output: output?.output,
       },
@@ -147,7 +182,7 @@ export function toolFailed(
     {
       tool_call: {
         id: part.callID,
-        name: part.tool,
+        name: toGramToolName(part.tool, ctx.mcpServers),
         input: part.state.input,
         error: part.state.error,
       },
