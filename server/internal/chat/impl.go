@@ -356,6 +356,8 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			ID:                   row.ID.String(),
 			UserID:               conv.FromPGText[string](row.UserID),
 			ExternalUserID:       conv.FromPGText[string](row.ExternalUserID),
+			AssistantID:          conv.FromNullableUUID(row.AssistantID),
+			AssistantName:        conv.FromPGText[string](row.AssistantName),
 			Source:               conv.FromPGText[string](row.Source),
 			Title:                row.Title.String,
 			NumMessages:          int(row.NumMessages),
