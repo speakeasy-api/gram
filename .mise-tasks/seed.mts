@@ -3573,7 +3573,7 @@ async function seedObservabilityData(init: {
       // the company-credential population, since Claude Code on an API
       // key/gateway emits no user identity (POC-282). Heavier than an
       // attributed session on average so the pooled bucket — rendered as
-      // "Team-wide account" on the user breakdown, and feeding the "tokens
+      // "Team-wide API Usage" on the user breakdown, and feeding the "tokens
       // without user attribution" metric — ranks among the top spenders,
       // mirroring how a gateway-authenticated org looks in production.
       const anonymous = r() < 0.12;
@@ -3581,7 +3581,7 @@ async function seedObservabilityData(init: {
       // Most identity-less sessions still ran on a device with the Gram hooks
       // installed, so their rows carry gram.hook.hostname and the user
       // breakdown surfaces them per device; the rest have no hostname either
-      // and pool into the "Team-wide account" bucket.
+      // and pool into the "Team-wide API Usage" bucket.
       const anonHostname =
         anonymous && r() < 0.7
           ? ANON_HOSTNAMES[Math.floor(r() * ANON_HOSTNAMES.length)]

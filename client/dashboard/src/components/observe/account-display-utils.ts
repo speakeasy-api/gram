@@ -39,7 +39,7 @@ export function providerLabel(provider: string): string {
 // users who merely lack the attribute (e.g. no department in the directory),
 // so no single semantic label is honest there.
 export function unsetLabel(dim: Dimension): string {
-  return dim === Dimension.Email ? "Team-wide account" : "(unset)";
+  return dim === Dimension.Email ? "Team-wide API Usage" : "(unset)";
 }
 
 // The email to display for a session produced by a personal AI account (e.g. a

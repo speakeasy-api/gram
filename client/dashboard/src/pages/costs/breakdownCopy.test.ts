@@ -78,7 +78,7 @@ describe("scopePhrase", () => {
   // account rather than "(unset)".
   it("names the unset user bucket the team-wide account", () => {
     expect(scopePhrase([at(Dimension.Email, "")], "spend")).toBe(
-      "Team-wide account's spend",
+      "Team-wide API Usage's spend",
     );
   });
 });

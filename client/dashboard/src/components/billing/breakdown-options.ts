@@ -134,7 +134,7 @@ export function breakdownLabel(value: string): string {
 }
 
 // Display label for one breakdown row value: "" is observed traffic that
-// lacks the attribute ("(unset)", or "Team-wide account" on the user
+// lacks the attribute ("(unset)", or "Team-wide API Usage" on the user
 // dimension — see unsetLabel), and project_id values are UUIDs mapped to
 // project names (a deleted project falls back to its raw id).
 export function breakdownValueLabel(

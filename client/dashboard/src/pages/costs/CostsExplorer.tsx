@@ -717,7 +717,7 @@ export function CostsExplorer(): JSX.Element {
     // Mix cards are compact "spend by X" rankings, so drop the "" bucket
     // entirely — an "(unset)" row is noise here (e.g. the $0 tool-row model
     // bucket). The user dimension is the exception: its "" bucket is the
-    // Team-wide account (company-credential sessions carry no user identity),
+    // Team-wide API Usage (company-credential sessions carry no user identity),
     // a real ranked spender the card must show. The full breakdown table
     // still surfaces "" for non-attribution dims where it is a real,
     // drillable slice.
