@@ -8,6 +8,7 @@ packages:
   - cli
   - tunnel
   - hooks
+  - hooks/opencode
   - functions
   - docs
   - evaluation
@@ -63,6 +64,7 @@ allowBuilds:
   msw: false
   ssh2: false
   "@openrouter/sdk": false
+  msgpackr-extract: false
 
 patchedDependencies:
   svix@1.92.2: patches/svix@1.92.2.patch
