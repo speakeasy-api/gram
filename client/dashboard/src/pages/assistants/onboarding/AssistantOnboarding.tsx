@@ -1,6 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { useProject, useSession } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { getServerURL } from "@/lib/utils";
@@ -12,6 +13,7 @@ import {
 } from "@/elements";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -120,6 +122,13 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const project = useProject();
   const draft = useAssistantDraft();
   const createSessionMutation = useChatSessionsCreateMutation();
+  const { data: productFeatures } = useProductFeatures();
+  const { hasScope } = useRBAC();
+  const skillsEnabled =
+    productFeatures?.skillsEnabled === true &&
+    hasScope("skill:read", project.id);
+  const skillMutationsEnabled =
+    skillsEnabled && hasScope("project:write", project.id);
   const { theme: resolvedTheme } = useMoonshineConfig();
   const [searchParams] = useSearchParams();
 
@@ -238,6 +247,10 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
         slug: m.mcpServerSlug,
         environmentSlug: m.environmentSlug ?? null,
       })),
+      skills: draft.assistant.skills.map((skill) => ({
+        id: skill.skillId,
+        pinnedVersionId: skill.pinnedVersionId ?? null,
+      })),
     };
   }
   const snapshot = snapshotRef.current;
@@ -246,8 +259,13 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
 
   const systemPrompt = useMemo(() => {
     if (!ready) return null;
-    return buildSystemPrompt({ mode, snapshot: snapshot ?? undefined });
-  }, [mode, ready, snapshot]);
+    return buildSystemPrompt({
+      mode,
+      snapshot: snapshot ?? undefined,
+      skillsEnabled,
+      skillMutationsEnabled,
+    });
+  }, [mode, ready, snapshot, skillsEnabled, skillMutationsEnabled]);
 
   const welcome = useMemo(
     () =>

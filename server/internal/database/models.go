@@ -175,18 +175,19 @@ type AssistantRuntime struct {
 }
 
 type AssistantThread struct {
-	ID            uuid.UUID
-	AssistantID   uuid.UUID
-	ProjectID     uuid.UUID
-	CorrelationID string
-	ChatID        uuid.UUID
-	SourceKind    string
-	SourceRefJson []byte
-	LastEventAt   pgtype.Timestamptz
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	ID               uuid.UUID
+	AssistantID      uuid.UUID
+	ProjectID        uuid.UUID
+	CorrelationID    string
+	ChatID           uuid.UUID
+	SourceKind       string
+	SourceRefJson    []byte
+	SkillSetSnapshot []byte
+	LastEventAt      pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type AssistantThreadEvent struct {
@@ -1650,6 +1651,7 @@ type SkillDistribution struct {
 	SkillID         uuid.UUID
 	PinnedVersionID uuid.NullUUID
 	PluginID        uuid.NullUUID
+	AssistantID     uuid.NullUUID
 	Channel         string
 	CreatedByUserID string
 	RevokedAt       pgtype.Timestamptz

@@ -110,6 +110,19 @@ Never report X as unavailable until steps 2–5 have all run and all come back e
 - Don't ask "shall I proceed?" between steps — just go.
 `;
 
+const SKILLS = `
+# Skills
+- Skill — reusable instructions loaded by the assistant at runtime. Skills are not MCP servers, toolsets, or callable tools.
+- Use \`list_skills\` to inspect live project skills and current attachments; never guess a skill name.
+`;
+
+const SKILL_MUTATIONS = `
+- Call \`list_skills\` before attaching or detaching so the name is resolved from live project state.
+- \`attach_skill(skill_name)\` tracks the latest valid version by default. Pass \`pinned_version_id\` only when the user explicitly wants a specific version.
+- \`detach_skill(skill_name)\` removes the attachment without deleting the project skill.
+- The Draft panel shows each attached skill as Latest or Pinned and lets the user change that selection directly.
+`;
+
 export type AssistantSnapshot = {
   name: string;
   model: string;
@@ -117,13 +130,21 @@ export type AssistantSnapshot = {
   instructions: string;
   toolsets: { slug: string; environmentSlug?: string | null }[];
   mcpServers: { slug: string; environmentSlug?: string | null }[];
+  skills: { id: string; pinnedVersionId?: string | null }[];
 };
 
 export function buildSystemPrompt(args: {
   mode: "create" | "edit";
   snapshot?: AssistantSnapshot;
+  skillsEnabled?: boolean;
+  skillMutationsEnabled?: boolean;
 }): string {
-  const { mode, snapshot } = args;
+  const {
+    mode,
+    snapshot,
+    skillsEnabled = false,
+    skillMutationsEnabled = false,
+  } = args;
   const isEdit = mode === "edit" && !!snapshot;
 
   const tonePersona = isEdit
@@ -138,7 +159,7 @@ Never restate or re-paste the Assistant spec — the user can see the live Draft
 
   const stateBlock = isEdit
     ? `\n\n# Current Assistant state (page-load snapshot)
-This is a snapshot taken when the user opened this chat — it bootstraps the edit flow so you don't need to call read tools just to know who you are. During the session, prefer the most recent tool results in this conversation over this snapshot; if you need authoritative live state, call \`list_toolsets\` / \`list_mcp_servers\` / \`list_triggers\` / \`list_environments\`.
+This is a snapshot taken when the user opened this chat — it bootstraps the edit flow so you don't need to call read tools just to know who you are. During the session, prefer the most recent tool results in this conversation over this snapshot; if you need authoritative live state, call \`list_toolsets\` / \`list_mcp_servers\` / \`list_triggers\` / \`list_environments\`${skillsEnabled ? " / `list_skills`" : ""}.
 
 - Name: ${snapshot.name}
 - Model: \`${snapshot.model}\`
@@ -163,6 +184,20 @@ This is a snapshot taken when the user opened this chat — it bootstraps the ed
               )
               .join(", ")
       }
+${
+  skillsEnabled
+    ? `- Skills: ${
+        snapshot.skills.length === 0
+          ? "none attached"
+          : snapshot.skills
+              .map(
+                (skill) =>
+                  `ID \`${skill.id}\` (${skill.pinnedVersionId ? `pinned: \`${skill.pinnedVersionId}\`` : "latest"})`,
+              )
+              .join(", ")
+      }`
+    : ""
+}
 
 ## Current instructions
 ${snapshot.instructions.trim().length > 0 ? snapshot.instructions : "(empty — none set yet)"}`
@@ -170,7 +205,7 @@ ${snapshot.instructions.trim().length > 0 ? snapshot.instructions : "(empty — 
 
   const modeBlock = isEdit
     ? `# Mode
-Edit flow. The Assistant already exists (see "Current Assistant state" above). Skip \`propose_name\` and \`propose_personality\` entirely — never call them. Use \`set_personality\` / \`set_tasks\` / \`update_assistant\` / \`attach_toolset\` / \`detach_toolset\` / \`create_trigger\` / \`update_trigger\` / etc. directly to make the changes the user asks for.
+Edit flow. The Assistant already exists (see "Current Assistant state" above). Skip \`propose_name\` and \`propose_personality\` entirely — never call them. Use \`set_personality\` / \`set_tasks\` / \`update_assistant\` / \`attach_toolset\` / \`detach_toolset\`${skillMutationsEnabled ? " / `attach_skill` / `detach_skill`" : ""} / \`create_trigger\` / \`update_trigger\` / etc. directly to make the changes the user asks for.
 
 Open the conversation with a short, in-persona acknowledgement and ask what they'd like to change. Don't restate your current spec — the user can see it in the panel.`
     : `# Mode
@@ -183,7 +218,7 @@ Onboarding agent. Help a (likely non-technical) user build or edit an Assistant 
 
 ${tonePersona}
 
-${BASE}${stateBlock}
+${BASE}${skillsEnabled ? SKILLS : ""}${skillMutationsEnabled ? SKILL_MUTATIONS : ""}${stateBlock}
 
 ${modeBlock}
 

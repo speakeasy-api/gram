@@ -119,7 +119,7 @@ export class Skills extends ClientSDK {
    * distribute skills
    *
    * @remarks
-   * Create or update the active distribution of a skill to a plugin. Repeating the request for the same skill and plugin updates the version pin or is a no-op.
+   * Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.
    */
   async distribute(
     request: DistributeSkillRequest,
@@ -214,7 +214,7 @@ export class Skills extends ClientSDK {
    * undistribute skills
    *
    * @remarks
-   * Revoke a skill's active distribution to a plugin. Repeated requests are a no-op.
+   * Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.
    */
   async undistribute(
     request: UndistributeSkillRequest,

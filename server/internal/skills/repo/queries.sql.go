@@ -101,6 +101,7 @@ INSERT INTO skill_distributions (
   project_id,
   skill_id,
   plugin_id,
+  assistant_id,
   pinned_version_id,
   channel,
   created_by_user_id
@@ -110,18 +111,25 @@ SELECT
   s.id,
   $1::uuid,
   $2::uuid,
-  'plugin',
-  $3
+  $3::uuid,
+  $4,
+  $5
 FROM skills s
-WHERE s.project_id = $4
-  AND s.id = $5
+WHERE s.project_id = $6
+  AND s.id = $7
   AND s.archived_at IS NULL
-RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, channel, created_by_user_id, revoked_at, created_at, updated_at
+  AND (
+    ($4 = 'plugin' AND $1::uuid IS NOT NULL AND $2::uuid IS NULL)
+    OR ($4 = 'assistant' AND $2::uuid IS NOT NULL AND $1::uuid IS NULL)
+  )
+RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, assistant_id, channel, created_by_user_id, revoked_at, created_at, updated_at
 `
 
 type CreateSkillDistributionParams struct {
-	PluginID        uuid.UUID
+	PluginID        uuid.NullUUID
+	AssistantID     uuid.NullUUID
 	PinnedVersionID uuid.NullUUID
+	Channel         string
 	CreatedByUserID string
 	ProjectID       uuid.UUID
 	SkillID         uuid.UUID
@@ -130,7 +138,9 @@ type CreateSkillDistributionParams struct {
 func (q *Queries) CreateSkillDistribution(ctx context.Context, arg CreateSkillDistributionParams) (SkillDistribution, error) {
 	row := q.db.QueryRow(ctx, createSkillDistribution,
 		arg.PluginID,
+		arg.AssistantID,
 		arg.PinnedVersionID,
+		arg.Channel,
 		arg.CreatedByUserID,
 		arg.ProjectID,
 		arg.SkillID,
@@ -142,6 +152,7 @@ func (q *Queries) CreateSkillDistribution(ctx context.Context, arg CreateSkillDi
 		&i.SkillID,
 		&i.PinnedVersionID,
 		&i.PluginID,
+		&i.AssistantID,
 		&i.Channel,
 		&i.CreatedByUserID,
 		&i.RevokedAt,
@@ -227,7 +238,7 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 
 const getActiveSkillDistributionRecord = `-- name: GetActiveSkillDistributionRecord :one
 SELECT
-  sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
+  sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
   resolved.id AS resolved_version_id
 FROM skill_distributions sd
 JOIN LATERAL (
@@ -241,16 +252,23 @@ JOIN LATERAL (
 ) resolved ON TRUE
 WHERE sd.project_id = $1
   AND sd.skill_id = $2
-  AND sd.plugin_id = $3
-  AND sd.channel = 'plugin'
+  AND sd.plugin_id IS NOT DISTINCT FROM $3::uuid
+  AND sd.assistant_id IS NOT DISTINCT FROM $4::uuid
+  AND sd.channel = $5
+  AND (
+    ($5 = 'plugin' AND $3::uuid IS NOT NULL AND $4::uuid IS NULL)
+    OR ($5 = 'assistant' AND $4::uuid IS NOT NULL AND $3::uuid IS NULL)
+  )
   AND sd.revoked_at IS NULL
 FOR UPDATE OF sd
 `
 
 type GetActiveSkillDistributionRecordParams struct {
-	ProjectID uuid.UUID
-	SkillID   uuid.UUID
-	PluginID  uuid.NullUUID
+	ProjectID   uuid.UUID
+	SkillID     uuid.UUID
+	PluginID    uuid.NullUUID
+	AssistantID uuid.NullUUID
+	Channel     string
 }
 
 type GetActiveSkillDistributionRecordRow struct {
@@ -259,7 +277,13 @@ type GetActiveSkillDistributionRecordRow struct {
 }
 
 func (q *Queries) GetActiveSkillDistributionRecord(ctx context.Context, arg GetActiveSkillDistributionRecordParams) (GetActiveSkillDistributionRecordRow, error) {
-	row := q.db.QueryRow(ctx, getActiveSkillDistributionRecord, arg.ProjectID, arg.SkillID, arg.PluginID)
+	row := q.db.QueryRow(ctx, getActiveSkillDistributionRecord,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.PluginID,
+		arg.AssistantID,
+		arg.Channel,
+	)
 	var i GetActiveSkillDistributionRecordRow
 	err := row.Scan(
 		&i.SkillDistribution.ID,
@@ -267,6 +291,7 @@ func (q *Queries) GetActiveSkillDistributionRecord(ctx context.Context, arg GetA
 		&i.SkillDistribution.SkillID,
 		&i.SkillDistribution.PinnedVersionID,
 		&i.SkillDistribution.PluginID,
+		&i.SkillDistribution.AssistantID,
 		&i.SkillDistribution.Channel,
 		&i.SkillDistribution.CreatedByUserID,
 		&i.SkillDistribution.RevokedAt,
@@ -274,6 +299,33 @@ func (q *Queries) GetActiveSkillDistributionRecord(ctx context.Context, arg GetA
 		&i.SkillDistribution.UpdatedAt,
 		&i.ResolvedVersionID,
 	)
+	return i, err
+}
+
+const getAssistantForDistribution = `-- name: GetAssistantForDistribution :one
+SELECT id, name
+FROM assistants
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR SHARE
+`
+
+type GetAssistantForDistributionParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type GetAssistantForDistributionRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// The share lock serializes distribution creation against assistant deletion.
+func (q *Queries) GetAssistantForDistribution(ctx context.Context, arg GetAssistantForDistributionParams) (GetAssistantForDistributionRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantForDistribution, arg.AssistantID, arg.ProjectID)
+	var i GetAssistantForDistributionRow
+	err := row.Scan(&i.ID, &i.Name)
 	return i, err
 }
 
@@ -396,7 +448,21 @@ const getSkillDetails = `-- name: GetSkillDetails :one
 SELECT
   s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.archived_at, s.created_at, s.updated_at,
   latest.id, latest.skill_id, latest.content, latest.canonical_sha256, latest.raw_sha256, latest.description, latest.metadata, latest.spec_valid, latest.validation_errors, latest.created_at, latest.created_by_user_id,
-  state.version_count
+  state.version_count,
+  (
+    SELECT COUNT(*)::bigint
+    FROM skill_distributions sd
+    JOIN assistants a
+      ON a.id = sd.assistant_id
+      AND a.project_id = sd.project_id
+      AND a.deleted IS FALSE
+    WHERE sd.project_id = s.project_id
+      AND sd.skill_id = s.id
+      AND sd.channel = 'assistant'
+      AND sd.plugin_id IS NULL
+      AND sd.assistant_id IS NOT NULL
+      AND sd.revoked_at IS NULL
+  ) AS assistant_count
 FROM skills s
 JOIN LATERAL (
   SELECT
@@ -421,9 +487,10 @@ type GetSkillDetailsParams struct {
 }
 
 type GetSkillDetailsRow struct {
-	Skill        Skill
-	SkillVersion SkillVersion
-	VersionCount int64
+	Skill          Skill
+	SkillVersion   SkillVersion
+	VersionCount   int64
+	AssistantCount int64
 }
 
 func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams) (GetSkillDetailsRow, error) {
@@ -452,6 +519,7 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 		&i.SkillVersion.CreatedAt,
 		&i.SkillVersion.CreatedByUserID,
 		&i.VersionCount,
+		&i.AssistantCount,
 	)
 	return i, err
 }
@@ -605,13 +673,16 @@ func (q *Queries) GetValidSkillVersion(ctx context.Context, arg GetValidSkillVer
 
 const listActiveSkillDistributions = `-- name: ListActiveSkillDistributions :many
 SELECT
-  sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
+  sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,
   s.name AS skill_name,
   s.display_name AS skill_display_name,
   pl.name AS plugin_name,
   resolved.id AS resolved_version_id
 FROM skill_distributions sd
-JOIN plugins pl ON pl.id = sd.plugin_id
+JOIN plugins pl
+  ON pl.id = sd.plugin_id
+  AND pl.project_id = sd.project_id
+  AND pl.deleted IS FALSE
 JOIN skills s
   ON s.project_id = sd.project_id
   AND s.id = sd.skill_id
@@ -627,6 +698,8 @@ JOIN LATERAL (
 ) resolved ON TRUE
 WHERE sd.project_id = $1
   AND sd.channel = 'plugin'
+  AND sd.plugin_id IS NOT NULL
+  AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
   AND ($2::uuid IS NULL OR sd.skill_id = $2::uuid)
   AND ($3::uuid IS NULL OR sd.plugin_id = $3::uuid)
@@ -680,6 +753,7 @@ func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActi
 			&i.SkillDistribution.SkillID,
 			&i.SkillDistribution.PinnedVersionID,
 			&i.SkillDistribution.PluginID,
+			&i.SkillDistribution.AssistantID,
 			&i.SkillDistribution.Channel,
 			&i.SkillDistribution.CreatedByUserID,
 			&i.SkillDistribution.RevokedAt,
@@ -854,20 +928,33 @@ SET revoked_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE project_id = $1
   AND skill_id = $2
-  AND plugin_id = $3
-  AND channel = 'plugin'
+  AND plugin_id IS NOT DISTINCT FROM $3::uuid
+  AND assistant_id IS NOT DISTINCT FROM $4::uuid
+  AND channel = $5
+  AND (
+    ($5 = 'plugin' AND $3::uuid IS NOT NULL AND $4::uuid IS NULL)
+    OR ($5 = 'assistant' AND $4::uuid IS NOT NULL AND $3::uuid IS NULL)
+  )
   AND revoked_at IS NULL
-RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, channel, created_by_user_id, revoked_at, created_at, updated_at
+RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, assistant_id, channel, created_by_user_id, revoked_at, created_at, updated_at
 `
 
 type RevokeActiveSkillDistributionParams struct {
-	ProjectID uuid.UUID
-	SkillID   uuid.UUID
-	PluginID  uuid.NullUUID
+	ProjectID   uuid.UUID
+	SkillID     uuid.UUID
+	PluginID    uuid.NullUUID
+	AssistantID uuid.NullUUID
+	Channel     string
 }
 
 func (q *Queries) RevokeActiveSkillDistribution(ctx context.Context, arg RevokeActiveSkillDistributionParams) (SkillDistribution, error) {
-	row := q.db.QueryRow(ctx, revokeActiveSkillDistribution, arg.ProjectID, arg.SkillID, arg.PluginID)
+	row := q.db.QueryRow(ctx, revokeActiveSkillDistribution,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.PluginID,
+		arg.AssistantID,
+		arg.Channel,
+	)
 	var i SkillDistribution
 	err := row.Scan(
 		&i.ID,
@@ -875,6 +962,7 @@ func (q *Queries) RevokeActiveSkillDistribution(ctx context.Context, arg RevokeA
 		&i.SkillID,
 		&i.PinnedVersionID,
 		&i.PluginID,
+		&i.AssistantID,
 		&i.Channel,
 		&i.CreatedByUserID,
 		&i.RevokedAt,
@@ -902,7 +990,7 @@ WHERE prev.id = sd.id
   AND sd.project_id = $1
   AND sd.skill_id = $2
   AND sd.revoked_at IS NULL
-RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id
+RETURNING sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id
 `
 
 type RevokeAllSkillDistributionsBySkillParams struct {
@@ -932,6 +1020,7 @@ func (q *Queries) RevokeAllSkillDistributionsBySkill(ctx context.Context, arg Re
 			&i.SkillDistribution.SkillID,
 			&i.SkillDistribution.PinnedVersionID,
 			&i.SkillDistribution.PluginID,
+			&i.SkillDistribution.AssistantID,
 			&i.SkillDistribution.Channel,
 			&i.SkillDistribution.CreatedByUserID,
 			&i.SkillDistribution.RevokedAt,
@@ -997,10 +1086,15 @@ SET pinned_version_id = $1::uuid,
     updated_at = clock_timestamp()
 WHERE project_id = $2
   AND skill_id = $3
-  AND plugin_id = $4
-  AND channel = 'plugin'
+  AND plugin_id IS NOT DISTINCT FROM $4::uuid
+  AND assistant_id IS NOT DISTINCT FROM $5::uuid
+  AND channel = $6
+  AND (
+    ($6 = 'plugin' AND $4::uuid IS NOT NULL AND $5::uuid IS NULL)
+    OR ($6 = 'assistant' AND $5::uuid IS NOT NULL AND $4::uuid IS NULL)
+  )
   AND revoked_at IS NULL
-RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, channel, created_by_user_id, revoked_at, created_at, updated_at
+RETURNING id, project_id, skill_id, pinned_version_id, plugin_id, assistant_id, channel, created_by_user_id, revoked_at, created_at, updated_at
 `
 
 type UpdateSkillDistributionParams struct {
@@ -1008,6 +1102,8 @@ type UpdateSkillDistributionParams struct {
 	ProjectID       uuid.UUID
 	SkillID         uuid.UUID
 	PluginID        uuid.NullUUID
+	AssistantID     uuid.NullUUID
+	Channel         string
 }
 
 func (q *Queries) UpdateSkillDistribution(ctx context.Context, arg UpdateSkillDistributionParams) (SkillDistribution, error) {
@@ -1016,6 +1112,8 @@ func (q *Queries) UpdateSkillDistribution(ctx context.Context, arg UpdateSkillDi
 		arg.ProjectID,
 		arg.SkillID,
 		arg.PluginID,
+		arg.AssistantID,
+		arg.Channel,
 	)
 	var i SkillDistribution
 	err := row.Scan(
@@ -1024,6 +1122,7 @@ func (q *Queries) UpdateSkillDistribution(ctx context.Context, arg UpdateSkillDi
 		&i.SkillID,
 		&i.PinnedVersionID,
 		&i.PluginID,
+		&i.AssistantID,
 		&i.Channel,
 		&i.CreatedByUserID,
 		&i.RevokedAt,

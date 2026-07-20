@@ -336,6 +336,45 @@ func (q *Queries) CountAnalyzedMessages(ctx context.Context, arg CountAnalyzedMe
 	return column_1, err
 }
 
+const countAnalyzedMessagesByProject = `-- name: CountAnalyzedMessagesByProject :many
+SELECT
+    rr.risk_policy_id
+  , rr.risk_policy_version
+  , COUNT(DISTINCT rr.chat_message_id)::BIGINT AS analyzed_messages
+FROM risk_results rr
+WHERE rr.project_id = $1
+GROUP BY rr.risk_policy_id, rr.risk_policy_version
+`
+
+type CountAnalyzedMessagesByProjectRow struct {
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	AnalyzedMessages  int64
+}
+
+// Batched form of CountAnalyzedMessages: the analyzed-message count for every
+// (policy, version) in a project in one query, so ListRiskPolicies avoids a
+// per-policy round trip.
+func (q *Queries) CountAnalyzedMessagesByProject(ctx context.Context, projectID uuid.UUID) ([]CountAnalyzedMessagesByProjectRow, error) {
+	rows, err := q.db.Query(ctx, countAnalyzedMessagesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountAnalyzedMessagesByProjectRow
+	for rows.Next() {
+		var i CountAnalyzedMessagesByProjectRow
+		if err := rows.Scan(&i.RiskPolicyID, &i.RiskPolicyVersion, &i.AnalyzedMessages); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countEnabledRegexExclusionsInScope = `-- name: CountEnabledRegexExclusionsInScope :one
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions

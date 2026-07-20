@@ -6,7 +6,7 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import type { SkillDistribution } from "@gram/client/models/components/skilldistribution.js";
+import type { PluginSkillDistribution } from "@gram/client/models/components/pluginskilldistribution.js";
 import {
   invalidateAllSkillDistributions,
   useSkillDistributionsInfinite,
@@ -48,7 +48,7 @@ export function SkillDistributionsSection({
   );
 
   const handleUndistribute = async (
-    distribution: SkillDistribution,
+    distribution: PluginSkillDistribution,
   ): Promise<void> => {
     try {
       await undistribute.mutateAsync({
@@ -155,7 +155,7 @@ export function SkillDistributionsSection({
 function VersionTrackingBadge({
   distribution,
 }: {
-  distribution: SkillDistribution;
+  distribution: PluginSkillDistribution;
 }): JSX.Element {
   if (distribution.pinnedVersionId) {
     return (

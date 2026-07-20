@@ -391,6 +391,7 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 	Attribute("logo_asset_id", String, "Optional logo asset id.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("client_setup_documentation_url", String, "URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; absent for issuers without DCR.")
@@ -421,6 +422,7 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	Attribute("logo_asset_id", String, "Set the logo asset id.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("client_setup_documentation_url", String, "Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint.")
@@ -457,6 +459,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("logo_asset_id", String, "Optional logo asset id; null when unset.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("client_setup_documentation_url", String, "URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; null for issuers without DCR.")
