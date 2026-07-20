@@ -321,8 +321,9 @@ export function ShadowMCPInventoryTable({
       }
       await refreshInventory();
       setActiveAction(null);
-    } catch {
-      toast.error(`Unable to update allow rule for: ${label}`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Unable to update allow rule for ${label}: ${detail}`);
     } finally {
       setIsSubmittingAction(false);
     }

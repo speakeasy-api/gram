@@ -10,6 +10,7 @@ import {
   type ShadowMCPPolicy,
 } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
 import {
+  shadowMCPBlockingPolicies,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusDescription,
@@ -303,10 +304,9 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const policyState = policiesQuery.isError
     ? "unavailable"
     : shadowMCPPolicyState(policiesQuery.data?.policies);
-  const shadowMCPPolicies: ShadowMCPPolicy[] =
-    policiesQuery.data?.policies.filter((policy) =>
-      policy.sources.includes("shadow_mcp"),
-    ) ?? [];
+  const shadowMCPPolicies: ShadowMCPPolicy[] = shadowMCPBlockingPolicies(
+    policiesQuery.data?.policies,
+  );
   const queryEnabled = project.id.length > 0 && serverSlug.length > 0;
   const [usersCursor, setUsersCursor] = useState<string | undefined>(undefined);
   const [userPages, setUserPages] = useState<UsersPage[]>([]);
@@ -483,8 +483,9 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       }
       await refreshInventory();
       setActiveAction(null);
-    } catch {
-      toast.error(`Unable to update allow rule for: ${label}`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Unable to update allow rule for ${label}: ${detail}`);
     } finally {
       setIsSubmittingAction(false);
     }

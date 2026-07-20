@@ -15,6 +15,21 @@ export type ShadowMCPInventoryStatus =
   | "pending"
   | "unavailable";
 
+/**
+ * Policies eligible for Shadow MCP allow rules. The server rejects any
+ * allow-rule policy that is not an enabled blocking shadow MCP policy.
+ */
+export function shadowMCPBlockingPolicies(
+  policies: RiskPolicy[] | undefined,
+): RiskPolicy[] {
+  return (policies ?? []).filter(
+    (policy) =>
+      policy.enabled &&
+      policy.action === "block" &&
+      policy.sources.includes("shadow_mcp"),
+  );
+}
+
 export function shadowMCPPolicyState(
   policies: RiskPolicy[] | undefined,
 ): ShadowMCPPolicyState {

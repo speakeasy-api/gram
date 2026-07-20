@@ -216,6 +216,12 @@ function PolicySelection({
       <Type variant="small" className="font-medium">
         Policies
       </Type>
+      {policies.length === 0 && (
+        <Type muted small>
+          No eligible policies. Allow rules require an enabled Shadow MCP policy
+          with the block action.
+        </Type>
+      )}
       <div className="space-y-2">
         {policies.map((policy) => {
           const checked = selectedPolicyIDSet.has(policy.id);
