@@ -6,6 +6,7 @@ import {
 } from "@gram/client/react-query/riskListCustomDetectionRules.js";
 import { useRiskUpdateCustomDetectionRuleMutation } from "@gram/client/react-query/riskUpdateCustomDetectionRule.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { DETECTION_RULES, type RuleCategory } from "./policy-data";
 
 /** Severity levels assigned to a detection rule. Drives how findings show
@@ -65,8 +66,7 @@ const CATEGORY_RULE_DESCRIPTION: Record<RuleCategory, string> = {
     "Flags tool calls whose Speakeasy tool definition is annotated as destructive. Requires Speakeasy hooks and Speakeasy-issued tool metadata.",
   cli_destructive:
     "Pattern detector for destructive shell, git, database, and cloud CLI invocations passed through tool arguments.",
-  account_identity:
-    "Flags sessions authenticated with a personal AI account or an email domain outside the policy's approved list, using the account attribution captured by session ingest.",
+  account_identity: `Flags sessions authenticated with a personal AI account or an email domain outside the policy's approved list, using the account attribution captured by session ingest. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
   custom:
     "Organization-defined regex pattern. Matches anywhere in the scanned payload.",
 };
