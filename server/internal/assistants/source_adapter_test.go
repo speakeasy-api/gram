@@ -45,6 +45,36 @@ func TestComposeInstructions_SlackIncludesRespondDecisionGuidance(t *testing.T) 
 	require.NotContains(t, instructions, "calling platform_slack_set_thread_status with status set to an empty string")
 }
 
+func TestSlackAdapterDecodeTurnRendersAttachments(t *testing.T) {
+	t.Parallel()
+
+	// A file_share message carries attachment metadata in the normalized
+	// payload. The turn must list each file's id/name/type/size and tell the
+	// assistant that contents are only reachable via the Slack platform tools.
+	got, err := slackAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"message","subtype":"file_share","team_id":"T1","channel_id":"C1","thread_id":"","user_id":"U1","text":"see attached","files":[{"id":"F123","name":"report.pdf","title":"Q2 report","mimetype":"application/pdf","size":204800},{"id":"F456","title":"screenshot","mimetype":"image/png","size":512}]}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, got, "Attachments:")
+	require.Contains(t, got, "- id: F123, name: report.pdf, type: application/pdf, size: 200.0 KB")
+	// A file without a name falls back to its title.
+	require.Contains(t, got, "- id: F456, name: screenshot, type: image/png, size: 512 B")
+	require.Contains(t, got, "Attachment contents are not directly visible")
+	require.Contains(t, got, "Slack platform tools")
+}
+
+func TestSlackAdapterDecodeTurnOmitsEmptyAttachments(t *testing.T) {
+	t.Parallel()
+
+	got, err := slackAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"message","team_id":"T1","channel_id":"C1","thread_id":"","text":"no files here"}`),
+	})
+	require.NoError(t, err)
+	require.NotContains(t, got, "Attachments:")
+}
+
 func TestLinearAdapterDecodeTurnInlinesEventData(t *testing.T) {
 	t.Parallel()
 

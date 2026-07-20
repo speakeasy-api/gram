@@ -7,6 +7,7 @@ mod runtime;
 mod server;
 mod telemetry;
 mod tools;
+mod vision;
 mod wire;
 mod workdir;
 
