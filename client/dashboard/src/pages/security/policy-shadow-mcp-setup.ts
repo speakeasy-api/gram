@@ -1,9 +1,5 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 
-export type SubmissionKeyCache = {
-  current: { fingerprint: string; key: string } | null;
-};
-
 type OriginalPolicy = Pick<RiskPolicy, "action" | "enabled" | "sources">;
 
 export function isShadowMCPBlockConfiguration(
@@ -47,18 +43,6 @@ export function shadowMCPAllowedURLsForMutation({
   }
 
   return undefined;
-}
-
-export function idempotencyKeyForFingerprint(
-  cache: SubmissionKeyCache,
-  fingerprint: string,
-  createKey: () => string = () => crypto.randomUUID(),
-): string {
-  if (cache.current?.fingerprint === fingerprint) return cache.current.key;
-
-  const key = createKey();
-  cache.current = { fingerprint, key };
-  return key;
 }
 
 export function shadowMCPSelectionIsDirty(

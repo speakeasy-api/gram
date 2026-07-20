@@ -1,14 +1,12 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  idempotencyKeyForFingerprint,
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
-  type SubmissionKeyCache,
 } from "./policy-shadow-mcp-setup";
 
 const blockingShadowMCPPolicy = {
@@ -91,36 +89,6 @@ describe("shadowMCPAllowedURLsForMutation", () => {
         originalPolicy: null,
       }),
     ).toBeUndefined();
-  });
-});
-
-describe("idempotencyKeyForFingerprint", () => {
-  it("reuses the key for the same request fingerprint", () => {
-    const cache: SubmissionKeyCache = { current: null };
-    const createKey = vi.fn(() => "key-1");
-
-    expect(idempotencyKeyForFingerprint(cache, "body-a", createKey)).toBe(
-      "key-1",
-    );
-    expect(idempotencyKeyForFingerprint(cache, "body-a", createKey)).toBe(
-      "key-1",
-    );
-    expect(createKey).toHaveBeenCalledOnce();
-  });
-
-  it("creates a new key when the request fingerprint changes", () => {
-    const cache: SubmissionKeyCache = { current: null };
-    const createKey = vi
-      .fn<() => string>()
-      .mockReturnValueOnce("key-1")
-      .mockReturnValueOnce("key-2");
-
-    expect(idempotencyKeyForFingerprint(cache, "body-a", createKey)).toBe(
-      "key-1",
-    );
-    expect(idempotencyKeyForFingerprint(cache, "body-b", createKey)).toBe(
-      "key-2",
-    );
   });
 });
 

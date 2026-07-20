@@ -253,20 +253,6 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, err
 	}
 
-	requestedIdempotencyKey := conv.PtrValOr(payload.IdempotencyKey, "")
-	if requestedIdempotencyKey != "" {
-		row, err := s.repo.GetRiskPolicyByIdempotencyKey(ctx, repo.GetRiskPolicyByIdempotencyKeyParams{
-			ProjectID:      *authCtx.ProjectID,
-			IdempotencyKey: conv.ToPGText(requestedIdempotencyKey),
-		})
-		if err == nil {
-			return s.policyToType(ctx, row)
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "get committed idempotent risk policy create").LogError(ctx, s.logger)
-		}
-	}
-
 	name := ""
 	if payload.Name != nil {
 		name = *payload.Name

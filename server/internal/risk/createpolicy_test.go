@@ -5,23 +5,16 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
-	or "github.com/OpenRouterTeam/go-sdk/models/components"
-	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 func TestCreateRiskPolicy_Success(t *testing.T) {
@@ -367,69 +360,4 @@ func TestCreateRiskPolicy_ShadowMCPAllowedURLsRejectInvalidURL(t *testing.T) {
 	})
 	require.ErrorContains(t, err, "invalid shadow mcp allowed urls")
 	require.False(t, riskPolicyExistsByName(t, ctx, ti.conn, name))
-}
-
-func requireRiskPolicyCreateAuditCount(t *testing.T, ctx context.Context, ti *testInstance, policyID string, want int) {
-	t.Helper()
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	logs, err := auditrepo.New(ti.conn).ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		CursorSeq:      pgtype.Int8{},
-		ActorID:        pgtype.Text{},
-		Action:         pgtype.Text{String: "risk_policy:create", Valid: true},
-		SubjectType:    pgtype.Text{String: "risk_policy", Valid: true},
-		SubjectID:      pgtype.Text{String: policyID, Valid: true},
-	})
-	require.NoError(t, err)
-	require.Len(t, logs, want)
-}
-
-type policyNameCompletionClient struct {
-	mock.Mock
-}
-
-func newPolicyNameCompletionClient(name string) *policyNameCompletionClient {
-	content := or.CreateChatAssistantMessageContentStr(name)
-	message := or.CreateChatMessagesAssistant(or.ChatAssistantMessage{
-		Role:             or.ChatAssistantMessageRoleAssistant,
-		Content:          optionalnullable.From(&content),
-		Name:             nil,
-		ToolCalls:        nil,
-		Refusal:          nil,
-		Reasoning:        nil,
-		ReasoningDetails: nil,
-		Images:           nil,
-		Audio:            nil,
-	})
-	client := new(policyNameCompletionClient)
-	client.On("GetCompletion", mock.Anything, mock.Anything).Return(&openrouter.CompletionResponse{
-		StartTime:    time.Time{},
-		Message:      &message,
-		MessageID:    "",
-		Model:        "test-model",
-		Usage:        openrouter.Usage{},
-		FinishReason: nil,
-		ToolCalls:    nil,
-		Content:      name,
-	}, nil)
-	return client
-}
-
-func (c *policyNameCompletionClient) GetCompletion(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
-	args := c.Called(ctx, request)
-	response, _ := args.Get(0).(*openrouter.CompletionResponse)
-	return response, args.Error(1)
-}
-
-func (c *policyNameCompletionClient) GetCompletionStream(context.Context, openrouter.CompletionRequest) (openrouter.StreamReader, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (c *policyNameCompletionClient) GetObjectCompletion(context.Context, openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (c *policyNameCompletionClient) CreateEmbeddings(context.Context, string, string, []string, ...openrouter.EmbeddingOption) ([][]float32, error) {
-	return nil, errors.New("not implemented")
 }
