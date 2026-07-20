@@ -297,8 +297,8 @@ func TestMaybeSyncAnthropicAnalyticsRecordsForbiddenAsFailure(t *testing.T) {
 	require.NoError(t, err)
 	costCfg, err := store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicAnalyticsCost)
 	require.NoError(t, err)
-	require.ErrorContains(t, pollers.usage.Sync(ctx, usageCfg, endTime), "read:analytics")
-	require.ErrorContains(t, pollers.cost.Sync(ctx, costCfg, endTime), "read:analytics")
+	require.ErrorContains(t, pollers.usage.Sync(ctx, usageCfg, endTime), "403 Forbidden")
+	require.ErrorContains(t, pollers.cost.Sync(ctx, costCfg, endTime), "403 Forbidden")
 }
 
 func TestMaybeSyncAnthropicAnalyticsCostFailureDoesNotBlockUsage(t *testing.T) {
@@ -332,7 +332,7 @@ func TestMaybeSyncAnthropicAnalyticsCostFailureDoesNotBlockUsage(t *testing.T) {
 	costCfg, err := store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicAnalyticsCost)
 	require.NoError(t, err)
 	require.NoError(t, pollers.usage.Sync(ctx, usageCfg, endTime))
-	require.ErrorContains(t, pollers.cost.Sync(ctx, costCfg, endTime), "read:analytics")
+	require.ErrorContains(t, pollers.cost.Sync(ctx, costCfg, endTime), "403 Forbidden")
 
 	usageState, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
 	require.NoError(t, err)

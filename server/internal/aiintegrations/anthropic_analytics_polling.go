@@ -148,20 +148,7 @@ func (p *AnthropicAnalyticsPoller) Sync(ctx context.Context, cfg Config, endTime
 		// watermark as their inclusive starting_at with no skip.
 		resumeOffset: 0,
 	}
-	if err := runner.sync(ctx, cfg, cfg.PollWatermarkAt, p.newSource(client, cfg), endTime); err != nil {
-		return classifyAnthropicAnalyticsErr(err)
-	}
-	return nil
-}
-
-// classifyAnthropicAnalyticsErr rewrites auth failures so the stored poll
-// error explains the plan/scope requirement instead of a bare status code.
-func classifyAnthropicAnalyticsErr(err error) error {
-	var httpErr *anthropicapi.HTTPError
-	if errors.As(err, &httpErr) && (httpErr.StatusCode == http.StatusUnauthorized || httpErr.StatusCode == http.StatusForbidden) {
-		return fmt.Errorf("anthropic analytics access denied - the analytics api requires a claude enterprise plan and an api key with the read:analytics scope: %w", err)
-	}
-	return err
+	return runner.sync(ctx, cfg, cfg.PollWatermarkAt, p.newSource(client, cfg), endTime)
 }
 
 // analyticsProbeParams is a minimal single-bucket request used only to read a
