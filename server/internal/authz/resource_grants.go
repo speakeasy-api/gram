@@ -279,3 +279,49 @@ func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource)
 
 	return grants, nil
 }
+
+// ListGrantsForResourceIDs loads grants for a set of resources under one scope
+// in an org in a single query, batching what ListGrantsForResource does for a
+// single resource while staying scoped to the given ids. Callers group the
+// returned grants by Selector.ResourceID() to attribute each grant.
+func ListGrantsForResourceIDs(ctx context.Context, db repo.DBTX, organizationID string, scope Scope, resourceIDs []string) ([]Grant, error) {
+	if organizationID == "" {
+		return nil, fmt.Errorf("organization id is required")
+	}
+	if scope == "" {
+		return nil, fmt.Errorf("scope is required")
+	}
+	if len(resourceIDs) == 0 {
+		return nil, nil
+	}
+	resourceKind := ResourceKindForScope(scope)
+	if resourceKind == WildcardResource {
+		return nil, fmt.Errorf("scope %q does not map to a resource kind", scope)
+	}
+
+	rows, err := repo.New(db).ListPrincipalGrantsByResourceIDs(ctx, repo.ListPrincipalGrantsByResourceIDsParams{
+		OrganizationID: organizationID,
+		Scope:          string(scope),
+		ResourceKind:   resourceKind,
+		ResourceIds:    resourceIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list scope grants: %w", err)
+	}
+
+	grants := make([]Grant, 0, len(rows))
+	for _, row := range rows {
+		selector, err := SelectorFromRow(row.Selectors)
+		if err != nil {
+			return nil, err
+		}
+		grants = append(grants, Grant{
+			PrincipalUrn: row.PrincipalUrn.String(),
+			Scope:        Scope(row.Scope),
+			Effect:       policyEffectFromText(row.Effect),
+			Selector:     selector,
+		})
+	}
+
+	return grants, nil
+}

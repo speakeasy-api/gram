@@ -191,6 +191,7 @@ func buildSkillDistributionAuditSnapshot(distribution repo.SkillDistribution, re
 		ProjectID:         distribution.ProjectID.String(),
 		SkillID:           distribution.SkillID.String(),
 		PluginID:          conv.FromNullableUUID(distribution.PluginID),
+		AssistantID:       conv.FromNullableUUID(distribution.AssistantID),
 		PinnedVersionID:   conv.FromNullableUUID(distribution.PinnedVersionID),
 		ResolvedVersionID: resolvedVersionID.String(),
 		Channel:           distribution.Channel,
@@ -199,6 +200,37 @@ func buildSkillDistributionAuditSnapshot(distribution repo.SkillDistribution, re
 		CreatedAt:         conv.FromPGTimestamptz(distribution.CreatedAt),
 		UpdatedAt:         conv.FromPGTimestamptz(distribution.UpdatedAt),
 	}
+}
+
+type distributionTarget struct {
+	channel     string
+	pluginID    uuid.NullUUID
+	assistantID uuid.NullUUID
+}
+
+func (t distributionTarget) mutationScope() authz.Scope {
+	if t.channel == "plugin" {
+		return authz.ScopeSkillWrite
+	}
+	return authz.ScopeProjectWrite
+}
+
+func parseDistributionTarget(pluginID, assistantID *string) (distributionTarget, error) {
+	if (pluginID == nil) == (assistantID == nil) {
+		return distributionTarget{}, oops.E(oops.CodeBadRequest, nil, "exactly one of plugin_id or assistant_id is required")
+	}
+	if pluginID != nil {
+		id, err := uuid.Parse(*pluginID)
+		if err != nil {
+			return distributionTarget{}, oops.E(oops.CodeBadRequest, nil, "invalid plugin id")
+		}
+		return distributionTarget{channel: "plugin", pluginID: uuid.NullUUID{UUID: id, Valid: true}, assistantID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
+	}
+	id, err := uuid.Parse(*assistantID)
+	if err != nil {
+		return distributionTarget{}, oops.E(oops.CodeBadRequest, nil, "invalid assistant id")
+	}
+	return distributionTarget{channel: "assistant", pluginID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, assistantID: uuid.NullUUID{UUID: id, Valid: true}}, nil
 }
 
 func (s *Service) recordVersion(
@@ -519,8 +551,9 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	return &gen.GetSkillResult{
-		Skill:         mv.BuildSkillView(details.Skill, details.SkillVersion.ID, details.VersionCount),
-		LatestVersion: latestView,
+		Skill:          mv.BuildSkillView(details.Skill, details.SkillVersion.ID, details.VersionCount),
+		LatestVersion:  latestView,
+		AssistantCount: details.AssistantCount,
 	}, nil
 }
 
@@ -590,18 +623,24 @@ func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPay
 }
 
 func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload) (*types.SkillDistribution, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
 	if err != nil {
 		return nil, err
+	}
+	target, err := parseDistributionTarget(payload.PluginID, payload.AssistantID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: target.mutationScope(), ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "distributing a skill requires a user identity")
 	}
 
 	skillID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill id")
-	}
-	pluginID, err := uuid.Parse(payload.PluginID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid plugin id")
 	}
 	pinnedVersionID, err := conv.PtrToNullUUID(payload.PinnedVersionID)
 	if err != nil {
@@ -623,15 +662,25 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "lock skill for distribution").LogError(ctx, logger)
 	}
 
-	plugin, err := queries.GetPluginForDistribution(ctx, repo.GetPluginForDistributionParams{
-		ProjectID: *authCtx.ProjectID,
-		PluginID:  pluginID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeBadRequest, nil, "plugin not found in project")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "validate plugin for distribution").LogError(ctx, logger)
+	var pluginName, assistantName *string
+	if target.channel == "plugin" {
+		plugin, targetErr := queries.GetPluginForDistribution(ctx, repo.GetPluginForDistributionParams{ProjectID: *authCtx.ProjectID, PluginID: target.pluginID.UUID})
+		switch {
+		case errors.Is(targetErr, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeBadRequest, nil, "plugin not found in project")
+		case targetErr != nil:
+			return nil, oops.E(oops.CodeUnexpected, targetErr, "validate plugin for distribution").LogError(ctx, logger)
+		}
+		pluginName = &plugin.Name
+	} else {
+		assistant, targetErr := queries.GetAssistantForDistribution(ctx, repo.GetAssistantForDistributionParams{ProjectID: *authCtx.ProjectID, AssistantID: target.assistantID.UUID})
+		switch {
+		case errors.Is(targetErr, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeBadRequest, nil, "assistant not found in project")
+		case targetErr != nil:
+			return nil, oops.E(oops.CodeUnexpected, targetErr, "validate assistant for distribution").LogError(ctx, logger)
+		}
+		assistantName = &assistant.Name
 	}
 
 	var resolvedVersionID uuid.UUID
@@ -663,9 +712,8 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 	}
 
 	existing, err := queries.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
-		ProjectID: *authCtx.ProjectID,
-		SkillID:   skill.ID,
-		PluginID:  uuid.NullUUID{UUID: pluginID, Valid: true},
+		ProjectID: *authCtx.ProjectID, SkillID: skill.ID, PluginID: target.pluginID,
+		AssistantID: target.assistantID, Channel: target.channel,
 	})
 	if err == nil {
 		distribution := existing.SkillDistribution
@@ -673,7 +721,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 			if err := dbtx.Commit(ctx); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "commit unchanged skill distribution transaction").LogError(ctx, logger)
 			}
-			return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, plugin.Name, resolvedVersionID), nil
+			return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
 		}
 
 		beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution, existing.ResolvedVersionID)
@@ -681,7 +729,9 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 			PinnedVersionID: pinnedVersionID,
 			ProjectID:       *authCtx.ProjectID,
 			SkillID:         skill.ID,
-			PluginID:        uuid.NullUUID{UUID: pluginID, Valid: true},
+			PluginID:        target.pluginID,
+			AssistantID:     target.assistantID,
+			Channel:         target.channel,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "update skill distribution").LogError(ctx, logger)
@@ -703,7 +753,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		if err := dbtx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "commit skill distribution update transaction").LogError(ctx, logger)
 		}
-		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, plugin.Name, resolvedVersionID), nil
+		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "get active skill distribution").LogError(ctx, logger)
@@ -711,7 +761,9 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 
 	distribution, err := queries.CreateSkillDistribution(ctx, repo.CreateSkillDistributionParams{
 		PinnedVersionID: pinnedVersionID,
-		PluginID:        pluginID,
+		PluginID:        target.pluginID,
+		AssistantID:     target.assistantID,
+		Channel:         target.channel,
 		CreatedByUserID: authCtx.UserID,
 		ProjectID:       *authCtx.ProjectID,
 		SkillID:         skill.ID,
@@ -736,23 +788,28 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		return nil, oops.E(oops.CodeUnexpected, err, "commit distribute skill transaction").LogError(ctx, logger)
 	}
 
-	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, plugin.Name, resolvedVersionID), nil
+	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
 }
 
 func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePayload) error {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
 	if err != nil {
 		return err
+	}
+	target, err := parseDistributionTarget(payload.PluginID, payload.AssistantID)
+	if err != nil {
+		return err
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: target.mutationScope(), ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return err
+	}
+	if authCtx.UserID == "" {
+		return oops.E(oops.CodeUnauthorized, nil, "undistributing a skill requires a user identity")
 	}
 	skillID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, nil, "invalid skill id")
 	}
-	pluginID, err := uuid.Parse(payload.PluginID)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, nil, "invalid plugin id")
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin undistribute skill transaction").LogError(ctx, logger)
@@ -768,9 +825,8 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 		return oops.E(oops.CodeUnexpected, err, "lock skill for undistribution").LogError(ctx, logger)
 	}
 	existing, err := queries.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
-		ProjectID: *authCtx.ProjectID,
-		SkillID:   skill.ID,
-		PluginID:  uuid.NullUUID{UUID: pluginID, Valid: true},
+		ProjectID: *authCtx.ProjectID, SkillID: skill.ID, PluginID: target.pluginID,
+		AssistantID: target.assistantID, Channel: target.channel,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		if err := dbtx.Commit(ctx); err != nil {
@@ -785,9 +841,8 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 	distribution := existing.SkillDistribution
 	beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution, existing.ResolvedVersionID)
 	revoked, err := queries.RevokeActiveSkillDistribution(ctx, repo.RevokeActiveSkillDistributionParams{
-		ProjectID: *authCtx.ProjectID,
-		SkillID:   skill.ID,
-		PluginID:  uuid.NullUUID{UUID: pluginID, Valid: true},
+		ProjectID: *authCtx.ProjectID, SkillID: skill.ID, PluginID: target.pluginID,
+		AssistantID: target.assistantID, Channel: target.channel,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "revoke skill distribution").LogError(ctx, logger)

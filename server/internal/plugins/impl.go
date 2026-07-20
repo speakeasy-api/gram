@@ -649,6 +649,7 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 			ProjectID:         revoked.ProjectID.String(),
 			SkillID:           revoked.SkillID.String(),
 			PluginID:          conv.FromNullableUUID(revoked.PluginID),
+			AssistantID:       conv.FromNullableUUID(revoked.AssistantID),
 			PinnedVersionID:   conv.FromNullableUUID(revoked.PinnedVersionID),
 			ResolvedVersionID: revoked.ResolvedVersionID.String(),
 			Channel:           revoked.Channel,
