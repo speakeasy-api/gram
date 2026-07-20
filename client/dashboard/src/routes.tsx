@@ -385,16 +385,20 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Overview",
             url: "overview",
           },
-          tools: {
-            title: "MCP Server Tools",
-            url: "tools",
+          inspect: {
+            title: "MCP Server Inspect",
+            url: "inspect",
           },
-          // Legacy route. MCPServerDetails redirects this to
+          // Legacy routes. MCPServerDetails redirects `authentication` to
           // settings#authentication now that authentication lives under
-          // Settings.
+          // Settings, and `tools` to `inspect`.
           authentication: {
             title: "MCP Server Authentication",
             url: "authentication",
+          },
+          tools: {
+            title: "MCP Server Tools",
+            url: "tools",
           },
           teamAccess: {
             title: "MCP Server Team Access",
