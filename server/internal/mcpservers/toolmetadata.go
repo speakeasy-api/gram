@@ -32,6 +32,10 @@ import (
 // within a single batch payload surfaces.
 const pgCardinalityViolation = "21000"
 
+// pgUniqueViolation is raised by the strictly additive insert when a tool in
+// the payload already holds a live stored entry.
+const pgUniqueViolation = "23505"
+
 // toolMetadataInput is the jsonb element shape consumed by
 // SetMCPServerToolMetadata's jsonb_to_recordset column list. Field names and
 // order must track that column list.
@@ -43,6 +47,32 @@ type toolMetadataInput struct {
 	IdempotentHint  *bool   `json:"idempotent_hint"`
 	OpenWorldHint   *bool   `json:"open_world_hint"`
 }
+
+// normalizeToolMetadataInput converts the wire payload into the jsonb element
+// shape, trimming names and rejecting empty ones: tool_name carries no CHECK
+// constraint, so emptiness is enforced here. Duplicate names are deliberately
+// not handled — the two batch methods have different policies for them.
+func normalizeToolMetadataInput(forms []*gen.ToolMetadataForm) ([]toolMetadataInput, error) {
+	tools := make([]toolMetadataInput, 0, len(forms))
+	for _, tool := range forms {
+		name := strings.TrimSpace(tool.ToolName)
+		if name == "" {
+			return nil, errEmptyToolName
+		}
+		tools = append(tools, toolMetadataInput{
+			ToolName:        name,
+			Title:           tool.Title,
+			ReadOnlyHint:    tool.ReadOnlyHint,
+			DestructiveHint: tool.DestructiveHint,
+			IdempotentHint:  tool.IdempotentHint,
+			OpenWorldHint:   tool.OpenWorldHint,
+		})
+	}
+
+	return tools, nil
+}
+
+var errEmptyToolName = errors.New("tool name must be non-empty")
 
 func ptrEq[T comparable](a, b *T) bool {
 	if a == nil || b == nil {
@@ -106,23 +136,11 @@ func (s *Service) SetToolMetadataBatch(ctx context.Context, payload *gen.SetTool
 		return nil, err
 	}
 
-	// tool_name carries no CHECK constraint, so emptiness is enforced here.
-	// Duplicates are left to the upsert, which rejects them as a cardinality
-	// violation.
-	tools := make([]toolMetadataInput, 0, len(payload.Tools))
-	for _, tool := range payload.Tools {
-		name := strings.TrimSpace(tool.ToolName)
-		if name == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "tool name must be non-empty").LogError(ctx, logger)
-		}
-		tools = append(tools, toolMetadataInput{
-			ToolName:        name,
-			Title:           tool.Title,
-			ReadOnlyHint:    tool.ReadOnlyHint,
-			DestructiveHint: tool.DestructiveHint,
-			IdempotentHint:  tool.IdempotentHint,
-			OpenWorldHint:   tool.OpenWorldHint,
-		})
+	// Names repeated within the payload are left to the upsert, which rejects
+	// them as a cardinality violation.
+	tools, err := normalizeToolMetadataInput(payload.Tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool metadata payload").LogError(ctx, logger)
 	}
 
 	toolsJSON, err := json.Marshal(tools)
@@ -187,6 +205,132 @@ func (s *Service) SetToolMetadataBatch(ctx context.Context, payload *gen.SetTool
 	}
 
 	return &gen.SetToolMetadataBatchResult{Tools: after, Retired: retired}, nil
+}
+
+func (s *Service) AddToolMetadataBatch(ctx context.Context, payload *gen.AddToolMetadataBatchPayload) (*gen.AddToolMetadataBatchResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	serverID, err := uuid.Parse(payload.McpServerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+
+	tools, err := normalizeToolMetadataInput(payload.Tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool metadata payload").LogError(ctx, logger)
+	}
+
+	// Unlike the authoritative path, duplicates within the payload are caught
+	// here rather than by the insert. Postgres reports them as the same unique
+	// violation as an already-stored tool, and the two mean different things to
+	// a caller: a malformed request versus a stale view of stored state.
+	seen := make(map[string]bool, len(tools))
+	for _, tool := range tools {
+		if seen[tool.ToolName] {
+			return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("duplicate tool name: %q", tool.ToolName), "duplicate tool name in payload").LogError(ctx, logger)
+		}
+		seen[tool.ToolName] = true
+	}
+
+	toolsJSON, err := json.Marshal(tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "encode tool metadata payload").LogError(ctx, logger)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	server, err := loadMCPServerForToolMetadata(ctx, txRepo, serverID, *authCtx.ProjectID, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	// Tool metadata backs disposition-aware RBAC for remote-backed servers.
+	// Toolset-backed servers already persist annotation hints on their tool
+	// definition tables, so storing a second copy here is disallowed.
+	if !server.RemoteMcpServerID.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "tool metadata is only supported for MCP servers backed by a remote MCP server").LogError(ctx, logger)
+	}
+
+	before, err := listToolMetadataViews(ctx, txRepo, serverID, *authCtx.ProjectID, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := txRepo.AddMCPServerToolMetadata(ctx, repo.AddMCPServerToolMetadataParams{
+		ProjectID:   *authCtx.ProjectID,
+		McpServerID: serverID,
+		Tools:       toolsJSON,
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
+			// The statement aborted this transaction, so the lookup that names
+			// the offending tools runs on a fresh one.
+			names := s.storedToolNames(ctx, serverID, *authCtx.ProjectID, seen)
+			return nil, oops.E(oops.CodeConflict, err, "tool metadata already stored for: %s", strings.Join(names, ", ")).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "add tool metadata").LogError(ctx, logger)
+	}
+
+	created := make([]*types.ToolMetadata, 0, len(rows))
+	for _, row := range rows {
+		created = append(created, mv.BuildToolMetadataView(row))
+	}
+
+	after, err := listToolMetadataViews(ctx, txRepo, serverID, *authCtx.ProjectID, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.logToolMetadataChange(ctx, dbtx, authCtx, server, before, after); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log tool metadata change").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return &gen.AddToolMetadataBatchResult{Tools: created}, nil
+}
+
+// storedToolNames returns the payload names that already hold a live stored
+// entry, sorted, so a conflict can name what actually collided. A failure to
+// look them up is not worth failing the request over — the caller is already
+// returning a conflict — so it yields an empty list.
+func (s *Service) storedToolNames(ctx context.Context, serverID, projectID uuid.UUID, payloadNames map[string]bool) []string {
+	rows, err := repo.New(s.db).ListMCPServerToolMetadata(ctx, repo.ListMCPServerToolMetadataParams{
+		McpServerID:    serverID,
+		ProjectID:      projectID,
+		IncludeDeleted: false,
+	})
+	if err != nil {
+		return nil
+	}
+
+	var names []string
+	for _, row := range rows {
+		if payloadNames[row.ToolName] {
+			names = append(names, row.ToolName)
+		}
+	}
+	slices.Sort(names)
+
+	return names
 }
 
 func (s *Service) ListToolMetadata(ctx context.Context, payload *gen.ListToolMetadataPayload) (*gen.ListToolMetadataResult, error) {

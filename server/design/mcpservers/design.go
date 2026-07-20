@@ -216,6 +216,35 @@ var _ = Service("mcpServers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetMcpServerToolMetadataBatch"}`)
 	})
 
+	Method("addToolMetadataBatch", func() {
+		Description("Strictly additive batch insert of tool metadata for an MCP server. Every tool in the payload is inserted; if any of them already has a live stored entry the whole batch fails with a conflict and nothing is inserted. Stored tools absent from the payload are left untouched and nothing is retired. Callers are expected to send only tools they know are new.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The ID of the MCP server the tool metadata belongs to", func() {
+				Format(FormatUUID)
+			})
+			Attribute("tools", ArrayOf(ToolMetadataForm), "The net-new tools to record. Every entry must be absent from the server's stored tool metadata.")
+			Required("mcp_server_id", "tools")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(AddToolMetadataBatchResult)
+
+		HTTP(func() {
+			POST("/rpc/mcpServers.addToolMetadataBatch")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "addMcpServerToolMetadataBatch")
+		Meta("openapi:extension:x-speakeasy-name-override", "addToolMetadataBatch")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddMcpServerToolMetadataBatch"}`)
+	})
+
 	Method("listToolMetadata", func() {
 		Description("List stored tool metadata for an MCP server.")
 
@@ -493,6 +522,13 @@ var SetToolMetadataBatchResult = Type("SetToolMetadataBatchResult", func() {
 	Attribute("tools", ArrayOf(ToolMetadata), "The stored tool metadata after the upsert")
 	Attribute("retired", Int, "The number of stored tools retired because they were absent from the payload")
 	Required("tools", "retired")
+})
+
+var AddToolMetadataBatchResult = Type("AddToolMetadataBatchResult", func() {
+	Description("Result of a strictly additive tool metadata batch insert.")
+
+	Attribute("tools", ArrayOf(ToolMetadata), "The tool metadata entries created by this call")
+	Required("tools")
 })
 
 var ListToolMetadataResult = Type("ListToolMetadataResult", func() {

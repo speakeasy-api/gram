@@ -192,6 +192,38 @@ SELECT
 FROM retired
 ORDER BY tool_name;
 
+-- name: AddMCPServerToolMetadata :many
+-- Strictly additive counterpart to SetMCPServerToolMetadata. There is
+-- deliberately no ON CONFLICT clause: a tool that already holds a live stored
+-- entry must abort the whole statement with a unique violation (SQLSTATE 23505)
+-- rather than being silently updated or skipped, so a caller working from a
+-- stale view of stored state is told so. The partial unique index covers only
+-- live rows, so a tool whose sole prior row is a tombstone inserts fresh.
+--
+-- See SetMCPServerToolMetadata above for why the payload is unpacked with ->>
+-- rather than jsonb_to_recordset.
+INSERT INTO mcp_server_tool_metadata (
+    project_id,
+    mcp_server_id,
+    tool_name,
+    title,
+    read_only_hint,
+    destructive_hint,
+    idempotent_hint,
+    open_world_hint
+)
+SELECT
+    @project_id,
+    @mcp_server_id,
+    elem->>'tool_name',
+    elem->>'title',
+    (elem->>'read_only_hint')::boolean,
+    (elem->>'destructive_hint')::boolean,
+    (elem->>'idempotent_hint')::boolean,
+    (elem->>'open_world_hint')::boolean
+FROM jsonb_array_elements(@tools::jsonb) AS elem
+RETURNING *;
+
 -- name: ListMCPServerToolMetadata :many
 SELECT *
 FROM mcp_server_tool_metadata
