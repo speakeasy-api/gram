@@ -214,6 +214,34 @@ enabled = true`,
     ],
   },
   {
+    id: "opencode",
+    name: "opencode",
+    description: "Open-source terminal coding agent",
+    icon: "opencode",
+    connected: false,
+    setupSteps: [
+      {
+        title: "Register the observability plugin",
+        description:
+          "Merge this into opencode.json to load the Gram observability plugin, which maps opencode's events to Speakeasy's dashboard.",
+        code: `{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@gram/opencode-observability"]
+}`,
+        language: "json",
+      },
+      {
+        title: "Set the required environment variables",
+        description:
+          "The plugin reads its Gram credentials from the environment, not from opencode.json. Export these before launching opencode (or add them to your shell profile).",
+        code: `export GRAM_KEY="{{GRAM_API_KEY}}"
+export GRAM_PROJECT="<your-project-slug>"`,
+        language: "bash",
+        requiresApiKey: true,
+      },
+    ],
+  },
+  {
     id: "copilot",
     name: "GitHub Copilot",
     description: "Microsoft / GitHub AI pair programmer",

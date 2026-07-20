@@ -56,7 +56,8 @@ type Provider =
   | "copilot"
   | "gemini"
   | "glean"
-  | "bedrock";
+  | "bedrock"
+  | "opencode";
 
 const providers: {
   id: Provider;
@@ -78,6 +79,7 @@ const providers: {
   },
   { id: "cursor", label: "Cursor", source: "cursor", available: true },
   { id: "codex", label: "Codex", source: "codex", available: true },
+  { id: "opencode", label: "opencode", source: "opencode", available: true },
   { id: "copilot", label: "Copilot", source: "copilot", available: false },
   { id: "gemini", label: "Gemini", source: "gemini", available: false },
   { id: "glean", label: "Glean", source: "glean", available: false },
@@ -653,6 +655,78 @@ function CodexInstallContent({
   );
 }
 
+/**
+ * opencode install. opencode has no plugin-marketplace or deep-link concept
+ * (unlike Claude Code / Cursor / Codex), so this covers the two things that
+ * actually apply: registering the Gram observability plugin (an npm-style
+ * package, configured via env vars — see hooks/opencode/README.md) and
+ * connecting an MCP server through opencode's own `mcp` config block. The MCP
+ * snippet uses placeholders — grab the real name/URL from that server's own
+ * hosted install page.
+ */
+function OpencodeInstallContent(): JSX.Element {
+  const pluginConfig = `{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@gram/opencode-observability"]
+}`;
+
+  const envConfig = `export GRAM_KEY="your-hooks-scoped-api-key"
+export GRAM_PROJECT="your-project-slug"`;
+
+  const mcpConfig = `{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "<server-name>": {
+      "type": "remote",
+      "enabled": true,
+      "url": "<mcp-server-url>",
+      "headers": {
+        "Authorization": "Bearer \${GRAM_API_KEY}"
+      }
+    }
+  }
+}`;
+
+  return (
+    <div className="min-w-0 space-y-6">
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          Send tool telemetry to Gram
+        </h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Merge this into{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            opencode.json
+          </code>{" "}
+          to register the Gram observability plugin:
+        </p>
+        <CodeBlock language="json" className="bg-background">
+          {pluginConfig}
+        </CodeBlock>
+        <p className="text-muted-foreground mt-3 mb-2 text-sm">
+          Then export these environment variables before launching opencode:
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {envConfig}
+        </CodeBlock>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Merge an entry into the same file's{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">mcp</code>{" "}
+          block. Replace the placeholders with the name and URL from that
+          server's own install page.
+        </p>
+        <CodeBlock language="json" className="bg-background">
+          {mcpConfig}
+        </CodeBlock>
+      </div>
+    </div>
+  );
+}
+
 type DialogProps = ContentProps & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -914,6 +988,7 @@ export function InstallInstructionsDialog({
                   pluginSlug={effectivePluginSlug}
                 />
               )}
+              {selected === "opencode" && <OpencodeInstallContent />}
             </div>
           </div>
         </div>
