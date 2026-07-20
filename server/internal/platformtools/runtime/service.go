@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
 	platformchats "github.com/speakeasy-api/gram/server/internal/platformtools/chats"
 	platformdeployments "github.com/speakeasy-api/gram/server/internal/platformtools/deployments"
 	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
@@ -185,6 +186,16 @@ func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService) []platformtools
 func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.DeploymentsService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformdeployments.NewGetDeploymentLogsTool(deploymentsSvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantChangelogTools returns the public-changelog tool for the
+// project's managed assistant so it can answer "what's new on the platform"
+// questions. The HTTP client must come from a guardian policy so the outbound
+// fetch stays within the egress rules.
+func ManagedAssistantChangelogTools(httpClient *guardian.HTTPClient) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformchangelog.NewGetChangelogTool(httpClient), RequiredFeature: ""},
 	}
 }
 
