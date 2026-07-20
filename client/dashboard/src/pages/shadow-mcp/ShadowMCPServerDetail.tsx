@@ -18,6 +18,7 @@ import {
   shadowMCPPolicyState,
   type ShadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
+import { ALLOW_RULE_POLICY_REQUIRED } from "@/components/shadow-mcp/shadowMCPInventoryActionItems";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
@@ -250,45 +251,58 @@ function TopUsersTable({
 }
 
 function DetailActionButtons({
+  canManageAllowRules,
   disabled,
   onOpenAction,
   server,
 }: {
+  canManageAllowRules: boolean;
   disabled: boolean;
   onOpenAction: (mode: InventoryActionMode) => void;
   server: ShadowMCPInventoryServer;
 }) {
   const primaryMode = actionModeForServer(server);
+  const primaryRequiresAllowRule =
+    primaryMode === "add" || primaryMode === "edit";
+  const primaryDisabled =
+    disabled || (primaryRequiresAllowRule && !canManageAllowRules);
 
   return (
-    <div className="flex items-center gap-2">
-      <Button
-        disabled={disabled}
-        onClick={() => onOpenAction(primaryMode)}
-        variant="primary"
-      >
-        <Button.Text>{actionLabel(primaryMode)}</Button.Text>
-      </Button>
-      {server.access === "allowed" && primaryMode !== "edit" && (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
         <Button
-          disabled={disabled}
-          onClick={() => onOpenAction("edit")}
-          variant="tertiary"
+          disabled={primaryDisabled}
+          onClick={() => onOpenAction(primaryMode)}
+          variant="primary"
         >
-          <Button.Text>{actionLabel("edit")}</Button.Text>
+          <Button.Text>{actionLabel(primaryMode)}</Button.Text>
         </Button>
-      )}
-      {server.access === "allowed" && (
-        <Button
-          disabled={disabled}
-          onClick={() => onOpenAction("delete")}
-          variant="tertiary"
-        >
-          <Button.LeftIcon>
-            <Icon name="trash-2" />
-          </Button.LeftIcon>
-          <Button.Text>Delete Rule</Button.Text>
-        </Button>
+        {server.access === "allowed" && primaryMode !== "edit" && (
+          <Button
+            disabled={disabled || !canManageAllowRules}
+            onClick={() => onOpenAction("edit")}
+            variant="tertiary"
+          >
+            <Button.Text>{actionLabel("edit")}</Button.Text>
+          </Button>
+        )}
+        {server.access === "allowed" && (
+          <Button
+            disabled={disabled}
+            onClick={() => onOpenAction("delete")}
+            variant="tertiary"
+          >
+            <Button.LeftIcon>
+              <Icon name="trash-2" />
+            </Button.LeftIcon>
+            <Button.Text>Delete Rule</Button.Text>
+          </Button>
+        )}
+      </div>
+      {primaryRequiresAllowRule && !canManageAllowRules && (
+        <Type muted small>
+          {ALLOW_RULE_POLICY_REQUIRED}
+        </Type>
       )}
     </div>
   );
@@ -555,6 +569,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             <Page.Section.CTA>
               {server && (
                 <DetailActionButtons
+                  canManageAllowRules={shadowMCPPolicies.length > 0}
                   disabled={isSubmitting}
                   onOpenAction={openAction}
                   server={server}

@@ -852,4 +852,42 @@ describe("ShadowMCPServerDetail", () => {
     });
     expect(mocks.invalidateShadowMCPInventory).toHaveBeenCalled();
   });
+
+  it("disables add when no allow-rule policy is eligible", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            action: "flag",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "flag-policy",
+            name: "Flag policy",
+            sources: ["shadow_mcp"],
+          },
+        ],
+      },
+      isError: false,
+      isLoading: false,
+    });
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({ access: "none", allowedPolicyIds: [] }),
+      error: null,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Add Allow Rule",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText("An enabled blocking Shadow MCP policy is required."),
+    ).toBeTruthy();
+  });
 });

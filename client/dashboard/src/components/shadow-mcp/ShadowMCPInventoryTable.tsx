@@ -191,6 +191,7 @@ export function ShadowMCPInventoryTable({
     deletePolicyBypass.isPending ||
     resolveInventoryRequest.isPending;
   const isActionPending = isSubmitting || activeAction !== null;
+  const canManageAllowRules = shadowMCPPolicies.length > 0;
 
   useEffect(() => {
     setPaginationScope(inventoryScope);
@@ -331,6 +332,7 @@ export function ShadowMCPInventoryTable({
   const renderActionsCell = (server: ShadowMCPInventoryServer) => {
     return (
       <ShadowMCPInventoryActionMenu
+        canManageAllowRules={canManageAllowRules}
         disabled={isActionPending}
         onOpenAction={(mode, selectedServer) =>
           setActiveAction({ mode, server: selectedServer })
@@ -498,6 +500,7 @@ export function ShadowMCPInventoryTable({
             <TableRowContextMenu
               key={row.canonicalServerUrl}
               actions={shadowMCPInventoryActions(row, {
+                canManageAllowRules,
                 disabled: isActionPending,
                 onOpenAction: (mode, selectedServer) =>
                   setActiveAction({ mode, server: selectedServer }),
