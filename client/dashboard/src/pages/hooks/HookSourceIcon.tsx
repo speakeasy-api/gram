@@ -264,6 +264,33 @@ export function BedrockIcon({
   );
 }
 
+// Official opencode square logomark, rendered monochrome so it tints with
+// text color like the sibling icons. Geometry from https://opencode.ai/brand
+// (sst/opencode packages/console/app/src/asset/brand/opencode-logo-*-square.svg);
+// the two-tone counter is approximated with a reduced-opacity currentColor fill.
+function OpencodeIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 300 300"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <g transform="translate(30, 0)">
+        <path
+          d="M180 240H60V120H180V240Z"
+          fill="currentColor"
+          fillOpacity="0.4"
+        />
+        <path
+          d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z"
+          fill="currentColor"
+        />
+      </g>
+    </svg>
+  );
+}
+
 interface HookSourceIconProps {
   source?: string;
   className?: string;
@@ -286,6 +313,9 @@ export function HookSourceIcon({
   }
   if (normalizedSource?.includes("codex")) {
     return <CodexIcon className={className} />;
+  }
+  if (normalizedSource?.includes("opencode")) {
+    return <OpencodeIcon className={className} />;
   }
   if (
     normalizedSource?.includes("copilot") ||

@@ -1317,6 +1317,69 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
         </ol>
       </div>
     </template>
+    <template class="install-target-template" data-install-target="opencode">
+      <div class="modal-content">
+        <h1>Instructions</h1>
+        <ol>
+          <li class="instruction-item">
+            Merge the following into your <code>opencode.json</code> (project-level or
+            <code>~/.config/opencode/opencode.json</code>) to register this server:
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <!-- prettier-ignore -->
+              <code class="code-snippet language-json" data-scope-url-text>{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "{{ .MCPSlug }}": {
+      "type": "remote",
+      "enabled": true,
+      "url": "{{ .MCPURL }}"{{- if .SecurityInputs }},
+      "headers": {
+        {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
+        "{{ $input.SystemName | asHTTPHeader }}": "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }}
+      }
+      {{- end }}
+    }
+  }
+}</code>
+            </div>
+          </li>
+          {{- if .IsOAuth }}
+          <li class="instruction-item">
+            This server uses OAuth. opencode's remote MCP client supports OAuth
+            dynamic client registration, so it will prompt you to authenticate
+            the first time a tool from this server is used — no manual token
+            configuration needed.
+          </li>
+          {{- else if .SecurityInputs }}
+          <li class="instruction-item">
+            Replace each <code>your-*-value</code> placeholder above with your
+            actual credential.
+          </li>
+          {{- end }}
+          <li class="instruction-item">
+            Restart opencode to load the new configuration.
+          </li>
+        </ol>
+      </div>
+    </template>
   </head>
   <body>
     <main class="main">
@@ -1424,6 +1487,13 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
                     data-install-target="codex-cli"
                   >
                     Codex CLI
+                  </button>
+                  <button
+                    class="popover-button"
+                    data-install-method="modal"
+                    data-install-target="opencode"
+                  >
+                    opencode
                   </button>
                 </div>
               </div>
@@ -1738,6 +1808,54 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
                   </defs>
                 </svg>
                 <span>Codex CLI</span>
+              </div>
+            </div>
+            <div
+              tabindex="0"
+              class="card install-target"
+              data-install-method="modal"
+              data-install-target="opencode"
+            >
+              <div class="target">
+                <!-- Official opencode square logomark (light variant). Source:
+                     https://opencode.ai/brand — sst/opencode
+                     packages/console/app/src/asset/brand/opencode-logo-light-square.svg -->
+                <svg
+                  width="300"
+                  height="300"
+                  viewBox="0 0 300 300"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <g transform="translate(30, 0)">
+                    <g clip-path="url(#clip0_opencode_target)">
+                      <mask
+                        id="mask0_opencode_target"
+                        style="mask-type: luminance"
+                        maskUnits="userSpaceOnUse"
+                        x="0"
+                        y="0"
+                        width="240"
+                        height="300"
+                      >
+                        <path d="M240 0H0V300H240V0Z" fill="white" />
+                      </mask>
+                      <g mask="url(#mask0_opencode_target)">
+                        <path d="M180 240H60V120H180V240Z" fill="#CFCECD" />
+                        <path
+                          d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z"
+                          fill="#211E1E"
+                        />
+                      </g>
+                    </g>
+                  </g>
+                  <defs>
+                    <clipPath id="clip0_opencode_target">
+                      <rect width="240" height="300" fill="white" />
+                    </clipPath>
+                  </defs>
+                </svg>
+                <span>opencode</span>
               </div>
             </div>
           </div>
