@@ -163,7 +163,9 @@ function IPAllowlistEditor({
               onClick={() => handleRemove(row.id)}
               aria-label="Remove entry"
             >
-              <X className="h-4 w-4" />
+              <Button.Icon>
+                <X className="h-4 w-4" />
+              </Button.Icon>
             </Button>
           </div>
           {row.error && (
@@ -414,13 +416,16 @@ function OrgDomainsInner() {
                   </Button>
                 )}
                 <Button
+                  aria-label="Delete custom domain"
                   variant="tertiary"
                   size="sm"
                   onClick={() => setIsDeleteDomainDialogOpen(true)}
                   className="hover:text-destructive"
                   disabled={deleteDomainMutation.isPending}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Button.Icon>
+                    <Trash2 className="h-4 w-4" />
+                  </Button.Icon>
                 </Button>
               </Stack>
             </RequireScope>
@@ -595,16 +600,21 @@ function OrgDomainsInner() {
               <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
                 <code className="flex-1 break-all">{CNAME_VALUE}</code>
                 <Button
+                  aria-label={
+                    isCnameCopied ? "CNAME value copied" : "Copy CNAME value"
+                  }
                   variant="tertiary"
                   size="sm"
                   onClick={() => void handleCopyCname()}
                   className="shrink-0"
                 >
-                  {isCnameCopied ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
+                  <Button.Icon>
+                    {isCnameCopied ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button.Icon>
                 </Button>
               </div>
             </div>
@@ -623,16 +633,21 @@ function OrgDomainsInner() {
               <div className="bg-muted mt-2 flex items-center space-x-2 rounded-md p-3">
                 <code className="flex-1 break-all">{txtValue}</code>
                 <Button
+                  aria-label={
+                    isTxtCopied ? "TXT value copied" : "Copy TXT value"
+                  }
                   variant="tertiary"
                   size="sm"
                   onClick={() => void handleCopyTxt()}
                   className="shrink-0"
                 >
-                  {isTxtCopied ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
+                  <Button.Icon>
+                    {isTxtCopied ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button.Icon>
                 </Button>
               </div>
             </div>

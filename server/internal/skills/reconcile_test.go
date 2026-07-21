@@ -194,7 +194,7 @@ func TestReconcileSkillObservations_DistributedPluginRemainsCustom(t *testing.T)
 	require.NoError(t, err)
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "distribution-plugin")
 	_, err = ti.service.Distribute(ctx, &gen.DistributePayload{
-		ID: captured.SkillID.String(), PluginID: plugin.ID.String(), PinnedVersionID: nil,
+		ID: captured.SkillID.String(), PluginID: new(plugin.ID.String()), PinnedVersionID: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
@@ -215,7 +215,7 @@ func TestReconcileSkillObservations_HashlessDistributedPluginRemainsCustom(t *te
 	require.NoError(t, err)
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "hashless-plugin")
 	_, err = ti.service.Distribute(ctx, &gen.DistributePayload{
-		ID: captured.SkillID.String(), PluginID: plugin.ID.String(), PinnedVersionID: nil,
+		ID: captured.SkillID.String(), PluginID: new(plugin.ID.String()), PinnedVersionID: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
@@ -236,7 +236,7 @@ func TestReconcileSkillObservations_LaggingDistributedPluginVersionRemainsCustom
 	require.NoError(t, err)
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "lagging-plugin")
 	_, err = ti.service.Distribute(ctx, &gen.DistributePayload{
-		ID: captured.SkillID.String(), PluginID: plugin.ID.String(), PinnedVersionID: nil,
+		ID: captured.SkillID.String(), PluginID: new(plugin.ID.String()), PinnedVersionID: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)

@@ -53,6 +53,8 @@ type AiIntegrationSync struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
+	Kind                  pgtype.Text
 	PollWatermarkAt       pgtype.Timestamptz
 	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
@@ -1676,7 +1678,6 @@ type SkillObservation struct {
 	RawSha256          pgtype.Text
 	SeenAt             pgtype.Timestamptz
 	SkillID            uuid.NullUUID
-	SkillVersionID     uuid.NullUUID
 	ReconciledAt       pgtype.Timestamptz
 	ReconcileErrorCode pgtype.Text
 	CreatedAt          pgtype.Timestamptz

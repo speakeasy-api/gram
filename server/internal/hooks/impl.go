@@ -104,6 +104,12 @@ type SessionMetadata struct {
 	// accounts logged in on one machine — the device bridge that links a personal
 	// account to the employee learned from a team session on the same device.
 	DeviceID string
+	// Hostname is the device hostname the Go hooks report on every event
+	// (gram.hook.hostname). Cached with the session so the Claude OTEL path —
+	// whose rows carry no hostname of their own — can stamp it onto cost rows,
+	// letting the user breakdown fall back to the device when the session has
+	// no email (company-credential sessions emit no user identity).
+	Hostname string
 	// AccountType is "team" or "personal" once classified, else empty.
 	AccountType string
 	// BillingMode is the admin-declared billing mode for the provider org this
