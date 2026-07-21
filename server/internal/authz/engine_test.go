@@ -73,40 +73,6 @@ func TestEngineRequire_mapsDeniedToForbidden(t *testing.T) {
 	require.Equal(t, "permission denied", oopsErr.Error())
 }
 
-func TestEngineRequire_mapsMCPServerDenialToActionableForbidden(t *testing.T) {
-	t.Parallel()
-
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), nil)
-
-	err = engine.Require(ctx, MCPCheck(ScopeMCPConnect, "server_123", "project_123"))
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-	require.Equal(t, "you do not have permission to use this MCP server. Contact your organization's administrator to request access.", oopsErr.Error())
-}
-
-func TestEngineRequire_mapsMCPToolDenialToActionableForbidden(t *testing.T) {
-	t.Parallel()
-
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), nil)
-
-	err = engine.Require(ctx, MCPToolCallCheck("server_123", MCPToolCallDimensions{
-		Tool:        "delete_ticket",
-		Disposition: "",
-		ProjectID:   "project_123",
-	}))
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-	require.Equal(t, "you do not have permission to use this MCP tool. Contact your organization's administrator to request access.", oopsErr.Error())
-}
-
 func TestEngineRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 	t.Parallel()
 

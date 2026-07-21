@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -513,7 +514,7 @@ func (s *Service) prepareProxyBackendContext(
 
 		// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), endpoint.ProjectID.String())); err != nil {
-			return nil, err
+			return nil, mcpaccess.ServerPermissionDenied(err)
 		}
 	case mcpservers.VisibilityPublic:
 		// Public, no OAuth: optionally probe Gram identity if the

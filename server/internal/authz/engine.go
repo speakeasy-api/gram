@@ -645,14 +645,6 @@ func validateInput(c Check) error {
 func (e *Engine) mapError(ctx context.Context, err error) error {
 	switch {
 	case errors.Is(err, ErrDenied):
-		if denied, ok := errors.AsType[*DeniedError](err); ok && denied.Scope == ScopeMCPConnect {
-			if denied.Selector[SelectorKeyTool] != "" {
-				return oops.E(oops.CodeForbidden, nil, "you do not have permission to use this MCP tool. Contact your organization's administrator to request access.")
-			}
-
-			return oops.E(oops.CodeForbidden, nil, "you do not have permission to use this MCP server. Contact your organization's administrator to request access.")
-		}
-
 		return oops.C(oops.CodeForbidden)
 	case errors.Is(err, ErrMissingGrants):
 		return oops.E(oops.CodeUnexpected, err, "authz grants missing from prepared context").LogError(ctx, e.logger)
