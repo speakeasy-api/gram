@@ -1636,7 +1636,7 @@ func TestServeInstallPage_McpServer_InstallationOverrideURL(t *testing.T) {
 
 	req := httptest.NewRequest(
 		"GET",
-		"/mcp/"+endpointSlug+"/install?utm_source=directory&campaign=spring&campaign=summer&referrer=https%3A%2F%2Fdirectory.example.com%2Fcatalog%3Fcategory%3Dai",
+		"/mcp/"+endpointSlug+"/install?configured=caller&utm_source=directory&campaign=spring&campaign=summer&referrer=https%3A%2F%2Fdirectory.example.com%2Fcatalog%3Fcategory%3Dai",
 		nil,
 	)
 	req.Header.Set("Referer", "https://different-referrer.example.com/page")
@@ -1654,7 +1654,7 @@ func TestServeInstallPage_McpServer_InstallationOverrideURL(t *testing.T) {
 	require.Equal(t, "custom-install-page.example.com", location.Host)
 	require.Equal(t, "/install", location.Path)
 	require.Equal(t, "setup", location.Fragment)
-	require.Equal(t, "1", location.Query().Get("configured"))
+	require.Equal(t, []string{"1", "caller"}, location.Query()["configured"])
 	require.Equal(t, "directory", location.Query().Get("utm_source"))
 	require.Equal(t, []string{"spring", "summer"}, location.Query()["campaign"])
 	require.Equal(t, "https://directory.example.com/catalog?category=ai", location.Query().Get("referrer"))
