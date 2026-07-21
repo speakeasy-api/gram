@@ -3858,6 +3858,22 @@ CREATE TABLE IF NOT EXISTS risk_results (
   CONSTRAINT risk_results_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+) WITH (
+  -- This table is append-heavy and rarely updated, so the only autovacuum
+  -- trigger that ever fires is the insert one. With the global 0.2 scale
+  -- factor that threshold scales with the table itself, so on a table this
+  -- size vacuum only runs every several million inserts — longer than the
+  -- window the risk overview queries scan. The freshly inserted pages are
+  -- therefore never marked all-visible, and the overview's index-only scan
+  -- degrades into a random heap scan (observed: ~93% heap fetches).
+  --
+  -- A fixed threshold with no scale factor keeps the vacuum cadence constant
+  -- as the table grows instead of stretching indefinitely. Dead tuples stay
+  -- negligible here, so these passes skip index cleanup and mostly just set
+  -- visibility map bits.
+  autovacuum_vacuum_insert_scale_factor = 0,
+  autovacuum_vacuum_insert_threshold = 250000,
+  autovacuum_vacuum_cost_limit = 2000
 );
 
 CREATE INDEX IF NOT EXISTS risk_results_project_policy_version_message_idx
