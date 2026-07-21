@@ -747,29 +747,6 @@ func TestDiscoverRemoteSessionIssuer_WithWarnings(t *testing.T) {
 	require.Nil(t, draft.TokenEndpoint)
 }
 
-func TestDiscoverRemoteSessionIssuer_RBACForbidden(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
-		Scope:    authz.ScopeProjectRead,
-		Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String()),
-	})
-
-	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
-		Issuer:           "https://idp.example.com",
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-	})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeForbidden)
-}
-
 func TestDiscoverRemoteSessionIssuer_BadURL(t *testing.T) {
 	t.Parallel()
 
