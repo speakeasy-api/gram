@@ -1718,6 +1718,12 @@ type SkillVersion struct {
 	CreatedByUserID  string
 }
 
+type SkillVersionLineage struct {
+	SkillVersionID       uuid.UUID
+	SkillID              uuid.UUID
+	DerivedFromVersionID uuid.UUID
+}
+
 type SkillVersionOrigin struct {
 	SkillVersionID uuid.UUID
 	SkillID        uuid.UUID

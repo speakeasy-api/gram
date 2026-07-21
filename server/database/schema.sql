@@ -313,6 +313,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key O
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versions (skill_id, id);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
 
+CREATE TABLE IF NOT EXISTS skill_version_lineages (
+  skill_version_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  derived_from_version_id uuid NOT NULL,
+
+  CONSTRAINT skill_version_lineages_pkey PRIMARY KEY (skill_version_id),
+  CONSTRAINT skill_version_lineages_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_version_lineages_skill_id_derived_from_version_id_fkey FOREIGN KEY (skill_id, derived_from_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skill_version_lineages_skill_id_derived_from_version_id_idx ON skill_version_lineages (skill_id, derived_from_version_id);
+
 CREATE TABLE IF NOT EXISTS skill_version_origins (
   skill_version_id uuid NOT NULL,
   skill_id uuid NOT NULL,
