@@ -240,6 +240,7 @@ func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Con
 			if err := repo.New(s.db).AdvanceUsagePollCursor(ctx, repo.AdvanceUsagePollCursorParams{
 				LastCursorID:          conv.ToPGText(batch.activitiesCursor),
 				AiIntegrationConfigID: cfg.ID,
+				Schedule:              conv.ToPGText(ScheduleAnthropicCompliance),
 			}); err != nil {
 				return oops.E(oops.CodeUnexpected, err, "advance anthropic compliance activities cursor")
 			}

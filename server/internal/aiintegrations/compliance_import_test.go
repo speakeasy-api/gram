@@ -71,6 +71,7 @@ func complianceDiscoveryConfig(lastCursor string) Config {
 	extOrgID := "ext-org"
 	return Config{
 		ID:                     uuid.New(),
+		SyncID:                 uuid.Nil,
 		OrganizationID:         "org_test",
 		Provider:               ProviderAnthropicCompliance,
 		ProjectID:              uuid.New(),
@@ -283,7 +284,7 @@ func TestWriteMessagePagesAdvancesActivitiesCursor(t *testing.T) {
 	// The persisted cursor must be visible through the same read PollAIData
 	// performs at the start of each retry attempt, so a failed run resumes
 	// from the last completed activities page.
-	reloaded, err := store.GetUsagePollConfig(ctx, cfg.ID)
+	reloaded, err := store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicCompliance)
 	require.NoError(t, err)
 	require.Equal(t, "act_200", reloaded.LastCursor)
 }
