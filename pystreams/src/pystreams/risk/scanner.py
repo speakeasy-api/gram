@@ -329,8 +329,12 @@ class ProcessPoolScanner(_AsyncCloseable):
                     tg.start_soon(scanner._warm_one)
         except BaseException:
             # Warmup failed or was cancelled after spawning some workers; reap them
-            # (aclose is bounded) so a failed create doesn't leak processes.
-            await scanner.aclose()
+            # (aclose is bounded) so a failed create doesn't leak processes. The
+            # shield is required when cancellation caused the failure: without it,
+            # the already-cancelled scope can interrupt aclose before executor
+            # shutdown starts.
+            with anyio.CancelScope(shield=True):
+                await scanner.aclose()
             raise
         return scanner
 
