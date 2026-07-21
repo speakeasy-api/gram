@@ -1,3 +1,4 @@
+import { formatCost } from "@/lib/money";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -25,13 +26,6 @@ import {
   isMeteredBilling,
 } from "@/components/estimated-cost-utils";
 import { displayName, isAttributionDim } from "./taxonomy";
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 // Average cost per chat session for a row; 0 when there are no sessions.
 function costPerSession(row: QueryRow): number {

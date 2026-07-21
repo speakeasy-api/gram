@@ -32,13 +32,3 @@ export type TimeSeriesStack = {
   series: number[];
   rollup?: boolean;
 };
-
-// Telemetry bucket timestamps arrive as unix-nano strings, which exceed
-// Number precision — divide as BigInt first.
-export function unixNanoToMs(nano: string): number {
-  try {
-    return Number(BigInt(nano) / 1_000_000n);
-  } catch {
-    return 0;
-  }
-}

@@ -106,34 +106,37 @@ export function BreakdownBar({
   );
 
   return (
-    // A deliberate two-row control bar (same visual shell as Page.Toolbar,
-    // which is single-row): the top row shapes the view — search on the left,
-    // the axis track anchored right; the bottom row scopes and acts — dataset
-    // + range on the left, table actions on the right. Every row spans the
-    // full bar at every width, so nothing clips and nothing rags.
-    <div className="border-border bg-muted/40 flex w-full flex-col gap-2 rounded-lg border p-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    // A deliberate two-row control bar on the shared Page.Toolbar shell: the
+    // top row shapes the view — search on the left, the axis track anchored
+    // right; the bottom row scopes and acts — dataset + range on the left,
+    // table actions on the right. Every row spans the full bar at every
+    // width, so nothing clips and nothing rags.
+    <Page.Toolbar>
+      <Page.Toolbar.Row>
         <Page.Toolbar.Search
           value={searchValue}
           onChange={onSearchChange}
           placeholder={searchPlaceholder}
         />
-        {/* A lone axis is no choice at all — at a session leaf (Agent, Model)
-            "Sessions" is the only option, and a track you can't move reads as
-            a broken toggle. The section title already names the cut. */}
-        {axisOptions.length > 1 && (
-          <SegmentedControl
-            value={axisValue}
-            onChange={onAxisChange}
-            options={segments}
-            trailing={more}
-          />
-        )}
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">{trailing}</div>
-        {actions}
-      </div>
-    </div>
+        <Page.Toolbar.Actions>
+          {/* A lone axis is no choice at all — at a session leaf (Agent,
+              Model) "Sessions" is the only option, and a track you can't move
+              reads as a broken toggle. The section title already names the
+              cut. */}
+          {axisOptions.length > 1 && (
+            <SegmentedControl
+              value={axisValue}
+              onChange={onAxisChange}
+              options={segments}
+              trailing={more}
+            />
+          )}
+        </Page.Toolbar.Actions>
+      </Page.Toolbar.Row>
+      <Page.Toolbar.Row>
+        <Page.Toolbar.Leading>{trailing}</Page.Toolbar.Leading>
+        <Page.Toolbar.Actions>{actions}</Page.Toolbar.Actions>
+      </Page.Toolbar.Row>
+    </Page.Toolbar>
   );
 }

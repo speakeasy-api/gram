@@ -1,3 +1,4 @@
+import { formatCost } from "@/lib/money";
 import { Badge } from "@speakeasy-api/moonshine";
 import {
   Select,
@@ -34,13 +35,6 @@ import {
 } from "./taxonomy";
 
 // ── Formatting helpers ──────────────────────────────────────────────────────
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 // ── CSV export ──────────────────────────────────────────────────────────────
 

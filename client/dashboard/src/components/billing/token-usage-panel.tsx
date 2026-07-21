@@ -1,9 +1,7 @@
 import { type TumDetailsPoint } from "@gram/client/models/components/tumdetailspoint.js";
 import { type ReactNode, useMemo } from "react";
-import {
-  type TimeSeriesStack,
-  unixNanoToMs,
-} from "@/components/stacked-time-series";
+import { unixNanoToMs } from "@/components/chart/chartUtils";
+import { type TimeSeriesStack } from "@/components/stacked-time-series";
 import { StackedTimeSeriesPanel } from "@/components/stacked-time-series-panel";
 import { type StackMode } from "./breakdown-options";
 

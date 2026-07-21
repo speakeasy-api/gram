@@ -1,3 +1,4 @@
+import { formatCost } from "@/lib/money";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
@@ -21,13 +22,6 @@ const PAGE_SIZE = 10;
 // The list arrives ranked by the server's sortBy (cost) and capped at this many
 // rows; surfaced so the footer can flag when the slice is truncated.
 const DEFAULT_LIMIT = 100;
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 function displayOrDash(value: string | undefined): string {
   return value && value.length > 0 ? value : "—";

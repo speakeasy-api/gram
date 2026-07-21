@@ -1,12 +1,13 @@
 import { type Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryResult } from "@gram/client/models/components/queryresult.js";
 import { useMemo } from "react";
+import { unixNanoToMs } from "@/components/chart/chartUtils";
 import {
   OTHER_STACK_LABEL,
   type TimeSeriesStack,
-  unixNanoToMs,
 } from "@/components/stacked-time-series";
 import { StackedTimeSeriesPanel } from "@/components/stacked-time-series-panel";
+import { formatCompactDollars, formatCost } from "@/lib/money";
 import { displayName, isAttributionDim } from "./taxonomy";
 
 // Stacked cost-over-time chart for the costs explorer: the shared time-series
@@ -21,22 +22,6 @@ import { displayName, isAttributionDim } from "./taxonomy";
 // that long is unreadable. The server's own top-N rollup row, when present,
 // ranks by its combined cost like any other series.
 const MAX_CHART_STACKS = 7;
-
-const compactDollars = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function formatAxisDollars(value: number): string {
-  return `$${compactDollars.format(value)}`;
-}
 
 export function CostBreakdownChart({
   data,
@@ -143,7 +128,7 @@ export function CostBreakdownChart({
       bucketsMs={bucketsMs}
       stacks={isError ? [] : stacks}
       formatValue={formatCost}
-      formatAxisValue={formatAxisDollars}
+      formatAxisValue={formatCompactDollars}
       emptyMessage={
         isError ? "Failed to load cost data." : "No cost data in this range."
       }

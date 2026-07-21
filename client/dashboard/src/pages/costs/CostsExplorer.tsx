@@ -1,3 +1,4 @@
+import { formatCost } from "@/lib/money";
 import { telemetryListAttributeKeys } from "@gram/client/funcs/telemetryListAttributeKeys";
 import { telemetryListSessions } from "@gram/client/funcs/telemetryListSessions";
 import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
@@ -112,13 +113,6 @@ function entityLevel(entity: Crumb | null): CostEntityLevel {
   if (entity.dim === Dimension.Email) return "user";
   if (entity.dim === Dimension.HookSource) return "agent";
   return "group";
-}
-
-function formatDollars(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
 }
 
 // Compact human date range for the widget titles, e.g. "June 15–19" within a
@@ -1176,7 +1170,7 @@ export function CostsExplorer(): JSX.Element {
   const scope = entityLabel
     ? `the ${entityType.toLowerCase()} "${entityLabel}"`
     : `the "${project.name}" project`;
-  const assistantContext = `Cost dashboard — viewing ${scope}, broken down by ${childLabel.toLowerCase()}. Over ${rangeLabel}: ${formatDollars(stats.cost)} total cost, ${stats.sessions.toLocaleString()} chat sessions, ${stats.tools.toLocaleString()} tool calls, ${stats.tokens.toLocaleString()} tokens. Active filters: ${filterSummary}.`;
+  const assistantContext = `Cost dashboard — viewing ${scope}, broken down by ${childLabel.toLowerCase()}. Over ${rangeLabel}: ${formatCost(stats.cost)} total cost, ${stats.sessions.toLocaleString()} chat sessions, ${stats.tools.toLocaleString()} tool calls, ${stats.tokens.toLocaleString()} tokens. Active filters: ${filterSummary}.`;
   const assistantSuggestions = costExplorerSuggestions({
     level,
     entityLabel,
