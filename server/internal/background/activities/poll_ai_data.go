@@ -46,11 +46,11 @@ type stageFailureDetail struct {
 }
 
 type PollAIData struct {
-	integrations         *aiintegrations.Store
-	cursorUsagePoller    *aiintegrations.UsagePollService
-	complianceImporter   *aiintegrations.ComplianceImportService
-	analyticsUsagePoller *aiintegrations.AnthropicAnalyticsPoller
-	analyticsCostPoller  *aiintegrations.AnthropicAnalyticsPoller
+	integrations                  *aiintegrations.Store
+	cursorUsagePoller             *aiintegrations.UsagePollService
+	anthropicComplianceImporter   *aiintegrations.ComplianceImportService
+	anthropicAnalyticsUsagePoller *aiintegrations.AnthropicAnalyticsPoller
+	anthropicAnalyticsCostPoller  *aiintegrations.AnthropicAnalyticsPoller
 }
 
 func NewPollAIData(
@@ -83,9 +83,9 @@ func NewPollAIData(
 				"page":     page,
 			})
 		}),
-		complianceImporter:   aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, complianceHeartbeat),
-		analyticsUsagePoller: aiintegrations.NewAnthropicUsageAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
-		analyticsCostPoller:  aiintegrations.NewAnthropicCostAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
+		anthropicComplianceImporter:   aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, complianceHeartbeat),
+		anthropicAnalyticsUsagePoller: aiintegrations.NewAnthropicUsageAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
+		anthropicAnalyticsCostPoller:  aiintegrations.NewAnthropicCostAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
 	}
 }
 
@@ -156,7 +156,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		if cfg.Provider != aiintegrations.ProviderAnthropicCompliance {
 			return oops.E(oops.CodeInvalid, nil, "anthropic compliance schedule cannot run for provider %s", cfg.Provider)
 		}
-		nextCursor, err := p.complianceImporter.SyncAnthropicCompliance(ctx, cfg)
+		nextCursor, err := p.anthropicComplianceImporter.SyncAnthropicCompliance(ctx, cfg)
 		if err != nil {
 			var httpErr *anthropicapi.HTTPError
 			if errors.As(err, &httpErr) {
@@ -173,14 +173,14 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 			return oops.E(oops.CodeUnexpected, err, "record anthropic compliance schedule success")
 		}
 	case aiintegrations.ScheduleAnthropicAnalyticsUsage:
-		if err := p.analyticsUsagePoller.Sync(ctx, cfg, endTime); err != nil {
+		if err := p.anthropicAnalyticsUsagePoller.Sync(ctx, cfg, endTime); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic analytics usage")
 		}
 		if err := p.integrations.RecordSchedulePollSuccess(ctx, cfg.ID, schedule, endTime); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "record anthropic analytics usage success")
 		}
 	case aiintegrations.ScheduleAnthropicAnalyticsCost:
-		if err := p.analyticsCostPoller.Sync(ctx, cfg, endTime); err != nil {
+		if err := p.anthropicAnalyticsCostPoller.Sync(ctx, cfg, endTime); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic analytics cost")
 		}
 		if err := p.integrations.RecordSchedulePollSuccess(ctx, cfg.ID, schedule, endTime); err != nil {

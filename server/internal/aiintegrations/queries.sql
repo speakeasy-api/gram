@@ -205,7 +205,8 @@ SET poll_watermark_at = @poll_watermark_at,
     consecutive_failures = 0,
     last_cursor_id = NULL,
     updated_at = clock_timestamp()
-WHERE id = @sync_id;
+WHERE ai_integration_config_id = @ai_integration_config_id
+  AND schedule = @schedule;
 
 -- name: ListUsagePollCandidates :many
 SELECT
