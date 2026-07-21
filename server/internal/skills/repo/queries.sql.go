@@ -99,7 +99,7 @@ func (q *Queries) BackfillSkillObservationsForCapturedVersion(ctx context.Contex
 }
 
 const claimPendingSkillObservations = `-- name: ClaimPendingSkillObservations :many
-SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, metrics_synced_at, reconcile_error_code, created_at
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at, reconcile_error_code, created_at
 FROM skill_observations
 WHERE project_id = $1
   AND reconciled_at IS NULL
@@ -141,6 +141,7 @@ func (q *Queries) ClaimPendingSkillObservations(ctx context.Context, arg ClaimPe
 			&i.SkillVersionID,
 			&i.ReconciledAt,
 			&i.MetricsSyncedAt,
+			&i.EfficacyEnqueuedAt,
 			&i.ReconcileErrorCode,
 			&i.CreatedAt,
 		); err != nil {
@@ -1891,7 +1892,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 }
 
 const listUnknownSkillActivations = `-- name: ListUnknownSkillActivations :many
-SELECT so.id, so.project_id, so.idempotency_key, so.provider, so.user_id, so.user_email, so.hostname, so.session_id, so.skill_name, so.source, so.source_level, so.source_path, so.raw_sha256, so.seen_at, so.skill_id, so.skill_version_id, so.reconciled_at, so.metrics_synced_at, so.reconcile_error_code, so.created_at
+SELECT so.id, so.project_id, so.idempotency_key, so.provider, so.user_id, so.user_email, so.hostname, so.session_id, so.skill_name, so.source, so.source_level, so.source_path, so.raw_sha256, so.seen_at, so.skill_id, so.skill_version_id, so.reconciled_at, so.metrics_synced_at, so.efficacy_enqueued_at, so.reconcile_error_code, so.created_at
 FROM skill_observations so
 WHERE so.project_id = $1
   AND so.skill_id IS NULL
@@ -1948,6 +1949,7 @@ func (q *Queries) ListUnknownSkillActivations(ctx context.Context, arg ListUnkno
 			&i.SkillVersionID,
 			&i.ReconciledAt,
 			&i.MetricsSyncedAt,
+			&i.EfficacyEnqueuedAt,
 			&i.ReconcileErrorCode,
 			&i.CreatedAt,
 		); err != nil {

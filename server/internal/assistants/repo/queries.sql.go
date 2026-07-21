@@ -2081,7 +2081,13 @@ func (q *Queries) LoadAssistantToolsets(ctx context.Context, arg LoadAssistantTo
 }
 
 const loadAttachedAssistantSkill = `-- name: LoadAttachedAssistantSkill :one
-SELECT resolved.content
+SELECT
+  s.id AS skill_id,
+  s.name,
+  resolved.id AS skill_version_id,
+  resolved.content,
+  resolved.canonical_sha256,
+  resolved.raw_sha256
 FROM skill_distributions sd
 JOIN assistants a
   ON a.id = sd.assistant_id
@@ -2092,7 +2098,7 @@ JOIN skills s
   AND s.project_id = sd.project_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.id, sv.content
+  SELECT sv.id, sv.content, sv.canonical_sha256, sv.raw_sha256
   FROM skill_versions sv
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
@@ -2115,11 +2121,27 @@ type LoadAttachedAssistantSkillParams struct {
 	Name        string
 }
 
-func (q *Queries) LoadAttachedAssistantSkill(ctx context.Context, arg LoadAttachedAssistantSkillParams) (string, error) {
+type LoadAttachedAssistantSkillRow struct {
+	SkillID         uuid.UUID
+	Name            string
+	SkillVersionID  uuid.UUID
+	Content         string
+	CanonicalSha256 string
+	RawSha256       string
+}
+
+func (q *Queries) LoadAttachedAssistantSkill(ctx context.Context, arg LoadAttachedAssistantSkillParams) (LoadAttachedAssistantSkillRow, error) {
 	row := q.db.QueryRow(ctx, loadAttachedAssistantSkill, arg.AssistantID, arg.ProjectID, arg.Name)
-	var content string
-	err := row.Scan(&content)
-	return content, err
+	var i LoadAttachedAssistantSkillRow
+	err := row.Scan(
+		&i.SkillID,
+		&i.Name,
+		&i.SkillVersionID,
+		&i.Content,
+		&i.CanonicalSha256,
+		&i.RawSha256,
+	)
+	return i, err
 }
 
 const loadThreadContext = `-- name: LoadThreadContext :one
@@ -2530,6 +2552,61 @@ func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckA
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordAssistantSkillObservation = `-- name: RecordAssistantSkillObservation :exec
+WITH observed AS (
+  SELECT clock_timestamp() AS seen_at
+)
+INSERT INTO skill_observations (
+    project_id
+  , idempotency_key
+  , provider
+  , session_id
+  , skill_name
+  , raw_sha256
+  , seen_at
+  , skill_id
+  , skill_version_id
+  , reconciled_at
+)
+SELECT
+    s.project_id
+  , 'assistant:' || $1::text || ':' || sv.id::text
+  , 'assistant'
+  , $1::text
+  , s.name
+  , sv.raw_sha256
+  , observed.seen_at
+  , s.id
+  , sv.id
+  , observed.seen_at
+FROM skills s
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = $2
+CROSS JOIN observed
+WHERE s.project_id = $3
+  AND s.id = $4
+ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+DO NOTHING
+`
+
+type RecordAssistantSkillObservationParams struct {
+	SessionID      string
+	SkillVersionID uuid.UUID
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+}
+
+func (q *Queries) RecordAssistantSkillObservation(ctx context.Context, arg RecordAssistantSkillObservationParams) error {
+	_, err := q.db.Exec(ctx, recordAssistantSkillObservation,
+		arg.SessionID,
+		arg.SkillVersionID,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	return err
 }
 
 const requeueStaleAssistantEvents = `-- name: RequeueStaleAssistantEvents :many

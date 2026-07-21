@@ -119,7 +119,7 @@ func TestManagedAssistantSkillsToolsExposesCatalog(t *testing.T) {
 func TestAssistantSkillToolsExposesCatalog(t *testing.T) {
 	t.Parallel()
 
-	tools := AssistantSkillTools(nil)
+	tools := AssistantSkillTools(testenv.NewLogger(t), nil)
 	require.Equal(t, []string{platformtools.ToolNameSkillsLoad}, toolNames(tools))
 	require.Empty(t, tools[0].RequiredFeature)
 }
@@ -175,6 +175,7 @@ func TestService_ExecuteTool_RequiresProjectAuthContext(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "project auth context")
@@ -202,6 +203,7 @@ func TestService_ExecuteTool_RejectsMismatchedProjectAuthContext(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "does not match project")

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -25,12 +27,14 @@ type loadInput struct {
 
 type Load struct {
 	db         *pgxpool.Pool
+	logger     *slog.Logger
 	descriptor core.ToolDescriptor
 }
 
-func NewLoadTool(db *pgxpool.Pool) *Load {
+func NewLoadTool(logger *slog.Logger, db *pgxpool.Pool) *Load {
 	return &Load{
-		db: db,
+		db:     db,
+		logger: logger,
 		descriptor: core.ToolDescriptor{
 			SourceSlug:  "skills",
 			HandlerName: "load",
@@ -50,7 +54,7 @@ func (t *Load) Descriptor() core.ToolDescriptor {
 	return t.descriptor
 }
 
-func (t *Load) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
+func (t *Load) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
 	if !ok {
 		return oops.E(oops.CodeUnauthorized, nil, "skills tools require an assistant principal")
@@ -70,14 +74,41 @@ func (t *Load) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Re
 	}
 
 	queries := assistantrepo.New(t.db)
-	content, err := queries.LoadAttachedAssistantSkill(ctx, assistantrepo.LoadAttachedAssistantSkillParams{
+	loaded, err := queries.LoadAttachedAssistantSkill(ctx, assistantrepo.LoadAttachedAssistantSkillParams{
 		AssistantID: uuid.NullUUID{UUID: principal.AssistantID, Valid: true},
 		ProjectID:   *authCtx.ProjectID,
 		Name:        input.Name,
 	})
 	if err == nil {
-		if _, err := io.WriteString(wr, content); err != nil {
+		if _, err := io.WriteString(wr, loaded.Content); err != nil {
 			return fmt.Errorf("write attached skill content: %w", err)
+		}
+		chatID, parseErr := uuid.Parse(env.GramChatID)
+		if parseErr != nil || chatID == uuid.Nil {
+			t.logger.WarnContext(ctx, "skipping assistant skill observation: missing or invalid Gram chat ID",
+				attr.SlogProjectID(authCtx.ProjectID.String()),
+				attr.SlogAssistantID(principal.AssistantID.String()),
+				attr.SlogAssistantThreadID(principal.ThreadID.String()),
+				attr.SlogChatID(env.GramChatID),
+				attr.SlogName(loaded.Name),
+			)
+			return nil
+		}
+		writeCtx := context.WithoutCancel(ctx)
+		if err := queries.RecordAssistantSkillObservation(writeCtx, assistantrepo.RecordAssistantSkillObservationParams{
+			SessionID:      chatID.String(),
+			SkillVersionID: loaded.SkillVersionID,
+			ProjectID:      *authCtx.ProjectID,
+			SkillID:        loaded.SkillID,
+		}); err != nil {
+			t.logger.ErrorContext(writeCtx, "failed to record assistant skill observation",
+				attr.SlogError(err),
+				attr.SlogProjectID(authCtx.ProjectID.String()),
+				attr.SlogAssistantID(principal.AssistantID.String()),
+				attr.SlogAssistantThreadID(principal.ThreadID.String()),
+				attr.SlogChatID(chatID.String()),
+				attr.SlogName(loaded.Name),
+			)
 		}
 		return nil
 	}
