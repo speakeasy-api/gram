@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { ClaudeCodeIcon, CursorIcon } from "../hooks/HookSourceIcon";
+import { ClaudeCodeIcon, CodexIcon, CursorIcon } from "../hooks/HookSourceIcon";
 
 type ProviderIcon = (props: { className?: string }) => JSX.Element;
 
@@ -153,6 +153,48 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
           Learn more
         </a>
         .
+      </>
+    ),
+  },
+  {
+    provider: "codex_compliance",
+    name: "Codex",
+    description:
+      "Import Codex usage and spend from OpenAI compliance cost logs.",
+    onboardingDescription:
+      "Connect OpenAI's Compliance Logs API so the platform can import Codex cost data for reporting.",
+    setupGuide: {
+      steps: [
+        {
+          title: "Create a Compliance API key",
+          description:
+            "Create an OpenAI API key with access to compliance logs for the organization or workspace whose Codex spend Speakeasy should import.",
+        },
+        {
+          title: "Copy your OpenAI organization or workspace ID",
+          description:
+            "Use the OpenAI organization ID when it starts with org-. If your compliance logs are scoped to a ChatGPT workspace instead, copy that workspace ID.",
+        },
+        {
+          title: "Paste both values into Speakeasy",
+          description:
+            "Copy the Compliance API key and OpenAI organization or workspace ID, then paste both below. The platform stores the key securely and starts importing Codex cost logs.",
+          showsForm: true,
+        },
+      ],
+    },
+    icon: CodexIcon,
+    apiKeyLabel: "OpenAI Compliance API key",
+    apiKeyPlaceholder: "Paste your OpenAI Compliance API key",
+    requiresOrganizationId: true,
+    organizationIdLabel: "OpenAI organization or workspace ID",
+    organizationIdPlaceholder: "org-... or workspace ID",
+    helpText: (
+      <>
+        Codex cost import uses OpenAI Compliance Logs Platform{" "}
+        <code className="text-foreground">COSTS</code> files. Use an{" "}
+        <code className="text-foreground">org-*</code> ID for API
+        organizations; otherwise use the ChatGPT workspace ID.
       </>
     ),
   },

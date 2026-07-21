@@ -158,6 +158,19 @@ func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
 	require.Equal(t, int64(1), countAIIntegrationConfigs(t, ctx, conn, orgID, false))
 }
 
+func TestUpsertWithTxStartsSingleCodexSchedule(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	externalOrgID := "org-openai"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCodexCompliance, "codex-key", true, true, &externalOrgID, nil)
+
+	require.Equal(t, map[string]string{
+		ScheduleCodexCompliance: SyncKindTime,
+	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
+}
+
 func upsertConfigWithTx(
 	t *testing.T,
 	ctx context.Context,

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
+	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
 
@@ -51,6 +52,7 @@ type PollAIData struct {
 	anthropicComplianceImporter   *aiintegrations.ComplianceImportService
 	anthropicAnalyticsUsagePoller *aiintegrations.AnthropicAnalyticsPoller
 	anthropicAnalyticsCostPoller  *aiintegrations.AnthropicAnalyticsPoller
+	codexCostImporter             *aiintegrations.CodexCostImportService
 }
 
 func NewPollAIData(
@@ -75,6 +77,12 @@ func NewPollAIData(
 			"page":     page,
 		})
 	}
+	codexHeartbeat := func(ctx context.Context, page int) {
+		activity.RecordHeartbeat(ctx, map[string]any{
+			"schedule": aiintegrations.ScheduleCodexCompliance,
+			"page":     page,
+		})
+	}
 	return &PollAIData{
 		integrations: store,
 		cursorUsagePoller: aiintegrations.NewUsagePollService(store, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
@@ -86,6 +94,7 @@ func NewPollAIData(
 		anthropicComplianceImporter:   aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, complianceHeartbeat),
 		anthropicAnalyticsUsagePoller: aiintegrations.NewAnthropicUsageAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
 		anthropicAnalyticsCostPoller:  aiintegrations.NewAnthropicCostAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
+		codexCostImporter:             aiintegrations.NewCodexCostImportService(logger, store, telemetryLogger, guardianPolicy, codexHeartbeat),
 	}
 }
 
@@ -186,6 +195,25 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		if err := p.integrations.RecordSchedulePollSuccess(ctx, cfg.ID, schedule, endTime); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "record anthropic analytics cost success")
 		}
+	case aiintegrations.ScheduleCodexCompliance:
+		if cfg.Provider != aiintegrations.ProviderCodexCompliance {
+			return oops.E(oops.CodeInvalid, nil, "codex compliance schedule cannot run for provider %s", cfg.Provider)
+		}
+		if err := p.codexCostImporter.SyncCodexCosts(ctx, cfg, endTime); err != nil {
+			var httpErr *codexapi.HTTPError
+			if errors.As(err, &httpErr) {
+				switch httpErr.StatusCode {
+				case 401, 403:
+					return oops.E(oops.CodeUnauthorized, err, "codex compliance rejected the configured api key")
+				case 404:
+					return oops.E(oops.CodeNotFound, err, "codex compliance organization not found or compliance api access not enabled")
+				}
+			}
+			return oops.E(oops.CodeUnexpected, err, "sync codex cost data")
+		}
+		if err := p.integrations.RecordSchedulePollSuccess(ctx, cfg.ID, schedule, endTime); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "record codex compliance schedule success")
+		}
 	default:
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration sync schedule: %s", schedule)
 	}
@@ -206,6 +234,10 @@ func pollRejectedByProvider(err error) bool {
 	var anthropicErr *anthropicapi.HTTPError
 	if errors.As(err, &anthropicErr) {
 		return anthropicErr.StatusCode == 401 || anthropicErr.StatusCode == 403 || anthropicErr.StatusCode == 404
+	}
+	var codexErr *codexapi.HTTPError
+	if errors.As(err, &codexErr) {
+		return codexErr.StatusCode == 401 || codexErr.StatusCode == 403 || codexErr.StatusCode == 404
 	}
 	return false
 }
