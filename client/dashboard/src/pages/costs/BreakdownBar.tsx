@@ -119,7 +119,10 @@ export function BreakdownBar({
         placeholder={searchPlaceholder}
         className="w-48"
       />
-      <Page.Toolbar.Actions>
+      {/* The axis track sits with search on the left — both control what the
+          collection shows — so a narrow window wraps the bar into two clean
+          rows: search + track above, actions + scope controls below. */}
+      <Page.Toolbar.Segments>
         {/* A lone axis is no choice at all — at a session leaf (Agent, Model)
             "Sessions" is the only option, and a track you can't move reads as
             a broken toggle. The section title already names the cut. */}
@@ -131,6 +134,8 @@ export function BreakdownBar({
             trailing={more}
           />
         )}
+      </Page.Toolbar.Segments>
+      <Page.Toolbar.Actions>
         {actions}
         {trailing && (
           <>
