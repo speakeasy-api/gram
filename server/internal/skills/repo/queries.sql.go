@@ -99,7 +99,7 @@ func (q *Queries) BackfillSkillObservationsForCapturedVersion(ctx context.Contex
 }
 
 const claimPendingSkillObservations = `-- name: ClaimPendingSkillObservations :many
-SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, reconcile_error_code, created_at
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, metrics_synced_at, reconcile_error_code, created_at
 FROM skill_observations
 WHERE project_id = $1
   AND reconciled_at IS NULL
@@ -140,6 +140,7 @@ func (q *Queries) ClaimPendingSkillObservations(ctx context.Context, arg ClaimPe
 			&i.SkillID,
 			&i.SkillVersionID,
 			&i.ReconciledAt,
+			&i.MetricsSyncedAt,
 			&i.ReconcileErrorCode,
 			&i.CreatedAt,
 		); err != nil {
@@ -1447,25 +1448,144 @@ func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActi
 	return items, nil
 }
 
+const listPendingSkillSessionVersions = `-- name: ListPendingSkillSessionVersions :many
+SELECT
+  so.id,
+  so.created_at,
+  so.seen_at,
+  p.organization_id,
+  so.project_id,
+  so.session_id::text AS session_id,
+  so.skill_id::uuid AS skill_id,
+  so.skill_version_id::uuid AS skill_version_id,
+  sv.canonical_sha256,
+  -- Surface is part of the attribution join contract: assistant/assistants
+  -- producers map to assistant, and every supported dev producer maps to dev.
+  CASE WHEN so.provider IN ('assistant', 'assistants') THEN 'assistant' ELSE 'dev' END::text AS surface
+FROM skill_observations so
+JOIN projects p ON p.id = so.project_id
+JOIN skills s
+  ON s.project_id = so.project_id
+  AND s.id = so.skill_id
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = so.skill_version_id
+WHERE so.project_id = $1
+  AND so.reconciled_at IS NOT NULL
+  AND so.metrics_synced_at IS NULL
+  AND so.session_id IS NOT NULL
+  AND so.skill_id IS NOT NULL
+  AND so.skill_version_id IS NOT NULL
+ORDER BY so.seen_at, so.id
+LIMIT $2
+`
+
+type ListPendingSkillSessionVersionsParams struct {
+	ProjectID uuid.UUID
+	BatchSize int32
+}
+
+type ListPendingSkillSessionVersionsRow struct {
+	ID              uuid.UUID
+	CreatedAt       pgtype.Timestamptz
+	SeenAt          pgtype.Timestamptz
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	SessionID       string
+	SkillID         uuid.UUID
+	SkillVersionID  uuid.UUID
+	CanonicalSha256 string
+	Surface         string
+}
+
+func (q *Queries) ListPendingSkillSessionVersions(ctx context.Context, arg ListPendingSkillSessionVersionsParams) ([]ListPendingSkillSessionVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listPendingSkillSessionVersions, arg.ProjectID, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingSkillSessionVersionsRow
+	for rows.Next() {
+		var i ListPendingSkillSessionVersionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.SeenAt,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.SessionID,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.CanonicalSha256,
+			&i.Surface,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectsWithPendingSkillObservations = `-- name: ListProjectsWithPendingSkillObservations :many
 WITH RECURSIVE pending_projects AS (
   (
-    SELECT so.project_id, 1 AS sequence
-    FROM skill_observations so
-    WHERE so.reconciled_at IS NULL
-      AND so.project_id > $2
-    ORDER BY so.project_id
+    SELECT candidate.project_id, 1 AS sequence
+    FROM (
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        WHERE so.reconciled_at IS NULL
+          AND so.project_id > $2
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        WHERE so.reconciled_at IS NOT NULL
+          AND so.metrics_synced_at IS NULL
+          AND so.session_id IS NOT NULL
+          AND so.skill_version_id IS NOT NULL
+          AND so.project_id > $2
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+    ) candidate
+    ORDER BY candidate.project_id
     LIMIT 1
   )
   UNION ALL
   SELECT next_project.project_id, current_project.sequence + 1
   FROM pending_projects current_project
   CROSS JOIN LATERAL (
-    SELECT so.project_id
-    FROM skill_observations so
-    WHERE so.reconciled_at IS NULL
-      AND so.project_id > current_project.project_id
-    ORDER BY so.project_id
+    SELECT candidate.project_id
+    FROM (
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        WHERE so.reconciled_at IS NULL
+          AND so.project_id > current_project.project_id
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        WHERE so.reconciled_at IS NOT NULL
+          AND so.metrics_synced_at IS NULL
+          AND so.session_id IS NOT NULL
+          AND so.skill_version_id IS NOT NULL
+          AND so.project_id > current_project.project_id
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+    ) candidate
+    ORDER BY candidate.project_id
     LIMIT 1
   ) next_project
   WHERE current_project.sequence < $1
@@ -1771,7 +1891,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 }
 
 const listUnknownSkillActivations = `-- name: ListUnknownSkillActivations :many
-SELECT so.id, so.project_id, so.idempotency_key, so.provider, so.user_id, so.user_email, so.hostname, so.session_id, so.skill_name, so.source, so.source_level, so.source_path, so.raw_sha256, so.seen_at, so.skill_id, so.skill_version_id, so.reconciled_at, so.reconcile_error_code, so.created_at
+SELECT so.id, so.project_id, so.idempotency_key, so.provider, so.user_id, so.user_email, so.hostname, so.session_id, so.skill_name, so.source, so.source_level, so.source_path, so.raw_sha256, so.seen_at, so.skill_id, so.skill_version_id, so.reconciled_at, so.metrics_synced_at, so.reconcile_error_code, so.created_at
 FROM skill_observations so
 WHERE so.project_id = $1
   AND so.skill_id IS NULL
@@ -1827,6 +1947,7 @@ func (q *Queries) ListUnknownSkillActivations(ctx context.Context, arg ListUnkno
 			&i.SkillID,
 			&i.SkillVersionID,
 			&i.ReconciledAt,
+			&i.MetricsSyncedAt,
 			&i.ReconcileErrorCode,
 			&i.CreatedAt,
 		); err != nil {
@@ -1861,6 +1982,28 @@ SELECT pg_advisory_xact_lock(hashtextextended('skill-observations:' || ($1::uuid
 func (q *Queries) LockSkillObservationReconciliation(ctx context.Context, projectID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, lockSkillObservationReconciliation, projectID)
 	return err
+}
+
+const markSkillSessionVersionsSynced = `-- name: MarkSkillSessionVersionsSynced :execrows
+UPDATE skill_observations
+SET metrics_synced_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+  AND reconciled_at IS NOT NULL
+  AND metrics_synced_at IS NULL
+`
+
+type MarkSkillSessionVersionsSyncedParams struct {
+	ProjectID      uuid.UUID
+	ObservationIds []uuid.UUID
+}
+
+func (q *Queries) MarkSkillSessionVersionsSynced(ctx context.Context, arg MarkSkillSessionVersionsSyncedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markSkillSessionVersionsSynced, arg.ProjectID, arg.ObservationIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const promoteObservedSkillToManual = `-- name: PromoteObservedSkillToManual :one

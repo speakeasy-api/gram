@@ -1679,6 +1679,7 @@ type SkillObservation struct {
 	SkillID            uuid.NullUUID
 	SkillVersionID     uuid.NullUUID
 	ReconciledAt       pgtype.Timestamptz
+	MetricsSyncedAt    pgtype.Timestamptz
 	ReconcileErrorCode pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 }

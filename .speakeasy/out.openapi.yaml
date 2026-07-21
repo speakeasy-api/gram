@@ -52475,6 +52475,7 @@ components:
             - billing_mode
             - query_source
             - skill_name
+            - skill_version
             - agent_name
             - mcp_server_name
             - mcp_tool_name
@@ -52572,6 +52573,7 @@ components:
             - billing_mode
             - query_source
             - skill_name
+            - skill_version
             - agent_name
             - mcp_server_name
             - mcp_tool_name
@@ -52602,7 +52604,7 @@ components:
           default: 10
           format: int64
           minimum: 1
-      description: Payload for a generic org-scoped analytics query
+      description: Payload for a generic org-scoped analytics query. Queries involving skill_version use raw telemetry retained for 90 days and attribute each whole session to every activated version; timeseries place the whole session in its start-time bucket.
       required:
         - from
         - to

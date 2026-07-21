@@ -23,6 +23,7 @@ export const Dimension = {
   BillingMode: "billing_mode",
   QuerySource: "query_source",
   SkillName: "skill_name",
+  SkillVersion: "skill_version",
   AgentName: "agent_name",
   McpServerName: "mcp_server_name",
   McpToolName: "mcp_tool_name",

@@ -44,6 +44,25 @@ func insertSkillObservationForProject(t *testing.T, ti *testInstance, projectID 
 	}))
 }
 
+func insertSkillObservationWithSession(t *testing.T, ti *testInstance, provider, sessionID, name, rawSHA256 string, seenAt time.Time) {
+	t.Helper()
+	require.NoError(t, hooksrepo.New(ti.conn).InsertSkillObservation(t.Context(), hooksrepo.InsertSkillObservationParams{
+		ProjectID:      ti.projectID,
+		IdempotencyKey: conv.ToPGText(uuid.NewString()),
+		Provider:       provider,
+		UserID:         conv.ToPGTextEmpty(""),
+		UserEmail:      conv.ToPGTextEmpty(""),
+		Hostname:       conv.ToPGTextEmpty(""),
+		SessionID:      conv.ToPGText(sessionID),
+		SkillName:      name,
+		Source:         conv.ToPGTextEmpty(""),
+		SourceLevel:    conv.ToPGTextEmpty("project"),
+		SourcePath:     conv.ToPGTextEmpty(""),
+		RawSha256:      conv.ToPGText(rawSHA256),
+		SeenAt:         conv.ToPGTimestamptz(seenAt),
+	}))
+}
+
 func TestListProjectsWithPendingSkillObservationsPaginatesDistinctProjects(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -66,6 +85,69 @@ func TestListProjectsWithPendingSkillObservationsPaginatesDistinctProjects(t *te
 	})
 	require.NoError(t, err)
 	require.Equal(t, projectIDs[2:], secondPage)
+	lastPage, err := ti.repo.ListProjectsWithPendingSkillObservations(ctx, repo.ListProjectsWithPendingSkillObservationsParams{
+		PageLimit: 2, ProjectCursor: secondPage[0],
+	})
+	require.NoError(t, err)
+	require.Empty(t, lastPage)
+}
+
+func TestPendingSkillSessionVersionsAreProjectScopedAndExcludeIneligibleObservations(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	content := capturedManifest("mapped-skill", "Mapped.", "body")
+	version, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+	seenAt := time.Now().UTC().Truncate(time.Microsecond)
+	insertSkillObservationWithSession(t, ti, "claude", "session-1", "mapped-skill", contentSHA256(content), seenAt)
+
+	result, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Processed)
+
+	projects, err := ti.repo.ListProjectsWithPendingSkillObservations(ctx, repo.ListProjectsWithPendingSkillObservationsParams{
+		ProjectCursor: uuid.Nil,
+		PageLimit:     10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{ti.projectID}, projects)
+
+	rows, err := ti.repo.ListPendingSkillSessionVersions(ctx, repo.ListPendingSkillSessionVersionsParams{
+		ProjectID: ti.projectID,
+		BatchSize: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "session-1", rows[0].SessionID)
+	require.Equal(t, version.SkillID, rows[0].SkillID)
+	require.Equal(t, version.SkillVersionID, rows[0].SkillVersionID)
+	require.Equal(t, "dev", rows[0].Surface)
+	require.True(t, rows[0].SeenAt.Time.Equal(seenAt))
+
+	marked, err := ti.repo.MarkSkillSessionVersionsSynced(ctx, repo.MarkSkillSessionVersionsSyncedParams{
+		ProjectID:      uuid.New(),
+		ObservationIds: []uuid.UUID{rows[0].ID},
+	})
+	require.NoError(t, err)
+	require.Zero(t, marked, "a different project must not mark the observation")
+
+	marked, err = ti.repo.MarkSkillSessionVersionsSynced(ctx, repo.MarkSkillSessionVersionsSyncedParams{
+		ProjectID:      ti.projectID,
+		ObservationIds: []uuid.UUID{rows[0].ID},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), marked)
+
+	insertSkillObservation(t, ti, "metadata-only", "", "project", "", seenAt)
+	result, err = skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Processed)
+	projects, err = ti.repo.ListProjectsWithPendingSkillObservations(ctx, repo.ListProjectsWithPendingSkillObservationsParams{
+		ProjectCursor: uuid.Nil,
+		PageLimit:     10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, projects)
 }
 
 func TestReconcileSkillObservations_NormalizesAndAggregatesMetadataOnlySightings(t *testing.T) {

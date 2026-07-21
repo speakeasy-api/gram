@@ -51,6 +51,7 @@ func ReconcileSkillObservationsWorkflow(ctx workflow.Context, params ReconcileSk
 	})
 
 	var a *Activities
+	var reconcileHasMore bool
 	for range skillObservationMaxBatches {
 		var result activities.ReconcileSkillObservationsResult
 		if err := workflow.ExecuteActivity(ctx, a.ReconcileSkillObservations, activities.ReconcileSkillObservationsParams{
@@ -59,12 +60,37 @@ func ReconcileSkillObservationsWorkflow(ctx workflow.Context, params ReconcileSk
 		}).Get(ctx, &result); err != nil {
 			return fmt.Errorf("reconcile skill observations: %w", err)
 		}
-		if !result.HasMore {
+		reconcileHasMore = result.HasMore
+		if !reconcileHasMore {
+			break
+		}
+		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+			return workflow.NewContinueAsNewError(ctx, ReconcileSkillObservationsWorkflow, params)
+		}
+	}
+	if reconcileHasMore {
+		return workflow.NewContinueAsNewError(ctx, ReconcileSkillObservationsWorkflow, params)
+	}
+
+	var syncHasMore bool
+	for range skillObservationMaxBatches {
+		var result activities.SyncSkillSessionVersionsResult
+		if err := workflow.ExecuteActivity(ctx, a.SyncSkillSessionVersions, activities.SyncSkillSessionVersionsParams{
+			ProjectID: params.ProjectID,
+			BatchSize: skillObservationBatchSize,
+		}).Get(ctx, &result); err != nil {
+			return fmt.Errorf("sync skill session versions: %w", err)
+		}
+		syncHasMore = result.HasMore
+		if !syncHasMore {
 			return nil
 		}
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
 			return workflow.NewContinueAsNewError(ctx, ReconcileSkillObservationsWorkflow, params)
 		}
+	}
+	if syncHasMore {
+		return workflow.NewContinueAsNewError(ctx, ReconcileSkillObservationsWorkflow, params)
 	}
 	return nil
 }

@@ -23,22 +23,60 @@ FOR UPDATE;
 -- name: ListProjectsWithPendingSkillObservations :many
 WITH RECURSIVE pending_projects AS (
   (
-    SELECT so.project_id, 1 AS sequence
-    FROM skill_observations so
-    WHERE so.reconciled_at IS NULL
-      AND so.project_id > @project_cursor
-    ORDER BY so.project_id
+    SELECT candidate.project_id, 1 AS sequence
+    FROM (
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        WHERE so.reconciled_at IS NULL
+          AND so.project_id > @project_cursor
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        WHERE so.reconciled_at IS NOT NULL
+          AND so.metrics_synced_at IS NULL
+          AND so.session_id IS NOT NULL
+          AND so.skill_version_id IS NOT NULL
+          AND so.project_id > @project_cursor
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+    ) candidate
+    ORDER BY candidate.project_id
     LIMIT 1
   )
   UNION ALL
   SELECT next_project.project_id, current_project.sequence + 1
   FROM pending_projects current_project
   CROSS JOIN LATERAL (
-    SELECT so.project_id
-    FROM skill_observations so
-    WHERE so.reconciled_at IS NULL
-      AND so.project_id > current_project.project_id
-    ORDER BY so.project_id
+    SELECT candidate.project_id
+    FROM (
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        WHERE so.reconciled_at IS NULL
+          AND so.project_id > current_project.project_id
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        WHERE so.reconciled_at IS NOT NULL
+          AND so.metrics_synced_at IS NULL
+          AND so.session_id IS NOT NULL
+          AND so.skill_version_id IS NOT NULL
+          AND so.project_id > current_project.project_id
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+    ) candidate
+    ORDER BY candidate.project_id
     LIMIT 1
   ) next_project
   WHERE current_project.sequence < @page_limit
@@ -47,6 +85,45 @@ SELECT project_id
 FROM pending_projects
 ORDER BY sequence
 LIMIT @page_limit;
+
+-- name: ListPendingSkillSessionVersions :many
+SELECT
+  so.id,
+  so.created_at,
+  so.seen_at,
+  p.organization_id,
+  so.project_id,
+  so.session_id::text AS session_id,
+  so.skill_id::uuid AS skill_id,
+  so.skill_version_id::uuid AS skill_version_id,
+  sv.canonical_sha256,
+  -- Surface is part of the attribution join contract: assistant/assistants
+  -- producers map to assistant, and every supported dev producer maps to dev.
+  CASE WHEN so.provider IN ('assistant', 'assistants') THEN 'assistant' ELSE 'dev' END::text AS surface
+FROM skill_observations so
+JOIN projects p ON p.id = so.project_id
+JOIN skills s
+  ON s.project_id = so.project_id
+  AND s.id = so.skill_id
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = so.skill_version_id
+WHERE so.project_id = @project_id
+  AND so.reconciled_at IS NOT NULL
+  AND so.metrics_synced_at IS NULL
+  AND so.session_id IS NOT NULL
+  AND so.skill_id IS NOT NULL
+  AND so.skill_version_id IS NOT NULL
+ORDER BY so.seen_at, so.id
+LIMIT @batch_size;
+
+-- name: MarkSkillSessionVersionsSynced :execrows
+UPDATE skill_observations
+SET metrics_synced_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = ANY(@observation_ids::uuid[])
+  AND reconciled_at IS NOT NULL
+  AND metrics_synced_at IS NULL;
 
 -- name: ClaimPendingSkillObservations :many
 SELECT *

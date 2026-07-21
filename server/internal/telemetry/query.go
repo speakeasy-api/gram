@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
@@ -31,9 +32,19 @@ import (
 const minIntervalSeconds int64 = 3600
 
 const (
-	defaultQuerySortBy = "total_cost"
-	defaultQueryTopN   = 10
+	defaultQuerySortBy       = "total_cost"
+	defaultQueryTopN         = 10
+	skillVersionRawRetention = 90 * 24 * time.Hour
 )
+
+var unsafeSkillVersionGroupDimensions = map[string]bool{
+	"model":           true,
+	"query_source":    true,
+	"skill_name":      true,
+	"agent_name":      true,
+	"mcp_server_name": true,
+	"mcp_tool_name":   true,
+}
 
 // otherGroupLabel is the default synthetic group value that holds the rolled-up
 // remainder beyond top_n. If a real group already uses this value, the response
@@ -101,9 +112,9 @@ func (s *Service) resolveOrgQueryScope(ctx context.Context, from, to string, pro
 	return scope, nil
 }
 
-// Query is a generic, org-scoped analytics query over the pre-aggregated
-// attribute_metrics_summaries view. It returns both a grouped table and a
-// matching per-group hourly timeseries for the same slice of data.
+// Query is a generic, org-scoped analytics query. Existing dimensions read the
+// pre-aggregated attribute_metrics_summaries view; skill_version queries use
+// session-level raw telemetry joined to asynchronously reconciled mappings.
 func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*telem_gen.QueryResult, error) {
 	scope, err := s.resolveOrgQueryScope(ctx, payload.From, payload.To, nil)
 	if err != nil {
@@ -149,6 +160,16 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 		Filters:         filters,
 		IntervalSeconds: interval,
 	}
+	useSkillVersions := groupBy == "skill_version"
+	for _, filter := range filters {
+		useSkillVersions = useSkillVersions || filter.Dimension == "skill_version"
+	}
+	if useSkillVersions && timeStart < time.Now().Add(-skillVersionRawRetention).UnixNano() {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill_version queries are limited to 90 days of raw telemetry history")
+	}
+	if useSkillVersions && unsafeSkillVersionGroupDimensions[groupBy] {
+		return nil, oops.E(oops.CodeBadRequest, nil, "group_by %q is not supported with skill_version because it can vary within a session", groupBy)
+	}
 
 	// The grouped table and the per-group timeseries are independent reads of
 	// the same aggregate — run them concurrently.
@@ -159,7 +180,11 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		var egErr error
-		tableRows, egErr = s.chRepo.QueryAttributeMetricsTable(egCtx, params)
+		if useSkillVersions {
+			tableRows, egErr = s.chRepo.QuerySkillVersionMetricsTable(egCtx, params)
+		} else {
+			tableRows, egErr = s.chRepo.QueryAttributeMetricsTable(egCtx, params)
+		}
 		if egErr != nil {
 			return fmt.Errorf("analytics table query: %w", egErr)
 		}
@@ -167,7 +192,11 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	})
 	eg.Go(func() error {
 		var egErr error
-		tsRows, egErr = s.chRepo.QueryAttributeMetricsTimeseries(egCtx, params)
+		if useSkillVersions {
+			tsRows, egErr = s.chRepo.QuerySkillVersionMetricsTimeseries(egCtx, params)
+		} else {
+			tsRows, egErr = s.chRepo.QueryAttributeMetricsTimeseries(egCtx, params)
+		}
 		if egErr != nil {
 			return fmt.Errorf("analytics timeseries query: %w", egErr)
 		}

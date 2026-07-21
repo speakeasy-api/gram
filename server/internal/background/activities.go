@@ -207,7 +207,7 @@ func NewActivities(
 		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate, features, publishers.PresidioAnalysis, publishers.GitleaksAnalysis, publishers.PromptInjectionAnalysis, publishers.PromptPolicyAnalysis, publishers.CustomRulesAnalysis, customRuleScanner, celEng, builtinPresets),
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
-		skillObservationReconciler:      activities.NewSkillObservationReconciler(db),
+		skillObservationReconciler:      activities.NewSkillObservationReconciler(db, telemetryRepo),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
@@ -439,6 +439,14 @@ func (a *Activities) ReconcileSkillObservations(ctx context.Context, input activ
 	result, err := a.skillObservationReconciler.Reconcile(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("reconcile skill observations: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) SyncSkillSessionVersions(ctx context.Context, input activities.SyncSkillSessionVersionsParams) (*activities.SyncSkillSessionVersionsResult, error) {
+	result, err := a.skillObservationReconciler.SyncSessionVersions(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("sync skill session versions: %w", err)
 	}
 	return result, nil
 }
