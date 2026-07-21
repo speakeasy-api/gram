@@ -170,6 +170,25 @@ func TestPollerPersistsCheckpointAfterEachPage(t *testing.T) {
 	}, store.checkpoints)
 }
 
+func TestPollerRejectsMissingNextPageBeforeCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	endTime := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
+	src := &fakePagedWindowSource{
+		pages: []Page[int]{
+			{Payload: 1, NextPage: "", HasMore: true},
+		},
+		fetches: nil,
+	}
+	store := &fakeCheckpointStore{checkpoints: nil}
+	p := newWindowTestPoller(store, newSyncState(uuid.New(), time.Time{}, emptyCheckpoint()), src, endTime, 24*time.Hour, 0, 0, time.Millisecond)
+
+	err := p.Do(t.Context())
+
+	require.ErrorContains(t, err, "provider returned has_more without a next page")
+	require.Empty(t, store.checkpoints)
+}
+
 func TestPollerResumesPartialCheckpointWithStoredWindow(t *testing.T) {
 	t.Parallel()
 

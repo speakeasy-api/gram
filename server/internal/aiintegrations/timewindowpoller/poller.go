@@ -216,6 +216,11 @@ func (p *Poller[T]) fetchWindowPages(ctx context.Context, start, end time.Time, 
 			p.Heartbeat(ctx, pageNum)
 		}
 
+		if current.HasMore && current.NextPage == "" {
+			fetchErr = fmt.Errorf("fetch %s page %d: provider returned has_more without a next page", p.Schedule, pageNum)
+			return
+		}
+
 		select {
 		case <-ctx.Done():
 			fetchErr = ctx.Err()
@@ -224,10 +229,6 @@ func (p *Poller[T]) fetchWindowPages(ctx context.Context, start, end time.Time, 
 		}
 
 		if !current.HasMore {
-			return
-		}
-		if current.NextPage == "" {
-			fetchErr = fmt.Errorf("fetch %s page %d: provider returned has_more without a next page", p.Schedule, pageNum)
 			return
 		}
 		pageToken = current.NextPage

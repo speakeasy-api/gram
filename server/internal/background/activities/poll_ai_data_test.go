@@ -38,7 +38,6 @@ func TestPollAIDataInputRoundTripsThroughTemporal(t *testing.T) {
 
 	var actual string
 	require.NoError(t, value.Get(&actual))
-	require.Equal(t, input, actual)
 	require.Equal(t, syncID.String(), actual)
 }
 

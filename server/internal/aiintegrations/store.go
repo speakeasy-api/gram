@@ -491,10 +491,18 @@ func (s *Store) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UUID
 	if err != nil {
 		return Config{}, "", err
 	}
-	if row.Kind.String == SyncKindTime {
+	schedule := row.Schedule.String
+	if !row.Schedule.Valid {
+		schedule = providerSyncSchedule(row.Provider).schedule
+	}
+	kind := row.Kind.String
+	if !row.Kind.Valid {
+		kind = providerSyncSchedule(row.Provider).kind
+	}
+	if kind == SyncKindTime {
 		normalizeNeverSyncedTimeCheckpoint(&cfg)
 	}
-	return cfg, row.Schedule.String, nil
+	return cfg, schedule, nil
 }
 
 func (s *Store) GetProviderUsagePollConfig(ctx context.Context, configID uuid.UUID) (Config, string, error) {

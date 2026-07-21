@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 )
 
 func TestUpsertWithTxCreatesConfigGeneration(t *testing.T) {
@@ -138,6 +139,26 @@ func TestListUsagePollCandidatesAdoptsLegacyRowsAndCreatesSchedules(t *testing.T
 		ScheduleAnthropicAnalyticsUsage: SyncKindTime,
 		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
 	}, listSyncSchedules(t, ctx, conn, configID))
+}
+
+func TestGetUsagePollConfigBySyncIDFallsBackForLegacySyncRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	configID := insertLegacyConfig(t, ctx, conn, store, orgID, ProviderCursor, true)
+	rows, err := repo.New(conn).ListSyncSchedules(ctx, configID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NoError(t, store.AdvanceWatermark(ctx, rows[0].ID, timewindowpoller.CompletedCheckpoint(epochTime())))
+
+	cfg, schedule, err := store.GetUsagePollConfigBySyncID(ctx, rows[0].ID)
+	require.NoError(t, err)
+
+	require.Equal(t, rows[0].ID, cfg.SyncID)
+	require.Equal(t, ScheduleCursor, schedule)
+	require.True(t, cfg.PollWatermarkAt.IsZero())
+	require.True(t, cfg.PollCheckpoint.Watermark.IsZero())
 }
 
 func TestListUsagePollCandidatesIgnoresInactiveConfigs(t *testing.T) {
