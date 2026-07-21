@@ -66,7 +66,9 @@ func TestListLogsUsesWorkspaceSegmentForNonOrgPrincipal(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/workspaces/ws_123/logs", r.URL.Path)
+		if r.URL.Path != "/workspaces/ws_123/logs" {
+			t.Errorf("expected path /workspaces/ws_123/logs, got %s", r.URL.Path)
+		}
 		_, _ = w.Write([]byte(`{"data": [], "has_more": false}`))
 	}))
 	t.Cleanup(server.Close)
@@ -80,8 +82,12 @@ func TestDownloadLogReturnsBody(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/organizations/org-123/logs/eclf_123", r.URL.Path)
-		require.Equal(t, "Bearer codex-key", r.Header.Get("Authorization"))
+		if r.URL.Path != "/organizations/org-123/logs/eclf_123" {
+			t.Errorf("expected path /organizations/org-123/logs/eclf_123, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer codex-key" {
+			t.Errorf("expected bearer auth, got %q", got)
+		}
 		_, _ = w.Write([]byte(`{"type":"COSTS"}` + "\n"))
 	}))
 	t.Cleanup(server.Close)
@@ -89,7 +95,7 @@ func TestDownloadLogReturnsBody(t *testing.T) {
 	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithAPIKey("codex-key"))
 	body, err := client.DownloadLog(t.Context(), "org-123", "eclf_123")
 	require.NoError(t, err)
-	require.Equal(t, []byte(`{"type":"COSTS"}`+"\n"), body)
+	require.JSONEq(t, `{"type":"COSTS"}`, string(body))
 }
 
 func TestListLogsReturnsHTTPError(t *testing.T) {

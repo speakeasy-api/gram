@@ -288,7 +288,8 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 		timestamp = file.EndTime
 	}
 	if timestamp.IsZero() {
-		return telemetry.LogParams{}, false, nil
+		var empty telemetry.LogParams
+		return empty, false, nil
 	}
 
 	userEmail := conv.NormalizeEmail(event.Payload.Identity.Email)

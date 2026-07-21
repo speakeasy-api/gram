@@ -15,12 +15,13 @@ import (
 // UpsertConfigRequestBody is the type of the "aiIntegrations" service
 // "upsertConfig" endpoint HTTP request body.
 type UpsertConfigRequestBody struct {
-	// AI provider identifier. Supported values include cursor and
-	// anthropic_compliance.
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Provider API key. Stored encrypted at rest; never returned on reads.
 	APIKey *string `form:"api_key,omitempty" json:"api_key,omitempty" xml:"api_key,omitempty"`
-	// Provider organization identifier. Required for anthropic_compliance.
+	// Provider organization identifier. Required for anthropic_compliance and
+	// codex_compliance.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
 	// How the provider org is billed: 'metered', 'flat_rate', or 'unknown'.
 	// Free-form; omit to leave the existing value unchanged.
@@ -32,8 +33,8 @@ type UpsertConfigRequestBody struct {
 // DeleteConfigRequestBody is the type of the "aiIntegrations" service
 // "deleteConfig" endpoint HTTP request body.
 type DeleteConfigRequestBody struct {
-	// AI provider identifier. Supported values include cursor and
-	// anthropic_compliance.
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 }
 
@@ -44,13 +45,13 @@ type GetConfigResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// AI provider identifier. Supported values include cursor and
-	// anthropic_compliance.
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// Provider organization identifier. Required for anthropic_compliance; omitted
-	// for providers that do not need one.
+	// Provider organization identifier. Required for anthropic_compliance and
+	// codex_compliance; omitted for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
@@ -89,13 +90,13 @@ type UpsertConfigResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// AI provider identifier. Supported values include cursor and
-	// anthropic_compliance.
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// Provider organization identifier. Required for anthropic_compliance; omitted
-	// for providers that do not need one.
+	// Provider organization identifier. Required for anthropic_compliance and
+	// codex_compliance; omitted for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or

@@ -128,7 +128,7 @@ func (c *Client) DownloadLog(ctx context.Context, principalID, logID string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("codex compliance download request failed: %w", err)
 	}
-	defer o11y.NoLogDefer(res.Body.Close)
+	defer o11y.NoLogDefer(func() error { return res.Body.Close() })
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 		return nil, &HTTPError{StatusCode: res.StatusCode, Status: res.Status}
 	}
@@ -151,7 +151,7 @@ func (c *Client) doJSON(ctx context.Context, endpoint *url.URL, out any) error {
 	if err != nil {
 		return fmt.Errorf("codex compliance request failed: %w", err)
 	}
-	defer o11y.NoLogDefer(res.Body.Close)
+	defer o11y.NoLogDefer(func() error { return res.Body.Close() })
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 		return &HTTPError{StatusCode: res.StatusCode, Status: res.Status}
 	}
