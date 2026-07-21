@@ -141,11 +141,17 @@ export const CHAT_LANDING_SUGGESTIONS: InsightsSuggestion[] = [
     prompt:
       "Which tools have the worst p95 latency, and which ones have regressed the most this week compared to last? Flag anything that looks like it's degrading.",
   },
+  {
+    title: "What's shipped this week on the platform?",
+    label: "Platform changelog",
+    icon: "rocket",
+    prompt: "What's shipped this week on the platform? Check the changelog.",
+  },
 ];
 
 /**
  * The full command palette shown when the user types `/` in the "Ask anything"
- * composer. A superset of the landing chips — the seven headline prompts plus a
+ * composer. A superset of the landing chips — the headline prompts plus a
  * deeper bench — so the slash menu speaks the same vocabulary as the chips while
  * surfacing the long tail of questions the assistant can answer.
  */

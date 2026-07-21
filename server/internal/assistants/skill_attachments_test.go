@@ -124,6 +124,42 @@ func TestAssistantSkillHydrationTracksLatestAndPin(t *testing.T) {
 	require.Equal(t, first.ID, got.Skills[0].PinnedVersionID.UUID)
 }
 
+func TestBuildThreadBootstrapInitializesAndReusesPersistedSkillBaseline(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistant_skill_bootstrap_snapshot")
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Bootstrap skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	require.NoError(t, err)
+	skill, _ := createSkillAttachmentFixture(t, conn, projectID, record.ID, "bootstrap-skill", "user-test")
+
+	chatID := uuid.New()
+	err = assistantrepo.New(conn).UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
+		ChatID: chatID, ProjectID: projectID, OrganizationID: "org-test", Title: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	threadID, err := assistantrepo.New(conn).UpsertAssistantThread(ctx, assistantrepo.UpsertAssistantThreadParams{
+		AssistantID: record.ID, ProjectID: projectID, CorrelationID: "bootstrap-snapshot", ChatID: chatID,
+		SourceKind: sourceKindSlack, SourceRefJson: []byte(`{}`),
+	})
+	require.NoError(t, err)
+
+	first, err := svc.core.BuildThreadBootstrap(ctx, projectID, threadID, record.ID)
+	require.NoError(t, err)
+	require.Contains(t, first.Instructions, `Name: "bootstrap-skill"; description: "first"`)
+
+	_, err = skillsrepo.New(conn).CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content: "---\nname: bootstrap-skill\ndescription: second\n---\n\nbody\n", CanonicalSha256: uuid.NewString(), RawSha256: uuid.NewString(),
+		Description: pgtype.Text{String: "second", Valid: true}, Metadata: []byte(`{}`), SpecValid: true,
+		ValidationErrors: []byte(`[]`), CreatedByUserID: "user-test", ProjectID: projectID, SkillID: skill.ID,
+	})
+	require.NoError(t, err)
+
+	second, err := svc.core.BuildThreadBootstrap(ctx, projectID, threadID, record.ID)
+	require.NoError(t, err)
+	require.Contains(t, second.Instructions, `Name: "bootstrap-skill"; description: "first"`)
+	require.NotContains(t, second.Instructions, `description: "second"`)
+}
+
 func TestAssistantSkillQueriesResolveLatestPinArchiveAndRevoke(t *testing.T) {
 	t.Parallel()
 

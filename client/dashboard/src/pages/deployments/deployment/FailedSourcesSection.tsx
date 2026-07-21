@@ -293,18 +293,16 @@ export function FailedSourcesSection({
                 onClick={handleRemoveClick}
                 disabled={pending || selected.size === 0}
               >
-                {pending ? (
-                  <>
-                    <Button.LeftIcon>
-                      <Loader2 className="size-4 animate-spin" />
-                    </Button.LeftIcon>
-                    <Button.Text>Removing...</Button.Text>
-                  </>
-                ) : (
-                  <Button.Text>
-                    {`Remove ${selected.size > 0 ? selected.size : ""} source${selected.size !== 1 ? "s" : ""}`}
-                  </Button.Text>
+                {pending && (
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" />
+                  </Button.LeftIcon>
                 )}
+                <Button.Text>
+                  {pending
+                    ? "Removing..."
+                    : `Remove ${selected.size > 0 ? selected.size : ""} source${selected.size !== 1 ? "s" : ""}`}
+                </Button.Text>
               </Button>
             </RequireScope>
           </div>

@@ -19,6 +19,8 @@ func TestSkillsRBACRejectsMissingAndOtherProjectGrants(t *testing.T) {
 
 	_, err := ti.service.List(noGrants, &gen.ListPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListUnknownActivations(noGrants, &gen.ListUnknownActivationsPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.Distribute(noGrants, &gen.DistributePayload{ID: uuid.NewString(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	pluginID := uuid.NewString()
@@ -36,6 +38,8 @@ func TestSkillsRBACRejectsMissingAndOtherProjectGrants(t *testing.T) {
 
 	otherProjectGrant := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillWrite, uuid.NewString()))
 	_, err = ti.service.List(otherProjectGrant, &gen.ListPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListUnknownActivations(otherProjectGrant, &gen.ListUnknownActivationsPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.Create(otherProjectGrant, &gen.CreatePayload{Content: skillManifest("other-project-grant", "Denied.", "body"), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -59,6 +63,8 @@ func TestSkillsFeatureDisabledRejectsEveryEndpoint(t *testing.T) {
 	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{ID: created.Skill.ID, Content: skillManifest("feature-gated", "Denied.", "body"), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.List(ctx, &gen.ListPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListUnknownActivations(ctx, &gen.ListUnknownActivationsPayload{Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.Get(ctx, &gen.GetPayload{ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)

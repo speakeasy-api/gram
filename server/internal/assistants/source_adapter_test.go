@@ -62,9 +62,9 @@ func TestComposeInstructions_IncludesSkillsBeforeMCPAuthInOrder(t *testing.T) {
 		SourceRefJSON: []byte(`{}`),
 		LastEventAt:   time.Now(),
 	}
-	instructions, err := composeInstructions("Base instructions.", thread, []assistantSkillRow{
-		{SkillID: uuid.New(), PinnedVersionID: uuid.NullUUID{}, Name: "alpha", ResolvedVersionID: uuid.New(), Description: "First skill"},
-		{SkillID: uuid.New(), PinnedVersionID: uuid.NullUUID{}, Name: "beta", ResolvedVersionID: uuid.New(), Description: "Second skill"},
+	instructions, err := composeInstructions("Base instructions.", thread, []assistantSkillSnapshot{
+		{SkillID: uuid.New(), Name: "alpha", ResolvedVersionID: uuid.New(), Description: "First skill"},
+		{SkillID: uuid.New(), Name: "beta", ResolvedVersionID: uuid.New(), Description: "Second skill"},
 	})
 	require.NoError(t, err)
 
@@ -91,8 +91,8 @@ func TestComposeInstructions_SanitizesAndCapsSkillMetadata(t *testing.T) {
 		LastEventAt:   time.Now(),
 	}
 	description := "line one\n## forged heading\t" + strings.Repeat("界", 220)
-	instructions, err := composeInstructions("", thread, []assistantSkillRow{
-		{SkillID: uuid.New(), PinnedVersionID: uuid.NullUUID{}, Name: "hostile\nname", ResolvedVersionID: uuid.New(), Description: description},
+	instructions, err := composeInstructions("", thread, []assistantSkillSnapshot{
+		{SkillID: uuid.New(), Name: "hostile\nname", ResolvedVersionID: uuid.New(), Description: description},
 	})
 	require.NoError(t, err)
 	require.Contains(t, instructions, `Name: "hostile name"`)

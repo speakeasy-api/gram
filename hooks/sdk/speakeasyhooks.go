@@ -5,10 +5,12 @@ package sdk
 // Generated from OpenAPI doc version 0.0.1 and generator version 2.916.4
 
 import (
+	"context"
 	"fmt"
 	"github.com/speakeasy-api/gram/hooks/sdk/internal/config"
 	"github.com/speakeasy-api/gram/hooks/sdk/internal/hooks"
 	"github.com/speakeasy-api/gram/hooks/sdk/internal/utils"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 	"github.com/speakeasy-api/gram/hooks/sdk/retry"
 	"net/http"
 	"time"
@@ -90,6 +92,22 @@ func WithServerIndex(serverIndex int) SDKOption {
 func WithClient(client HTTPClient) SDKOption {
 	return func(sdk *SpeakeasyHooks) {
 		sdk.sdkConfiguration.Client = client
+	}
+}
+
+// WithSecurity configures the SDK to use the provided security details
+func WithSecurity(security components.Security) SDKOption {
+	return func(sdk *SpeakeasyHooks) {
+		sdk.sdkConfiguration.Security = utils.AsSecuritySource(security)
+	}
+}
+
+// WithSecuritySource configures the SDK to invoke the Security Source function on each method call to determine authentication
+func WithSecuritySource(security func(context.Context) (components.Security, error)) SDKOption {
+	return func(sdk *SpeakeasyHooks) {
+		sdk.sdkConfiguration.Security = func(ctx context.Context) (interface{}, error) {
+			return security(ctx)
+		}
 	}
 }
 

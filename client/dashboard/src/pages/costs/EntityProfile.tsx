@@ -25,6 +25,7 @@ import {
   LABELS,
   type Measures,
   pluralLabel,
+  unsetLabel,
 } from "./taxonomy";
 
 // ── Formatting helpers ──────────────────────────────────────────────────────
@@ -36,8 +37,8 @@ function formatCost(value: number): string {
   })}`;
 }
 
-function displayValue(groupValue: string): string {
-  return groupValue === "" ? "(unset)" : groupValue;
+function displayValue(dim: Dimension, groupValue: string): string {
+  return groupValue === "" ? unsetLabel(dim) : groupValue;
 }
 
 // ── CSV export ──────────────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ function buildCostCsv(
     const cost = r.measures.totalCost ?? 0;
     const chats = r.measures.totalChats ?? 0;
     return [
-      displayValue(r.groupValue),
+      displayValue(groupBy, r.groupValue),
       cost.toFixed(2),
       total > 0 ? ((cost / total) * 100).toFixed(1) : "0.0",
       chats > 0 ? (cost / chats).toFixed(2) : "0.00",
@@ -281,7 +282,12 @@ export function EntityProfile({
   // `title` title-cases a user's address into a name ("Olivia Novak"), which is
   // friendlier but ambiguous between two people — keep the address it came from
   // alongside it. Only users have one; every other value is already its label.
-  const emailSuffix = entity?.dim === Dimension.Email ? entity.value : null;
+  // The user dimension can also hold a device hostname (the fallback for
+  // sessions with no email) — no address to repeat there.
+  const emailSuffix =
+    entity?.dim === Dimension.Email && entity.value.includes("@")
+      ? entity.value
+      : null;
   const badgeVariant = entityBadgeVariant(
     entity?.dim ?? collection?.dim ?? null,
   );
@@ -294,6 +300,15 @@ export function EntityProfile({
     costLabel: formatCost(stats.cost),
     groupCount: isError ? 0 : rows.length,
   });
+
+  // The "Back to …" label names the immediate parent with its own dimension's
+  // labeling (the parent crumb is second-to-last on the path; the last crumb is
+  // the entity in view), falling back to the project at the root.
+  const parentDim = path[path.length - 2]?.dim;
+  const backLabel =
+    parentValue !== null && parentDim !== undefined
+      ? displayValue(parentDim, parentValue)
+      : projectName || "All costs";
 
   // Whichever table is on screen owns the export: the dimension rows by default,
   // the override's rows (sessions) when it has supplied a builder. The control
@@ -393,9 +408,7 @@ export function EntityProfile({
               <span className="max-w-[220px] truncate">
                 Back to{" "}
                 <span className="text-foreground font-semibold">
-                  {parentValue
-                    ? displayValue(parentValue)
-                    : projectName || "All costs"}
+                  {backLabel}
                 </span>
               </span>
             </button>

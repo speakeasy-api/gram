@@ -100,6 +100,7 @@ type Activities struct {
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
 	markMessagesAnalyzed            *risk_analysis.MarkMessagesAnalyzed
 	reconcileExclusion              *risk_exclusion.Reconcile
+	skillObservationReconciler      *activities.SkillObservationReconciler
 	cleanRiskPolicyResults          *risk_policy.Cleanup
 	admitAssistantThreads           *activities.AdmitAssistantThreads
 	processAssistantThread          *activities.ProcessAssistantThread
@@ -230,6 +231,7 @@ func NewActivities(
 		analyzeBatch:                    analyzeBatch,
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
+		skillObservationReconciler:      activities.NewSkillObservationReconciler(db),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
@@ -455,6 +457,22 @@ func (a *Activities) ReconcileExclusion(ctx context.Context, input risk_exclusio
 		return fmt.Errorf("reconcile exclusion: %w", err)
 	}
 	return nil
+}
+
+func (a *Activities) ReconcileSkillObservations(ctx context.Context, input activities.ReconcileSkillObservationsParams) (*activities.ReconcileSkillObservationsResult, error) {
+	result, err := a.skillObservationReconciler.Reconcile(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("reconcile skill observations: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) ListProjectsWithPendingSkillObservations(ctx context.Context, input activities.ListPendingSkillObservationProjectsParams) ([]uuid.UUID, error) {
+	projects, err := a.skillObservationReconciler.ListProjects(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list projects with pending skill observations: %w", err)
+	}
+	return projects, nil
 }
 
 func (a *Activities) CleanRiskPolicyResults(ctx context.Context, input risk_policy.CleanArgs) error {

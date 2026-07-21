@@ -181,6 +181,7 @@ type assistantThreadEventRecord struct {
 	Attempts              int
 	LastError             pgtype.Text
 	CreatedAt             time.Time
+	SkillSetSnapshot      []byte
 }
 
 // assistantToolsetRow is the hydrated view of a row in assistant_toolsets
@@ -2438,7 +2439,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_start", "assistant turn started", "INFO", nil)
 
 		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, event.ID)
-		runErr := s.processEventTurn(turnCtx, thread, assistant, runtimeRecord, event)
+		currentSkillSnapshot, runErr := s.processEventTurn(turnCtx, thread, assistant, runtimeRecord, event)
 		stopLeaseHeartbeat()
 		if runErr != nil {
 			s.logger.WarnContext(ctx, "assistant turn failed",
@@ -2635,8 +2636,20 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			}, nil
 		}
 
-		if err := s.completeEvent(ctx, thread.ProjectID, event.ID); err != nil {
+		completed, err := s.completeEvent(ctx, thread.ProjectID, event.ID, event.Attempts, event.SkillSetSnapshot, currentSkillSnapshot, event.Attempts == 1)
+		if err != nil {
 			return ProcessThreadEventsResult{}, err
+		}
+		if !completed {
+			return ProcessThreadEventsResult{
+				AssistantID:         assistant.ID,
+				WarmUntil:           runtimeRecord.WarmUntil.Time,
+				WarmTTLSeconds:      assistant.WarmTTLSeconds,
+				RuntimeActive:       true,
+				RetryAdmission:      true,
+				ProcessedAnyEvent:   processedAny,
+				BootstrappedRuntime: bootstrappedRuntime,
+			}, nil
 		}
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_completed", "assistant event completed", "INFO", nil)
 		processedAny = true
@@ -2663,38 +2676,55 @@ func (s *ServiceCore) processEventTurn(
 	assistant assistantRecord,
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
-) error {
+) ([]byte, error) {
+	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
+	if err != nil {
+		return nil, err
+	}
+	currentSnapshot := newAssistantSkillSetSnapshot(skills[assistant.ID])
+	currentSnapshotBytes, err := marshalAssistantSkillSetSnapshot(currentSnapshot)
+	if err != nil {
+		return nil, fmt.Errorf("marshal current assistant skill snapshot: %w", err)
+	}
+	notice := ""
+	if event.SkillSetSnapshot != nil {
+		claimedSnapshot, err := decodeAssistantSkillSetSnapshot(event.SkillSetSnapshot)
+		if err != nil {
+			return nil, err
+		}
+		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
+	}
+
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	if prompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
+	prompt, actorUserID := "", assistant.CreatedByUserID
+	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
 		// MCP auth resumption is a system event with no human sender — act as
 		// the assistant's creator.
-		turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, assistant.CreatedByUserID)
+		prompt = mcpAuthPrompt
+	} else {
+		adapter, err := getSourceAdapter(thread.SourceKind)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
-			return fmt.Errorf("run assistant turn: %w", err)
+		prompt, err = adapter.DecodeTurn(event)
+		if err != nil {
+			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		return nil
+		actorUserID = turnUserID(assistant, thread, event)
 	}
-
-	adapter, err := getSourceAdapter(thread.SourceKind)
+	prompt, err = insertAssistantEnvironmentChange(prompt, notice)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	prompt, err := adapter.DecodeTurn(event)
+	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
 	if err != nil {
-		return fmt.Errorf("decode assistant turn: %w", err)
-	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, turnUserID(assistant, thread, event))
-	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
-		return fmt.Errorf("run assistant turn: %w", err)
+		return nil, fmt.Errorf("run assistant turn: %w", err)
 	}
-	return nil
+	return currentSnapshotBytes, nil
 }
 
 // currentRuntimeMCPServers builds the MCP server set the runner should be
@@ -2880,6 +2910,23 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	if err := s.hydrateAssistantSkills(ctx, assistant.ProjectID, &assistant); err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant skills").LogError(ctx, s.logger, logAttrs...)
 	}
+	candidate := newAssistantSkillSetSnapshot(assistant.Skills)
+	candidateSnapshot, err := marshalAssistantSkillSetSnapshot(candidate)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "marshal assistant skill snapshot").LogError(ctx, s.logger, logAttrs...)
+	}
+	persistedSnapshot, err := assistantrepo.New(s.db).InitThreadSkillSnapshot(ctx, assistantrepo.InitThreadSkillSnapshotParams{
+		Candidate: candidateSnapshot,
+		ThreadID:  thread.ID,
+		ProjectID: thread.ProjectID,
+	})
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "initialize assistant skill snapshot").LogError(ctx, s.logger, logAttrs...)
+	}
+	baselineSkills, err := decodeAssistantSkillSetSnapshot(persistedSnapshot)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "decode assistant skill snapshot").LogError(ctx, s.logger, logAttrs...)
+	}
 
 	runtimeServerURL := s.runtime.ServerURL()
 	if runtimeServerURL == nil {
@@ -2900,7 +2947,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// assistant can tell the user which integration is broken.
 	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
 
-	instructions, err := composeInstructions(assistant.Instructions, thread, assistant.Skills)
+	instructions, err := composeInstructions(assistant.Instructions, thread, baselineSkills.Skills)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -2954,7 +3001,7 @@ Two MCP auth events may appear in thread, each as <message-context> block with E
 
 - EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
-func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillRow) (string, error) {
+func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillSnapshot) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
 	if err != nil {
 		return "", err
@@ -3444,20 +3491,26 @@ func (s *ServiceCore) claimNextPendingEvent(ctx context.Context, projectID, thre
 			Attempts:              conv.SafeInt(row.Attempts),
 			LastError:             row.LastError,
 			CreatedAt:             row.CreatedAt.Time,
+			SkillSetSnapshot:      row.SkillSetSnapshot,
 		}, true, nil
 	}
 }
 
-func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid.UUID) error {
-	err := assistantrepo.New(s.db).CompleteAssistantThreadEvent(ctx, assistantrepo.CompleteAssistantThreadEventParams{
-		CompletedStatus: eventStatusCompleted,
-		EventID:         eventID,
-		ProjectID:       projectID,
+func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid.UUID, claimedAttempt int, claimedSnapshot, currentSnapshot []byte, allowAdvance bool) (bool, error) {
+	completed, err := assistantrepo.New(s.db).CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx, assistantrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+		AllowAdvance:     allowAdvance,
+		ClaimedAttempt:   int64(claimedAttempt),
+		CompletedStatus:  eventStatusCompleted,
+		EventID:          eventID,
+		ProcessingStatus: eventStatusProcessing,
+		ProjectID:        projectID,
+		CurrentSnapshot:  currentSnapshot,
+		ClaimedSnapshot:  claimedSnapshot,
 	})
 	if err != nil {
-		return fmt.Errorf("complete assistant thread event: %w", err)
+		return false, fmt.Errorf("complete assistant thread event: %w", err)
 	}
-	return nil
+	return completed, nil
 }
 
 // recordTurnClassification counts a failed turn by its classifyTurnError

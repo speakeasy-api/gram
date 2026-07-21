@@ -1,4 +1,4 @@
-h1:IXZ+z42xWfVbO+ylU4ZXHDxhz9ZTqC2ZPDEZAjS/Vkg=
+h1:+wKvJdrZqa2+MYo1vB3OecQMnSw18idRGA0zd8hSCFo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -274,3 +274,10 @@ h1:IXZ+z42xWfVbO+ylU4ZXHDxhz9ZTqC2ZPDEZAjS/Vkg=
 20260717084803_risk-results-add-overview-window-index.sql h1:BGSMZeD4ym5mRiZYyzsnHG63R0+A1ztbrt3EqGokbvQ=
 20260718133346_assistant-skill-distributions-additive.sql h1:O8xELra+jvEYo4FcZeD5nZ2Bm4jGk9TvGQZ9qS7N7mI=
 20260718133423_assistant-skill-distributions-drop-old-index.sql h1:uXeDfnAwbzpH7GZglJYBhjBzwCzOj4MbX4cS04AZWFw=
+20260720164342_skill_observations_hash_mapping.sql h1:8JWYcuWH0uIvcI/pmn0XQZm2kgAqDNsWKss23M8jyFs=
+20260720233833_ai-integration-sync-schedules-expand.sql h1:TTyPfdanXp+Mex7mhcXwL3c62FcmGcgOHm4Rgp0kWl8=
+20260721002043_skill-observation-reconciliation.sql h1:Qp4IE9tAbwQD2YRi+aSQWwEQ4kFUaVO9eM1DefG8h+Y=
+20260721005550_skill-observations-version-link.sql h1:fHhs3ENBlVtAjOysLa43p6GfI65ngQv3LYEB3v/2Bbw=
+20260721015036_skill-version-lineage.sql h1:AGskkUJirV1iKMZo8K/x0mPj8vL53ht8uqmxO2GXZHk=
+20260721023354_drop-sso-connection-id.sql h1:afqseo0AgAtex4aIM1sIvYzSdcbpMaMDkDAK6loIewc=
+20260721093938_risk-results-autovacuum-insert-cadence.sql h1:yUpY0HL6nQrNEl7HEkvOuGby0dSEX+QfFt4BrjK8KyM=

@@ -33,6 +33,7 @@ export function CommandPaletteTrigger({
       <TooltipTrigger asChild>
         <button
           type="button"
+          data-slot="command-palette-trigger"
           onClick={open}
           aria-label="Search (Command palette)"
           className={cn(

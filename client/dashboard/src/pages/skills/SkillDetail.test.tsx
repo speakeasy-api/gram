@@ -15,6 +15,7 @@ const testState = vi.hoisted(() => ({
   navigate: vi.fn(),
   invalidateSkills: vi.fn().mockResolvedValue(undefined),
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
+  invalidateDistributions: vi.fn().mockResolvedValue(undefined),
   invalidateVersions: vi.fn().mockResolvedValue(undefined),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
@@ -22,6 +23,7 @@ const testState = vi.hoisted(() => ({
   isFetchNextPageError: false,
   versionError: null as Error | null,
   versions: [] as Array<Record<string, unknown>>,
+  latestVersion: undefined as Record<string, unknown> | undefined,
   version: {
     id: "version_latest",
     skillId: "skill_a",
@@ -39,6 +41,7 @@ const testState = vi.hoisted(() => ({
     },
     specValid: true,
     validationErrors: [],
+    seenCount: 3,
   },
 }));
 
@@ -60,10 +63,10 @@ vi.mock("@/routes", () => ({
   }),
 }));
 vi.mock("./SkillPluginBanner", () => ({
-  SkillPluginBanner: () => null,
+  SkillPluginBanner: () => <div>Distribution banner</div>,
 }));
 vi.mock("./SkillDistributionsSection", () => ({
-  SkillDistributionsSection: () => null,
+  SkillDistributionsSection: () => <div>Distribution controls</div>,
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => testState.queryClient,
@@ -81,9 +84,27 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
         classification: "custom",
         sourceKind: "manual",
         versionCount: 1,
+        seenCount: 3,
         updatedAt: new Date("2026-07-16T00:00:00Z"),
       },
-      latestVersion: testState.version,
+      latestVersion: testState.latestVersion,
+      adoption: {
+        activationsInWindow: 3,
+        distinctHostnames: 2,
+        windowStart: new Date("2026-06-16T00:00:00Z"),
+        windowEnd: new Date("2026-07-16T00:00:00Z"),
+      },
+      drift: {
+        activeMachines: 2,
+        driftedMachines: 0,
+        indeterminateMachines: 2,
+        onTargetMachines: 0,
+        targetState: "not_distributed",
+        targetVersionIds: [],
+        windowStart: new Date("2026-06-16T00:00:00Z"),
+        windowEnd: new Date("2026-07-16T00:00:00Z"),
+      },
+      sightingTimeline: [],
     },
   }),
   invalidateAllSkill: testState.invalidateSkill,
@@ -99,6 +120,9 @@ vi.mock("@gram/client/react-query/skillVersions.js", () => ({
     fetchNextPage: testState.fetchNextPage,
   }),
   invalidateAllSkillVersions: testState.invalidateVersions,
+}));
+vi.mock("@gram/client/react-query/skillDistributions.js", () => ({
+  invalidateAllSkillDistributions: testState.invalidateDistributions,
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   invalidateAllSkills: testState.invalidateSkills,
@@ -129,6 +153,9 @@ vi.mock("@/elements/components/Markdown", () => ({
   Markdown: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("./SkillManifestDialog", () => ({ SkillManifestDialog: () => null }));
+vi.mock("./EditSkillDetailsDialog", () => ({
+  EditSkillDetailsDialog: () => null,
+}));
 vi.mock("@/components/page-layout", () => {
   const Wrapper = ({ children }: { children?: ReactNode }) => (
     <div>{children}</div>
@@ -177,6 +204,7 @@ beforeEach(() => {
   testState.navigate.mockReset();
   testState.invalidateSkills.mockClear();
   testState.invalidateSkill.mockClear();
+  testState.invalidateDistributions.mockClear();
   testState.invalidateVersions.mockClear();
   testState.toastSuccess.mockReset();
   testState.toastError.mockReset();
@@ -184,6 +212,7 @@ beforeEach(() => {
   testState.isFetchNextPageError = false;
   testState.versionError = null;
   testState.versions = [testState.version];
+  testState.latestVersion = testState.version;
 });
 
 afterEach(cleanup);
@@ -226,12 +255,29 @@ describe("SkillDetail", () => {
     ).toBeTruthy();
   });
 
+  it("shows observed metadata when manifest content was not captured", () => {
+    testState.latestVersion = undefined;
+    testState.versions = [];
+
+    render(<SkillDetail />);
+
+    expect(
+      screen.getByText(
+        "Manifest content has not been captured for this observed skill.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit SKILL.md" })).toBeNull();
+    expect(screen.queryByText("Version history")).toBeNull();
+    expect(screen.queryByText("Distribution banner")).toBeNull();
+    expect(screen.queryByText("Distribution controls")).toBeNull();
+  });
+
   it("keeps loaded versions visible and retries a next-page failure explicitly", () => {
     testState.isFetchNextPageError = true;
     testState.versionError = new Error("next page failed");
     render(<SkillDetail />);
 
-    expect(screen.getByText("Version table")).toBeTruthy();
+    expect(screen.getAllByText("Version table").length).toBeGreaterThan(0);
     expect(screen.getByText("Unable to load more versions.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.fetchNextPage).toHaveBeenCalledOnce();
@@ -253,6 +299,9 @@ describe("SkillDetail", () => {
       testState.queryClient,
     );
     expect(testState.invalidateSkill).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(testState.invalidateDistributions).toHaveBeenCalledWith(
       testState.queryClient,
     );
     expect(testState.invalidateVersions).toHaveBeenCalledWith(
