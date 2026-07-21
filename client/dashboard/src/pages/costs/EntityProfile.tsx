@@ -396,7 +396,7 @@ export function EntityProfile({
   );
 
   // The dataset selector: a grey "Dataset" label box wrapping the select,
-  // rendered in the top control bar's trailing (page-scope) group.
+  // rendered in the top control bar's leading (page-scope) group.
   const datasetControl = (
     <div className="border-border bg-muted flex h-10 items-stretch overflow-hidden rounded-md border text-sm">
       <span className="text-muted-foreground flex items-center pr-2 pl-3 font-medium">
@@ -574,7 +574,7 @@ export function EntityProfile({
                 </button>
               </div>
             }
-            trailing={
+            scopeControls={
               <>
                 {datasetControl}
                 {rangePicker}

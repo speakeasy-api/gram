@@ -61,7 +61,7 @@ export function BreakdownBar({
   onSearchChange,
   searchPlaceholder,
   actions,
-  trailing,
+  scopeControls,
 }: {
   axisValue: string;
   axisOptions: AxisOption[];
@@ -72,11 +72,11 @@ export function BreakdownBar({
   onSearchChange: (value: string) => void;
   searchPlaceholder: string;
   // Controls that belong to the table below (e.g. CSV export), anchored to
-  // the right of the bar's bottom row.
+  // the right of the bar's top row.
   actions?: ReactNode;
   // Page-scope controls (dataset selector + date-range picker), leading the
-  // bar's bottom row.
-  trailing?: ReactNode;
+  // bar's top row.
+  scopeControls?: ReactNode;
 }): JSX.Element {
   const { segments, overflow } = partitionAxes(axisOptions, axisValue);
 
@@ -106,19 +106,19 @@ export function BreakdownBar({
   );
 
   return (
-    // A deliberate two-row control bar on the shared Page.Toolbar shell: the
-    // top row shapes the view — search on the left, the axis track anchored
-    // right; the bottom row scopes and acts — dataset + range on the left,
-    // table actions on the right. Every row spans the full bar at every
-    // width, so nothing clips and nothing rags.
+    // A deliberate two-row control bar on the shared Page.Toolbar shell. The
+    // data options read as one left-stacked block: dataset + range lead the
+    // top row with the breakdown axis track directly beneath them; table
+    // actions (export/reset) anchor top-right and the row search anchors
+    // bottom-right. Every row spans the full bar at every width, so nothing
+    // clips and nothing rags.
     <Page.Toolbar>
       <Page.Toolbar.Row>
-        <Page.Toolbar.Search
-          value={searchValue}
-          onChange={onSearchChange}
-          placeholder={searchPlaceholder}
-        />
-        <Page.Toolbar.Actions>
+        <Page.Toolbar.Leading>{scopeControls}</Page.Toolbar.Leading>
+        <Page.Toolbar.Actions>{actions}</Page.Toolbar.Actions>
+      </Page.Toolbar.Row>
+      <Page.Toolbar.Row>
+        <Page.Toolbar.Leading>
           {/* A lone axis is no choice at all — at a session leaf (Agent,
               Model) "Sessions" is the only option, and a track you can't move
               reads as a broken toggle. The section title already names the
@@ -131,11 +131,16 @@ export function BreakdownBar({
               trailing={more}
             />
           )}
+        </Page.Toolbar.Leading>
+        {/* Wrapped in Actions so the search anchors right — the left column
+            below the dataset/range belongs to the axis track. */}
+        <Page.Toolbar.Actions>
+          <Page.Toolbar.Search
+            value={searchValue}
+            onChange={onSearchChange}
+            placeholder={searchPlaceholder}
+          />
         </Page.Toolbar.Actions>
-      </Page.Toolbar.Row>
-      <Page.Toolbar.Row>
-        <Page.Toolbar.Leading>{trailing}</Page.Toolbar.Leading>
-        <Page.Toolbar.Actions>{actions}</Page.Toolbar.Actions>
       </Page.Toolbar.Row>
     </Page.Toolbar>
   );
