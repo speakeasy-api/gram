@@ -572,8 +572,15 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		}
 		// Cursor surfaces the MCP server URL on the payload directly (no
 		// SessionStart inventory), so persist it alongside the tool call.
+		// The match key carries the same server-level identifier the other
+		// senders resolve from their inventory snapshot — full URL for
+		// HTTP/SSE, launch command for stdio — so the offline risk scanner
+		// reads one attribute regardless of which agent sent the event.
 		if payload.URL != nil && *payload.URL != "" {
 			attrs[attr.MCPServerURLKey] = *payload.URL
+			attrs[attr.MCPMatchKey] = *payload.URL
+		} else if payload.Command != nil && *payload.Command != "" {
+			attrs[attr.MCPMatchKey] = *payload.Command
 		}
 	}
 

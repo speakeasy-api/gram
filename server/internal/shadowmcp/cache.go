@@ -3,6 +3,7 @@ package shadowmcp
 import (
 	"context"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,14 +60,20 @@ type Client struct {
 	cache        cache.TypedCacheObject[PolicyEnabledCache]
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
 	accessStore  accesscontrol.Store
+	// serverURL is the deployment's own base URL, trusted as a Gram-hosted
+	// MCP host alongside the built-in ones. Nil in contexts that never
+	// classify URLs (the check then falls back to the built-ins plus the
+	// org's custom domain).
+	serverURL *url.URL
 }
 
-func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, accessStore accesscontrol.Store) *Client {
+func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, accessStore accesscontrol.Store, serverURL *url.URL) *Client {
 	logger = logger.With(attr.SlogComponent("shadowmcp"))
 	return &Client{
-		logger: logger,
-		db:     db,
-		repo:   risk_repo.New(db),
+		logger:    logger,
+		db:        db,
+		repo:      risk_repo.New(db),
+		serverURL: serverURL,
 		cache: cache.NewTypedObjectCache[PolicyEnabledCache](
 			logger.With(attr.SlogCacheNamespace("shadow_mcp_policy_enabled")),
 			cacheImpl,

@@ -32,17 +32,13 @@ func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, orgID string
 	go func() {
 		asyncCtx, cancel := context.WithTimeout(detachedCtx, shadowMCPInventoryUpsertTimeout)
 		defer cancel()
-		// One custom-domain lookup covers every entry — the per-entry
-		// isGramHostedMCPURLForOrg variant would re-query custom_domains for
-		// each external URL in the inventory.
-		trustedHosts := s.gramHostedMCPTrustedHostsForOrg(asyncCtx, orgID)
 
 		inventoryURLs := make([]telemetry.ShadowMCPInventoryURL, 0, len(entries))
 		for _, entry := range entries {
 			if entry.URL == "" {
 				continue
 			}
-			if isGramHostedMCPURL(entry.URL, trustedHosts...) {
+			if s.shadowMCPClient.IsGramHostedMCPURLForOrg(asyncCtx, entry.URL, orgID) {
 				continue
 			}
 			invURL, ok := shadowmcp.CanonicalizeInventoryURL(entry.URL)

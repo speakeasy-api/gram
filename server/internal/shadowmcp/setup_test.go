@@ -64,7 +64,7 @@ func newFixture(t *testing.T) *fixture {
 	logger := testenv.NewLogger(t)
 	cacheImpl := cache.NewRedisCacheAdapter(redisClient)
 	accessStore := accesscontrol.NewRedisStore(cacheImpl, accesscontrol.AlphaTTL)
-	client := shadowmcp.NewClient(logger, conn, cacheImpl, accessStore)
+	client := shadowmcp.NewClient(logger, conn, cacheImpl, accessStore, nil)
 
 	orgID := "test-org-" + uuid.NewString()[:8]
 	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
