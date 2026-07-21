@@ -19,14 +19,16 @@ import (
 // Server lists the organizationRemoteSessionIssuers service endpoint HTTP
 // handlers.
 type Server struct {
-	Mounts                   []*MountPoint
-	CreateIssuer             http.Handler
-	ListIssuers              http.Handler
-	GetIssuer                http.Handler
-	GetIssuerDeletePreflight http.Handler
-	UpdateIssuer             http.Handler
-	DeleteIssuer             http.Handler
-	MoveIssuer               http.Handler
+	Mounts                    []*MountPoint
+	CreateIssuer              http.Handler
+	ListIssuers               http.Handler
+	GetIssuer                 http.Handler
+	GetIssuerDeletePreflight  http.Handler
+	UpdateIssuer              http.Handler
+	DeleteIssuer              http.Handler
+	MoveIssuer                http.Handler
+	GetIssuerMigratePreflight http.Handler
+	MigrateIssuer             http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -63,14 +65,18 @@ func New(
 			{"UpdateIssuer", "POST", "/rpc/organizationRemoteSessionIssuers.update"},
 			{"DeleteIssuer", "DELETE", "/rpc/organizationRemoteSessionIssuers.delete"},
 			{"MoveIssuer", "POST", "/rpc/organizationRemoteSessionIssuers.move"},
+			{"GetIssuerMigratePreflight", "GET", "/rpc/organizationRemoteSessionIssuers.getMigratePreflight"},
+			{"MigrateIssuer", "POST", "/rpc/organizationRemoteSessionIssuers.migrate"},
 		},
-		CreateIssuer:             NewCreateIssuerHandler(e.CreateIssuer, mux, decoder, encoder, errhandler, formatter),
-		ListIssuers:              NewListIssuersHandler(e.ListIssuers, mux, decoder, encoder, errhandler, formatter),
-		GetIssuer:                NewGetIssuerHandler(e.GetIssuer, mux, decoder, encoder, errhandler, formatter),
-		GetIssuerDeletePreflight: NewGetIssuerDeletePreflightHandler(e.GetIssuerDeletePreflight, mux, decoder, encoder, errhandler, formatter),
-		UpdateIssuer:             NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
-		DeleteIssuer:             NewDeleteIssuerHandler(e.DeleteIssuer, mux, decoder, encoder, errhandler, formatter),
-		MoveIssuer:               NewMoveIssuerHandler(e.MoveIssuer, mux, decoder, encoder, errhandler, formatter),
+		CreateIssuer:              NewCreateIssuerHandler(e.CreateIssuer, mux, decoder, encoder, errhandler, formatter),
+		ListIssuers:               NewListIssuersHandler(e.ListIssuers, mux, decoder, encoder, errhandler, formatter),
+		GetIssuer:                 NewGetIssuerHandler(e.GetIssuer, mux, decoder, encoder, errhandler, formatter),
+		GetIssuerDeletePreflight:  NewGetIssuerDeletePreflightHandler(e.GetIssuerDeletePreflight, mux, decoder, encoder, errhandler, formatter),
+		UpdateIssuer:              NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
+		DeleteIssuer:              NewDeleteIssuerHandler(e.DeleteIssuer, mux, decoder, encoder, errhandler, formatter),
+		MoveIssuer:                NewMoveIssuerHandler(e.MoveIssuer, mux, decoder, encoder, errhandler, formatter),
+		GetIssuerMigratePreflight: NewGetIssuerMigratePreflightHandler(e.GetIssuerMigratePreflight, mux, decoder, encoder, errhandler, formatter),
+		MigrateIssuer:             NewMigrateIssuerHandler(e.MigrateIssuer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -86,6 +92,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateIssuer = m(s.UpdateIssuer)
 	s.DeleteIssuer = m(s.DeleteIssuer)
 	s.MoveIssuer = m(s.MoveIssuer)
+	s.GetIssuerMigratePreflight = m(s.GetIssuerMigratePreflight)
+	s.MigrateIssuer = m(s.MigrateIssuer)
 }
 
 // MethodNames returns the methods served.
@@ -101,6 +109,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateIssuerHandler(mux, h.UpdateIssuer)
 	MountDeleteIssuerHandler(mux, h.DeleteIssuer)
 	MountMoveIssuerHandler(mux, h.MoveIssuer)
+	MountGetIssuerMigratePreflightHandler(mux, h.GetIssuerMigratePreflight)
+	MountMigrateIssuerHandler(mux, h.MigrateIssuer)
 }
 
 // Mount configures the mux to serve the organizationRemoteSessionIssuers
@@ -463,6 +473,115 @@ func NewMoveIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "moveIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetIssuerMigratePreflightHandler configures the mux to serve the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint.
+func MountGetIssuerMigratePreflightHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizationRemoteSessionIssuers.getMigratePreflight", f)
+}
+
+// NewGetIssuerMigratePreflightHandler creates a HTTP handler which loads the
+// HTTP request and calls the "organizationRemoteSessionIssuers" service
+// "getIssuerMigratePreflight" endpoint.
+func NewGetIssuerMigratePreflightHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetIssuerMigratePreflightRequest(mux, decoder)
+		encodeResponse = EncodeGetIssuerMigratePreflightResponse(encoder)
+		encodeError    = EncodeGetIssuerMigratePreflightError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getIssuerMigratePreflight")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMigrateIssuerHandler configures the mux to serve the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint.
+func MountMigrateIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizationRemoteSessionIssuers.migrate", f)
+}
+
+// NewMigrateIssuerHandler creates a HTTP handler which loads the HTTP request
+// and calls the "organizationRemoteSessionIssuers" service "migrateIssuer"
+// endpoint.
+func NewMigrateIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMigrateIssuerRequest(mux, decoder)
+		encodeResponse = EncodeMigrateIssuerResponse(encoder)
+		encodeError    = EncodeMigrateIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "migrateIssuer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

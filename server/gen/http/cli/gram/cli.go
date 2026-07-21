@@ -121,7 +121,7 @@ func UsageCommands() []string {
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|clone-client-fromoauth-proxy-provider|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
-		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer)",
+		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer)",
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
@@ -1593,6 +1593,17 @@ func ParseEndpoint(
 		organizationRemoteSessionIssuersMoveIssuerSessionTokenFlag = organizationRemoteSessionIssuersMoveIssuerFlags.String("session-token", "", "")
 		organizationRemoteSessionIssuersMoveIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersMoveIssuerFlags.String("apikey-token", "", "")
 
+		organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags            = flag.NewFlagSet("get-issuer-migrate-preflight", flag.ExitOnError)
+		organizationRemoteSessionIssuersGetIssuerMigratePreflightSourceIDFlag     = organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.String("source-id", "REQUIRED", "")
+		organizationRemoteSessionIssuersGetIssuerMigratePreflightTargetIDFlag     = organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.String("target-id", "REQUIRED", "")
+		organizationRemoteSessionIssuersGetIssuerMigratePreflightSessionTokenFlag = organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersGetIssuerMigratePreflightApikeyTokenFlag  = organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersMigrateIssuerFlags            = flag.NewFlagSet("migrate-issuer", flag.ExitOnError)
+		organizationRemoteSessionIssuersMigrateIssuerBodyFlag         = organizationRemoteSessionIssuersMigrateIssuerFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionIssuersMigrateIssuerSessionTokenFlag = organizationRemoteSessionIssuersMigrateIssuerFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersMigrateIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersMigrateIssuerFlags.String("apikey-token", "", "")
+
 		remoteSessionIssuersFlags = flag.NewFlagSet("remote-session-issuers", flag.ContinueOnError)
 
 		remoteSessionIssuersDiscoverRemoteSessionIssuerFlags                = flag.NewFlagSet("discover-remote-session-issuer", flag.ExitOnError)
@@ -2939,6 +2950,8 @@ func ParseEndpoint(
 	organizationRemoteSessionIssuersUpdateIssuerFlags.Usage = organizationRemoteSessionIssuersUpdateIssuerUsage
 	organizationRemoteSessionIssuersDeleteIssuerFlags.Usage = organizationRemoteSessionIssuersDeleteIssuerUsage
 	organizationRemoteSessionIssuersMoveIssuerFlags.Usage = organizationRemoteSessionIssuersMoveIssuerUsage
+	organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.Usage = organizationRemoteSessionIssuersGetIssuerMigratePreflightUsage
+	organizationRemoteSessionIssuersMigrateIssuerFlags.Usage = organizationRemoteSessionIssuersMigrateIssuerUsage
 
 	remoteSessionIssuersFlags.Usage = remoteSessionIssuersUsage
 	remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.Usage = remoteSessionIssuersDiscoverRemoteSessionIssuerUsage
@@ -4225,6 +4238,12 @@ func ParseEndpoint(
 
 			case "move-issuer":
 				epf = organizationRemoteSessionIssuersMoveIssuerFlags
+
+			case "get-issuer-migrate-preflight":
+				epf = organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags
+
+			case "migrate-issuer":
+				epf = organizationRemoteSessionIssuersMigrateIssuerFlags
 
 			}
 
@@ -5767,6 +5786,12 @@ func ParseEndpoint(
 			case "move-issuer":
 				endpoint = c.MoveIssuer()
 				data, err = organizationremotesessionissuersc.BuildMoveIssuerPayload(*organizationRemoteSessionIssuersMoveIssuerBodyFlag, *organizationRemoteSessionIssuersMoveIssuerSessionTokenFlag, *organizationRemoteSessionIssuersMoveIssuerApikeyTokenFlag)
+			case "get-issuer-migrate-preflight":
+				endpoint = c.GetIssuerMigratePreflight()
+				data, err = organizationremotesessionissuersc.BuildGetIssuerMigratePreflightPayload(*organizationRemoteSessionIssuersGetIssuerMigratePreflightSourceIDFlag, *organizationRemoteSessionIssuersGetIssuerMigratePreflightTargetIDFlag, *organizationRemoteSessionIssuersGetIssuerMigratePreflightSessionTokenFlag, *organizationRemoteSessionIssuersGetIssuerMigratePreflightApikeyTokenFlag)
+			case "migrate-issuer":
+				endpoint = c.MigrateIssuer()
+				data, err = organizationremotesessionissuersc.BuildMigrateIssuerPayload(*organizationRemoteSessionIssuersMigrateIssuerBodyFlag, *organizationRemoteSessionIssuersMigrateIssuerSessionTokenFlag, *organizationRemoteSessionIssuersMigrateIssuerApikeyTokenFlag)
 			}
 		case "remote-session-issuers":
 			c := remotesessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -12622,6 +12647,8 @@ func organizationRemoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    update-issuer: Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-issuer: Soft-delete any remote_session_issuer (organizational or project-specific) in the caller's organization. Blocked when any remote_session_clients still reference it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    get-issuer-migrate-preflight: Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s organization-remote-session-issuers COMMAND --help\n", os.Args[0])
@@ -12780,6 +12807,52 @@ func organizationRemoteSessionIssuersMoveIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers move-issuer --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersGetIssuerMigratePreflightUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers get-issuer-migrate-preflight", os.Args[0])
+	fmt.Fprint(os.Stderr, " -source-id STRING")
+	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -source-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers get-issuer-migrate-preflight --source-id \"550e8400-e29b-41d4-a716-446655440000\" --target-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersMigrateIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers migrate-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers migrate-issuer --body '{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 // remoteSessionIssuersUsage displays the usage of the remote-session-issuers
