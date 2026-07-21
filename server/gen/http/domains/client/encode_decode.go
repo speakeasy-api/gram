@@ -703,6 +703,236 @@ func DecodeUpdateDomainResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildCheckHealthRequest instantiates a HTTP request object with method and
+// path set to call the "domains" service "checkHealth" endpoint
+func (c *Client) BuildCheckHealthRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CheckHealthDomainsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("domains", "checkHealth", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCheckHealthRequest returns an encoder for requests sent to the domains
+// checkHealth server.
+func EncodeCheckHealthRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*domains.CheckHealthPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("domains", "checkHealth", "*domains.CheckHealthPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeCheckHealthResponse returns a decoder for responses returned by the
+// domains checkHealth endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeCheckHealthResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCheckHealthResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CheckHealthResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "checkHealth", err)
+			}
+			err = ValidateCheckHealthResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "checkHealth", err)
+			}
+			res := NewCheckHealthCustomDomainOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CheckHealthUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "checkHealth", err)
+			}
+			err = ValidateCheckHealthUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "checkHealth", err)
+			}
+			return nil, NewCheckHealthUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CheckHealthForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "checkHealth", err)
+			}
+			err = ValidateCheckHealthForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "checkHealth", err)
+			}
+			return nil, NewCheckHealthForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CheckHealthBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "checkHealth", err)
+			}
+			err = ValidateCheckHealthBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "checkHealth", err)
+			}
+			return nil, NewCheckHealthBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CheckHealthNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "checkHealth", err)
+			}
+			err = ValidateCheckHealthNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "checkHealth", err)
+			}
+			return nil, NewCheckHealthNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CheckHealthConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "checkHealth", err)
+			}
+			err = ValidateCheckHealthConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "checkHealth", err)
+			}
+			return nil, NewCheckHealthConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CheckHealthUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "checkHealth", err)
+			}
+			err = ValidateCheckHealthUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "checkHealth", err)
+			}
+			return nil, NewCheckHealthUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CheckHealthInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "checkHealth", err)
+			}
+			err = ValidateCheckHealthInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "checkHealth", err)
+			}
+			return nil, NewCheckHealthInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CheckHealthInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "checkHealth", err)
+				}
+				err = ValidateCheckHealthInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "checkHealth", err)
+				}
+				return nil, NewCheckHealthInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CheckHealthUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "checkHealth", err)
+				}
+				err = ValidateCheckHealthUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "checkHealth", err)
+				}
+				return nil, NewCheckHealthUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("domains", "checkHealth", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CheckHealthGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "checkHealth", err)
+			}
+			err = ValidateCheckHealthGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "checkHealth", err)
+			}
+			return nil, NewCheckHealthGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("domains", "checkHealth", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteDomainRequest instantiates a HTTP request object with method and
 // path set to call the "domains" service "deleteDomain" endpoint
 func (c *Client) BuildDeleteDomainRequest(ctx context.Context, v any) (*http.Request, error) {

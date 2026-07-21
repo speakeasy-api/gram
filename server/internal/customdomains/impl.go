@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"slices"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
 	srv "github.com/speakeasy-api/gram/server/gen/http/domains/server"
@@ -45,6 +46,7 @@ type TemporalClient interface {
 	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error)
 	ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error)
 	ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error)
+	ExecuteCustomDomainHealthCheck(ctx context.Context, customDomainID uuid.UUID) (client.WorkflowRun, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -200,6 +202,39 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 	}
 
 	return buildCustomDomainView(domain, isUpdating), nil
+}
+
+func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*gen.CustomDomain, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	repository := repo.New(s.db)
+	domain, err := repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
+	}
+
+	run, err := s.temporalClient.ExecuteCustomDomainHealthCheck(ctx, domain.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to start custom domain health check").LogError(ctx, s.logger)
+	}
+	if err := run.Get(ctx, nil); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "custom domain health check failed").LogError(ctx, s.logger)
+	}
+
+	domain, err = repository.GetCustomDomainByIDAndOrganization(ctx, repo.GetCustomDomainByIDAndOrganizationParams{
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get custom domain after health check").LogError(ctx, s.logger)
+	}
+	return buildCustomDomainView(domain, false), nil
 }
 
 func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) (err error) {

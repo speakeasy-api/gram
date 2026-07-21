@@ -23,6 +23,21 @@ var CustomDomain = Type("CustomDomain", func() {
 	})
 	Attribute("is_updating", Boolean, "The custom domain is actively being registered")
 	Attribute("ip_allowlist", ArrayOf(String), "IP addresses or CIDR ranges allowed to access this domain. Empty list means unrestricted.")
+	Attribute("health_status", String, "The latest observed domain health status")
+	Attribute("health_issue", String, "The reason the domain was last observed as unhealthy")
+	Attribute("health_checked_at", String, func() {
+		Description("When the domain health was last checked.")
+		Format(FormatDateTime)
+	})
+	Attribute("unhealthy_since", String, func() {
+		Description("When the current unhealthy period began.")
+		Format(FormatDateTime)
+	})
+	Attribute("certificate_expires_at", String, func() {
+		Description("When the currently observed TLS certificate expires.")
+		Format(FormatDateTime)
+	})
+	Attribute("consecutive_failures", Int32, "The number of consecutive failed health checks")
 
 	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "ip_allowlist")
 })
@@ -93,6 +108,26 @@ var _ = Service("domains", func() {
 		Meta("openapi:operationId", "updateDomain")
 		Meta("openapi:extension:x-speakeasy-name-override", "updateDomain")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "updateDomain"}`)
+	})
+
+	Method("checkHealth", func() {
+		Description("Check the routing and certificate health of the organization's custom domain")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(CustomDomain)
+
+		HTTP(func() {
+			POST("/rpc/domain.checkHealth")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "checkDomainHealth")
+		Meta("openapi:extension:x-speakeasy-name-override", "checkHealth")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CheckDomainHealth"}`)
 	})
 
 	Method("deleteDomain", func() {

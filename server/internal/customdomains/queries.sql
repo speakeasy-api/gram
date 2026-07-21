@@ -46,6 +46,36 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
 
+-- name: ListActivatedCustomDomainsForHealthCheck :many
+SELECT id
+FROM custom_domains
+WHERE activated IS TRUE
+  AND deleted IS FALSE
+  AND id > @after_id
+ORDER BY id
+LIMIT @page_limit;
+
+-- name: GetCustomDomainByIDForHealthUpdate :one
+SELECT *
+FROM custom_domains
+WHERE id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: UpdateCustomDomainHealth :one
+UPDATE custom_domains
+SET
+    health_status = @health_status,
+    health_issue = @health_issue,
+    health_checked_at = @checked_at,
+    unhealthy_since = @unhealthy_since,
+    certificate_expires_at = @certificate_expires_at,
+    consecutive_failures = @consecutive_failures,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
 
 -- name: UpdateCustomDomain :one
 UPDATE custom_domains
