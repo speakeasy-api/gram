@@ -48,7 +48,9 @@ func TestMintUserSessionForServerRequiresMCPConnect(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
-	require.Equal(t, mcpaccess.ServerPermissionDeniedMessage, err.Error())
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, mcpaccess.ServerPermissionDeniedMessage, oopsErr.Error())
 }
 
 func TestMintUserSessionForServerAllowsMCPConnect(t *testing.T) {

@@ -2,6 +2,7 @@ package remotemcp
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -77,9 +78,14 @@ func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Contex
 		return nil
 	}
 
-	return mcpaccess.ToolPermissionDenied(i.authz.Require(ctx, authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
+	err := i.authz.Require(ctx, authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
 		Tool:        call.Params.Name,
 		Disposition: "",
 		ProjectID:   i.projectID,
-	})))
+	}))
+	if err != nil {
+		return fmt.Errorf("authorize remote MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
+	}
+
+	return nil
 }

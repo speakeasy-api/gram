@@ -227,7 +227,7 @@ func handleToolsCall(
 			Disposition: disposition,
 			ProjectID:   payload.projectID.String(),
 		})); err != nil {
-			return nil, mcpaccess.ToolPermissionDenied(err)
+			return nil, fmt.Errorf("authorize MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
 		}
 	}
 
