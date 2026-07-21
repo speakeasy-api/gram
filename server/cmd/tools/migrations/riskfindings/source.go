@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/pipeline"
-	"github.com/speakeasy-api/gram/server/internal/uuidv7"
 )
 
 // DefaultBatchSize is the number of rows fetched per page when the caller does
@@ -27,8 +26,8 @@ const (
 	CriteriaOrgID     = "org_id"     // string; filters organization_id
 	CriteriaProjectID = "project_id" // uuid.UUID; filters project_id
 	CriteriaPolicyID  = "policy_id"  // uuid.UUID; filters risk_policy_id
-	CriteriaFrom      = "from"       // time.Time; lower bound (inclusive) via uuidv7 id
-	CriteriaTo        = "to"         // time.Time; upper bound (exclusive) via uuidv7 id
+	CriteriaFrom      = "from"       // time.Time; created_at >= from (ignored when a cursor is set)
+	CriteriaTo        = "to"         // time.Time; created_at < to
 	CriteriaCursor    = "cursor"     // uuid.UUID; resume after this id (exclusive)
 	CriteriaBatchSize = "batch_size" // int; rows per page
 )
@@ -57,19 +56,21 @@ type SourceRow struct {
 	ExclusionID       *uuid.UUID
 }
 
-// selectPage walks risk_results in id order (uuidv7, so id order is time order).
+// selectPage walks risk_results in id order (uuidv7). The id is used ONLY as a
+// keyset pagination/resume key (id > cursor); it is deliberately NOT used to
+// prune the time window. A row's uuidv7 id and its created_at are minted at
+// slightly different instants (generate_uuidv7() vs clock_timestamp()), so the
+// id timestamp is not a sound bound for a created_at filter — using it could drop
+// a row whose created_at is inside the window but whose id falls just outside it.
+// Time bounds are therefore enforced exactly by the created_at predicates ($4/$5).
+//
 // Optional filters use the "$n IS NULL OR col = $n" idiom so a single prepared
-// statement serves every filter combination. The keyset window (id > cursor,
-// id < upper) makes the scan resumable and cheap on the primary key.
+// statement serves every filter combination.
 //
 // Only real findings are migrated: found IS TRUE AND rule_id IS NOT NULL mirrors
 // the live outbox emission (findingCreatedPayloads in risk_result_writer.go), so
 // the "nothing found" SourceNone sentinels and dead-letter rows — which never
 // reach ClickHouse through the live path — are excluded here too.
-//
-// The keyset bounds (id) are only millisecond-precise because they are derived
-// from uuidv7.LowerBound, so the exact created_at predicates ($4/$5) enforce
-// sub-millisecond -from/-to boundaries the coarse id window cannot.
 const selectPage = `
 SELECT id, created_at, organization_id, project_id, risk_policy_id,
        risk_policy_version, chat_message_id, source, found, rule_id, description,
@@ -82,11 +83,10 @@ WHERE ($1::text IS NULL OR organization_id = $1)
   AND ($4::timestamptz IS NULL OR created_at >= $4)
   AND ($5::timestamptz IS NULL OR created_at < $5)
   AND id > $6
-  AND id < $7
   AND found IS TRUE
   AND rule_id IS NOT NULL
 ORDER BY id
-LIMIT $8
+LIMIT $7
 `
 
 // Source reads risk_results pages from Postgres and publishes them to the
@@ -117,41 +117,24 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 		batchSize = DefaultBatchSize
 	}
 
-	// Exact time bounds (nil disables the created_at predicate). These enforce
-	// the requested precision; the id keyset bounds below are only a coarse,
-	// millisecond-granular prune around them.
+	// Keyset lower bound / resume point. A -cursor is the sole lower bound when
+	// present: it overrides -from (its committed id already sits after -from's
+	// rows), so the created_at >= from predicate is dropped in that case to avoid
+	// skipping rows that follow the cursor but precede -from.
+	cursor := uuid.Nil
+	c, hasCursor := criteria[CriteriaCursor].(uuid.UUID)
+	if hasCursor {
+		cursor = c
+	}
+
+	// Exact time bounds via created_at (nil disables the predicate). -from is not
+	// applied when resuming from a cursor.
 	var fromArg, toArg any
-	from, hasFrom := criteria[CriteriaFrom].(time.Time)
-	if hasFrom {
+	if from, ok := criteria[CriteriaFrom].(time.Time); ok && !hasCursor {
 		fromArg = from
 	}
-	to, hasTo := criteria[CriteriaTo].(time.Time)
-	if hasTo {
+	if to, ok := criteria[CriteriaTo].(time.Time); ok {
 		toArg = to
-	}
-
-	// Lower keyset bound: an explicit cursor wins, else the floor id of -from,
-	// else scan from the beginning. Flooring is safe — it can only include a few
-	// extra rows in -from's millisecond, which the created_at >= from predicate
-	// then trims.
-	cursor := uuid.Nil
-	if c, ok := criteria[CriteriaCursor].(uuid.UUID); ok {
-		cursor = c
-	} else if hasFrom {
-		cursor = uuidv7.LowerBound(from)
-	}
-
-	// Upper keyset bound: the ceiling id of -to, else the maximum id. Rounding
-	// -to up to the next millisecond keeps every row in -to's millisecond inside
-	// the keyset window so the created_at < to predicate — not the coarse id
-	// bound — decides the boundary.
-	upper := uuid.Max
-	if hasTo {
-		ceil := to.Truncate(time.Millisecond)
-		if ceil.Before(to) {
-			ceil = ceil.Add(time.Millisecond)
-		}
-		upper = uuidv7.LowerBound(ceil)
 	}
 
 	// nil interface values become SQL NULL, disabling the optional filters.
@@ -171,7 +154,7 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 			return fmt.Errorf("read interrupted at %s: %w", cursor, err)
 		}
 
-		rows, err := s.pool.Query(ctx, selectPage, orgArg, projectArg, policyArg, fromArg, toArg, cursor, upper, batchSize)
+		rows, err := s.pool.Query(ctx, selectPage, orgArg, projectArg, policyArg, fromArg, toArg, cursor, batchSize)
 		if err != nil {
 			return fmt.Errorf("query page after %s: %w", cursor, err)
 		}

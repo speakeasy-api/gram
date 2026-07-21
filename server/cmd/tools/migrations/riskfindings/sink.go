@@ -70,7 +70,9 @@ func (s *Sink) Inserted() int64 { return s.inserted }
 // LastCommitted returns the id of the last row in the last successfully flushed
 // batch. Because records flow through the pipeline in id order, everything up to
 // and including this id is durably written, so it is the safe cursor to resume a
-// later run from (unlike the source's read position, which runs ahead).
+// later run from (unlike the source's read position, which runs ahead). It stays
+// uuid.Nil in dry-run, where no batch is actually written and there is therefore
+// no durable checkpoint.
 func (s *Sink) LastCommitted() uuid.UUID { return s.lastCommitted }
 
 // Run implements pipeline.Sink. It drains the input channel, flushing whenever a
@@ -86,8 +88,13 @@ func (s *Sink) Run(ctx context.Context) error {
 			return err
 		}
 		s.inserted += int64(len(buf))
-		s.lastCommitted = buf[len(buf)-1].ID
-		log.Printf("sink: committed batch=%d total=%d committed=%s", len(buf), s.inserted, s.lastCommitted)
+		// Only a real write advances the durable resume cursor. In dry-run the
+		// flush is a no-op, so exposing a cursor would let an operator resume the
+		// real migration from a checkpoint that was never written.
+		if !s.dryRun {
+			s.lastCommitted = buf[len(buf)-1].ID
+		}
+		log.Printf("sink: flushed batch=%d total=%d committed=%s", len(buf), s.inserted, s.lastCommitted)
 		buf = buf[:0]
 		return nil
 	}

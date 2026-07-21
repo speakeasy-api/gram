@@ -315,7 +315,13 @@ func printReport(cfg config, scanned, inserted int64, lastCursor uuid.UUID) {
 	}
 	fmt.Printf("  scanned:     %d\n", scanned)
 	fmt.Printf("  inserted:    %d\n", inserted)
-	fmt.Printf("  last cursor: %s\n", lastCursor)
+	// The resume cursor is meaningful only for an applied run: in dry-run nothing
+	// is written, so there is no durable checkpoint to resume from.
+	if cfg.dryRun {
+		fmt.Printf("  last cursor: (dry run — no durable checkpoint)\n")
+	} else {
+		fmt.Printf("  last cursor: %s\n", lastCursor)
+	}
 	if cfg.dryRun && scanned > 0 {
 		fmt.Println()
 		fmt.Println("re-run with -dry-run=false to write to ClickHouse.")
