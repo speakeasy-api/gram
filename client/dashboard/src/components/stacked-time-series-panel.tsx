@@ -34,7 +34,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 // Pointer movement under this many pixels counts as a click, not a drag.
 const DRAG_THRESHOLD_PX = 5;
 
-export type Granularity = "day" | "week" | "month";
+type Granularity = "day" | "week" | "month";
 
 const GRANULARITIES: { value: Granularity; label: string }[] = [
   { value: "day", label: "Daily" },

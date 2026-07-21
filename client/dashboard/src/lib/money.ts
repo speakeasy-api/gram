@@ -3,7 +3,10 @@
 // how spend renders — cents policy, currency, grouping — lands everywhere at
 // once instead of drifting across per-file copies.
 
-const compactDollars = new Intl.NumberFormat("en-US", {
+// Browser-default locale, matching formatCost's toLocaleString(undefined) —
+// the two must agree or the same page mixes locale conventions between the
+// axis labels and the exact figures.
+const compactDollars = new Intl.NumberFormat(undefined, {
   notation: "compact",
   maximumFractionDigits: 1,
 });
