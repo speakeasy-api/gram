@@ -26,6 +26,16 @@ rule_id IS NOT NULL`, mirroring the live outbox emission
 through the live path — are excluded, so the backfill cannot inflate risk-event
 counts with non-findings.
 
+**False positives are intentionally included.** Rows with
+`false_positive_at IS NOT NULL` (noise the Presidio sweep classified and the
+dashboard hides) are **not** filtered out. `risk_findings` is an append-only
+event log, and the live writer emits a finding at creation time — before the
+sweep runs — so live ClickHouse already holds rows later marked false-positive in
+Postgres, with no annotation (ClickHouse has no false-positive column). Including
+them keeps the backfilled window consistent with the live-ingested window;
+filtering here is the alternative if a future CH read path learns to suppress
+them.
+
 The Postgres and ClickHouse shapes differ — this is **not** a column-for-column
 copy:
 
@@ -159,6 +169,11 @@ will not join.
   a genuinely identical re-inserted batch; on a plain `MergeTree` the token is
   ignored, so a re-run inserts duplicates. When re-running, resume from `-cursor`
   so any overlap is bounded to the single in-flight batch.
+- **Do not overlap the live writer.** Production `risk_findings` is a plain
+  `MergeTree`, so the dedup token is inert there: any backfill window that
+  overlaps rows the live writer is already ingesting double-inserts every
+  overlapping row. Set `-to` at (or before) the live-writer cutover time so the
+  backfill and the live stream meet without overlapping.
 - **Partition limit.** `risk_findings` is `PARTITION BY toYYYYMMDD(created_at)`.
   A backfill batch can span more than the default 100 partitions when historical
   data is sparse, so the sink sets `max_partitions_per_insert_block = 0` for its

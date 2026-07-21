@@ -205,7 +205,7 @@ func parseFlags() (config, error) {
 		policyID          = flag.String("policy", "", "risk_policy_id (uuid) to scope (optional)")
 		fromStr           = flag.String("from", "", "lower time bound, RFC3339 (optional; from the beginning if empty)")
 		toStr             = flag.String("to", "", "upper time bound, RFC3339 (optional; to the end if empty)")
-		cursorStr         = flag.String("cursor", "", "resume after this risk_results id (exclusive); overrides -from")
+		cursorStr         = flag.String("cursor", "", "resume after this risk_results id (exclusive); keyset resume position only — still pass the original -from/-to/-org/-project/-policy")
 		batchSize         = flag.Int("batch-size", riskfindings.DefaultBatchSize, "rows per source page and sink batch")
 		bufferSize        = flag.Int("buffer", riskfindings.DefaultBatchSize, "channel buffer between pipeline stages")
 		dryRun            = flag.Bool("dry-run", true, "when true (default) read and transform but do not write; pass -dry-run=false to insert")

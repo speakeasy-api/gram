@@ -71,6 +71,14 @@ type SourceRow struct {
 // the live outbox emission (findingCreatedPayloads in risk_result_writer.go), so
 // the "nothing found" SourceNone sentinels and dead-letter rows — which never
 // reach ClickHouse through the live path — are excluded here too.
+//
+// false_positive_at is deliberately NOT filtered. risk_findings is an append-only
+// event log, and the live writer emits a finding at creation time — before the
+// Presidio false-positive sweep runs — so live ClickHouse already contains rows
+// later marked false-positive in Postgres, unannotated (there is no CH
+// false-positive column). Including them here keeps the backfilled window
+// consistent with the live-ingested window; excluding them would make historical
+// data cleaner than going-forward data.
 const selectPage = `
 SELECT id, created_at, organization_id, project_id, risk_policy_id,
        risk_policy_version, chat_message_id, source, found, rule_id, description,
