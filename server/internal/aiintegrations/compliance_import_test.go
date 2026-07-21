@@ -71,6 +71,7 @@ func complianceDiscoveryConfig(lastCursor string) Config {
 	extOrgID := "ext-org"
 	return Config{
 		ID:                     uuid.New(),
+		SyncID:                 uuid.Nil,
 		OrganizationID:         "org_test",
 		Provider:               ProviderAnthropicCompliance,
 		ProjectID:              uuid.New(),

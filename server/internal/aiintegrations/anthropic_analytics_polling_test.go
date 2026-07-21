@@ -3,6 +3,7 @@ package aiintegrations
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -229,10 +231,10 @@ func TestMaybeSyncAnthropicAnalyticsChunksBacklogIntoWindows(t *testing.T) {
 
 	// Seed a usage watermark 3 days back to simulate an outage backlog. The
 	// cost schedule stays fresh, so it only does its initial lookback.
-	_, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
+	state, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
 	require.NoError(t, err)
 	backlogStart := endTime.Add(-72 * time.Hour).Truncate(time.Minute)
-	require.NoError(t, store.AdvanceSchedulePollWatermark(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage, backlogStart))
+	require.NoError(t, store.AdvanceWatermark(ctx, state.SyncID, timewindowpoller.CompletedCheckpoint(backlogStart)))
 
 	pollers.syncBoth(t, ctx, cfg, endTime)
 
@@ -245,7 +247,7 @@ func TestMaybeSyncAnthropicAnalyticsChunksBacklogIntoWindows(t *testing.T) {
 	require.Equal(t, backlogStart.Add(24*time.Hour).Format(time.RFC3339), queries[1].Get("ending_at"))
 	require.Equal(t, backlogStart.Add(24*time.Hour).Format(time.RFC3339), queries[2].Get("starting_at"))
 
-	state, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
+	state, err = store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
 	require.NoError(t, err)
 	require.Equal(t, endTime.Truncate(time.Minute), state.WatermarkAt.UTC())
 }
@@ -297,8 +299,8 @@ func TestMaybeSyncAnthropicAnalyticsRecordsForbiddenAsFailure(t *testing.T) {
 	require.NoError(t, err)
 	costCfg, err := store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicAnalyticsCost)
 	require.NoError(t, err)
-	require.ErrorContains(t, pollers.usage.Sync(ctx, usageCfg, endTime), "403 Forbidden")
-	require.ErrorContains(t, pollers.cost.Sync(ctx, costCfg, endTime), "403 Forbidden")
+	require.ErrorContains(t, pollers.syncSchedule(ctx, ScheduleAnthropicAnalyticsUsage, usageCfg, endTime), "403 Forbidden")
+	require.ErrorContains(t, pollers.syncSchedule(ctx, ScheduleAnthropicAnalyticsCost, costCfg, endTime), "403 Forbidden")
 }
 
 func TestMaybeSyncAnthropicAnalyticsCostFailureDoesNotBlockUsage(t *testing.T) {
@@ -331,8 +333,8 @@ func TestMaybeSyncAnthropicAnalyticsCostFailureDoesNotBlockUsage(t *testing.T) {
 	require.NoError(t, err)
 	costCfg, err := store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicAnalyticsCost)
 	require.NoError(t, err)
-	require.NoError(t, pollers.usage.Sync(ctx, usageCfg, endTime))
-	require.ErrorContains(t, pollers.cost.Sync(ctx, costCfg, endTime), "403 Forbidden")
+	require.NoError(t, pollers.syncSchedule(ctx, ScheduleAnthropicAnalyticsUsage, usageCfg, endTime))
+	require.ErrorContains(t, pollers.syncSchedule(ctx, ScheduleAnthropicAnalyticsCost, costCfg, endTime), "403 Forbidden")
 
 	usageState, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, ScheduleAnthropicAnalyticsUsage)
 	require.NoError(t, err)
@@ -354,12 +356,13 @@ func testAnalyticsConfig() Config {
 	return cfg
 }
 
-// testAnalyticsPollers holds the two per-report poller services, mirroring
-// how the poll activity wires them.
+// testAnalyticsPollers mirrors how the poll activity drives both analytics
+// schedules through their schedule-specific pollers.
 type testAnalyticsPollers struct {
-	usage *AnthropicAnalyticsPoller
-	cost  *AnthropicAnalyticsPoller
-	store *Store
+	store           *Store
+	policy          *guardian.Policy
+	telemetryLogger *telemetry.Logger
+	baseURL         string
 }
 
 func (p testAnalyticsPollers) syncBoth(t *testing.T, ctx context.Context, cfg Config, endTime time.Time) {
@@ -368,8 +371,23 @@ func (p testAnalyticsPollers) syncBoth(t *testing.T, ctx context.Context, cfg Co
 	require.NoError(t, err)
 	costCfg, err := p.store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicAnalyticsCost)
 	require.NoError(t, err)
-	require.NoError(t, p.usage.Sync(ctx, usageCfg, endTime))
-	require.NoError(t, p.cost.Sync(ctx, costCfg, endTime))
+	require.NoError(t, p.syncSchedule(ctx, ScheduleAnthropicAnalyticsUsage, usageCfg, endTime))
+	require.NoError(t, p.syncSchedule(ctx, ScheduleAnthropicAnalyticsCost, costCfg, endTime))
+}
+
+func (p testAnalyticsPollers) syncSchedule(ctx context.Context, schedule string, cfg Config, endTime time.Time) error {
+	switch schedule {
+	case ScheduleAnthropicAnalyticsUsage:
+		poller := NewAnthropicUsageAnalyticsPoller(p.store, p.policy, p.telemetryLogger, func(context.Context, string, int) {})
+		poller.baseURL = p.baseURL
+		return poller.Sync(ctx, cfg, endTime)
+	case ScheduleAnthropicAnalyticsCost:
+		poller := NewAnthropicCostAnalyticsPoller(p.store, p.policy, p.telemetryLogger, func(context.Context, string, int) {})
+		poller.baseURL = p.baseURL
+		return poller.Sync(ctx, cfg, endTime)
+	default:
+		return fmt.Errorf("unsupported analytics schedule %q", schedule)
+	}
 }
 
 func newTestAnalyticsPollers(t *testing.T, store *Store, baseURL string) testAnalyticsPollers {
@@ -380,13 +398,12 @@ func newTestAnalyticsPollers(t *testing.T, store *Store, baseURL string) testAna
 
 	logger := testenv.NewLogger(t)
 	telemetryLogger := telemetry.NewStub(logger)
-	heartbeat := func(ctx context.Context, scope string, page int) {}
-
-	usage := NewAnthropicUsageAnalyticsPoller(store, policy, telemetryLogger, heartbeat)
-	usage.baseURL = baseURL
-	cost := NewAnthropicCostAnalyticsPoller(store, policy, telemetryLogger, heartbeat)
-	cost.baseURL = baseURL
-	return testAnalyticsPollers{usage: usage, cost: cost, store: store}
+	return testAnalyticsPollers{
+		store:           store,
+		policy:          policy,
+		telemetryLogger: telemetryLogger,
+		baseURL:         baseURL,
+	}
 }
 
 func createAnthropicComplianceConfig(t *testing.T, ctx context.Context, conn *pgxpool.Pool, store *Store, orgID string) Config {

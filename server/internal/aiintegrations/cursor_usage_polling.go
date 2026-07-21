@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -36,57 +37,94 @@ func NewUsagePollService(store *Store, telemetryLogger *telemetry.Logger, guardi
 	}
 }
 
-// SyncCursorUsage ingests the (watermark, endTime] window of Cursor usage
-// events through the shared time-window poller. Cursor events are final as
-// soon as they exist, so the source's upper bound is endTime, and the whole
-// range is one window. The runner advances the cursor schedule's watermark
-// after the write; the activity's success recording then re-asserts it along
-// with the rest of the poll state.
+// SyncCursorUsage ingests the Cursor usage window through the shared
+// time-window poller.
 func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endTime time.Time) error {
 	if cfg.Provider != ProviderCursor {
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
 	}
 
-	runner := &poller[[]telemetry.LogParams]{
-		store:       s.store,
-		schedule:    ScheduleCursor,
-		heartbeat:   s.heartbeat,
-		processPage: s.telemetryLogger.LogBulk,
-		// Cursor usage is immediately final and has no provider window limit.
-		initialLookback: initialUsagePollLookback,
-		maxWindow:       0,
-		granularity:     0,
-		// Cursor windows are end-inclusive at millisecond resolution, so
-		// resumed fetches start one millisecond past the stored watermark.
-		resumeOffset: time.Millisecond,
+	source, err := NewCursorUsageSource(s.guardianPolicy, cfg, s.telemetryLogger.LogBulk, "", 0)
+	if err != nil {
+		return fmt.Errorf("build cursor usage source: %w", err)
 	}
-	src := &cursorUsageSource{
-		client: cursorapi.New(s.guardianPolicy, cursorapi.WithAPIKey(cfg.APIKey)),
-		svc:    s,
-		cfg:    cfg,
+
+	runner := &timewindowpoller.Poller[[]telemetry.LogParams]{
+		Store:    s.store,
+		Schedule: ScheduleCursor,
+		State: timewindowpoller.SyncState{
+			SyncID:      cfg.SyncID,
+			WatermarkAt: cfg.PollWatermarkAt,
+			Checkpoint:  cfg.PollCheckpoint,
+		},
+		Source:  source,
+		EndTime: endTime,
+		Heartbeat: func(ctx context.Context, page int) {
+			s.heartbeat(ctx, page)
+		},
+		InitialLookback: InitialUsagePollLookback,
+		MaxWindow:       0,
+		Granularity:     0,
+		ResumeOffset:    time.Millisecond,
 	}
-	return runner.sync(ctx, cfg, cfg.PollWatermarkAt, src, endTime)
+	if err := runner.Do(ctx); err != nil {
+		return fmt.Errorf("sync cursor usage: %w", err)
+	}
+	return nil
+}
+
+func NewCursorUsageSource(
+	guardianPolicy *guardian.Policy,
+	cfg Config,
+	processPage func(ctx context.Context, payload []telemetry.LogParams) error,
+	baseURL string,
+	pageLimit int,
+) (timewindowpoller.Source[[]telemetry.LogParams], error) {
+	if guardianPolicy == nil {
+		return nil, fmt.Errorf("guardian policy is required")
+	}
+	if processPage == nil {
+		return nil, fmt.Errorf("process page is required")
+	}
+	if cfg.Provider == "" {
+		cfg.Provider = ProviderCursor
+	}
+	if cfg.Provider != ProviderCursor {
+		return nil, fmt.Errorf("schedule %q requires provider %q, got %q", ScheduleCursor, ProviderCursor, cfg.Provider)
+	}
+
+	client := cursorapi.New(
+		guardianPolicy,
+		cursorapi.WithAPIKey(cfg.APIKey),
+		cursorapi.WithBaseURL(baseURL),
+		cursorapi.WithPageSize(pageLimit),
+	)
+	return &cursorUsageSource{
+		client:      client,
+		cfg:         cfg,
+		processPage: processPage,
+	}, nil
 }
 
 // cursorUsageSource adapts one Cursor usage-events response page to the
 // time-window poller. Fetch bounds arrive ready to use: the poller's
 // resumeOffset already skips resumed fetches past the stored watermark.
 type cursorUsageSource struct {
-	client *cursorapi.Client
-	svc    *UsagePollService
-	cfg    Config
+	client      *cursorapi.Client
+	cfg         Config
+	processPage func(ctx context.Context, payload []telemetry.LogParams) error
 }
 
 func (src *cursorUsageSource) UpperBound(_ context.Context, endTime time.Time) (time.Time, error) {
 	return endTime, nil
 }
 
-func (src *cursorUsageSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (page[[]telemetry.LogParams], error) {
+func (src *cursorUsageSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (timewindowpoller.Page[[]telemetry.LogParams], error) {
 	pageNum := 1
 	if pageToken != "" {
 		parsed, err := strconv.Atoi(pageToken)
 		if err != nil {
-			return page[[]telemetry.LogParams]{}, fmt.Errorf("parse cursor usage page %q: %w", pageToken, err)
+			return timewindowpoller.Page[[]telemetry.LogParams]{Payload: nil, NextPage: "", HasMore: false}, fmt.Errorf("parse cursor usage page %q: %w", pageToken, err)
 		}
 		pageNum = parsed
 	}
@@ -97,23 +135,27 @@ func (src *cursorUsageSource) FetchPage(ctx context.Context, start, end time.Tim
 		Page:  pageNum,
 	})
 	if err != nil {
-		return page[[]telemetry.LogParams]{}, fmt.Errorf("fetch cursor usage events page: %w", err)
+		return timewindowpoller.Page[[]telemetry.LogParams]{Payload: nil, NextPage: "", HasMore: false}, fmt.Errorf("fetch cursor usage events page: %w", err)
 	}
 
 	rows := make([]telemetry.LogParams, 0, len(res.Events))
 	for _, event := range res.Events {
-		rows = append(rows, src.svc.buildCursorUsageEvent(src.cfg, event))
+		rows = append(rows, buildCursorUsageEvent(src.cfg, event))
 	}
 
 	nextPage := ""
 	if res.HasNextPage {
 		nextPage = strconv.Itoa(pageNum + 1)
 	}
-	return page[[]telemetry.LogParams]{
+	return timewindowpoller.Page[[]telemetry.LogParams]{
 		Payload:  rows,
 		NextPage: nextPage,
 		HasMore:  res.HasNextPage,
 	}, nil
+}
+
+func (src *cursorUsageSource) ProcessPage(ctx context.Context, payload []telemetry.LogParams) error {
+	return src.processPage(ctx, payload)
 }
 
 func (src *cursorUsageSource) RetryAfter(err error) (time.Duration, bool) {
@@ -124,7 +166,7 @@ func (src *cursorUsageSource) RetryAfter(err error) (time.Duration, bool) {
 	return rateLimitErr.RetryAfter, true
 }
 
-func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.LogParams {
+func buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.LogParams {
 	userEmail := conv.NormalizeEmail(event.UserEmail)
 
 	return telemetry.LogParams{

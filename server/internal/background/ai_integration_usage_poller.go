@@ -90,12 +90,12 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 		batch := make([]runningPoller, 0, len(candidates))
 		for _, candidate := range candidates {
 			childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-				WorkflowID:            buildAIUsagePollerWorkflowID(candidate.OrganizationSlug, candidate.ID, candidate.Schedule),
+				WorkflowID:            buildAIUsagePollerWorkflowID(candidate.OrganizationSlug, candidate.SyncID),
 				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 				WaitForCancellation:   true,
 			})
 
-			child := workflow.ExecuteChildWorkflow(childCtx, AIUsagePollerWorkflow, activities.EncodePollAIDataInput(candidate.ID, candidate.Schedule, workflow.Now(ctx).UTC()))
+			child := workflow.ExecuteChildWorkflow(childCtx, AIUsagePollerWorkflow, candidate.SyncID.String())
 			if err := child.GetChildWorkflowExecution().Get(ctx, nil); err != nil {
 				if !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
 					return fmt.Errorf("start poller child: %w", err)
@@ -152,20 +152,20 @@ func AIUsagePollerWorkflow(ctx workflow.Context, input string) error {
 	return nil
 }
 
-func buildAIUsagePollerWorkflowID(organizationSlug string, configID uuid.UUID, schedule string) string {
-	return fmt.Sprintf("v1:ai-usage-poller:%s:%s:%s", organizationSlug, configID.String(), schedule)
+func buildAIUsagePollerWorkflowID(organizationSlug string, syncID uuid.UUID) string {
+	return fmt.Sprintf("v1:ai-usage-poller:%s:%s", organizationSlug, syncID.String())
 }
 
 type TemporalAIUsagePoller struct {
 	TemporalEnv *tenv.Environment
 }
 
-func (p *TemporalAIUsagePoller) Poll(ctx context.Context, organizationSlug string, configID uuid.UUID, schedule string) error {
+func (p *TemporalAIUsagePoller) Poll(ctx context.Context, organizationSlug string, syncID uuid.UUID) error {
 	_, err := p.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    buildAIUsagePollerWorkflowID(organizationSlug, configID, schedule),
+		ID:                    buildAIUsagePollerWorkflowID(organizationSlug, syncID),
 		TaskQueue:             string(p.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-	}, AIUsagePollerWorkflow, activities.EncodePollAIDataInput(configID, schedule, time.Now().UTC()))
+	}, AIUsagePollerWorkflow, syncID.String())
 	return err
 }
 

@@ -97,7 +97,7 @@ func TestListUsagePollCandidatesReturnsEveryDueSchedule(t *testing.T) {
 	ctx, conn, store, orgID := newStoreTestDB(t)
 
 	extOrgID := "org_ext_1"
-	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+	upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
 
 	candidates, err := store.ListUsagePollCandidates(ctx, time.Now().Add(time.Minute), 10)
 	require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestListUsagePollCandidatesReturnsEveryDueSchedule(t *testing.T) {
 
 	schedules := make(map[string]string, len(candidates))
 	for _, candidate := range candidates {
-		require.Equal(t, created.Config.ID, candidate.ID)
+		require.NotEqual(t, uuid.Nil, candidate.SyncID)
 		require.Equal(t, ProviderAnthropicCompliance, candidate.Provider)
 		schedules[candidate.Schedule] = candidate.Kind
 	}
@@ -126,7 +126,7 @@ func TestListUsagePollCandidatesAdoptsLegacyRowsAndCreatesSchedules(t *testing.T
 	require.NoError(t, err)
 	require.Len(t, candidates, 3)
 	for _, candidate := range candidates {
-		require.Equal(t, configID, candidate.ID)
+		require.NotEqual(t, uuid.Nil, candidate.SyncID)
 		require.Equal(t, ProviderAnthropicCompliance, candidate.Provider)
 	}
 
@@ -149,9 +149,7 @@ func TestListUsagePollCandidatesIgnoresInactiveConfigs(t *testing.T) {
 
 	candidates, err := store.ListUsagePollCandidates(ctx, time.Now().Add(time.Minute), 10)
 	require.NoError(t, err)
-	for _, candidate := range candidates {
-		require.NotEqual(t, configID, candidate.ID)
-	}
+	require.Empty(t, candidates)
 
 	// The disabled config's pre-schedule row is left untouched: no adoption,
 	// no new schedule rows. This process is forward-looking, not a backfill.

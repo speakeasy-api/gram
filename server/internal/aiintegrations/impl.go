@@ -45,7 +45,7 @@ var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
 type ConfigPoller interface {
-	Poll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error
+	Poll(ctx context.Context, organizationSlug string, syncID uuid.UUID) error
 }
 
 func NewService(
@@ -285,9 +285,23 @@ func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, c
 		return nil
 	}
 
+	schedules, err := s.store.ListSyncSchedules(ctx, configID)
+	if err != nil {
+		return err
+	}
+	syncIDsBySchedule := make(map[string]uuid.UUID, len(schedules))
+	for _, syncSchedule := range schedules {
+		syncIDsBySchedule[syncSchedule.Schedule] = syncSchedule.ID
+	}
+
 	var startErr error
 	for _, syncSchedule := range syncSchedulesFor(provider) {
-		if err := s.configPoller.Poll(ctx, organizationSlug, configID, syncSchedule.schedule); err != nil {
+		syncID, ok := syncIDsBySchedule[syncSchedule.schedule]
+		if !ok {
+			startErr = errors.Join(startErr, fmt.Errorf("missing %s sync schedule", syncSchedule.schedule))
+			continue
+		}
+		if err := s.configPoller.Poll(ctx, organizationSlug, syncID); err != nil {
 			startErr = errors.Join(startErr, fmt.Errorf("start %s schedule: %w", syncSchedule.schedule, err))
 		}
 	}

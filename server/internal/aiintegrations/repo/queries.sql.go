@@ -75,25 +75,6 @@ func (q *Queries) AdoptLegacySyncSchedulesForProvider(ctx context.Context, arg A
 	return err
 }
 
-const advancePollWatermark = `-- name: AdvancePollWatermark :exec
-UPDATE ai_integration_syncs
-SET poll_watermark_at = $1,
-    updated_at = clock_timestamp()
-WHERE ai_integration_config_id = $2
-  AND schedule = $3
-`
-
-type AdvancePollWatermarkParams struct {
-	PollWatermarkAt       pgtype.Timestamptz
-	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
-}
-
-func (q *Queries) AdvancePollWatermark(ctx context.Context, arg AdvancePollWatermarkParams) error {
-	_, err := q.db.Exec(ctx, advancePollWatermark, arg.PollWatermarkAt, arg.AiIntegrationConfigID, arg.Schedule)
-	return err
-}
-
 const advanceUsagePollCursor = `-- name: AdvanceUsagePollCursor :exec
 UPDATE ai_integration_syncs
 SET last_cursor_id = $1,
@@ -110,6 +91,25 @@ type AdvanceUsagePollCursorParams struct {
 
 func (q *Queries) AdvanceUsagePollCursor(ctx context.Context, arg AdvanceUsagePollCursorParams) error {
 	_, err := q.db.Exec(ctx, advanceUsagePollCursor, arg.LastCursorID, arg.AiIntegrationConfigID, arg.Schedule)
+	return err
+}
+
+const advanceWatermark = `-- name: AdvanceWatermark :exec
+UPDATE ai_integration_syncs
+SET poll_watermark_at = $1,
+    poll_checkpoint = $2,
+    updated_at = clock_timestamp()
+WHERE id = $3
+`
+
+type AdvanceWatermarkParams struct {
+	PollWatermarkAt pgtype.Timestamptz
+	PollCheckpoint  pgtype.Text
+	SyncID          uuid.UUID
+}
+
+func (q *Queries) AdvanceWatermark(ctx context.Context, arg AdvanceWatermarkParams) error {
+	_, err := q.db.Exec(ctx, advanceWatermark, arg.PollWatermarkAt, arg.PollCheckpoint, arg.SyncID)
 	return err
 }
 
@@ -200,7 +200,7 @@ WITH inserted AS (
     , $4
     , $5
   )
-  ON CONFLICT (ai_integration_config_id, schedule) DO NOTHING
+  ON CONFLICT (ai_integration_config_id, schedule) DO UPDATE SET updated_at = ai_integration_syncs.updated_at
   RETURNING created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
 )
 SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
@@ -272,6 +272,7 @@ SELECT
     c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
   , s.id AS sync_id
   , s.poll_watermark_at
+  , s.poll_checkpoint
   , s.next_poll_after
   , s.last_poll_error
   , s.last_poll_failed_at
@@ -309,6 +310,7 @@ type GetConfigByOrgAndProviderRow struct {
 	Deleted                bool
 	SyncID                 uuid.UUID
 	PollWatermarkAt        pgtype.Timestamptz
+	PollCheckpoint         pgtype.Text
 	NextPollAfter          pgtype.Timestamptz
 	LastPollError          pgtype.Text
 	LastPollFailedAt       pgtype.Timestamptz
@@ -346,6 +348,7 @@ func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigBy
 		&i.Deleted,
 		&i.SyncID,
 		&i.PollWatermarkAt,
+		&i.PollCheckpoint,
 		&i.NextPollAfter,
 		&i.LastPollError,
 		&i.LastPollFailedAt,
@@ -374,11 +377,101 @@ func (q *Queries) GetFirstProjectByOrganization(ctx context.Context, organizatio
 	return id, err
 }
 
+const getProviderUsagePollConfigByID = `-- name: GetProviderUsagePollConfigByID :one
+SELECT
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
+  , s.id AS sync_id
+  , s.schedule
+  , s.kind
+  , s.poll_watermark_at
+  , s.poll_checkpoint
+  , s.next_poll_after
+  , s.last_poll_error
+  , s.last_poll_failed_at
+  , s.last_poll_success_at
+  , s.consecutive_failures
+  , s.last_cursor_id
+  , s.created_at AS sync_created_at
+  , s.updated_at AS sync_updated_at
+FROM ai_integration_configs c
+JOIN ai_integration_syncs s
+  ON s.ai_integration_config_id = c.id
+ AND (s.schedule = c.provider OR s.schedule IS NULL)
+WHERE c.id = $1
+  AND c.enabled IS TRUE
+  AND c.deleted IS FALSE
+  AND c.api_key_encrypted IS NOT NULL
+ORDER BY s.schedule ASC NULLS LAST
+LIMIT 1
+`
+
+type GetProviderUsagePollConfigByIDRow struct {
+	CreatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	OrganizationID         string
+	Provider               string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	ApiKeyEncrypted        string
+	Enabled                bool
+	BillingMode            pgtype.Text
+	ID                     uuid.UUID
+	Deleted                bool
+	SyncID                 uuid.UUID
+	Schedule               pgtype.Text
+	Kind                   pgtype.Text
+	PollWatermarkAt        pgtype.Timestamptz
+	PollCheckpoint         pgtype.Text
+	NextPollAfter          pgtype.Timestamptz
+	LastPollError          pgtype.Text
+	LastPollFailedAt       pgtype.Timestamptz
+	LastPollSuccessAt      pgtype.Timestamptz
+	ConsecutiveFailures    int32
+	LastCursorID           pgtype.Text
+	SyncCreatedAt          pgtype.Timestamptz
+	SyncUpdatedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) GetProviderUsagePollConfigByID(ctx context.Context, aiIntegrationConfigID uuid.UUID) (GetProviderUsagePollConfigByIDRow, error) {
+	row := q.db.QueryRow(ctx, getProviderUsagePollConfigByID, aiIntegrationConfigID)
+	var i GetProviderUsagePollConfigByIDRow
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ExternalOrganizationID,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.BillingMode,
+		&i.ID,
+		&i.Deleted,
+		&i.SyncID,
+		&i.Schedule,
+		&i.Kind,
+		&i.PollWatermarkAt,
+		&i.PollCheckpoint,
+		&i.NextPollAfter,
+		&i.LastPollError,
+		&i.LastPollFailedAt,
+		&i.LastPollSuccessAt,
+		&i.ConsecutiveFailures,
+		&i.LastCursorID,
+		&i.SyncCreatedAt,
+		&i.SyncUpdatedAt,
+	)
+	return i, err
+}
+
 const getUsagePollConfigByID = `-- name: GetUsagePollConfigByID :one
 SELECT
     c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
   , s.id AS sync_id
   , s.poll_watermark_at
+  , s.poll_checkpoint
   , s.next_poll_after
   , s.last_poll_error
   , s.last_poll_failed_at
@@ -417,6 +510,7 @@ type GetUsagePollConfigByIDRow struct {
 	Deleted                bool
 	SyncID                 uuid.UUID
 	PollWatermarkAt        pgtype.Timestamptz
+	PollCheckpoint         pgtype.Text
 	NextPollAfter          pgtype.Timestamptz
 	LastPollError          pgtype.Text
 	LastPollFailedAt       pgtype.Timestamptz
@@ -445,6 +539,92 @@ func (q *Queries) GetUsagePollConfigByID(ctx context.Context, arg GetUsagePollCo
 		&i.Deleted,
 		&i.SyncID,
 		&i.PollWatermarkAt,
+		&i.PollCheckpoint,
+		&i.NextPollAfter,
+		&i.LastPollError,
+		&i.LastPollFailedAt,
+		&i.LastPollSuccessAt,
+		&i.ConsecutiveFailures,
+		&i.LastCursorID,
+		&i.SyncCreatedAt,
+		&i.SyncUpdatedAt,
+	)
+	return i, err
+}
+
+const getUsagePollConfigBySyncID = `-- name: GetUsagePollConfigBySyncID :one
+SELECT
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
+  , s.id AS sync_id
+  , s.schedule
+  , s.kind
+  , s.poll_watermark_at
+  , s.poll_checkpoint
+  , s.next_poll_after
+  , s.last_poll_error
+  , s.last_poll_failed_at
+  , s.last_poll_success_at
+  , s.consecutive_failures
+  , s.last_cursor_id
+  , s.created_at AS sync_created_at
+  , s.updated_at AS sync_updated_at
+FROM ai_integration_syncs s
+JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+WHERE s.id = $1
+  AND c.enabled IS TRUE
+  AND c.deleted IS FALSE
+  AND c.api_key_encrypted IS NOT NULL
+`
+
+type GetUsagePollConfigBySyncIDRow struct {
+	CreatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	OrganizationID         string
+	Provider               string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	ApiKeyEncrypted        string
+	Enabled                bool
+	BillingMode            pgtype.Text
+	ID                     uuid.UUID
+	Deleted                bool
+	SyncID                 uuid.UUID
+	Schedule               pgtype.Text
+	Kind                   pgtype.Text
+	PollWatermarkAt        pgtype.Timestamptz
+	PollCheckpoint         pgtype.Text
+	NextPollAfter          pgtype.Timestamptz
+	LastPollError          pgtype.Text
+	LastPollFailedAt       pgtype.Timestamptz
+	LastPollSuccessAt      pgtype.Timestamptz
+	ConsecutiveFailures    int32
+	LastCursorID           pgtype.Text
+	SyncCreatedAt          pgtype.Timestamptz
+	SyncUpdatedAt          pgtype.Timestamptz
+}
+
+func (q *Queries) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UUID) (GetUsagePollConfigBySyncIDRow, error) {
+	row := q.db.QueryRow(ctx, getUsagePollConfigBySyncID, syncID)
+	var i GetUsagePollConfigBySyncIDRow
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ExternalOrganizationID,
+		&i.ApiKeyEncrypted,
+		&i.Enabled,
+		&i.BillingMode,
+		&i.ID,
+		&i.Deleted,
+		&i.SyncID,
+		&i.Schedule,
+		&i.Kind,
+		&i.PollWatermarkAt,
+		&i.PollCheckpoint,
 		&i.NextPollAfter,
 		&i.LastPollError,
 		&i.LastPollFailedAt,
@@ -534,6 +714,7 @@ SELECT
     c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
   , s.id AS sync_id
   , s.poll_watermark_at
+  , s.poll_checkpoint
   , s.next_poll_after
   , s.last_poll_error
   , s.last_poll_failed_at
@@ -568,6 +749,7 @@ type ListEnabledConfigsByProviderRow struct {
 	Deleted                bool
 	SyncID                 uuid.UUID
 	PollWatermarkAt        pgtype.Timestamptz
+	PollCheckpoint         pgtype.Text
 	NextPollAfter          pgtype.Timestamptz
 	LastPollError          pgtype.Text
 	LastPollFailedAt       pgtype.Timestamptz
@@ -602,6 +784,7 @@ func (q *Queries) ListEnabledConfigsByProvider(ctx context.Context, provider str
 			&i.Deleted,
 			&i.SyncID,
 			&i.PollWatermarkAt,
+			&i.PollCheckpoint,
 			&i.NextPollAfter,
 			&i.LastPollError,
 			&i.LastPollFailedAt,
@@ -622,13 +805,14 @@ func (q *Queries) ListEnabledConfigsByProvider(ctx context.Context, provider str
 }
 
 const listSyncSchedules = `-- name: ListSyncSchedules :many
-SELECT schedule, kind
+SELECT id, schedule, kind
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = $1
 ORDER BY schedule
 `
 
 type ListSyncSchedulesRow struct {
+	ID       uuid.UUID
 	Schedule pgtype.Text
 	Kind     pgtype.Text
 }
@@ -642,7 +826,7 @@ func (q *Queries) ListSyncSchedules(ctx context.Context, aiIntegrationConfigID u
 	var items []ListSyncSchedulesRow
 	for rows.Next() {
 		var i ListSyncSchedulesRow
-		if err := rows.Scan(&i.Schedule, &i.Kind); err != nil {
+		if err := rows.Scan(&i.ID, &i.Schedule, &i.Kind); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -655,7 +839,7 @@ func (q *Queries) ListSyncSchedules(ctx context.Context, aiIntegrationConfigID u
 
 const listUsagePollCandidates = `-- name: ListUsagePollCandidates :many
 SELECT
-    c.id
+    s.id AS sync_id
   , c.organization_id
   , om.slug AS organization_slug
   , c.provider
@@ -678,7 +862,7 @@ type ListUsagePollCandidatesParams struct {
 }
 
 type ListUsagePollCandidatesRow struct {
-	ID               uuid.UUID
+	SyncID           uuid.UUID
 	OrganizationID   string
 	OrganizationSlug string
 	Provider         string
@@ -696,7 +880,7 @@ func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePoll
 	for rows.Next() {
 		var i ListUsagePollCandidatesRow
 		if err := rows.Scan(
-			&i.ID,
+			&i.SyncID,
 			&i.OrganizationID,
 			&i.OrganizationSlug,
 			&i.Provider,
@@ -771,6 +955,7 @@ func (q *Queries) RecordUsagePollFailure(ctx context.Context, arg RecordUsagePol
 const recordUsagePollSuccess = `-- name: RecordUsagePollSuccess :exec
 UPDATE ai_integration_syncs
 SET poll_watermark_at = $1,
+    poll_checkpoint = NULL,
     next_poll_after = $2,
     last_poll_error = NULL,
     last_poll_failed_at = NULL,
@@ -778,16 +963,14 @@ SET poll_watermark_at = $1,
     consecutive_failures = 0,
     last_cursor_id = $3,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = $4
-  AND schedule = $5
+WHERE id = $4
 `
 
 type RecordUsagePollSuccessParams struct {
-	PollWatermarkAt       pgtype.Timestamptz
-	NextPollAfter         pgtype.Timestamptz
-	LastCursorID          pgtype.Text
-	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
+	PollWatermarkAt pgtype.Timestamptz
+	NextPollAfter   pgtype.Timestamptz
+	LastCursorID    pgtype.Text
+	SyncID          uuid.UUID
 }
 
 func (q *Queries) RecordUsagePollSuccess(ctx context.Context, arg RecordUsagePollSuccessParams) error {
@@ -795,8 +978,7 @@ func (q *Queries) RecordUsagePollSuccess(ctx context.Context, arg RecordUsagePol
 		arg.PollWatermarkAt,
 		arg.NextPollAfter,
 		arg.LastCursorID,
-		arg.AiIntegrationConfigID,
-		arg.Schedule,
+		arg.SyncID,
 	)
 	return err
 }
@@ -804,6 +986,7 @@ func (q *Queries) RecordUsagePollSuccess(ctx context.Context, arg RecordUsagePol
 const resetUsagePollState = `-- name: ResetUsagePollState :exec
 UPDATE ai_integration_syncs
 SET poll_watermark_at = $1,
+    poll_checkpoint = NULL,
     next_poll_after = $2,
     last_poll_error = NULL,
     last_poll_failed_at = NULL,
@@ -811,24 +994,17 @@ SET poll_watermark_at = $1,
     consecutive_failures = 0,
     last_cursor_id = NULL,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = $3
-  AND schedule = $4
+WHERE id = $3
 `
 
 type ResetUsagePollStateParams struct {
-	PollWatermarkAt       pgtype.Timestamptz
-	NextPollAfter         pgtype.Timestamptz
-	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
+	PollWatermarkAt pgtype.Timestamptz
+	NextPollAfter   pgtype.Timestamptz
+	SyncID          uuid.UUID
 }
 
 func (q *Queries) ResetUsagePollState(ctx context.Context, arg ResetUsagePollStateParams) error {
-	_, err := q.db.Exec(ctx, resetUsagePollState,
-		arg.PollWatermarkAt,
-		arg.NextPollAfter,
-		arg.AiIntegrationConfigID,
-		arg.Schedule,
-	)
+	_, err := q.db.Exec(ctx, resetUsagePollState, arg.PollWatermarkAt, arg.NextPollAfter, arg.SyncID)
 	return err
 }
 

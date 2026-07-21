@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -49,68 +50,66 @@ const (
 	anthropicAnalyticsAccountType = "team"
 )
 
-// anthropicAnalyticsSourceFactory builds the report-specific source for one
-// sync, bound to that sync's API client and config.
-type anthropicAnalyticsSourceFactory func(client *anthropicapi.Client, cfg Config) source[[]telemetry.LogParams]
+const (
+	AnthropicAnalyticsMaxWindow = anthropicAnalyticsMaxWindow
+	AnthropicAnalyticsPageLimit = anthropicAnalyticsPageLimit
+)
 
-// AnthropicAnalyticsPoller ingests one Admin Analytics report — usage or
-// cost — from the Anthropic API into telemetry_logs for analytics and
-// tokens-under-management billing. Each report is its own service instance
-// driving its own sync schedule: construct one with
-// NewAnthropicUsageAnalyticsPoller and one with
-// NewAnthropicCostAnalyticsPoller. Usage is ingested per (user, minute, model)
-// without any session linkage — the Compliance API import owns session
-// content.
+type anthropicAnalyticsSourceFactory func(
+	guardianPolicy *guardian.Policy,
+	cfg Config,
+	processPage func(ctx context.Context, payload []telemetry.LogParams) error,
+	baseURL string,
+	pageLimit int,
+) (timewindowpoller.Source[[]telemetry.LogParams], error)
+
+// AnthropicAnalyticsPoller ingests one Admin Analytics report — usage or cost
+// — from the Anthropic API into telemetry_logs.
 type AnthropicAnalyticsPoller struct {
 	store           *Store
 	guardianPolicy  *guardian.Policy
 	telemetryLogger *telemetry.Logger
-	heartbeat       func(ctx context.Context, scope string, page int)
+	heartbeat       func(ctx context.Context, schedule string, page int)
 	schedule        string
 	newSource       anthropicAnalyticsSourceFactory
 	// baseURL overrides the Anthropic API base URL in tests; empty means the
 	// client default.
-	baseURL string
+	baseURL   string
+	pageLimit int
 }
 
-// NewAnthropicUsageAnalyticsPoller ingests the user_usage_report (token
-// counts) as the anthropic_analytics_usage schedule.
+// NewAnthropicUsageAnalyticsPoller ingests the user_usage_report as the
+// anthropic_analytics_usage schedule.
 func NewAnthropicUsageAnalyticsPoller(
 	store *Store,
 	guardianPolicy *guardian.Policy,
 	telemetryLogger *telemetry.Logger,
-	heartbeat func(ctx context.Context, scope string, page int),
+	heartbeat func(ctx context.Context, schedule string, page int),
 ) *AnthropicAnalyticsPoller {
-	return newAnthropicAnalyticsPoller(store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsUsage,
-		func(client *anthropicapi.Client, cfg Config) source[[]telemetry.LogParams] {
-			return &anthropicUsageReportSource{client: client, cfg: cfg}
-		})
+	return newAnthropicAnalyticsPoller(store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsUsage, NewAnthropicAnalyticsUsageSource)
 }
 
-// NewAnthropicCostAnalyticsPoller ingests the user_cost_report (spend) as
-// the anthropic_analytics_cost schedule.
+// NewAnthropicCostAnalyticsPoller ingests the user_cost_report as the
+// anthropic_analytics_cost schedule.
 func NewAnthropicCostAnalyticsPoller(
 	store *Store,
 	guardianPolicy *guardian.Policy,
 	telemetryLogger *telemetry.Logger,
-	heartbeat func(ctx context.Context, scope string, page int),
+	heartbeat func(ctx context.Context, schedule string, page int),
 ) *AnthropicAnalyticsPoller {
-	return newAnthropicAnalyticsPoller(store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsCost,
-		func(client *anthropicapi.Client, cfg Config) source[[]telemetry.LogParams] {
-			return &anthropicCostReportSource{client: client, cfg: cfg}
-		})
+	return newAnthropicAnalyticsPoller(store, guardianPolicy, telemetryLogger, heartbeat, ScheduleAnthropicAnalyticsCost, NewAnthropicAnalyticsCostSource)
 }
 
 func newAnthropicAnalyticsPoller(
 	store *Store,
 	guardianPolicy *guardian.Policy,
 	telemetryLogger *telemetry.Logger,
-	heartbeat func(ctx context.Context, scope string, page int),
+	heartbeat func(ctx context.Context, schedule string, page int),
 	schedule string,
 	newSource anthropicAnalyticsSourceFactory,
 ) *AnthropicAnalyticsPoller {
 	if heartbeat == nil {
-		panic("ai integration analytics poller requires heartbeat")
+		panic("anthropic analytics poller requires heartbeat")
 	}
 	return &AnthropicAnalyticsPoller{
 		store:           store,
@@ -120,35 +119,106 @@ func newAnthropicAnalyticsPoller(
 		schedule:        schedule,
 		newSource:       newSource,
 		baseURL:         "",
+		pageLimit:       0,
 	}
 }
 
-// Sync ingests one Admin Analytics report schedule. Its caller runs this in a
-// dedicated Temporal workflow, so errors are returned for independent retries
-// and failure recording. Non-Enterprise organizations (or keys without the
-// read:analytics scope) receive a classified access error.
 func (p *AnthropicAnalyticsPoller) Sync(ctx context.Context, cfg Config, endTime time.Time) error {
 	if cfg.Provider != ProviderAnthropicCompliance {
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for anthropic analytics: %s", cfg.Provider)
 	}
 
-	client := anthropicapi.New(p.guardianPolicy, anthropicapi.WithAPIKey(cfg.APIKey), anthropicapi.WithBaseURL(p.baseURL))
+	source, err := p.newSource(p.guardianPolicy, cfg, p.telemetryLogger.LogBulk, p.baseURL, p.pageLimit)
+	if err != nil {
+		return fmt.Errorf("build %s source: %w", p.schedule, err)
+	}
 
-	runner := &poller[[]telemetry.LogParams]{
-		store:    p.store,
-		schedule: p.schedule,
-		heartbeat: func(ctx context.Context, page int) {
+	runner := &timewindowpoller.Poller[[]telemetry.LogParams]{
+		Store:    p.store,
+		Schedule: p.schedule,
+		State: timewindowpoller.SyncState{
+			SyncID:      cfg.SyncID,
+			WatermarkAt: cfg.PollWatermarkAt,
+			Checkpoint:  cfg.PollCheckpoint,
+		},
+		Source:  source,
+		EndTime: endTime,
+		Heartbeat: func(ctx context.Context, page int) {
 			p.heartbeat(ctx, p.schedule, page)
 		},
-		processPage:     p.telemetryLogger.LogBulk,
-		initialLookback: anthropicAnalyticsInitialLookback,
-		maxWindow:       anthropicAnalyticsMaxWindow,
-		granularity:     time.Minute,
-		// Report buckets are exclusive-end, so resumed windows re-use the
-		// watermark as their inclusive starting_at with no skip.
-		resumeOffset: 0,
+		InitialLookback: AnthropicAnalyticsInitialLookback,
+		MaxWindow:       anthropicAnalyticsMaxWindow,
+		Granularity:     time.Minute,
+		ResumeOffset:    0,
 	}
-	return runner.sync(ctx, cfg, cfg.PollWatermarkAt, p.newSource(client, cfg), endTime)
+	if err := runner.Do(ctx); err != nil {
+		return fmt.Errorf("sync %s: %w", p.schedule, err)
+	}
+	return nil
+}
+
+func NewAnthropicAnalyticsUsageSource(
+	guardianPolicy *guardian.Policy,
+	cfg Config,
+	processPage func(ctx context.Context, payload []telemetry.LogParams) error,
+	baseURL string,
+	pageLimit int,
+) (timewindowpoller.Source[[]telemetry.LogParams], error) {
+	cfg, client, err := newAnthropicAnalyticsClient(guardianPolicy, ScheduleAnthropicAnalyticsUsage, cfg, baseURL)
+	if err != nil {
+		return nil, err
+	}
+	if processPage == nil {
+		return nil, fmt.Errorf("process page is required")
+	}
+	return &anthropicUsageReportSource{
+		client:      client,
+		cfg:         cfg,
+		pageLimit:   analyticsPageLimit(pageLimit),
+		processPage: processPage,
+	}, nil
+}
+
+func NewAnthropicAnalyticsCostSource(
+	guardianPolicy *guardian.Policy,
+	cfg Config,
+	processPage func(ctx context.Context, payload []telemetry.LogParams) error,
+	baseURL string,
+	pageLimit int,
+) (timewindowpoller.Source[[]telemetry.LogParams], error) {
+	cfg, client, err := newAnthropicAnalyticsClient(guardianPolicy, ScheduleAnthropicAnalyticsCost, cfg, baseURL)
+	if err != nil {
+		return nil, err
+	}
+	if processPage == nil {
+		return nil, fmt.Errorf("process page is required")
+	}
+	return &anthropicCostReportSource{
+		client:      client,
+		cfg:         cfg,
+		pageLimit:   analyticsPageLimit(pageLimit),
+		processPage: processPage,
+	}, nil
+}
+
+func newAnthropicAnalyticsClient(guardianPolicy *guardian.Policy, schedule string, cfg Config, baseURL string) (Config, *anthropicapi.Client, error) {
+	if guardianPolicy == nil {
+		return cfg, nil, fmt.Errorf("guardian policy is required")
+	}
+	if cfg.Provider == "" {
+		cfg.Provider = ProviderAnthropicCompliance
+	}
+	if cfg.Provider != ProviderAnthropicCompliance {
+		return cfg, nil, fmt.Errorf("schedule %q requires provider %q, got %q", schedule, ProviderAnthropicCompliance, cfg.Provider)
+	}
+	return cfg, anthropicapi.New(guardianPolicy, anthropicapi.WithAPIKey(cfg.APIKey), anthropicapi.WithBaseURL(baseURL)), nil
+}
+
+func analyticsPageLimit(limit int) int {
+	if limit > 0 {
+		return limit
+	}
+	return anthropicAnalyticsPageLimit
 }
 
 // analyticsProbeParams is a minimal single-bucket request used only to read a
@@ -166,14 +236,14 @@ func analyticsProbeParams(endTime time.Time) anthropicapi.UserAnalyticsReportPar
 	}
 }
 
-func analyticsWindowParams(start, end time.Time, page string) anthropicapi.UserAnalyticsReportParams {
+func analyticsWindowParams(start, end time.Time, page string, limit int) anthropicapi.UserAnalyticsReportParams {
 	return anthropicapi.UserAnalyticsReportParams{
 		StartingAt:  start,
 		EndingAt:    end,
 		BucketWidth: anthropicAnalyticsBucketWidth,
 		Products:    []string{anthropicAnalyticsProductChat},
 		GroupBy:     []string{"model"},
-		Limit:       anthropicAnalyticsPageLimit,
+		Limit:       limit,
 		Page:        page,
 	}
 }
@@ -185,8 +255,10 @@ func analyticsWindowParams(start, end time.Time, page string) anthropicapi.UserA
 // late-arriving events for up to 30 days; restatements behind the watermark
 // are deliberately not re-read for now.)
 type anthropicUsageReportSource struct {
-	client *anthropicapi.Client
-	cfg    Config
+	client      *anthropicapi.Client
+	cfg         Config
+	pageLimit   int
+	processPage func(ctx context.Context, payload []telemetry.LogParams) error
 }
 
 func (src *anthropicUsageReportSource) UpperBound(ctx context.Context, endTime time.Time) (time.Time, error) {
@@ -201,20 +273,24 @@ func (src *anthropicUsageReportSource) UpperBound(ctx context.Context, endTime t
 	return refreshedAt.UTC(), nil
 }
 
-func (src *anthropicUsageReportSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (page[[]telemetry.LogParams], error) {
-	res, err := src.client.GetUserUsageReport(ctx, analyticsWindowParams(start, end, pageToken))
+func (src *anthropicUsageReportSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (timewindowpoller.Page[[]telemetry.LogParams], error) {
+	res, err := src.client.GetUserUsageReport(ctx, analyticsWindowParams(start, end, pageToken, src.pageLimit))
 	if err != nil {
-		return page[[]telemetry.LogParams]{}, err //nolint:wrapcheck // Preserve HTTPError for access-denied and rate-limit handling upstream.
+		return timewindowpoller.Page[[]telemetry.LogParams]{Payload: nil, NextPage: "", HasMore: false}, err //nolint:wrapcheck // Preserve HTTPError for access-denied and rate-limit handling upstream.
 	}
 	rows, err := buildClaudeChatUsageRows(src.cfg, res.Data)
 	if err != nil {
-		return page[[]telemetry.LogParams]{}, err
+		return timewindowpoller.Page[[]telemetry.LogParams]{Payload: nil, NextPage: "", HasMore: false}, err
 	}
-	return page[[]telemetry.LogParams]{
+	return timewindowpoller.Page[[]telemetry.LogParams]{
 		Payload:  rows,
 		NextPage: res.NextPage,
 		HasMore:  res.HasMore,
 	}, nil
+}
+
+func (src *anthropicUsageReportSource) ProcessPage(ctx context.Context, payload []telemetry.LogParams) error {
+	return src.processPage(ctx, payload)
 }
 
 func (src *anthropicUsageReportSource) RetryAfter(err error) (time.Duration, bool) {
@@ -228,8 +304,10 @@ func (src *anthropicUsageReportSource) RetryAfter(err error) (time.Duration, boo
 // anthropicCostReportSource pulls the user_cost_report for the
 // anthropic_analytics_cost schedule, mirroring the usage source.
 type anthropicCostReportSource struct {
-	client *anthropicapi.Client
-	cfg    Config
+	client      *anthropicapi.Client
+	cfg         Config
+	pageLimit   int
+	processPage func(ctx context.Context, payload []telemetry.LogParams) error
 }
 
 func (src *anthropicCostReportSource) UpperBound(ctx context.Context, endTime time.Time) (time.Time, error) {
@@ -244,20 +322,24 @@ func (src *anthropicCostReportSource) UpperBound(ctx context.Context, endTime ti
 	return refreshedAt.UTC(), nil
 }
 
-func (src *anthropicCostReportSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (page[[]telemetry.LogParams], error) {
-	res, err := src.client.GetUserCostReport(ctx, analyticsWindowParams(start, end, pageToken))
+func (src *anthropicCostReportSource) FetchPage(ctx context.Context, start, end time.Time, pageToken string) (timewindowpoller.Page[[]telemetry.LogParams], error) {
+	res, err := src.client.GetUserCostReport(ctx, analyticsWindowParams(start, end, pageToken, src.pageLimit))
 	if err != nil {
-		return page[[]telemetry.LogParams]{}, err //nolint:wrapcheck // Preserve HTTPError for access-denied and rate-limit handling upstream.
+		return timewindowpoller.Page[[]telemetry.LogParams]{Payload: nil, NextPage: "", HasMore: false}, err //nolint:wrapcheck // Preserve HTTPError for access-denied and rate-limit handling upstream.
 	}
 	rows, err := buildClaudeChatCostRows(src.cfg, res.Data)
 	if err != nil {
-		return page[[]telemetry.LogParams]{}, err
+		return timewindowpoller.Page[[]telemetry.LogParams]{Payload: nil, NextPage: "", HasMore: false}, err
 	}
-	return page[[]telemetry.LogParams]{
+	return timewindowpoller.Page[[]telemetry.LogParams]{
 		Payload:  rows,
 		NextPage: res.NextPage,
 		HasMore:  res.HasMore,
 	}, nil
+}
+
+func (src *anthropicCostReportSource) ProcessPage(ctx context.Context, payload []telemetry.LogParams) error {
+	return src.processPage(ctx, payload)
 }
 
 func (src *anthropicCostReportSource) RetryAfter(err error) (time.Duration, bool) {

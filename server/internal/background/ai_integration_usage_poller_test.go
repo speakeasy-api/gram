@@ -19,12 +19,8 @@ import (
 func TestBuildAIUsagePollerWorkflowID(t *testing.T) {
 	t.Parallel()
 
-	configID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	require.Equal(t, "v1:ai-usage-poller:acme:11111111-1111-1111-1111-111111111111:cursor", buildAIUsagePollerWorkflowID("acme", configID, aiintegrations.ScheduleCursor))
-	require.NotEqual(t,
-		buildAIUsagePollerWorkflowID("acme", configID, aiintegrations.ScheduleAnthropicAnalyticsUsage),
-		buildAIUsagePollerWorkflowID("acme", configID, aiintegrations.ScheduleAnthropicAnalyticsCost),
-	)
+	syncID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	require.Equal(t, "v1:ai-usage-poller:acme:11111111-1111-1111-1111-111111111111", buildAIUsagePollerWorkflowID("acme", syncID))
 }
 
 func TestAIUsagePollerCadenceAndRetryConfig(t *testing.T) {
@@ -38,7 +34,7 @@ func TestAIUsagePollerCadenceAndRetryConfig(t *testing.T) {
 	require.Equal(t, 5, activities.PollUsageMaxAttempts)
 }
 
-func TestAIUsagePollerWorkflowAcceptsEncodedStringInput(t *testing.T) {
+func TestAIUsagePollerWorkflowAcceptsSyncIDInput(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
@@ -46,72 +42,27 @@ func TestAIUsagePollerWorkflowAcceptsEncodedStringInput(t *testing.T) {
 	start := time.Date(2026, 7, 16, 20, 0, 0, 0, time.UTC)
 	env.SetStartTime(start)
 
-	configID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	schedule := aiintegrations.ScheduleAnthropicAnalyticsUsage
+	syncID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	env.SetStartWorkflowOptions(client.StartWorkflowOptions{
-		ID:        buildAIUsagePollerWorkflowID("acme", configID, schedule),
+		ID:        buildAIUsagePollerWorkflowID("acme", syncID),
 		TaskQueue: "test-task-queue",
 	})
 	env.RegisterWorkflow(AIUsagePollerWorkflow)
 
-	var actual activities.PollAIDataInput
+	var actual string
 	env.RegisterActivityWithOptions(
-		func(ctx context.Context, input string) error {
-			decoded, err := activities.DecodePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, time.Time{})
-			require.NoError(t, err)
-			actual = decoded
+		func(_ context.Context, input string) error {
+			actual = input
 			return nil
 		},
 		activity.RegisterOptions{Name: "PollAIData"},
 	)
 
-	env.ExecuteWorkflow("AIUsagePollerWorkflow", activities.EncodePollAIDataInput(configID, schedule, start))
+	env.ExecuteWorkflow("AIUsagePollerWorkflow", syncID.String())
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
-	require.Equal(t, activities.PollAIDataInput{
-		ConfigID: configID.String(),
-		Schedule: schedule,
-		EndTime:  start,
-	}, actual)
-}
-
-func TestAIUsagePollerWorkflowAcceptsLegacyStringInput(t *testing.T) {
-	t.Parallel()
-
-	var suite testsuite.WorkflowTestSuite
-	env := suite.NewTestWorkflowEnvironment()
-	start := time.Date(2026, 7, 16, 20, 0, 0, 0, time.UTC)
-	env.SetStartTime(start)
-
-	configID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	schedule := aiintegrations.ScheduleAnthropicCompliance
-	env.SetStartWorkflowOptions(client.StartWorkflowOptions{
-		ID:        buildAIUsagePollerWorkflowID("acme", configID, schedule),
-		TaskQueue: "test-task-queue",
-	})
-	env.RegisterWorkflow(AIUsagePollerWorkflow)
-
-	var actual activities.PollAIDataInput
-	env.RegisterActivityWithOptions(
-		func(ctx context.Context, input string) error {
-			decoded, err := activities.DecodePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, start)
-			require.NoError(t, err)
-			actual = decoded
-			return nil
-		},
-		activity.RegisterOptions{Name: "PollAIData"},
-	)
-
-	env.ExecuteWorkflow("AIUsagePollerWorkflow", configID.String())
-
-	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError())
-	require.Equal(t, activities.PollAIDataInput{
-		ConfigID: configID.String(),
-		Schedule: schedule,
-		EndTime:  start,
-	}, actual)
+	require.Equal(t, syncID.String(), actual)
 }
 
 func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *testing.T) {
@@ -125,7 +76,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 
 	candidates := []aiintegrations.UsagePollCandidate{
 		{
-			ID:               uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			SyncID:           uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			OrganizationID:   "org_a",
 			OrganizationSlug: "org-a",
 			Provider:         aiintegrations.ProviderCursor,
@@ -133,7 +84,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 			Kind:             aiintegrations.SyncKindTime,
 		},
 		{
-			ID:               uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+			SyncID:           uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 			OrganizationID:   "org_b",
 			OrganizationSlug: "org-b",
 			Provider:         aiintegrations.ProviderCursor,
@@ -141,7 +92,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 			Kind:             aiintegrations.SyncKindTime,
 		},
 		{
-			ID:               uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+			SyncID:           uuid.MustParse("33333333-3333-3333-3333-333333333333"),
 			OrganizationID:   "org_c",
 			OrganizationSlug: "org-c",
 			Provider:         aiintegrations.ProviderCursor,
@@ -149,7 +100,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 			Kind:             aiintegrations.SyncKindTime,
 		},
 		{
-			ID:               uuid.MustParse("44444444-4444-4444-4444-444444444444"),
+			SyncID:           uuid.MustParse("44444444-4444-4444-4444-444444444444"),
 			OrganizationID:   "org_d",
 			OrganizationSlug: "org-d",
 			Provider:         aiintegrations.ProviderCursor,
@@ -157,7 +108,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 			Kind:             aiintegrations.SyncKindTime,
 		},
 		{
-			ID:               uuid.MustParse("55555555-5555-5555-5555-555555555555"),
+			SyncID:           uuid.MustParse("55555555-5555-5555-5555-555555555555"),
 			OrganizationID:   "org_e",
 			OrganizationSlug: "org-e",
 			Provider:         aiintegrations.ProviderCursor,
@@ -165,7 +116,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 			Kind:             aiintegrations.SyncKindTime,
 		},
 		{
-			ID:               uuid.MustParse("66666666-6666-6666-6666-666666666666"),
+			SyncID:           uuid.MustParse("66666666-6666-6666-6666-666666666666"),
 			OrganizationID:   "org_f",
 			OrganizationSlug: "org-f",
 			Provider:         aiintegrations.ProviderCursor,
@@ -173,7 +124,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 			Kind:             aiintegrations.SyncKindTime,
 		},
 		{
-			ID:               uuid.MustParse("77777777-7777-7777-7777-777777777777"),
+			SyncID:           uuid.MustParse("77777777-7777-7777-7777-777777777777"),
 			OrganizationID:   "org_g",
 			OrganizationSlug: "org-g",
 			Provider:         aiintegrations.ProviderCursor,
@@ -206,12 +157,8 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 
 	var synced []string
 	env.RegisterActivityWithOptions(
-		func(ctx context.Context, input string) error {
-			decoded, err := activities.DecodePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, time.Time{})
-			require.NoError(t, err)
-			require.Equal(t, aiintegrations.ScheduleCursor, decoded.Schedule)
-			require.Equal(t, start, decoded.EndTime)
-			synced = append(synced, decoded.ConfigID)
+		func(_ context.Context, input string) error {
+			synced = append(synced, input)
 			return nil
 		},
 		activity.RegisterOptions{Name: "PollAIData"},
@@ -222,7 +169,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, 3, listCalls)
-	require.ElementsMatch(t, candidateIDs(candidates), synced)
+	require.ElementsMatch(t, candidateSyncIDs(candidates), synced)
 }
 
 func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T) {
@@ -235,7 +182,7 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 	env.RegisterWorkflow(AIUsagePollerWorkflow)
 
 	failedCandidate := aiintegrations.UsagePollCandidate{
-		ID:               uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		SyncID:           uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 		OrganizationID:   "org_a",
 		OrganizationSlug: "org-a",
 		Provider:         aiintegrations.ProviderCursor,
@@ -243,7 +190,7 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 		Kind:             aiintegrations.SyncKindTime,
 	}
 	successCandidate := aiintegrations.UsagePollCandidate{
-		ID:               uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		SyncID:           uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		OrganizationID:   "org_b",
 		OrganizationSlug: "org-b",
 		Provider:         aiintegrations.ProviderCursor,
@@ -251,7 +198,7 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 		Kind:             aiintegrations.SyncKindTime,
 	}
 	nextBatchCandidate := aiintegrations.UsagePollCandidate{
-		ID:               uuid.MustParse("33333333-3333-3333-3333-333333333333"),
+		SyncID:           uuid.MustParse("33333333-3333-3333-3333-333333333333"),
 		OrganizationID:   "org_c",
 		OrganizationSlug: "org-c",
 		Provider:         aiintegrations.ProviderCursor,
@@ -284,14 +231,12 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 	attemptsByConfigID := map[string]int{}
 	var synced []string
 	env.RegisterActivityWithOptions(
-		func(ctx context.Context, input string) error {
-			decoded, err := activities.DecodePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, time.Time{})
-			require.NoError(t, err)
-			attemptsByConfigID[decoded.ConfigID]++
-			if decoded.ConfigID == failedCandidate.ID.String() {
+		func(_ context.Context, input string) error {
+			attemptsByConfigID[input]++
+			if input == failedCandidate.SyncID.String() {
 				return errors.New("cursor API unavailable")
 			}
-			synced = append(synced, decoded.ConfigID)
+			synced = append(synced, input)
 			return nil
 		},
 		activity.RegisterOptions{Name: "PollAIData"},
@@ -302,8 +247,8 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, 3, listCalls)
-	require.Equal(t, activities.PollUsageMaxAttempts, attemptsByConfigID[failedCandidate.ID.String()])
-	require.ElementsMatch(t, []string{successCandidate.ID.String(), nextBatchCandidate.ID.String()}, synced)
+	require.Equal(t, activities.PollUsageMaxAttempts, attemptsByConfigID[failedCandidate.SyncID.String()])
+	require.ElementsMatch(t, []string{successCandidate.SyncID.String(), nextBatchCandidate.SyncID.String()}, synced)
 }
 
 func TestAIUsagePollerCoordinatorStartsIndependentWorkflowsForConfigSchedules(t *testing.T) {
@@ -315,10 +260,9 @@ func TestAIUsagePollerCoordinatorStartsIndependentWorkflowsForConfigSchedules(t 
 	env.SetStartTime(start)
 	env.RegisterWorkflow(AIUsagePollerWorkflow)
 
-	configID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	candidates := []aiintegrations.UsagePollCandidate{
 		{
-			ID:               configID,
+			SyncID:           uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			OrganizationID:   "org_a",
 			OrganizationSlug: "org-a",
 			Provider:         aiintegrations.ProviderAnthropicCompliance,
@@ -326,7 +270,7 @@ func TestAIUsagePollerCoordinatorStartsIndependentWorkflowsForConfigSchedules(t 
 			Kind:             aiintegrations.SyncKindTime,
 		},
 		{
-			ID:               configID,
+			SyncID:           uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 			OrganizationID:   "org_a",
 			OrganizationSlug: "org-a",
 			Provider:         aiintegrations.ProviderAnthropicCompliance,
@@ -347,12 +291,10 @@ func TestAIUsagePollerCoordinatorStartsIndependentWorkflowsForConfigSchedules(t 
 		activity.RegisterOptions{Name: "GetAIIntegrationsCandidates"},
 	)
 
-	var schedules []string
+	var synced []string
 	env.RegisterActivityWithOptions(
-		func(ctx context.Context, input string) error {
-			decoded, err := activities.DecodePollAIDataInput(input, activity.GetInfo(ctx).WorkflowExecution.ID, time.Time{})
-			require.NoError(t, err)
-			schedules = append(schedules, decoded.Schedule)
+		func(_ context.Context, input string) error {
+			synced = append(synced, input)
 			return nil
 		},
 		activity.RegisterOptions{Name: "PollAIData"},
@@ -362,16 +304,13 @@ func TestAIUsagePollerCoordinatorStartsIndependentWorkflowsForConfigSchedules(t 
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
-	require.ElementsMatch(t, []string{
-		aiintegrations.ScheduleAnthropicAnalyticsUsage,
-		aiintegrations.ScheduleAnthropicAnalyticsCost,
-	}, schedules)
+	require.ElementsMatch(t, candidateSyncIDs(candidates), synced)
 }
 
-func candidateIDs(candidates []aiintegrations.UsagePollCandidate) []string {
+func candidateSyncIDs(candidates []aiintegrations.UsagePollCandidate) []string {
 	out := make([]string, 0, len(candidates))
 	for _, candidate := range candidates {
-		out = append(out, candidate.ID.String())
+		out = append(out, candidate.SyncID.String())
 	}
 	return out
 }

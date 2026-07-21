@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -97,6 +98,11 @@ const (
 	anthropicAnalyticsInitialLookback = 24 * time.Hour
 )
 
+const (
+	InitialUsagePollLookback          = initialUsagePollLookback
+	AnthropicAnalyticsInitialLookback = anthropicAnalyticsInitialLookback
+)
+
 // pollIntervalForSchedule returns the delay between runs of one independent
 // sync schedule. Unknown schedules fall back to the Cursor interval.
 func pollIntervalForSchedule(schedule string) time.Duration {
@@ -119,6 +125,7 @@ type Store struct {
 
 type Config struct {
 	ID                     uuid.UUID
+	SyncID                 uuid.UUID
 	OrganizationID         string
 	Provider               string
 	ProjectID              uuid.UUID
@@ -127,6 +134,7 @@ type Config struct {
 	APIKey                 string
 	Enabled                bool
 	PollWatermarkAt        time.Time
+	PollCheckpoint         timewindowpoller.PollCheckpoint
 	NextPollAfter          time.Time
 	LastPollError          string
 	LastPollFailedAt       time.Time
@@ -138,12 +146,18 @@ type Config struct {
 }
 
 type UsagePollCandidate struct {
-	ID               uuid.UUID
+	SyncID           uuid.UUID
 	OrganizationID   string
 	OrganizationSlug string
 	Provider         string
 	Schedule         string
 	Kind             string
+}
+
+type SyncSchedule struct {
+	ID       uuid.UUID
+	Schedule string
+	Kind     string
 }
 
 type UpsertResult struct {
@@ -301,6 +315,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		syncRow.LastPollFailedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		syncRow.LastPollSuccessAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		syncRow.ConsecutiveFailures = 0
+		syncRow.PollCheckpoint = pgtype.Text{String: "", Valid: false}
 		syncRow.LastCursorID = pgtype.Text{String: "", Valid: false}
 		if err := q.ResetUsagePollState(ctx, repo.ResetUsagePollStateParams{
 			AiIntegrationConfigID: row.ID,
@@ -395,7 +410,7 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, pollDueBefore time.
 			schedule, kind = fallback.schedule, fallback.kind
 		}
 		candidates = append(candidates, UsagePollCandidate{
-			ID:               row.ID,
+			SyncID:           row.SyncID,
 			OrganizationID:   row.OrganizationID,
 			OrganizationSlug: row.OrganizationSlug,
 			Provider:         row.Provider,
@@ -448,6 +463,66 @@ func (s *Store) ensureActiveSyncSchedules(ctx context.Context) error {
 	return nil
 }
 
+func (s *Store) ListSyncSchedules(ctx context.Context, configID uuid.UUID) ([]SyncSchedule, error) {
+	rows, err := s.repo.ListSyncSchedules(ctx, configID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list ai integration sync schedules")
+	}
+	schedules := make([]SyncSchedule, 0, len(rows))
+	for _, row := range rows {
+		schedules = append(schedules, SyncSchedule{
+			ID:       row.ID,
+			Schedule: row.Schedule.String,
+			Kind:     row.Kind.String,
+		})
+	}
+	return schedules, nil
+}
+
+func (s *Store) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UUID) (Config, string, error) {
+	row, err := s.repo.GetUsagePollConfigBySyncID(ctx, syncID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return Config{}, "", oops.E(oops.CodeNotFound, err, "ai integration usage poll sync not found")
+	case err != nil:
+		return Config{}, "", oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll sync")
+	}
+	cfg, err := s.configFromUsagePollConfigBySyncIDRow(row)
+	if err != nil {
+		return Config{}, "", err
+	}
+	if row.Kind.String == SyncKindTime {
+		normalizeNeverSyncedTimeCheckpoint(&cfg)
+	}
+	return cfg, row.Schedule.String, nil
+}
+
+func (s *Store) GetProviderUsagePollConfig(ctx context.Context, configID uuid.UUID) (Config, string, error) {
+	row, err := s.repo.GetProviderUsagePollConfigByID(ctx, configID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return Config{}, "", oops.E(oops.CodeNotFound, err, "ai integration usage poll config not found")
+	case err != nil:
+		return Config{}, "", oops.E(oops.CodeUnexpected, err, "failed to load ai integration usage poll config")
+	}
+	cfg, err := s.configFromProviderUsagePollConfigByIDRow(row)
+	if err != nil {
+		return Config{}, "", err
+	}
+	schedule := row.Schedule.String
+	if !row.Schedule.Valid {
+		schedule = providerSyncSchedule(row.Provider).schedule
+	}
+	kind := row.Kind.String
+	if !row.Kind.Valid {
+		kind = providerSyncSchedule(row.Provider).kind
+	}
+	if kind == SyncKindTime {
+		normalizeNeverSyncedTimeCheckpoint(&cfg)
+	}
+	return cfg, schedule, nil
+}
+
 func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID, schedule string) (Config, error) {
 	row, err := s.repo.GetUsagePollConfigByID(ctx, repo.GetUsagePollConfigByIDParams{
 		AiIntegrationConfigID: configID,
@@ -463,8 +538,8 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID, sche
 	if err != nil {
 		return Config{}, err
 	}
-	if schedule != ScheduleAnthropicCompliance && !cfg.PollWatermarkAt.After(epochTime()) {
-		cfg.PollWatermarkAt = time.Time{}
+	if schedule != ScheduleAnthropicCompliance {
+		normalizeNeverSyncedTimeCheckpoint(&cfg)
 	}
 	return cfg, nil
 }
@@ -483,12 +558,14 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, 
 }
 
 // SyncScheduleState is the scheduler state for one sync schedule row.
-// WatermarkAt is the exclusive end of the last ingested range; its zero value
-// means the schedule never synced.
+// WatermarkAt is the exclusive end of the last fully ingested range; its zero
+// value means the schedule never completed a window.
 type SyncScheduleState struct {
+	SyncID              uuid.UUID
 	ConfigID            uuid.UUID
 	Schedule            string
 	WatermarkAt         time.Time
+	Checkpoint          timewindowpoller.PollCheckpoint
 	NextPollAfter       time.Time
 	LastPollError       string
 	ConsecutiveFailures int32
@@ -511,30 +588,43 @@ func (s *Store) EnsureTimeSyncSchedule(ctx context.Context, configID uuid.UUID, 
 		return SyncScheduleState{}, oops.E(oops.CodeUnexpected, err, "failed to load ai integration sync schedule")
 	}
 
-	// The epoch watermark is the never-synced sentinel; surface it as the
-	// zero time so callers keep a single "no watermark yet" check.
-	watermark := row.PollWatermarkAt.Time
-	if !watermark.After(epoch) {
-		watermark = time.Time{}
+	checkpoint, err := decodeRowPollCheckpoint(row.PollCheckpoint, row.PollWatermarkAt)
+	if err != nil {
+		return SyncScheduleState{}, oops.E(oops.CodeUnexpected, err, "failed to decode ai integration sync checkpoint")
+	}
+	// The epoch watermark is the never-synced sentinel for legacy rows; surface
+	// it as zero so callers keep a single "no watermark yet" check.
+	if !checkpoint.Partial() && !checkpoint.Watermark.After(epoch) {
+		checkpoint.Watermark = time.Time{}
 	}
 	return SyncScheduleState{
+		SyncID:              row.ID,
 		ConfigID:            row.AiIntegrationConfigID,
 		Schedule:            row.Schedule.String,
-		WatermarkAt:         watermark,
+		WatermarkAt:         checkpoint.Watermark,
+		Checkpoint:          checkpoint,
 		NextPollAfter:       row.NextPollAfter.Time,
 		LastPollError:       row.LastPollError.String,
 		ConsecutiveFailures: row.ConsecutiveFailures,
 	}, nil
 }
 
-// AdvanceSchedulePollWatermark durably records that data up to (but not
-// including) watermark has been ingested for a schedule. It is called after
-// each ingested window so a mid-sync crash re-fetches at most one window.
-func (s *Store) AdvanceSchedulePollWatermark(ctx context.Context, configID uuid.UUID, schedule string, watermark time.Time) error {
-	if err := s.repo.AdvancePollWatermark(ctx, repo.AdvancePollWatermarkParams{
-		AiIntegrationConfigID: configID,
-		Schedule:              conv.ToPGText(schedule),
-		PollWatermarkAt:       conv.ToPGTimestamptz(watermark),
+// AdvanceWatermark durably records a schedule checkpoint. Completed checkpoints
+// move the time watermark forward; partial checkpoints keep the last completed
+// watermark and store the provider's next page token.
+func (s *Store) AdvanceWatermark(ctx context.Context, syncID uuid.UUID, checkpoint timewindowpoller.PollCheckpoint) error {
+	encoded, err := checkpoint.MarshalText()
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to encode ai integration sync checkpoint")
+	}
+	shadowWatermark := checkpoint.Watermark
+	if shadowWatermark.IsZero() {
+		shadowWatermark = epochTime()
+	}
+	if err := s.repo.AdvanceWatermark(ctx, repo.AdvanceWatermarkParams{
+		PollWatermarkAt: conv.ToPGTimestamptz(shadowWatermark),
+		PollCheckpoint:  conv.ToPGText(string(encoded)),
+		SyncID:          syncID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to advance ai integration sync schedule watermark")
 	}
@@ -581,13 +671,45 @@ func epochTime() time.Time {
 	return time.Unix(0, 0).UTC()
 }
 
+func normalizeNeverSyncedTimeCheckpoint(cfg *Config) {
+	if cfg.PollCheckpoint.Partial() || cfg.PollCheckpoint.Watermark.After(epochTime()) {
+		return
+	}
+	cfg.PollCheckpoint.Watermark = time.Time{}
+	cfg.PollWatermarkAt = time.Time{}
+}
+
+func decodeRowPollCheckpoint(encoded pgtype.Text, legacy pgtype.Timestamptz) (timewindowpoller.PollCheckpoint, error) {
+	legacyWatermark := time.Time{}
+	if legacy.Valid {
+		legacyWatermark = legacy.Time
+	}
+	if !encoded.Valid {
+		checkpoint, err := timewindowpoller.DecodeCheckpoint("", legacyWatermark)
+		if err != nil {
+			return timewindowpoller.CompletedCheckpoint(time.Time{}), fmt.Errorf("decode legacy poll checkpoint: %w", err)
+		}
+		return checkpoint, nil
+	}
+	checkpoint, err := timewindowpoller.DecodeCheckpoint(encoded.String, legacyWatermark)
+	if err != nil {
+		return timewindowpoller.CompletedCheckpoint(time.Time{}), fmt.Errorf("decode poll checkpoint: %w", err)
+	}
+	return checkpoint, nil
+}
+
 func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {
 	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
+	checkpoint, err := decodeRowPollCheckpoint(row.PollCheckpoint, row.PollWatermarkAt)
+	if err != nil {
+		return emptyConfig(row.OrganizationID, row.Provider), err
+	}
 	return Config{
 		ID:                     row.ID,
+		SyncID:                 row.SyncID,
 		OrganizationID:         row.OrganizationID,
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
@@ -595,7 +717,8 @@ func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config,
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
-		PollWatermarkAt:        row.PollWatermarkAt.Time,
+		PollWatermarkAt:        checkpoint.Watermark,
+		PollCheckpoint:         checkpoint,
 		NextPollAfter:          row.NextPollAfter.Time,
 		LastPollError:          row.LastPollError.String,
 		LastPollFailedAt:       row.LastPollFailedAt.Time,
@@ -612,8 +735,13 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
+	checkpoint, err := decodeRowPollCheckpoint(row.PollCheckpoint, row.PollWatermarkAt)
+	if err != nil {
+		return emptyConfig(row.OrganizationID, row.Provider), err
+	}
 	return Config{
 		ID:                     row.ID,
+		SyncID:                 row.SyncID,
 		OrganizationID:         row.OrganizationID,
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
@@ -621,7 +749,8 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
-		PollWatermarkAt:        row.PollWatermarkAt.Time,
+		PollWatermarkAt:        checkpoint.Watermark,
+		PollCheckpoint:         checkpoint,
 		NextPollAfter:          row.NextPollAfter.Time,
 		LastPollError:          row.LastPollError.String,
 		LastPollFailedAt:       row.LastPollFailedAt.Time,
@@ -638,8 +767,13 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
+	checkpoint, err := decodeRowPollCheckpoint(row.PollCheckpoint, row.PollWatermarkAt)
+	if err != nil {
+		return emptyConfig(row.OrganizationID, row.Provider), err
+	}
 	return Config{
 		ID:                     row.ID,
+		SyncID:                 row.SyncID,
 		OrganizationID:         row.OrganizationID,
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
@@ -647,7 +781,72 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
-		PollWatermarkAt:        row.PollWatermarkAt.Time,
+		PollWatermarkAt:        checkpoint.Watermark,
+		PollCheckpoint:         checkpoint,
+		NextPollAfter:          row.NextPollAfter.Time,
+		LastPollError:          row.LastPollError.String,
+		LastPollFailedAt:       row.LastPollFailedAt.Time,
+		LastPollSuccessAt:      row.LastPollSuccessAt.Time,
+		ConsecutiveFailures:    row.ConsecutiveFailures,
+		LastCursor:             row.LastCursorID.String,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
+	}, nil
+}
+
+func (s *Store) configFromUsagePollConfigBySyncIDRow(row repo.GetUsagePollConfigBySyncIDRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+	if err != nil {
+		return emptyConfig(row.OrganizationID, row.Provider), err
+	}
+	checkpoint, err := decodeRowPollCheckpoint(row.PollCheckpoint, row.PollWatermarkAt)
+	if err != nil {
+		return emptyConfig(row.OrganizationID, row.Provider), err
+	}
+	return Config{
+		ID:                     row.ID,
+		SyncID:                 row.SyncID,
+		OrganizationID:         row.OrganizationID,
+		Provider:               row.Provider,
+		ProjectID:              row.ProjectID,
+		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
+		APIKey:                 apiKey,
+		Enabled:                row.Enabled,
+		PollWatermarkAt:        checkpoint.Watermark,
+		PollCheckpoint:         checkpoint,
+		NextPollAfter:          row.NextPollAfter.Time,
+		LastPollError:          row.LastPollError.String,
+		LastPollFailedAt:       row.LastPollFailedAt.Time,
+		LastPollSuccessAt:      row.LastPollSuccessAt.Time,
+		ConsecutiveFailures:    row.ConsecutiveFailures,
+		LastCursor:             row.LastCursorID.String,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
+	}, nil
+}
+
+func (s *Store) configFromProviderUsagePollConfigByIDRow(row repo.GetProviderUsagePollConfigByIDRow) (Config, error) {
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+	if err != nil {
+		return emptyConfig(row.OrganizationID, row.Provider), err
+	}
+	checkpoint, err := decodeRowPollCheckpoint(row.PollCheckpoint, row.PollWatermarkAt)
+	if err != nil {
+		return emptyConfig(row.OrganizationID, row.Provider), err
+	}
+	return Config{
+		ID:                     row.ID,
+		SyncID:                 row.SyncID,
+		OrganizationID:         row.OrganizationID,
+		Provider:               row.Provider,
+		ProjectID:              row.ProjectID,
+		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
+		APIKey:                 apiKey,
+		Enabled:                row.Enabled,
+		PollWatermarkAt:        checkpoint.Watermark,
+		PollCheckpoint:         checkpoint,
 		NextPollAfter:          row.NextPollAfter.Time,
 		LastPollError:          row.LastPollError.String,
 		LastPollFailedAt:       row.LastPollFailedAt.Time,
@@ -664,8 +863,13 @@ func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.Ensure
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
+	checkpoint, err := decodeRowPollCheckpoint(syncRow.PollCheckpoint, syncRow.PollWatermarkAt)
+	if err != nil {
+		return emptyConfig(row.OrganizationID, row.Provider), err
+	}
 	return Config{
 		ID:                     row.ID,
+		SyncID:                 syncRow.ID,
 		OrganizationID:         row.OrganizationID,
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
@@ -673,7 +877,8 @@ func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.Ensure
 		BillingMode:            conv.FromPGTextOrEmpty[string](row.BillingMode),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
-		PollWatermarkAt:        syncRow.PollWatermarkAt.Time,
+		PollWatermarkAt:        checkpoint.Watermark,
+		PollCheckpoint:         checkpoint,
 		NextPollAfter:          syncRow.NextPollAfter.Time,
 		LastPollError:          syncRow.LastPollError.String,
 		LastPollFailedAt:       syncRow.LastPollFailedAt.Time,
@@ -711,6 +916,7 @@ func (s *Store) decryptAPIKey(stored string) (string, error) {
 func emptyConfig(orgID string, provider string) Config {
 	return Config{
 		ID:                     uuid.Nil,
+		SyncID:                 uuid.Nil,
 		OrganizationID:         orgID,
 		Provider:               provider,
 		ProjectID:              uuid.Nil,
@@ -719,6 +925,7 @@ func emptyConfig(orgID string, provider string) Config {
 		APIKey:                 "",
 		Enabled:                false,
 		PollWatermarkAt:        time.Time{},
+		PollCheckpoint:         timewindowpoller.CompletedCheckpoint(time.Time{}),
 		NextPollAfter:          time.Time{},
 		LastPollError:          "",
 		LastPollFailedAt:       time.Time{},

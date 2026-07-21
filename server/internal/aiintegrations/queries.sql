@@ -13,6 +13,7 @@ SELECT
     c.*
   , s.id AS sync_id
   , s.poll_watermark_at
+  , s.poll_checkpoint
   , s.next_poll_after
   , s.last_poll_error
   , s.last_poll_failed_at
@@ -174,6 +175,7 @@ SELECT
     c.*
   , s.id AS sync_id
   , s.poll_watermark_at
+  , s.poll_checkpoint
   , s.next_poll_after
   , s.last_poll_error
   , s.last_poll_failed_at
@@ -195,6 +197,7 @@ ORDER BY c.organization_id, c.provider;
 -- name: ResetUsagePollState :exec
 UPDATE ai_integration_syncs
 SET poll_watermark_at = @poll_watermark_at,
+    poll_checkpoint = NULL,
     next_poll_after = @next_poll_after,
     last_poll_error = NULL,
     last_poll_failed_at = NULL,
@@ -202,12 +205,11 @@ SET poll_watermark_at = @poll_watermark_at,
     consecutive_failures = 0,
     last_cursor_id = NULL,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = @ai_integration_config_id
-  AND schedule = @schedule;
+WHERE id = @sync_id;
 
 -- name: ListUsagePollCandidates :many
 SELECT
-    c.id
+    s.id AS sync_id
   , c.organization_id
   , om.slug AS organization_slug
   , c.provider
@@ -223,11 +225,62 @@ WHERE c.enabled IS TRUE
 ORDER BY s.next_poll_after ASC, c.organization_id ASC, s.schedule ASC
 LIMIT @limit_count;
 
+-- name: GetUsagePollConfigBySyncID :one
+SELECT
+    c.*
+  , s.id AS sync_id
+  , s.schedule
+  , s.kind
+  , s.poll_watermark_at
+  , s.poll_checkpoint
+  , s.next_poll_after
+  , s.last_poll_error
+  , s.last_poll_failed_at
+  , s.last_poll_success_at
+  , s.consecutive_failures
+  , s.last_cursor_id
+  , s.created_at AS sync_created_at
+  , s.updated_at AS sync_updated_at
+FROM ai_integration_syncs s
+JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
+WHERE s.id = @sync_id
+  AND c.enabled IS TRUE
+  AND c.deleted IS FALSE
+  AND c.api_key_encrypted IS NOT NULL;
+
+-- name: GetProviderUsagePollConfigByID :one
+SELECT
+    c.*
+  , s.id AS sync_id
+  , s.schedule
+  , s.kind
+  , s.poll_watermark_at
+  , s.poll_checkpoint
+  , s.next_poll_after
+  , s.last_poll_error
+  , s.last_poll_failed_at
+  , s.last_poll_success_at
+  , s.consecutive_failures
+  , s.last_cursor_id
+  , s.created_at AS sync_created_at
+  , s.updated_at AS sync_updated_at
+FROM ai_integration_configs c
+JOIN ai_integration_syncs s
+  ON s.ai_integration_config_id = c.id
+ AND (s.schedule = c.provider OR s.schedule IS NULL)
+WHERE c.id = @ai_integration_config_id
+  AND c.enabled IS TRUE
+  AND c.deleted IS FALSE
+  AND c.api_key_encrypted IS NOT NULL
+ORDER BY s.schedule ASC NULLS LAST
+LIMIT 1;
+
 -- name: GetUsagePollConfigByID :one
 SELECT
     c.*
   , s.id AS sync_id
   , s.poll_watermark_at
+  , s.poll_checkpoint
   , s.next_poll_after
   , s.last_poll_error
   , s.last_poll_failed_at
@@ -248,6 +301,7 @@ WHERE c.id = @ai_integration_config_id
 -- name: RecordUsagePollSuccess :exec
 UPDATE ai_integration_syncs
 SET poll_watermark_at = @poll_watermark_at,
+    poll_checkpoint = NULL,
     next_poll_after = @next_poll_after,
     last_poll_error = NULL,
     last_poll_failed_at = NULL,
@@ -255,8 +309,7 @@ SET poll_watermark_at = @poll_watermark_at,
     consecutive_failures = 0,
     last_cursor_id = @last_cursor_id,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = @ai_integration_config_id
-  AND schedule = @schedule;
+WHERE id = @sync_id;
 
 -- name: AdvanceUsagePollCursor :exec
 UPDATE ai_integration_syncs
@@ -275,12 +328,12 @@ SET next_poll_after = @next_poll_after,
 WHERE ai_integration_config_id = @ai_integration_config_id
   AND schedule = @schedule;
 
--- name: AdvancePollWatermark :exec
+-- name: AdvanceWatermark :exec
 UPDATE ai_integration_syncs
 SET poll_watermark_at = @poll_watermark_at,
+    poll_checkpoint = @poll_checkpoint,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = @ai_integration_config_id
-  AND schedule = @schedule;
+WHERE id = @sync_id;
 
 -- RecordPollSuccessKeepWatermark reschedules a sync and clears failure state
 -- without touching the watermark or cursor. Used by schedules that advance
@@ -298,7 +351,7 @@ WHERE ai_integration_config_id = @ai_integration_config_id
   AND schedule = @schedule;
 
 -- name: ListSyncSchedules :many
-SELECT schedule, kind
+SELECT id, schedule, kind
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = @ai_integration_config_id
 ORDER BY schedule;

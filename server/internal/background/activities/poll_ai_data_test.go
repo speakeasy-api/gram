@@ -23,65 +23,23 @@ import (
 func TestPollAIDataInputRoundTripsThroughTemporal(t *testing.T) {
 	t.Parallel()
 
-	configID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	input := EncodePollAIDataInput(configID, aiintegrations.ScheduleAnthropicAnalyticsCost, time.Date(2026, 7, 16, 20, 0, 0, 0, time.UTC))
+	syncID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	input := syncID.String()
 	echo := func(_ context.Context, decoded string) (string, error) {
 		return decoded, nil
 	}
 
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
-	env.RegisterActivityWithOptions(echo, activity.RegisterOptions{Name: "DecodePollAIDataInput"})
+	env.RegisterActivityWithOptions(echo, activity.RegisterOptions{Name: "EchoPollAIDataInput"})
 
-	value, err := env.ExecuteActivity("DecodePollAIDataInput", input)
+	value, err := env.ExecuteActivity("EchoPollAIDataInput", input)
 	require.NoError(t, err)
 
 	var actual string
 	require.NoError(t, value.Get(&actual))
 	require.Equal(t, input, actual)
-
-	decoded, err := DecodePollAIDataInput(actual, "", time.Time{})
-	require.NoError(t, err)
-	require.Equal(t, PollAIDataInput{
-		ConfigID: configID.String(),
-		Schedule: aiintegrations.ScheduleAnthropicAnalyticsCost,
-		EndTime:  time.Date(2026, 7, 16, 20, 0, 0, 0, time.UTC),
-	}, decoded)
-}
-
-func TestPollAIDataInputDecodesLegacyStringFromWorkflowID(t *testing.T) {
-	t.Parallel()
-
-	configID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	endTime := time.Date(2026, 7, 16, 20, 0, 0, 0, time.UTC)
-
-	decoded, err := DecodePollAIDataInput(
-		configID.String(),
-		"v1:ai-usage-poller:acme:22222222-2222-2222-2222-222222222222:anthropic_compliance",
-		endTime,
-	)
-	require.NoError(t, err)
-	require.Equal(t, PollAIDataInput{
-		ConfigID: configID.String(),
-		Schedule: aiintegrations.ScheduleAnthropicCompliance,
-		EndTime:  endTime,
-	}, decoded)
-}
-
-func TestPollAIDataInputRejectsMalformedURN(t *testing.T) {
-	t.Parallel()
-
-	_, err := DecodePollAIDataInput(PollAIDataInputPrefix+"missing-schedule", "", time.Time{})
-	require.ErrorContains(t, err, "invalid format")
-}
-
-func TestPollAIDataInputRejectsUnsupportedSchedule(t *testing.T) {
-	t.Parallel()
-
-	configID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	input := fmt.Sprintf("%s%s:%s:%d", PollAIDataInputPrefix, configID.String(), "unknown", time.Now().UTC().UnixNano())
-	_, err := DecodePollAIDataInput(input, "", time.Time{})
-	require.ErrorContains(t, err, "unsupported schedule")
+	require.Equal(t, syncID.String(), actual)
 }
 
 func TestPollRejectedByProviderMatchesPermanentProviderFailures(t *testing.T) {
