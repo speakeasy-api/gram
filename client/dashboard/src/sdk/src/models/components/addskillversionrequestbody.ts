@@ -3,12 +3,17 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type AddSkillVersionRequestBody = {
   /**
    * The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
    */
   content: string;
+  /**
+   * The optional source version this new version was derived from.
+   */
+  derivedFromVersionId?: string | undefined;
   /**
    * The skill ID.
    */
@@ -18,6 +23,7 @@ export type AddSkillVersionRequestBody = {
 /** @internal */
 export type AddSkillVersionRequestBody$Outbound = {
   content: string;
+  derived_from_version_id?: string | undefined;
   id: string;
 };
 
@@ -25,10 +31,18 @@ export type AddSkillVersionRequestBody$Outbound = {
 export const AddSkillVersionRequestBody$outboundSchema: z.ZodMiniType<
   AddSkillVersionRequestBody$Outbound,
   AddSkillVersionRequestBody
-> = z.object({
-  content: z.string(),
-  id: z.string(),
-});
+> = z.pipe(
+  z.object({
+    content: z.string(),
+    derivedFromVersionId: z.optional(z.string()),
+    id: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      derivedFromVersionId: "derived_from_version_id",
+    });
+  }),
+);
 
 export function addSkillVersionRequestBodyToJSON(
   addSkillVersionRequestBody: AddSkillVersionRequestBody,

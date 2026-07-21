@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -111,6 +113,14 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
+	skillCapture, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
+	if observationErr != nil {
+		logger.WarnContext(ctx, "failed to record skill activation",
+			attr.SlogError(observationErr),
+			attr.SlogName(canonicalSkillName(payload)),
+		)
+		skillCapture = nil
+	}
 	if !s.isHookDuplicate(ctx) {
 		// Detach from request cancellation: the idempotency token is already
 		// claimed, so a client disconnect here would otherwise drop the event
@@ -133,9 +143,67 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// duplicate).
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
 	if blockReason != "" {
-		return s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason)), nil
+		return s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture), nil
 	}
-	return s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult()), nil
+	return s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), skillCapture), nil
+}
+
+type skillCaptureSignal struct {
+	rawSHA256 string
+	known     bool
+}
+
+func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, seenAt time.Time, blockReason string) (*skillCaptureSignal, error) {
+	if payload.Data == nil || payload.Data.Skill == nil {
+		return nil, nil
+	}
+	skill := payload.Data.Skill
+	name := strings.TrimSpace(skill.Name)
+	if name == "" || !isExplicitSkillActivation(payload) && blockReason != "" {
+		return nil, nil
+	}
+
+	rawSHA256 := normalizeRawSHA256(conv.PtrValOr(skill.RawSha256, ""))
+	var capture *skillCaptureSignal
+	if rawSHA256 != "" {
+		known, err := s.repo.RememberKnownSkillRawHash(ctx, repo.RememberKnownSkillRawHashParams{
+			ProjectID: *authCtx.ProjectID,
+			RawSha256: rawSHA256,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("resolve known skill raw hash: %w", err)
+		}
+		capture = &skillCaptureSignal{rawSHA256: rawSHA256, known: known}
+	}
+	if err := s.repo.InsertSkillObservation(ctx, repo.InsertSkillObservationParams{
+		ProjectID:      *authCtx.ProjectID,
+		IdempotencyKey: conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, ""))),
+		Provider:       strings.TrimSpace(payload.Source.Adapter),
+		UserID:         conv.ToPGTextEmpty(actor.UserID),
+		UserEmail:      conv.ToPGTextEmpty(actor.Email),
+		Hostname:       conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(payload.Source.Hostname, ""))),
+		SessionID:      conv.ToPGTextEmpty(canonicalSessionID(payload)),
+		SkillName:      name,
+		Source:         conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(skill.Source, ""))),
+		SourceLevel:    conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(skill.SourceLevel, ""))),
+		SourcePath:     conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(skill.SourcePath, ""))),
+		RawSha256:      conv.ToPGTextEmpty(rawSHA256),
+		SeenAt:         conv.ToPGTimestamptz(seenAt),
+	}); err != nil {
+		return nil, fmt.Errorf("insert skill observation: %w", err)
+	}
+	return capture, nil
+}
+
+func normalizeRawSHA256(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if len(value) != 64 {
+		return ""
+	}
+	if _, err := hex.DecodeString(value); err != nil {
+		return ""
+	}
+	return value
 }
 
 // withOrgSettings attaches the org-level settings hook senders mirror locally
@@ -144,7 +212,7 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 // setting — so a sender's cached copy converges on any successful exchange.
 // Best-effort: on lookup failure the effects are omitted and senders keep
 // their last-seen value.
-func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.IngestHookResult) *gen.IngestHookResult {
+func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.IngestHookResult, capture *skillCaptureSignal) *gen.IngestHookResult {
 	if s.productFeatures == nil {
 		return res
 	}
@@ -156,18 +224,50 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 	// (a deadline-less pool acquire can wait unboundedly under saturation).
 	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	defer cancel()
-	failOpen, err := s.productFeatures.IsFeatureEnabled(lookupCtx, orgID, productfeatures.FeatureHooksFailOpen)
-	if err != nil {
+	lookup := func(feature productfeatures.Feature) (bool, error) {
+		return s.productFeatures.IsFeatureEnabled(lookupCtx, orgID, feature)
+	}
+	settings := map[string]any{}
+	failOpen, failOpenErr := lookup(productfeatures.FeatureHooksFailOpen)
+	if failOpenErr != nil {
 		s.logger.WarnContext(ctx, "failed to resolve hooks fail-open setting for ingest effects",
-			attr.SlogError(err),
+			attr.SlogError(failOpenErr),
 			attr.SlogOrganizationID(orgID),
 		)
-		return res
+	} else {
+		settings["fail_open"] = failOpen
 	}
-	res.Effects = map[string]any{
-		"org_settings": map[string]any{
-			"fail_open": failOpen,
-		},
+	metadataOnly, metadataErr := lookup(productfeatures.FeatureSkillCaptureMetadataOnly)
+	if metadataErr != nil {
+		s.logger.WarnContext(ctx, "failed to resolve skill capture privacy setting for ingest effects",
+			attr.SlogError(metadataErr),
+			attr.SlogOrganizationID(orgID),
+		)
+	} else {
+		settings["skill_capture_metadata_only"] = metadataOnly
+	}
+	if res.Effects == nil {
+		res.Effects = map[string]any{}
+	}
+	if len(settings) > 0 {
+		res.Effects["org_settings"] = settings
+	}
+	if capture != nil && metadataErr == nil && !metadataOnly {
+		skillsEnabled, skillsErr := lookup(productfeatures.FeatureSkills)
+		if skillsErr != nil {
+			s.logger.WarnContext(ctx, "failed to resolve skills entitlement for ingest effects",
+				attr.SlogError(skillsErr),
+				attr.SlogOrganizationID(orgID),
+			)
+		} else if skillsEnabled {
+			res.Effects["skill_capture"] = map[string]any{
+				"raw_sha256":       capture.rawSHA256,
+				"content_required": !capture.known,
+			}
+		}
+	}
+	if len(res.Effects) == 0 {
+		res.Effects = nil
 	}
 	return res
 }
@@ -489,8 +589,12 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
+	// Hostname counts as cacheable identity: a session ingested with an
+	// org-scoped key and no self-reported email carries nothing else, and the
+	// OTEL path needs the cached hostname to stamp Claude cost rows so the
+	// user breakdown can fall back to the device.
 	if strings.TrimSpace(payload.Event.Type) == "session.started" &&
-		metadata.SessionID != "" && (metadata.UserID != "" || metadata.UserEmail != "") {
+		metadata.SessionID != "" && (metadata.UserID != "" || metadata.UserEmail != "" || metadata.Hostname != "") {
 		cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
 		err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
 		cancel()
@@ -540,6 +644,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
+		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.Source.Hostname, "")),
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -558,6 +663,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		metadata.ExternalAccountUUID = cached.ExternalAccountUUID
 		metadata.ExternalAccountID = cached.ExternalAccountID
 		metadata.DeviceID = cached.DeviceID
+		metadata.Hostname = conv.Default(metadata.Hostname, cached.Hostname)
 		metadata.AccountType = cached.AccountType
 		metadata.BillingMode = cached.BillingMode
 		metadata.UserAccountID = cached.UserAccountID

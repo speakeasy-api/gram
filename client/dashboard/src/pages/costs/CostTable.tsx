@@ -83,15 +83,23 @@ function LegendTooltip({
   );
 }
 
-// A plain info icon + tooltip for explaining a column header.
+// A plain info icon + tooltip for explaining a column header or a special row.
+// The trigger is a span (not the Radix default button) so it can also render
+// inside the row drill buttons without nesting interactive elements.
 function InfoTooltip({ text }: { text: string }): JSX.Element {
   return (
     <Tooltip>
-      <TooltipTrigger
-        aria-label={text}
-        className="text-muted-foreground inline-flex cursor-help"
-      >
-        <Info className="size-3.5" />
+      <TooltipTrigger asChild>
+        {/* stopPropagation keeps a click on the icon from activating the
+            surrounding row drill button. */}
+        <span
+          tabIndex={0}
+          aria-label={text}
+          onClick={(event) => event.stopPropagation()}
+          className="text-muted-foreground inline-flex shrink-0 cursor-help"
+        >
+          <Info className="size-3.5" />
+        </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-56">{text}</TooltipContent>
     </Tooltip>
@@ -101,6 +109,13 @@ function InfoTooltip({ text }: { text: string }): JSX.Element {
 const GREEN = "#10b981";
 const RED = "#f43f5e";
 const GREY = "#94a3b8";
+
+// Why the Team-wide API Usage row exists, surfaced as an info tooltip on the
+// user breakdown's empty-identity bucket.
+const TEAM_WIDE_USAGE_TOOLTIP =
+  "Sessions authenticated with a shared company credential (an API key or " +
+  "gateway) carry no user identity, so their usage can't be attributed to an " +
+  "individual and is grouped here.";
 
 // "" is the "(unset)" bucket — a real slice (everyone missing this attribute),
 // so it stays drillable. Only "Other" — the synthetic top-N overflow rollup of
@@ -447,6 +462,9 @@ export function CostTable({
                 <span className="truncate font-medium">
                   {displayName(groupBy, row.groupValue)}
                 </span>
+                {groupBy === Dimension.Email && row.groupValue === "" && (
+                  <InfoTooltip text={TEAM_WIDE_USAGE_TOOLTIP} />
+                )}
                 {drillable && (
                   <ChevronRight className="text-muted-foreground size-4 shrink-0" />
                 )}

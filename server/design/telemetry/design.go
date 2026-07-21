@@ -1384,6 +1384,7 @@ var queryDimensions = []any{
 	"division_name",
 	"cost_center_name",
 	"email",
+	"hostname", // device hostname reported by the Go hooks (gram.hook.hostname)
 	"model",
 	"hook_source",  // consuming surface (claude-code, cowork, cursor, ...)
 	"account_type", // AI account classification (team | personal | unclassified)

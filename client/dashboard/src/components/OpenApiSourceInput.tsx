@@ -125,8 +125,14 @@ export function OpenApiSourceInput({
               disabled={!url.trim() || fetchMutation.isPending}
               className="w-full"
             >
-              {fetchMutation.isPending && <Spinner className="mr-2 size-4" />}
-              {fetchMutation.isPending ? "Loading..." : "Load OpenAPI Spec"}
+              {fetchMutation.isPending && (
+                <Button.LeftIcon>
+                  <Spinner className="size-4" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {fetchMutation.isPending ? "Loading..." : "Load OpenAPI Spec"}
+              </Button.Text>
             </Button>
           </Stack>
         </form>

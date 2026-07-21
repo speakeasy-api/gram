@@ -72,6 +72,15 @@ describe("scopePhrase", () => {
       "(unset)'s spend",
     );
   });
+
+  // The empty user bucket is the company credential's spend (Claude Code on an
+  // API key/gateway emits no user identity), so it reads as the shared team
+  // account rather than "(unset)".
+  it("names the unset user bucket the team-wide account", () => {
+    expect(scopePhrase([at(Dimension.Email, "")], "spend")).toBe(
+      "Team-wide API Usage's spend",
+    );
+  });
 });
 
 // ── Title + caption, per breakdown axis ─────────────────────────────────────
@@ -162,6 +171,13 @@ const CASES: Case[] = [
     empty: "Showing all project spend, broken down by Provider.",
     single: "Showing all project spend — $4.04, all from a single Provider.",
     split: "Showing all project spend — $4.04 across 3 Providers.",
+  },
+  {
+    dim: Dimension.Hostname,
+    title: "Cost by Device",
+    empty: "Showing all project spend, broken down by Device.",
+    single: "Showing all project spend — $4.04, all from a single Device.",
+    split: "Showing all project spend — $4.04 across 3 Devices.",
   },
   {
     dim: Dimension.Role,

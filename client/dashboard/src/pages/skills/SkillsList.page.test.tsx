@@ -14,6 +14,7 @@ const testState = vi.hoisted(() => ({
   isFetchNextPageError: false,
   error: null as Error | null,
   skills: [] as Array<Record<string, unknown>>,
+  unknownEnabled: false,
 }));
 
 vi.mock("@/components/filters", () => ({
@@ -55,6 +56,25 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
     fetchNextPage: testState.fetchNextPage,
     refetch: vi.fn(),
   }),
+}));
+vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
+  useUnknownSkillActivationsInfinite: (
+    _request: unknown,
+    _security: unknown,
+    options?: { enabled?: boolean },
+  ) => {
+    testState.unknownEnabled = options?.enabled ?? true;
+    return {
+      data: { pages: [{ result: { activations: [] } }] },
+      isPending: false,
+      isFetchingNextPage: false,
+      isFetchNextPageError: false,
+      hasNextPage: false,
+      error: null,
+      fetchNextPage: vi.fn(),
+      refetch: vi.fn(),
+    };
+  },
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -120,6 +140,7 @@ function makeSkills(count: number): Array<Record<string, unknown>> {
     classification: "custom",
     latestVersionId: `version_${index}`,
     versionCount: 1,
+    seenCount: 0,
     createdAt: new Date("2026-07-16T00:00:00Z"),
     updatedAt: new Date("2026-07-16T00:00:00Z"),
   }));
@@ -131,6 +152,7 @@ beforeEach(() => {
   testState.isFetchNextPageError = false;
   testState.error = null;
   testState.skills = makeSkills(250);
+  testState.unknownEnabled = false;
 });
 
 afterEach(cleanup);
@@ -168,5 +190,16 @@ describe("SkillsList pagination surfaces", () => {
       screen.getByText("Search incomplete. Retry to check remaining skills."),
     ).toBeTruthy();
     expect(screen.queryByText("No matching skills.")).toBeNull();
+  });
+
+  it("loads unknown activations only when requested", () => {
+    render(<SkillsList />);
+
+    expect(testState.unknownEnabled).toBe(false);
+    fireEvent.click(
+      screen.getByRole("button", { name: "View unknown activations" }),
+    );
+    expect(testState.unknownEnabled).toBe(true);
+    expect(screen.getByText("No unknown activations found.")).toBeTruthy();
   });
 });

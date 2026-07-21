@@ -137,6 +137,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			clients[entry.ServerURL] = cl
 		}
 		res := cl.send(ctx, a.c, entry.Envelope, entry.IdempotencyKey)
+		replayCreds := a.c
 		if res.authRejected {
 			// A rejected credential is machine state, not event state — the
 			// backlog would deliver fine after a re-login or key rotation.
@@ -147,6 +148,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 				org := creds{ServerURL: entry.ServerURL, APIKey: a.orgKey, Project: entry.ProjectSlug, Email: "", Org: entry.OrgID, Source: credOrg}
 				res = cl.send(ctx, org, entry.Envelope, entry.IdempotencyKey)
 				if !res.authRejected {
+					replayCreds = org
 					auths[key] = drainAuth{c: org, ok: true, orgKey: a.orgKey}
 				}
 			}
@@ -158,6 +160,10 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 		}
 		switch {
 		case res.accepted():
+			if err := uploadSkillContent(ctx, replayCreds, res, replayedSkill(entry)); err != nil {
+				s.Skipped++
+				continue
+			}
 			if removeSpoolEntry(path) {
 				s.Replayed++
 			} else {
@@ -181,6 +187,21 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 	}
 	s.Remaining = len(listSpoolEntries(dir))
 	return s
+}
+
+func replayedSkill(entry spoolEntry) *resolvedSkill {
+	if entry.SkillSourceRoot == "" || entry.Envelope.Data == nil || entry.Envelope.Data.Skill == nil ||
+		entry.Envelope.Data.Skill.SourcePath == nil || entry.Envelope.Data.Skill.RawSha256 == nil {
+		return nil
+	}
+	return &resolvedSkill{
+		content:      "",
+		rawSHA256:    *entry.Envelope.Data.Skill.RawSha256,
+		sourcePath:   *entry.Envelope.Data.Skill.SourcePath,
+		sourceLevel:  "",
+		root:         entry.SkillSourceRoot,
+		captureReady: true,
+	}
 }
 
 // decodeSpoolEntry unmarshals an entry, restoring every any-typed envelope
@@ -371,10 +392,10 @@ func (r *Relay) maybeSpawnDrain() {
 // finishExchange runs the spool bookkeeping for a final exchange result: an
 // unsent payload is kept for replay; a healthy exchange flushes any backlog
 // via a detached drain.
-func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, res ingestResult) {
+func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, res ingestResult, skill *resolvedSkill) {
 	switch {
 	case res.unsent():
-		r.spoolUnsent(idemKey, payload)
+		r.spoolUnsent(idemKey, payload, skill)
 	case res.accepted():
 		r.maybeSpawnDrain()
 	}

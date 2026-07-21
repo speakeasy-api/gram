@@ -21,6 +21,7 @@ export const FeatureName = {
   HooksFailOpen: "hooks_fail_open",
   CustomModelKeys: "custom_model_keys",
   Skills: "skills",
+  SkillCaptureMetadataOnly: "skill_capture_metadata_only",
 } as const;
 /**
  * Name of the feature to update
