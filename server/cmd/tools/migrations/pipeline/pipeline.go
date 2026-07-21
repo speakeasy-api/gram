@@ -79,18 +79,30 @@ func Run[A, B any](ctx context.Context, src Source[A], tf Transformer[A, B], sin
 	})
 
 	// Transform stage: the sole producer to the sink channel. It closes that
-	// channel ONLY after cleanly draining the source, so a closed sink channel
-	// unambiguously means "producer finished successfully". On any error it
-	// returns WITHOUT closing sinkCh; the shared context is cancelled, and the
-	// sink unwinds via ctx.Done rather than mistaking the failure for EOF and
+	// channel ONLY after the source channel is closed cleanly (source success),
+	// so a closed sink channel unambiguously means "producer finished
+	// successfully". The receive is cancellation-aware: because the source does
+	// not close srcCh on error, a plain `range` would block forever, so the
+	// transform selects on ctx.Done and unwinds without closing sinkCh, letting
+	// the sink unwind via ctx.Done rather than mistaking the failure for EOF and
 	// flushing a partial batch.
 	g.Go(func() error {
-		for a := range srcCh {
-			// Stop transforming buffered items promptly once a peer stage fails,
-			// rather than draining the whole source buffer first.
-			if err := ctx.Err(); err != nil {
-				return fmt.Errorf("transform cancelled: %w", err)
+		for {
+			var (
+				a  A
+				ok bool
+			)
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("transform cancelled: %w", ctx.Err())
+			case a, ok = <-srcCh:
 			}
+			if !ok {
+				// srcCh is closed only on source success ⇒ clean end of stream.
+				close(sinkCh)
+				return nil
+			}
+
 			bs, err := tf.Transform(ctx, a)
 			if err != nil {
 				return fmt.Errorf("transform: %w", err)
@@ -103,16 +115,17 @@ func Run[A, B any](ctx context.Context, src Source[A], tf Transformer[A, B], sin
 				}
 			}
 		}
-		close(sinkCh)
-		return nil
 	})
 
-	// Source: publishes records then closes the source channel.
+	// Source: publishes records, then closes srcCh ONLY on success. On error it
+	// returns without closing, so the closed-channel signal never reaches the
+	// transform on a failed read; the shared context cancels and every stage
+	// unwinds via ctx.Done instead.
 	g.Go(func() error {
-		defer close(srcCh)
 		if err := src.Read(ctx, criteria, srcCh); err != nil {
 			return fmt.Errorf("source: %w", err)
 		}
+		close(srcCh)
 		return nil
 	})
 

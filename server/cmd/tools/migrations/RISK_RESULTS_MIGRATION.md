@@ -168,10 +168,18 @@ will not join.
   ignored, so a re-run inserts duplicates. When re-running, resume from `-cursor`
   so any overlap is bounded to the single in-flight batch.
 - **Do not overlap the live writer.** Production `risk_findings` is a plain
-  `MergeTree`, so the dedup token is inert there: any backfill window that
-  overlaps rows the live writer is already ingesting double-inserts every
-  overlapping row. Set `-to` at (or before) the live-writer cutover time so the
-  backfill and the live stream meet without overlapping.
+  `MergeTree`, so the dedup token is inert there: any row inserted by both the
+  backfill and the live writer is duplicated. A `-to` cutoff is **necessary but
+  not sufficient** — the live path emits through the async outbox, so a finding
+  created before `-to` can still be delivered (or retried) into ClickHouse _after_
+  the backfill runs, and the live event and the backfill row carry independent
+  inserts of the same `id`. Before relying on the boundary you must also make the
+  handoff atomic on the live side: **quiesce/drain the live outbox** (or pause the
+  live ClickHouse writer) so no pre-`-to` finding is still in flight, then run the
+  backfill up to that drained watermark, then resume live ingestion. Equivalently,
+  agree a shared cutover checkpoint (e.g. a `created_at`/`id` watermark) that the
+  backfill's `-to` and the live writer's start both key off. Do not treat wall-clock
+  `-to` alone as the boundary.
 - **Partition limit.** `risk_findings` is `PARTITION BY toYYYYMMDD(created_at)`.
   A backfill batch can span more than the default 100 partitions when historical
   data is sparse, so the sink sets `max_partitions_per_insert_block = 0` for its

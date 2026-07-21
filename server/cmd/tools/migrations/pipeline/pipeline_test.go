@@ -39,6 +39,21 @@ func (failing) Transform(_ context.Context, _ int) ([]int, error) { return nil, 
 
 var errBoom = errors.New("boom")
 
+// erroringSource emits its items then fails, exercising the source-error edge:
+// srcCh must not be closed on failure so the sink never sees a false EOF.
+type erroringSource struct{ items []int }
+
+func (s *erroringSource) Read(ctx context.Context, _ pipeline.Criteria, out chan<- int) error {
+	for _, i := range s.items {
+		select {
+		case out <- i:
+		case <-ctx.Done():
+			return fmt.Errorf("source cancelled: %w", ctx.Err())
+		}
+	}
+	return errBoom
+}
+
 // failOnSecond passes the first record through then errors on the second, so a
 // prior record is buffered in the sink when the failure hits.
 type failOnSecond struct{ seen int }
@@ -239,6 +254,24 @@ func TestRunDoesNotFlushOnUpstreamError(t *testing.T) {
 	sink.mu.Lock()
 	defer sink.mu.Unlock()
 	require.Empty(t, sink.got, "sink must not flush a partial batch when the pipeline fails")
+	require.Zero(t, sink.flushes)
+}
+
+func TestRunDoesNotFlushOnSourceError(t *testing.T) {
+	t.Parallel()
+
+	// A source that emits rows then fails must not be mistaken for clean EOF:
+	// the sink must not flush the buffered rows.
+	src := &erroringSource{items: []int{1, 2, 3}}
+	sink := &batchSink{in: make(chan int, 8), batchSize: 10}
+
+	err := pipeline.Run[int, int](t.Context(), src, doubler{}, sink, pipeline.Criteria{}, 8)
+	require.Error(t, err)
+	require.ErrorIs(t, err, errBoom)
+
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	require.Empty(t, sink.got, "sink must not flush when the source fails")
 	require.Zero(t, sink.flushes)
 }
 
