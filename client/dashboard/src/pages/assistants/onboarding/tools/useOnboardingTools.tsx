@@ -1,8 +1,12 @@
-import { useSession } from "@/contexts/Auth";
+import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { defineFrontendTool, type FrontendTool } from "@/elements";
 import { Gram } from "@gram/client";
+import type { AssistantSkillRef } from "@gram/client/models/components/assistantskillref.js";
+import type { Skill } from "@gram/client/models/components/skill.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useMemo } from "react";
 import { z } from "zod";
@@ -334,6 +338,8 @@ type AttachMCPServerArgs = {
   environment_slug?: string;
 };
 type DetachMCPServerArgs = { mcp_server_slug: string };
+type AttachSkillArgs = { skill_name: string; pinned_version_id?: string };
+type DetachSkillArgs = { skill_name: string };
 type CreateToolsetArgs = {
   name: string;
   description?: string;
@@ -402,6 +408,33 @@ type PersonalityChoice =
   | { kind: "generate"; describe: string }
   | { kind: "random" };
 
+async function listAllSkills(sdk: Gram): Promise<Skill[]> {
+  const pages = await sdk.skills.list({ limit: 200 });
+  const skills: Skill[] = [];
+  for await (const page of pages) skills.push(...page.result.skills);
+  return skills;
+}
+
+function resolveSkillByName(skills: Skill[], requestedName: string): Skill {
+  const name = requestedName.trim().toLowerCase();
+  const normalizedMatch = skills.find(
+    (skill) => skill.name.toLowerCase() === name,
+  );
+  if (normalizedMatch) return normalizedMatch;
+  const displayMatches = skills.filter(
+    (skill) => skill.displayName.toLowerCase() === name,
+  );
+  if (displayMatches.length === 1) return displayMatches[0]!;
+  if (displayMatches.length > 1) {
+    throw new Error(
+      `More than one skill is named "${requestedName}". Use its unique normalized name.`,
+    );
+  }
+  throw new Error(
+    `Skill "${requestedName}" was not found. Call list_skills first.`,
+  );
+}
+
 function buildAssistantTools(deps: ToolDeps) {
   const { sdk, draft, organizationId } = deps;
 
@@ -423,12 +456,14 @@ function buildAssistantTools(deps: ToolDeps) {
     instructions: string;
     toolsets: ReadonlyArray<LiveToolset>;
     mcpServers: ReadonlyArray<LiveMCPServer>;
+    skills: ReadonlyArray<AssistantSkillRef>;
   } = {
     id: draft.assistantId,
     name: draft.assistant?.name,
     instructions: draft.assistant?.instructions ?? "",
     toolsets: draft.assistant?.toolsets ?? [],
     mcpServers: draft.assistant?.mcpServers ?? [],
+    skills: draft.assistant?.skills ?? [],
   };
   const trackLive = (a: {
     id: string;
@@ -436,12 +471,14 @@ function buildAssistantTools(deps: ToolDeps) {
     instructions: string;
     toolsets: ReadonlyArray<LiveToolset>;
     mcpServers?: ReadonlyArray<LiveMCPServer> | undefined;
+    skills?: ReadonlyArray<AssistantSkillRef> | undefined;
   }) => {
     live.id = a.id;
     live.name = a.name;
     live.instructions = a.instructions;
     live.toolsets = a.toolsets;
     live.mcpServers = a.mcpServers ?? [];
+    live.skills = a.skills ?? [];
   };
 
   // The LLM may emit multiple mutating tool calls in parallel within one turn.
@@ -452,6 +489,14 @@ function buildAssistantTools(deps: ToolDeps) {
     const next = mutationTail.then(fn, fn);
     mutationTail = next.catch(() => undefined);
     return next;
+  };
+  let skillsPromise: Promise<Skill[]> | undefined;
+  const loadSkills = (): Promise<Skill[]> => {
+    skillsPromise ??= listAllSkills(sdk).catch((error: unknown) => {
+      skillsPromise = undefined;
+      throw error;
+    });
+    return skillsPromise;
   };
 
   const triggerCreateInFlight = new Map<string, Promise<ToolResult>>();
@@ -930,6 +975,164 @@ function buildAssistantTools(deps: ToolDeps) {
         }),
     },
     "detach_mcp_server",
+  );
+
+  const list_skills = defineFrontendTool<Record<string, never>, ToolResult>(
+    {
+      description:
+        "List project skills and show which are attached to the assistant. Skills are reusable instructions, not MCP servers or toolsets. Call this before attach_skill or detach_skill so you use an exact skill name.",
+      parameters: z.object({}),
+      execute: async () => {
+        try {
+          const skills = await loadSkills();
+          const attached = new Map(
+            live.skills.map((ref) => [ref.skillId, ref]),
+          );
+          return okResult({
+            skills: skills.map((skill) => {
+              const ref = attached.get(skill.id);
+              return {
+                name: skill.name,
+                display_name: skill.displayName,
+                summary: skill.summary,
+                latest_version_id: skill.latestVersionId,
+                attached: !!ref,
+                pinned_version_id: ref?.pinnedVersionId,
+                resolved_version_id: ref?.resolvedVersionId,
+              };
+            }),
+          });
+        } catch (e) {
+          return errResult(
+            e instanceof Error ? e.message : "list skills failed",
+          );
+        }
+      },
+    },
+    "list_skills",
+  );
+
+  const attach_skill = defineFrontendTool<AttachSkillArgs, ToolResult>(
+    {
+      description:
+        "Attach a project skill to the assistant by its exact name. Omit pinned_version_id to track the latest valid version; pass a valid version ID only when the user asks to pin a specific version. Skills are not MCP servers and do not provide callable tools.",
+      parameters: z.object({
+        skill_name: z.string().min(1),
+        pinned_version_id: z
+          .string()
+          .optional()
+          .describe("Valid skill version ID to pin. Omit to track latest."),
+      }),
+      execute: async (args) =>
+        serialize(async () => {
+          const { skill_name, pinned_version_id } = args as AttachSkillArgs;
+          try {
+            const skill = resolveSkillByName(await loadSkills(), skill_name);
+            const created = live.id
+              ? undefined
+              : await ensureAssistant(deps, {}, live.id);
+            if (created) trackLive(created);
+            const assistantId = live.id;
+            if (!assistantId) {
+              return errResult("Unable to create the assistant.");
+            }
+            await sdk.skills.distribute({
+              distributeSkillRequestBody: {
+                id: skill.id,
+                assistantId,
+                ...(pinned_version_id
+                  ? { pinnedVersionId: pinned_version_id }
+                  : {}),
+              },
+            });
+            live.skills = [
+              ...live.skills.filter((ref) => ref.skillId !== skill.id),
+              {
+                skillId: skill.id,
+                resolvedVersionId: pinned_version_id ?? skill.latestVersionId,
+                ...(pinned_version_id
+                  ? { pinnedVersionId: pinned_version_id }
+                  : {}),
+              },
+            ];
+            draft.invalidateSkillAttachments();
+            try {
+              const updated = await sdk.assistants.get({ id: assistantId });
+              draft.setAssistant(updated);
+              trackLive(updated);
+            } catch {
+              draft.invalidateAll();
+              return okResult({
+                skill: {
+                  name: skill.name,
+                  display_name: skill.displayName,
+                  pinned_version_id,
+                },
+                skills: live.skills,
+                warning:
+                  "The skill was attached, but the assistant view did not refresh. Reload to confirm the latest state.",
+              });
+            }
+            return okResult({
+              skill: {
+                name: skill.name,
+                display_name: skill.displayName,
+                pinned_version_id,
+              },
+              skills: live.skills,
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "attach skill failed",
+            );
+          }
+        }),
+    },
+    "attach_skill",
+  );
+
+  const detach_skill = defineFrontendTool<DetachSkillArgs, ToolResult>(
+    {
+      description:
+        "Detach a project skill from the assistant by its exact name. This does not archive or delete the skill.",
+      parameters: z.object({ skill_name: z.string().min(1) }),
+      execute: async (args) =>
+        serialize(async () => {
+          const { skill_name } = args as DetachSkillArgs;
+          try {
+            if (!live.id) {
+              return errResult("No assistant exists yet. Create one first.");
+            }
+            const skill = resolveSkillByName(await loadSkills(), skill_name);
+            await sdk.skills.undistribute({
+              undistributeSkillRequestBody: {
+                id: skill.id,
+                assistantId: live.id,
+              },
+            });
+            live.skills = live.skills.filter((ref) => ref.skillId !== skill.id);
+            draft.invalidateSkillAttachments();
+            try {
+              const updated = await sdk.assistants.get({ id: live.id });
+              draft.setAssistant(updated);
+              trackLive(updated);
+            } catch {
+              draft.invalidateAll();
+              return okResult({
+                skills: live.skills,
+                warning:
+                  "The skill was detached, but the assistant view did not refresh. Reload to confirm the latest state.",
+              });
+            }
+            return okResult({ skills: live.skills });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "detach skill failed",
+            );
+          }
+        }),
+    },
+    "detach_skill",
   );
 
   const list_mcp_servers = defineFrontendTool<
@@ -2056,6 +2259,9 @@ function buildAssistantTools(deps: ToolDeps) {
     detach_toolset,
     attach_mcp_server,
     detach_mcp_server,
+    list_skills,
+    attach_skill,
+    detach_skill,
     list_mcp_servers,
     list_toolsets,
     create_toolset,
@@ -2088,13 +2294,45 @@ export function useOnboardingTools(): {
 } {
   const sdk = useSdkClient();
   const session = useSession();
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const { data: productFeatures } = useProductFeatures();
   const draft = useAssistantDraft();
   const organizationId = session.activeOrganizationId;
 
-  const frontendTools = useMemo<OnboardingTools>(
-    () => buildAssistantTools({ sdk, organizationId, draft }),
-    [sdk, organizationId, draft],
-  );
+  const frontendTools = useMemo<Partial<OnboardingTools>>(() => {
+    const tools = buildAssistantTools({ sdk, organizationId, draft });
+    if (productFeatures?.skillsEnabled !== true) {
+      const { list_skills, attach_skill, detach_skill, ...enabledTools } =
+        tools;
+      void list_skills;
+      void attach_skill;
+      void detach_skill;
+      return enabledTools;
+    }
+    if (!hasScope("skill:read", project.id)) {
+      const { list_skills, attach_skill, detach_skill, ...enabledTools } =
+        tools;
+      void list_skills;
+      void attach_skill;
+      void detach_skill;
+      return enabledTools;
+    }
+    if (!hasScope("project:write", project.id)) {
+      const { attach_skill, detach_skill, ...readableTools } = tools;
+      void attach_skill;
+      void detach_skill;
+      return readableTools;
+    }
+    return tools;
+  }, [
+    sdk,
+    organizationId,
+    draft,
+    productFeatures?.skillsEnabled,
+    hasScope,
+    project.id,
+  ]);
 
   const components = useMemo<Record<string, ToolCallMessagePartComponent>>(
     () => ({

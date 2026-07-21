@@ -1,8 +1,8 @@
 import {
-  useRemoteMcpTools,
-  type RemoteMcpTool,
-} from "@/hooks/useRemoteMcpTools";
-import { useRemoteMcpUserSessionToken } from "@/hooks/useRemoteMcpUserSessionToken";
+  useProxiedMcpTools,
+  type ProxiedMcpTool,
+} from "@/hooks/useProxiedMcpTools";
+import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import {
   firstPartyConnectUrl,
   getServerURL,
@@ -11,7 +11,7 @@ import {
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMemo } from "react";
 
-export interface RemoteMcpConnection {
+export interface ProxiedMcpConnection {
   /**
    * The Gram-origin display MCP URL (`/mcp/<slug>`) handed to the elements
    * chat, which manages its own transport (mirrors the toolset path).
@@ -28,7 +28,7 @@ export interface RemoteMcpConnection {
   /** Re-attempt the tools listing (e.g. after returning from the connect tab). */
   refetch: () => void;
   /** The tools advertised by the upstream, keyed by name. */
-  tools: Record<string, RemoteMcpTool> | undefined;
+  tools: Record<string, ProxiedMcpTool> | undefined;
   isLoading: boolean;
   /**
    * True once we can safely open the chat: a non-gated server is always ready,
@@ -40,15 +40,17 @@ export interface RemoteMcpConnection {
 }
 
 /**
- * Resolves everything needed to chat with a remote-MCP-backed server: its
+ * Resolves everything needed to chat with a proxied-MCP-backed server: its
  * proxied `/mcp/<slug>` URL, the issuer-gated JWT, the live tools listing, and
  * the needs-connect state. Mirrors the plumbing in RemoteMcpToolsSection so the
  * playground connects through the exact path a real MCP client would.
  */
-export function useRemoteMcpConnection(
+export function useProxiedMcpConnection(
   mcpServerId: string | undefined,
-  isIssuerGated: boolean,
-): RemoteMcpConnection {
+  userSessionIssuerId: string | undefined,
+): ProxiedMcpConnection {
+  const isIssuerGated = !!userSessionIssuerId;
+
   const { data: endpointsData, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId: mcpServerId ?? "" }, undefined, {
       enabled: !!mcpServerId,
@@ -68,8 +70,10 @@ export function useRemoteMcpConnection(
     return endpoint ? `${getServerURL()}/mcp/${endpoint.slug}` : undefined;
   }, [endpointsData]);
 
-  const { accessToken, isLoading: isTokenLoading } =
-    useRemoteMcpUserSessionToken({ mcpServerId, isIssuerGated });
+  const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
+    target: { kind: "mcpServer", id: mcpServerId },
+    userSessionIssuerId,
+  });
 
   const headers = useMemo(
     () =>
@@ -87,7 +91,7 @@ export function useRemoteMcpConnection(
 
   // No error boundary wraps the playground panels, so keep every failure inline
   // (isError) rather than throwing a non-401 to the nearest boundary.
-  const { tools, needsAuth, isError, isLoading, refetch } = useRemoteMcpTools(
+  const { tools, needsAuth, isError, isLoading, refetch } = useProxiedMcpTools(
     connectUrl,
     { headers, enabled: connectionReady, throwOnError: false },
   );

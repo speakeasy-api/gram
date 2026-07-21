@@ -7,8 +7,10 @@ import { Button as UiButton } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { DotCard } from "@/components/ui/dot-card";
+import { DotTable } from "@/components/ui/dot-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { useViewMode } from "@/components/ui/use-view-mode";
 import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
@@ -66,9 +68,11 @@ import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
+import { PluginInstallButton } from "./PluginInstallButton";
 import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
 import { PluginSkillsSection } from "./PluginSkillsSection";
 import { PluginAssignmentsList } from "./PluginAssignmentsList";
+import { PluginServerTableRow } from "./PluginServerTableRow";
 import { describePrincipal, memberMapByUrn, roleMapByUrn } from "./principals";
 import { PublishDialog } from "./PublishDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
@@ -101,6 +105,7 @@ export default function PluginDetail(): JSX.Element | null {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isAssignmentsOpen, setIsAssignmentsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useViewMode();
   // The component stays mounted when only :pluginId changes, so a stale query
   // from a previous plugin would filter the new plugin's lists.
   useEffect(() => setSearch(""), [pluginId]);
@@ -428,6 +433,36 @@ export default function PluginDetail(): JSX.Element | null {
     serversContent = <SectionEmptyState title="No servers added yet" />;
   } else if (filteredServers.length === 0) {
     serversContent = <SectionEmptyState title="No servers match your search" />;
+  } else if (viewMode === "table") {
+    serversContent = (
+      <DotTable
+        headers={[
+          { label: "Name" },
+          { label: "Publish status" },
+          { label: "Type" },
+          { label: "Visibility" },
+          { label: "", className: "text-right" },
+        ]}
+      >
+        {filteredServers.map((server) => (
+          <PluginServerTableRow
+            key={server.id}
+            server={server}
+            toolset={
+              server.toolsetId ? toolsetById.get(server.toolsetId) : undefined
+            }
+            mcpServer={
+              server.mcpServerId
+                ? mcpServerById.get(server.mcpServerId)
+                : undefined
+            }
+            isLoading={isLoadingServers}
+            onRemove={() => handleRemoveServer(server)}
+            lastPublishedAt={publishStatus?.lastPublishedAt}
+          />
+        ))}
+      </DotTable>
+    );
   } else {
     serversContent = (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -521,13 +556,7 @@ export default function PluginDetail(): JSX.Element | null {
                 onOpenChange={setIsDownloadMenuOpen}
               >
                 <DropdownMenuTrigger asChild>
-                  <Button variant="primary">
-                    <Button.Text>Install</Button.Text>
-                    <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
-                    <Button.RightIcon>
-                      <Icon name="chevron-down" className="h-4 w-4" />
-                    </Button.RightIcon>
-                  </Button>
+                  <PluginInstallButton />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
@@ -642,6 +671,7 @@ export default function PluginDetail(): JSX.Element | null {
               onChange={setSearch}
               placeholder="Search servers, skills, and assignments"
             />
+            <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
           </Page.Toolbar>
 
           {/* Servers section */}
@@ -724,6 +754,7 @@ export default function PluginDetail(): JSX.Element | null {
               <PluginSkillsSection
                 pluginId={pluginId!}
                 searchQuery={search}
+                viewMode={viewMode}
                 onMutated={(message) => offerPublish(message)}
               />
             </RequireScope>

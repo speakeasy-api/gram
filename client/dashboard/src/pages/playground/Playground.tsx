@@ -13,9 +13,11 @@ import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
+  useTelemetry,
 } from "@/contexts/Telemetry";
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
 import { DEFAULT_MODEL } from "@/lib/models";
+import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useHideInsightsDock } from "@/components/insights-context";
@@ -43,13 +45,16 @@ import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
 import { PlaygroundElements } from "./PlaygroundElements";
 import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
-import { PlaygroundRemoteChat } from "./PlaygroundRemoteChat";
+import { PlaygroundProxiedChat } from "./PlaygroundProxiedChat";
 import { ShareChatButton } from "./ShareChatButton";
-import { useRemoteMcpConnection } from "./useRemoteMcpConnection";
+import { useProxiedMcpConnection } from "./useProxiedMcpConnection";
 
 // A single selectable server in the playground. Toolset-backed and
-// remote-MCP-backed servers share one flat picker; the `kind` discriminant only
-// drives how we connect (and which controls appear), never how it's labeled.
+// proxied-MCP-backed servers (remote or tunneled) share one flat picker; the
+// `kind` discriminant only drives how we connect (and which controls appear),
+// never how it's labeled. `remote` and `tunneled` carry identical fields and
+// route to the same proxied connection path — the distinct variant keeps the
+// discriminant honest and leaves room for tunneled-only affordances later.
 type PlaygroundServerRef =
   | { kind: "toolset"; key: string; name: string; toolsetSlug: string }
   | {
@@ -57,11 +62,18 @@ type PlaygroundServerRef =
       key: string;
       name: string;
       mcpServerId: string;
-      isIssuerGated: boolean;
+      userSessionIssuerId: string | undefined;
+    }
+  | {
+      kind: "tunneled";
+      key: string;
+      name: string;
+      mcpServerId: string;
+      userSessionIssuerId: string | undefined;
     };
 
 const toolsetServerKey = (slug: string) => `toolset:${slug}`;
-const remoteServerKey = (mcpServerId: string) => `remote:${mcpServerId}`;
+const mcpServerKey = (mcpServerId: string) => `mcp:${mcpServerId}`;
 
 // Merges toolset-backed servers (from listToolsets) with remote-MCP-backed
 // servers (the remoteMcpServerId subset of mcpServers) into one sorted list.
@@ -74,6 +86,10 @@ function usePlaygroundServers(): {
     useListToolsets();
   const { data: mcpServersData, isLoading: isLoadingMcpServers } =
     useMcpServers();
+
+  const telemetry = useTelemetry();
+  const tunneledEnabled =
+    telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG) === true;
 
   const servers = useMemo<PlaygroundServerRef[]>(() => {
     const toolsetServers: PlaygroundServerRef[] = (
@@ -91,16 +107,30 @@ function usePlaygroundServers(): {
       .filter((server) => !!server.remoteMcpServerId)
       .map((server) => ({
         kind: "remote",
-        key: remoteServerKey(server.id),
+        key: mcpServerKey(server.id),
         name: server.name ?? server.slug ?? "Remote MCP server",
         mcpServerId: server.id,
-        isIssuerGated: !!server.userSessionIssuerId,
+        userSessionIssuerId: server.userSessionIssuerId,
       }));
 
-    return [...toolsetServers, ...remoteServers].sort((a, b) =>
-      a.name.localeCompare(b.name),
+    // Tunneled servers serve at the same /mcp/<slug> path and are the same
+    // McpServer view as remote; they only reach the picker when the flag is on.
+    const tunneledServers: PlaygroundServerRef[] = tunneledEnabled
+      ? (mcpServersData?.mcpServers ?? [])
+          .filter((server) => !!server.tunneledMcpServerId)
+          .map((server) => ({
+            kind: "tunneled",
+            key: mcpServerKey(server.id),
+            name: server.name ?? server.slug ?? "Tunneled MCP server",
+            mcpServerId: server.id,
+            userSessionIssuerId: server.userSessionIssuerId,
+          }))
+      : [];
+
+    return [...toolsetServers, ...remoteServers, ...tunneledServers].sort(
+      (a, b) => a.name.localeCompare(b.name),
     );
-  }, [toolsetsData, mcpServersData]);
+  }, [toolsetsData, mcpServersData, tunneledEnabled]);
 
   return { servers, isLoading: isLoadingToolsets || isLoadingMcpServers };
 }
@@ -147,7 +177,7 @@ export default function Playground(): JSX.Element {
 /** Resolve the initially-selected server key from URL params. */
 function initialServerKey(searchParams: URLSearchParams): string | null {
   const mcpServer = searchParams.get("mcpServer");
-  if (mcpServer) return remoteServerKey(mcpServer);
+  if (mcpServer) return mcpServerKey(mcpServer);
   const toolset = searchParams.get("toolset");
   if (toolset) return toolsetServerKey(toolset);
   return null;
@@ -277,10 +307,11 @@ function PlaygroundInner() {
                 onPlaygroundEnvironmentSlug={setPlaygroundEnvironmentSlug}
               />
             )}
-            {selectedServer?.kind === "remote" && (
-              <RemoteServerPanel
+            {(selectedServer?.kind === "remote" ||
+              selectedServer?.kind === "tunneled") && (
+              <ProxiedServerPanel
                 mcpServerId={selectedServer.mcpServerId}
-                isIssuerGated={selectedServer.isIssuerGated}
+                userSessionIssuerId={selectedServer.userSessionIssuerId}
                 serverSelector={serverSelector}
                 temperature={temperature}
                 setTemperature={setTemperature}
@@ -307,10 +338,11 @@ function PlaygroundInner() {
                   additionalActions={additionalActions}
                 />
               )}
-              {selectedServer?.kind === "remote" && (
-                <PlaygroundRemoteChat
+              {(selectedServer?.kind === "remote" ||
+                selectedServer?.kind === "tunneled") && (
+                <PlaygroundProxiedChat
                   mcpServerId={selectedServer.mcpServerId}
-                  isIssuerGated={selectedServer.isIssuerGated}
+                  userSessionIssuerId={selectedServer.userSessionIssuerId}
                   environmentSlug={selectedEnvironment}
                   model={model}
                   additionalActions={additionalActions}
@@ -599,13 +631,13 @@ function ToolsetPanel({
 }
 
 /**
- * Left panel for a remote-MCP-backed server: the shared selector, a read-only
+ * Left panel for a proxied-MCP-backed server: the shared selector, a read-only
  * live tool list, and model settings. Tool curation, auth, and env config are
  * absent — those affordances don't apply to a proxied upstream.
  */
-function RemoteServerPanel({
+function ProxiedServerPanel({
   mcpServerId,
-  isIssuerGated,
+  userSessionIssuerId,
   serverSelector,
   temperature,
   setTemperature,
@@ -615,9 +647,9 @@ function RemoteServerPanel({
   setMaxTokens,
 }: PanelConfigProps & {
   mcpServerId: string;
-  isIssuerGated: boolean;
+  userSessionIssuerId: string | undefined;
 }) {
-  const { tools } = useRemoteMcpConnection(mcpServerId, isIssuerGated);
+  const { tools } = useProxiedMcpConnection(mcpServerId, userSessionIssuerId);
 
   const remoteTools = useMemo(
     () =>
