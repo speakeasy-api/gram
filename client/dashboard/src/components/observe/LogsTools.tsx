@@ -16,6 +16,7 @@ import {
 } from "@/components/observe/ObserveFilterBar";
 import {
   buildServerOptionGroups,
+  isDefaultToolUsageTypeSelection,
   parseTargetFilter,
   selectedHookSources,
   selectedTargetValues,
@@ -775,7 +776,7 @@ function LogsToolsContent({
                     traces={traces}
                     hasActiveFilters={
                       activeFilters.length > 0 ||
-                      selectedTypes.length > 0 ||
+                      !isDefaultToolUsageTypeSelection(selectedTypes) ||
                       selectedStatuses.length > 0 ||
                       selectedRoleIds.length > 0 ||
                       attributeFilters.length > 0 ||
