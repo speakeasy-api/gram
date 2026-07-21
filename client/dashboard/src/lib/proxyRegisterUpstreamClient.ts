@@ -71,7 +71,7 @@ export async function proxyRegisterUpstreamClient(
 
 // registrationErrorMessage pulls the most actionable message out of a failed
 // /oauth/proxy-register response. The backend passes an upstream 4xx through as
-// a bad request whose `message` already carries the upstream
+// a bad request whose `Message` already carries the upstream
 // error/error_description; some responses may instead surface the raw RFC 7591
 // `error_description`/`error`.
 async function registrationErrorMessage(
@@ -83,9 +83,15 @@ async function registrationErrorMessage(
   } catch {
     return null;
   }
+
   if (body && typeof body === "object") {
     const record = body as Record<string, unknown>;
-    for (const key of ["message", "error_description", "error"] as const) {
+    for (const key of [
+      "Message",
+      "message",
+      "error_description",
+      "error",
+    ] as const) {
       const value = record[key];
       if (typeof value === "string" && value.trim()) return value;
     }

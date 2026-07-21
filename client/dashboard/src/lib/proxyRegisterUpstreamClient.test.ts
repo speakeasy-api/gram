@@ -37,9 +37,9 @@ describe("proxyRegisterUpstreamClient", () => {
     const authedFetch: AuthedFetch = vi.fn(async () =>
       jsonResponse(
         {
-          message:
+          Message:
             "identity provider rejected the client registration: invalid_client_metadata: redirect_uris must be loopback",
-          name: "bad_request",
+          Name: "bad_request",
         },
         { status: 400 },
       ),
