@@ -382,8 +382,8 @@ WHERE project_id = @project_id
 -- name: GetSkillDetails :one
 SELECT
   sqlc.embed(s),
-  sqlc.embed(latest),
-  state.version_count,
+  COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
+  COALESCE(state.version_count, 0)::bigint AS version_count,
   (
     SELECT COUNT(*)::bigint
     FROM skill_distributions sd
@@ -399,7 +399,7 @@ SELECT
       AND sd.revoked_at IS NULL
   ) AS assistant_count
 FROM skills s
-JOIN LATERAL (
+LEFT JOIN LATERAL (
   SELECT
     sv.id AS latest_version_id,
     COUNT(*) OVER()::bigint AS version_count
@@ -408,19 +408,16 @@ JOIN LATERAL (
   ORDER BY sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) state ON TRUE
-JOIN skill_versions latest
-  ON latest.id = state.latest_version_id
-  AND latest.skill_id = s.id
 WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL;
 
 -- name: GetSkillState :one
 SELECT
-  state.latest_version_id,
-  state.version_count
+  COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
+  COALESCE(state.version_count, 0)::bigint AS version_count
 FROM skills s
-JOIN LATERAL (
+LEFT JOIN LATERAL (
   SELECT
     sv.id AS latest_version_id,
     COUNT(*) OVER()::bigint AS version_count
@@ -436,10 +433,10 @@ WHERE s.project_id = @project_id
 -- name: ListSkills :many
 SELECT
   sqlc.embed(s),
-  latest.id AS latest_version_id,
-  latest.version_count
+  COALESCE(latest.id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
+  COALESCE(latest.version_count, 0)::bigint AS version_count
 FROM skills s
-JOIN LATERAL (
+LEFT JOIN LATERAL (
   SELECT
     sv.id,
     COUNT(*) OVER()::bigint AS version_count
@@ -458,9 +455,25 @@ ORDER BY s.name ASC
 LIMIT @page_limit;
 
 -- name: ListSkillVersions :many
-SELECT sv.*
+SELECT
+  sqlc.embed(sv),
+  sightings.first_seen_at,
+  sightings.last_seen_at,
+  COALESCE(sightings.seen_count, 0)::bigint AS seen_count
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN LATERAL (
+  SELECT
+    MIN(so.seen_at)::timestamptz AS first_seen_at,
+    MAX(so.seen_at)::timestamptz AS last_seen_at,
+    COUNT(*)::bigint AS seen_count
+  FROM skill_observations so
+  WHERE so.project_id = s.project_id
+    AND so.skill_id = sv.skill_id
+    AND so.skill_version_id = sv.id
+    AND so.reconciled_at IS NOT NULL
+    AND so.reconcile_error_code IS NULL
+) sightings ON TRUE
 WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL
@@ -472,6 +485,115 @@ WHERE s.project_id = @project_id
     )
   )
 ORDER BY sv.created_at DESC, sv.id DESC
+LIMIT @page_limit;
+
+-- name: GetSkillVersionDetails :one
+SELECT
+  sqlc.embed(sv),
+  sightings.first_seen_at,
+  sightings.last_seen_at,
+  COALESCE(sightings.seen_count, 0)::bigint AS seen_count
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN LATERAL (
+  SELECT
+    MIN(so.seen_at)::timestamptz AS first_seen_at,
+    MAX(so.seen_at)::timestamptz AS last_seen_at,
+    COUNT(*)::bigint AS seen_count
+  FROM skill_observations so
+  WHERE so.project_id = s.project_id
+    AND so.skill_id = sv.skill_id
+    AND so.skill_version_id = sv.id
+    AND so.reconciled_at IS NOT NULL
+    AND so.reconcile_error_code IS NULL
+) sightings ON TRUE
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+  AND sv.id = @skill_version_id;
+
+-- name: GetSkillAdoptionStats :one
+SELECT
+  COUNT(DISTINCT NULLIF(lower(btrim(so.hostname)), ''))::bigint AS distinct_hostnames,
+  COUNT(*)::bigint AS activations_in_window
+FROM skill_observations so
+WHERE so.project_id = @project_id
+  AND so.skill_id = sqlc.arg(skill_id)::uuid
+  AND so.reconciled_at IS NOT NULL
+  AND so.reconcile_error_code IS NULL
+  AND so.seen_at >= @window_start
+  AND so.seen_at < @window_end;
+
+-- name: ListSkillSightingTimeline :many
+SELECT
+  (date_trunc('day', so.seen_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')::timestamptz AS bucket_start,
+  COUNT(*)::bigint AS activation_count
+FROM skill_observations so
+WHERE so.project_id = @project_id
+  AND so.skill_id = sqlc.arg(skill_id)::uuid
+  AND so.reconciled_at IS NOT NULL
+  AND so.reconcile_error_code IS NULL
+  AND so.seen_at >= @window_start
+  AND so.seen_at < @window_end
+GROUP BY bucket_start
+ORDER BY bucket_start ASC;
+
+-- name: ListActiveMachineLatestVersions :many
+WITH latest AS (
+  SELECT DISTINCT ON (lower(btrim(so.hostname)))
+    lower(btrim(so.hostname)) AS hostname,
+    so.skill_version_id
+  FROM skill_observations so
+  WHERE so.project_id = @project_id
+    AND so.skill_id = sqlc.arg(skill_id)::uuid
+    AND NULLIF(btrim(so.hostname), '') IS NOT NULL
+    AND so.reconciled_at IS NOT NULL
+    AND so.reconcile_error_code IS NULL
+    AND so.seen_at >= @window_start
+    AND so.seen_at < @window_end
+  ORDER BY lower(btrim(so.hostname)), so.seen_at DESC, so.id DESC
+)
+SELECT skill_version_id, COUNT(*)::bigint AS machine_count
+FROM latest
+GROUP BY skill_version_id;
+
+-- name: ListSkillDistributionTargetVersions :many
+SELECT DISTINCT resolved.id
+FROM skill_distributions sd
+JOIN LATERAL (
+  SELECT sv.id
+  FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE sv.skill_id = sd.skill_id
+    AND sv.spec_valid IS TRUE
+    AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE sd.project_id = @project_id
+  AND sd.skill_id = @skill_id
+  AND sd.channel = 'plugin'
+  AND sd.revoked_at IS NULL
+ORDER BY resolved.id;
+
+-- name: ListUnknownSkillActivations :many
+SELECT so.*
+FROM skill_observations so
+WHERE so.project_id = @project_id
+  AND so.skill_id IS NULL
+  AND so.reconciled_at IS NOT NULL
+  AND so.reconcile_error_code IS NOT NULL
+  AND (
+    sqlc.narg(cursor_seen_at)::timestamptz IS NULL
+    OR (so.seen_at, so.id) < (
+      sqlc.narg(cursor_seen_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY so.seen_at DESC, so.id DESC
 LIMIT @page_limit;
 
 -- name: GetSkillName :one

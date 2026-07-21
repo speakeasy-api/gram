@@ -10,13 +10,19 @@ import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
-import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
+import { type Column, Icon, Table } from "@speakeasy-api/moonshine";
 import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
 import { useDeferredValue, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { SkillManifestDialog } from "./SkillManifestDialog";
+import {
+  SKILL_CLASSIFICATION_OPTIONS,
+  SKILL_SOURCE_OPTIONS,
+} from "./skill-badge-options";
+import { SkillClassificationBadge, SkillSourceBadge } from "./skill-badges";
 import { filterSkills, skillCountLabel } from "./skills-list-helpers";
+import { UnknownSkillActivationsSection } from "./UnknownSkillActivationsSection";
 import { useDrainSkillPages } from "./use-drain-skill-pages";
 
 const SKILL_FILTERS = defineFilters([
@@ -30,8 +36,8 @@ const SKILL_FILTERS = defineFilters([
 ]);
 
 const FILTER_OPTIONS = {
-  sourceKind: [{ value: "manual", label: "Manual" }],
-  classification: [{ value: "custom", label: "Custom" }],
+  sourceKind: SKILL_SOURCE_OPTIONS,
+  classification: SKILL_CLASSIFICATION_OPTIONS,
 };
 
 const RESULT_PAGE_SIZE = 200;
@@ -131,7 +137,15 @@ export default function SkillsList(): JSX.Element {
       key: "source",
       header: "Source",
       width: "120px",
-      render: (skill) => <Badge variant="neutral">{skill.sourceKind}</Badge>,
+      render: (skill) => <SkillSourceBadge value={skill.sourceKind} />,
+    },
+    {
+      key: "classification",
+      header: "Classification",
+      width: "130px",
+      render: (skill) => (
+        <SkillClassificationBadge value={skill.classification} />
+      ),
     },
     {
       key: "versions",
@@ -302,6 +316,8 @@ export default function SkillsList(): JSX.Element {
                   </Button>
                 </div>
               )}
+
+              <UnknownSkillActivationsSection />
             </div>
 
             <SkillManifestDialog

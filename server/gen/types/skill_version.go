@@ -33,4 +33,10 @@ type SkillVersion struct {
 	CreatedAt string
 	// The user that recorded this version.
 	CreatedByUserID string
+	// When this exact version was first activated.
+	FirstSeenAt *string
+	// When this exact version was most recently activated.
+	LastSeenAt *string
+	// The number of activations attributed to this exact version.
+	SeenCount int64
 }

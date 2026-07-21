@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -297,7 +298,15 @@ func (s *Service) recordVersion(
 		if stateErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, stateErr, "load current skill state after version no-op").LogError(ctx, logger)
 		}
-		matchedView, viewErr := mv.BuildSkillVersionView(matched, manifestFrontmatter(matched.Content))
+		matchedDetails, getErr := queries.GetSkillVersionDetails(ctx, repo.GetSkillVersionDetailsParams{
+			ProjectID: *authCtx.ProjectID, SkillID: skill.ID, SkillVersionID: matched.ID,
+		})
+		if getErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, getErr, "load existing skill version details").LogError(ctx, logger)
+		}
+		matchedView, viewErr := mv.BuildSkillVersionView(matchedDetails.SkillVersion, manifestFrontmatter(matchedDetails.SkillVersion.Content), mv.SkillVersionSightingStats{
+			FirstSeenAt: matchedDetails.FirstSeenAt, LastSeenAt: matchedDetails.LastSeenAt, SeenCount: matchedDetails.SeenCount,
+		})
 		if viewErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, viewErr, "build existing skill version").LogError(ctx, logger)
 		}
@@ -328,7 +337,11 @@ func (s *Service) recordVersion(
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
 	}
 	afterView := mv.BuildSkillView(updated, latestID, count)
-	versionView, err := mv.BuildSkillVersionView(version, manifestFrontmatter(version.Content))
+	versionView, err := mv.BuildSkillVersionView(version, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
+		FirstSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		LastSeenAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		SeenCount:   0,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build created skill version").LogError(ctx, logger)
 	}
@@ -424,9 +437,9 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve skill by manifest name").LogError(ctx, logger)
 	}
 	if !createdSkill && skill.SourceKind == "captured" {
-		_, _, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		_, versionCount, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 		switch {
-		case errors.Is(stateErr, pgx.ErrNoRows):
+		case stateErr == nil && versionCount == 0, errors.Is(stateErr, pgx.ErrNoRows):
 			skill, err = queries.PromoteObservedSkillToManual(ctx, repo.PromoteObservedSkillToManualParams{
 				ProjectID: *authCtx.ProjectID,
 				ID:        skill.ID,
@@ -555,7 +568,8 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill id")
 	}
-	details, err := repo.New(s.db).GetSkillDetails(ctx, repo.GetSkillDetailsParams{
+	queries := repo.New(s.db)
+	details, err := queries.GetSkillDetails(ctx, repo.GetSkillDetailsParams{
 		ProjectID: *authCtx.ProjectID,
 		SkillID:   skillID,
 	})
@@ -566,16 +580,140 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 		return nil, oops.E(oops.CodeUnexpected, err, "get skill details").LogError(ctx, logger)
 	}
 
-	latestView, err := mv.BuildSkillVersionView(details.SkillVersion, manifestFrontmatter(details.SkillVersion.Content))
+	var latestView *types.SkillVersion
+	if details.LatestVersionID != uuid.Nil {
+		latest, latestErr := queries.GetSkillVersionDetails(ctx, repo.GetSkillVersionDetailsParams{
+			ProjectID: *authCtx.ProjectID, SkillID: skillID, SkillVersionID: details.LatestVersionID,
+		})
+		if latestErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, latestErr, "get latest skill version details").LogError(ctx, logger)
+		}
+		latestView, latestErr = mv.BuildSkillVersionView(latest.SkillVersion, manifestFrontmatter(latest.SkillVersion.Content), mv.SkillVersionSightingStats{
+			FirstSeenAt: latest.FirstSeenAt, LastSeenAt: latest.LastSeenAt, SeenCount: latest.SeenCount,
+		})
+		if latestErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, latestErr, "build latest skill version").LogError(ctx, logger)
+		}
+	}
+
+	windowEnd := time.Now().UTC().Truncate(time.Second)
+	windowStart := windowEnd.Add(-30 * 24 * time.Hour)
+	adoption, err := queries.GetSkillAdoptionStats(ctx, repo.GetSkillAdoptionStatsParams{
+		WindowStart: conv.ToPGTimestamptz(windowStart), WindowEnd: conv.ToPGTimestamptz(windowEnd),
+		ProjectID: *authCtx.ProjectID, SkillID: skillID,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build latest skill version").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get skill adoption stats").LogError(ctx, logger)
+	}
+	timelineRows, err := queries.ListSkillSightingTimeline(ctx, repo.ListSkillSightingTimelineParams{
+		ProjectID: *authCtx.ProjectID, SkillID: skillID,
+		WindowStart: conv.ToPGTimestamptz(windowStart), WindowEnd: conv.ToPGTimestamptz(windowEnd),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill sighting timeline").LogError(ctx, logger)
+	}
+	machineRows, err := queries.ListActiveMachineLatestVersions(ctx, repo.ListActiveMachineLatestVersionsParams{
+		ProjectID: *authCtx.ProjectID, SkillID: skillID,
+		WindowStart: conv.ToPGTimestamptz(windowStart), WindowEnd: conv.ToPGTimestamptz(windowEnd),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list active skill machines").LogError(ctx, logger)
+	}
+	targetVersions, err := queries.ListSkillDistributionTargetVersions(ctx, repo.ListSkillDistributionTargetVersionsParams{
+		ProjectID: *authCtx.ProjectID, SkillID: skillID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill distribution targets").LogError(ctx, logger)
+	}
+
+	timeline := make([]*gen.SkillSightingTimelinePoint, len(timelineRows))
+	for i, row := range timelineRows {
+		timeline[i] = &gen.SkillSightingTimelinePoint{
+			BucketStart: conv.FromPGTimestamptz(row.BucketStart), ActivationCount: row.ActivationCount,
+		}
+	}
+	targetVersionIDs := make([]string, len(targetVersions))
+	for i, targetVersionID := range targetVersions {
+		targetVersionIDs[i] = targetVersionID.String()
+	}
+	targetState := "ambiguous"
+	if len(targetVersions) == 0 {
+		targetState = "not_distributed"
+	} else if len(targetVersions) == 1 {
+		targetState = "single"
+	}
+	var activeMachines, onTargetMachines, driftedMachines, indeterminateMachines int64
+	for _, row := range machineRows {
+		activeMachines += row.MachineCount
+		if targetState != "single" || !row.SkillVersionID.Valid {
+			indeterminateMachines += row.MachineCount
+		} else if row.SkillVersionID.UUID == targetVersions[0] {
+			onTargetMachines += row.MachineCount
+		} else {
+			driftedMachines += row.MachineCount
+		}
 	}
 
 	return &gen.GetSkillResult{
-		Skill:          mv.BuildSkillView(details.Skill, details.SkillVersion.ID, details.VersionCount),
+		Skill:          mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount),
 		LatestVersion:  latestView,
 		AssistantCount: details.AssistantCount,
+		Adoption: &gen.SkillAdoption{
+			WindowStart: windowStart.Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
+			DistinctHostnames: adoption.DistinctHostnames, ActivationsInWindow: adoption.ActivationsInWindow,
+		},
+		SightingTimeline: timeline,
+		Drift: &gen.SkillDrift{
+			WindowStart: windowStart.Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
+			TargetState: targetState, TargetVersionIds: targetVersionIDs, ActiveMachines: activeMachines,
+			OnTargetMachines: onTargetMachines, DriftedMachines: driftedMachines, IndeterminateMachines: indeterminateMachines,
+		},
 	}, nil
+}
+
+func (s *Service) ListUnknownActivations(ctx context.Context, payload *gen.ListUnknownActivationsPayload) (*gen.ListUnknownSkillActivationsResult, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	if err != nil {
+		return nil, err
+	}
+
+	cursorSeenAt := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	cursorID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if payload.Cursor != nil {
+		seenAt, id, decodeErr := decodeCreatedAtIDCursor(*payload.Cursor)
+		if decodeErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid unknown activation cursor")
+		}
+		cursorSeenAt = conv.ToPGTimestamptz(seenAt)
+		cursorID = conv.ToNullUUID(id)
+	}
+
+	rows, err := repo.New(s.db).ListUnknownSkillActivations(ctx, repo.ListUnknownSkillActivationsParams{
+		ProjectID: *authCtx.ProjectID, CursorSeenAt: cursorSeenAt, CursorID: cursorID,
+		PageLimit: conv.SafeInt32(payload.Limit + 1),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list unknown skill activations").LogError(ctx, logger)
+	}
+	hasMore := len(rows) > payload.Limit
+	if hasMore {
+		rows = rows[:payload.Limit]
+	}
+	activations := make([]*gen.UnknownSkillActivation, len(rows))
+	for i, row := range rows {
+		activations[i] = &gen.UnknownSkillActivation{
+			ID: row.ID.String(), SkillName: row.SkillName, Provider: row.Provider,
+			Source: conv.FromPGText[string](row.Source), SourceLevel: conv.FromPGText[string](row.SourceLevel),
+			SeenAt: conv.FromPGTimestamptz(row.SeenAt), Reason: row.ReconcileErrorCode.String,
+		}
+	}
+	var nextCursor *string
+	if hasMore {
+		last := rows[len(rows)-1]
+		encoded := encodeCreatedAtIDCursor(last.SeenAt.Time, last.ID)
+		nextCursor = &encoded
+	}
+	return &gen.ListUnknownSkillActivationsResult{Activations: activations, NextCursor: nextCursor}, nil
 }
 
 func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPayload) (*gen.ListSkillVersionsResult, error) {
@@ -633,7 +771,7 @@ func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPay
 	var nextCursor *string
 	if hasMore {
 		last := rows[len(rows)-1]
-		encoded := encodeCreatedAtIDCursor(last.CreatedAt.Time, last.ID)
+		encoded := encodeCreatedAtIDCursor(last.SkillVersion.CreatedAt.Time, last.SkillVersion.ID)
 		nextCursor = &encoded
 	}
 

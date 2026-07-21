@@ -1028,6 +1028,13 @@ function buildAssistantTools(deps: ToolDeps) {
           const { skill_name, pinned_version_id } = args as AttachSkillArgs;
           try {
             const skill = resolveSkillByName(await loadSkills(), skill_name);
+            const resolvedVersionId =
+              pinned_version_id ?? skill.latestVersionId;
+            if (!resolvedVersionId) {
+              return errResult(
+                "This skill has no version yet and cannot be attached.",
+              );
+            }
             const created = live.id
               ? undefined
               : await ensureAssistant(deps, {}, live.id);
@@ -1049,7 +1056,7 @@ function buildAssistantTools(deps: ToolDeps) {
               ...live.skills.filter((ref) => ref.skillId !== skill.id),
               {
                 skillId: skill.id,
-                resolvedVersionId: pinned_version_id ?? skill.latestVersionId,
+                resolvedVersionId,
                 ...(pinned_version_id
                   ? { pinnedVersionId: pinned_version_id }
                   : {}),

@@ -32321,6 +32321,131 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: SkillDistributions
+  /rpc/skills.listUnknownActivations:
+    get:
+      description: List terminal skill activations that could not be attributed to a skill version.
+      operationId: listUnknownSkillActivations
+      parameters:
+        - allowEmptyValue: true
+          description: Cursor for the next page of unknown activations.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of unknown activations.
+            type: string
+        - allowEmptyValue: true
+          description: The number of unknown activations to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The number of unknown activations to return per page.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListUnknownSkillActivationsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listUnknownActivations skills
+      tags:
+        - skills
+      x-speakeasy-name-override: listUnknownActivations
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: UnknownSkillActivations
   /rpc/skills.listVersions:
     get:
       description: List immutable versions of an active skill, newest first. The implementation requires the skills product feature and skill read scope.
@@ -47483,18 +47608,29 @@ components:
     GetSkillResult:
       type: object
       properties:
+        adoption:
+          $ref: '#/components/schemas/SkillAdoption'
         assistant_count:
           type: integer
           description: The number of active, non-deleted assistants using the skill.
           format: int64
+        drift:
+          $ref: '#/components/schemas/SkillDrift'
         latest_version:
           $ref: '#/components/schemas/SkillVersion'
+        sighting_timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillSightingTimelinePoint'
+          description: Daily activations in the adoption window.
         skill:
           $ref: '#/components/schemas/Skill'
       description: An active skill and its derived latest version.
       required:
         - skill
-        - latest_version
+        - adoption
+        - sighting_timeline
+        - drift
         - assistant_count
     GetToolUsageFilterOptionsPayload:
       type: object
@@ -49684,6 +49820,20 @@ components:
       description: Result type for listing tunneled MCP servers
       required:
         - tunneled_mcp_servers
+    ListUnknownSkillActivationsResult:
+      type: object
+      properties:
+        activations:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnknownSkillActivation'
+          description: Unknown activations in this page.
+        next_cursor:
+          type: string
+          description: Cursor for the next page; absent when exhausted.
+      description: A page of terminal skill activations without exact version attribution.
+      required:
+        - activations
     ListUserGrantsResult:
       type: object
       properties:
@@ -55629,10 +55779,18 @@ components:
         display_name:
           type: string
           description: The display name from the latest recorded manifest.
+        first_seen_at:
+          type: string
+          description: When this skill was first activated.
+          format: date-time
         id:
           type: string
           description: The skill ID.
           format: uuid
+        last_seen_at:
+          type: string
+          description: When this skill was most recently activated.
+          format: date-time
         latest_version_id:
           type: string
           description: The derived latest version ID, selected from immutable version creation order.
@@ -55644,6 +55802,10 @@ components:
           type: string
           description: The project that owns the skill.
           format: uuid
+        seen_count:
+          type: integer
+          description: The number of reconciled activations observed for this skill.
+          format: int64
         source_kind:
           type: string
           description: How the skill entered the registry.
@@ -55666,10 +55828,35 @@ components:
         - display_name
         - source_kind
         - classification
-        - latest_version_id
         - version_count
+        - seen_count
         - created_at
         - updated_at
+    SkillAdoption:
+      type: object
+      properties:
+        activations_in_window:
+          type: integer
+          description: Activations observed during the rolling window.
+          format: int64
+        distinct_hostnames:
+          type: integer
+          description: Distinct non-empty hostnames that activated the skill during the rolling window.
+          format: int64
+        window_end:
+          type: string
+          description: End of the rolling adoption window.
+          format: date-time
+        window_start:
+          type: string
+          description: Start of the rolling adoption window.
+          format: date-time
+      description: Activation adoption metrics for a skill.
+      required:
+        - window_start
+        - window_end
+        - distinct_hostnames
+        - activations_in_window
     SkillBreakdownRow:
       type: object
       properties:
@@ -55760,6 +55947,71 @@ components:
         - created_by_user_id
         - created_at
         - updated_at
+    SkillDrift:
+      type: object
+      properties:
+        active_machines:
+          type: integer
+          description: Machines that activated the skill during the window.
+          format: int64
+        drifted_machines:
+          type: integer
+          description: Active machines whose latest attributed activation used another version.
+          format: int64
+        indeterminate_machines:
+          type: integer
+          description: Active machines without a version or without one unambiguous target.
+          format: int64
+        on_target_machines:
+          type: integer
+          description: Active machines whose latest activation used the target version.
+          format: int64
+        target_state:
+          type: string
+          description: Whether the skill has no distribution target, one target, or conflicting targets.
+          enum:
+            - not_distributed
+            - single
+            - ambiguous
+        target_version_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Distinct versions targeted by active plugin distributions.
+        window_end:
+          type: string
+          description: End of the active-machine window.
+          format: date-time
+        window_start:
+          type: string
+          description: Start of the active-machine window.
+          format: date-time
+      description: Active-machine convergence against the skill's plugin distribution target.
+      required:
+        - window_start
+        - window_end
+        - target_state
+        - target_version_ids
+        - active_machines
+        - on_target_machines
+        - drifted_machines
+        - indeterminate_machines
+    SkillSightingTimelinePoint:
+      type: object
+      properties:
+        activation_count:
+          type: integer
+          description: Activations observed during the day.
+          format: int64
+        bucket_start:
+          type: string
+          description: Start of the UTC day.
+          format: date-time
+      description: A UTC-day activation bucket for a skill.
+      required:
+        - bucket_start
+        - activation_count
     SkillSummary:
       type: object
       properties:
@@ -55833,6 +56085,10 @@ components:
         description:
           type: string
           description: The optional description from this manifest version.
+        first_seen_at:
+          type: string
+          description: When this exact version was first activated.
+          format: date-time
         frontmatter:
           type: object
           description: All top-level frontmatter fields parsed from this manifest version.
@@ -55841,6 +56097,10 @@ components:
           type: string
           description: The skill version ID.
           format: uuid
+        last_seen_at:
+          type: string
+          description: When this exact version was most recently activated.
+          format: date-time
         metadata:
           type: object
           description: Metadata parsed from this manifest version.
@@ -55848,6 +56108,10 @@ components:
         raw_sha256:
           type: string
           description: The SHA-256 digest of the exact uploaded SKILL.md content.
+        seen_count:
+          type: integer
+          description: The number of activations attributed to this exact version.
+          format: int64
         skill_id:
           type: string
           description: The skill that owns this version.
@@ -55873,6 +56137,7 @@ components:
         - validation_errors
         - created_at
         - created_by_user_id
+        - seen_count
     SourceEnvironmentLink:
       type: object
       properties:
@@ -58020,6 +58285,43 @@ components:
         plugin_id: 550e8400-e29b-41d4-a716-446655440001
       required:
         - id
+    UnknownSkillActivation:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The activation observation ID.
+          format: uuid
+        provider:
+          type: string
+          description: The agent provider that reported the activation.
+        reason:
+          type: string
+          description: Why exact version attribution failed.
+          enum:
+            - invalid_name
+            - unresolved_hash
+            - ambiguous_hash
+        seen_at:
+          type: string
+          description: When the activation occurred.
+          format: date-time
+        skill_name:
+          type: string
+          description: The skill name reported by the agent.
+        source:
+          type: string
+          description: The optional provider-specific source.
+        source_level:
+          type: string
+          description: The optional source precedence level.
+      description: A completed activation that could not be attributed to a skill version.
+      required:
+        - id
+        - skill_name
+        - provider
+        - seen_at
+        - reason
     UpdateAssistantForm:
       type: object
       properties:
