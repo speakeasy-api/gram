@@ -49,7 +49,7 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 }
 
 const claimPendingSkillObservations = `-- name: ClaimPendingSkillObservations :many
-SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, reconciled_at, reconcile_error_code, created_at
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, reconcile_error_code, created_at
 FROM skill_observations
 WHERE project_id = $1
   AND reconciled_at IS NULL
@@ -88,6 +88,7 @@ func (q *Queries) ClaimPendingSkillObservations(ctx context.Context, arg ClaimPe
 			&i.RawSha256,
 			&i.SeenAt,
 			&i.SkillID,
+			&i.SkillVersionID,
 			&i.ReconciledAt,
 			&i.ReconcileErrorCode,
 			&i.CreatedAt,
