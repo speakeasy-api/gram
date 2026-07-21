@@ -221,6 +221,10 @@ export type EntityProfileProps = {
   rangeLabel: string;
   // The summary widgets row (trend chart, mix, KPIs), rendered above the table.
   widgets: ReactNode;
+  // The stacked cost-over-time chart, rendered inside the breakdown section
+  // between the control bar and the table — it stacks by the same axis the
+  // bar controls, so it reads as part of the breakdown.
+  chart?: ReactNode;
   isLoading: boolean;
   isError: boolean;
 };
@@ -262,6 +266,7 @@ export function EntityProfile({
   rangePicker,
   rangeLabel,
   widgets,
+  chart,
   isLoading,
   isError,
 }: EntityProfileProps): JSX.Element {
@@ -518,6 +523,7 @@ export function EntityProfile({
               </button>
             }
           />
+          {chart}
           {tableOverride ?? dimensionTable}
         </div>
       </div>

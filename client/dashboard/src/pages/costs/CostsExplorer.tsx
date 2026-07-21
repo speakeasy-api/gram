@@ -29,6 +29,7 @@ import {
 } from "@/lib/insights-suggestions";
 import { useRoutes } from "@/routes";
 import { ChatDetailSheet } from "../chatLogs/ChatDetailPanel";
+import { CostBreakdownChart } from "./CostBreakdownChart";
 import { type CardSpec, CostWidgets } from "./CostWidgets";
 import { EntityProfile } from "./EntityProfile";
 import { SessionTable, type SessionColumnId } from "./SessionTable";
@@ -1169,6 +1170,16 @@ export function CostsExplorer(): JSX.Element {
     ? [sessionsCard, ...cards.slice(0, 1)]
     : cards;
 
+  // Chart drill-down: a clicked/dragged bucket becomes the page's custom date
+  // range, clamped to the current period (week/month buckets can overhang its
+  // edges, and a week bar can extend past "now").
+  const handleChartRangeSelect = (start: Date, end: Date): void => {
+    const s = new Date(Math.max(start.getTime(), from.getTime()));
+    const e = new Date(Math.min(end.getTime(), to.getTime()));
+    if (e <= s) return;
+    setCustomRangeParam(s, e);
+  };
+
   const widgets = (
     <CostWidgets
       series={widgetSeries}
@@ -1181,6 +1192,19 @@ export function CostsExplorer(): JSX.Element {
       onOpenSession={setOpenChatId}
       loading={loadingSlice}
       billingMode={viewBillingMode}
+    />
+  );
+
+  // The stacked cost-over-time chart lives inside the breakdown section (under
+  // the control bar, above the table) — it stacks by the same axis the bar
+  // controls. Sessions mode swaps the table for the per-session list, where a
+  // dimension-stacked chart would mismatch the view, so it comes off with it.
+  const breakdownChart = sessionsMode ? undefined : (
+    <CostBreakdownChart
+      data={data}
+      groupBy={groupBy}
+      loading={loadingSlice}
+      onSelectRange={handleChartRangeSelect}
     />
   );
 
@@ -1271,6 +1295,7 @@ export function CostsExplorer(): JSX.Element {
             : undefined
         }
         onViewSessions={onViewSessions}
+        chart={breakdownChart}
         seriesByGroup={seriesByGroup}
         datasetValue={dataset}
         datasetOptions={DATASET_OPTIONS}

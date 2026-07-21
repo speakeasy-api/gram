@@ -8,13 +8,9 @@ import { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { CHART_COLORS, OTHER_COLOR } from "@/components/stacked-time-series";
 import { type BillingPeriod, bucketDateKey } from "./billing-cycles";
-import {
-  breakdownLabel,
-  breakdownValueLabel,
-  CHART_COLORS,
-  OTHER_COLOR,
-} from "./breakdown-options";
+import { breakdownLabel, breakdownValueLabel } from "./breakdown-options";
 import { tumDetailsQuery } from "./tum-queries";
 
 // Vercel-style usage details for the selected billing cycle: one row per

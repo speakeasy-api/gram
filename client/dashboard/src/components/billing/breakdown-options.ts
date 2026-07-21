@@ -33,22 +33,6 @@ export type StackMode = "group" | "tokenType" | "total";
 export const BREAKDOWN_TOTAL = "total";
 const BREAKDOWN_TOKEN_TYPE = "tokenType";
 
-// The chart series palette, shared with the usage details table so a metric's
-// dot color matches its chart legend color.
-export const CHART_COLORS = [
-  "#60a5fa", // blue
-  "#34d399", // emerald
-  "#f97316", // orange
-  "#a78bfa", // violet
-  "#fb7185", // rose
-  "#facc15", // yellow
-  "#38bdf8", // sky
-  "#c084fc", // purple
-  "#4ade80", // green
-  "#f472b6", // pink
-];
-export const OTHER_COLOR = "#94a3b8"; // slate — the top-N remainder rollup
-
 type BreakdownOption = {
   value: string;
   label: string;
