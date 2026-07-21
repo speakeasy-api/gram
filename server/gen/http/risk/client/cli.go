@@ -2132,7 +2132,7 @@ func BuildEvaluatePromptGuardrailPayload(riskEvaluatePromptGuardrailBody string,
 	{
 		err = json.Unmarshal([]byte(riskEvaluatePromptGuardrailBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"prompt\": \"aa\",\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"prompt\": \"aa\",\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", body.ChatID, goa.FormatUUID))
 		if utf8.RuneCountInString(body.Prompt) < 1 {
@@ -2171,12 +2171,6 @@ func BuildEvaluatePromptGuardrailPayload(riskEvaluatePromptGuardrailBody string,
 	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
-	}
-	if body.MessageTypes != nil {
-		v.MessageTypes = make([]string, len(body.MessageTypes))
-		for i, val := range body.MessageTypes {
-			v.MessageTypes[i] = val
-		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

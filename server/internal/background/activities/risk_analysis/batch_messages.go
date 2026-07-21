@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -107,25 +106,6 @@ func parseRecordedToolCalls(ctx context.Context, logger *slog.Logger, raw []byte
 		return []recordedToolCall{fallback}
 	}
 	return calls
-}
-
-func filterMessagesByMessageTypes(messages []repo.GetMessageContentBatchRow, messageTypes []string) []repo.GetMessageContentBatchRow {
-	filtered := make([]repo.GetMessageContentBatchRow, 0, len(messages))
-	for _, msg := range messages {
-		messageType, ok := messageRowMessageType(msg)
-		if !ok {
-			continue
-		}
-		if len(messageTypes) > 0 && !slices.Contains(messageTypes, messageType) {
-			continue
-		}
-		filtered = append(filtered, msg)
-	}
-	return filtered
-}
-
-func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bool) {
-	return messageTypeForRole(msg.Role, msg.ToolCalls)
 }
 
 func messageTypeForRole(role string, toolCalls []byte) (message.Type, bool) {

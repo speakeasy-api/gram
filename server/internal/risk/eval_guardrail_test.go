@@ -140,7 +140,7 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 	require.Empty(t, results.Results)
 }
 
-func TestEvaluatePromptGuardrail_MessageTypeFilter(t *testing.T) {
+func TestEvaluatePromptGuardrail_ScopeIncludeFilter(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -163,7 +163,7 @@ func TestEvaluatePromptGuardrail_MessageTypeFilter(t *testing.T) {
 	res, err := ti.service.EvaluatePromptGuardrail(ctx, &gen.EvaluatePromptGuardrailPayload{
 		ChatID:       chatID.String(),
 		Prompt:       "anything",
-		MessageTypes: []string{"user_message"},
+		ScopeInclude: new(`kind == "user_message"`),
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, res.JudgedCount)
@@ -240,8 +240,8 @@ func TestEvaluatePromptGuardrail_CELScopeExemptSkipsToolCall(t *testing.T) {
 	res, err := ti.service.EvaluatePromptGuardrail(ctx, &gen.EvaluatePromptGuardrailPayload{
 		ChatID:       chatID.String(),
 		Prompt:       "Flag destructive requests.",
+		ScopeInclude: new(`kind == "tool_request"`),
 		ScopeExempt:  new(`tool_calls.all(t, t.server.matchText("slack"))`),
-		MessageTypes: []string{"tool_request"},
 	})
 	require.NoError(t, err)
 

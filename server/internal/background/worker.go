@@ -366,6 +366,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReconcileSkillObservations)
 	temporalWorker.RegisterActivity(activities.ListProjectsWithPendingSkillObservations)
 	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
+	temporalWorker.RegisterActivity(activities.BackfillRiskDetectionScopes)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
 	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
@@ -430,6 +431,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ReconcileSkillObservationsWorkflow)
 	temporalWorker.RegisterWorkflow(SkillObservationReconciliationSweepWorkflow)
 	temporalWorker.RegisterWorkflow(RiskPolicyCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(BackfillRiskDetectionScopesWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)

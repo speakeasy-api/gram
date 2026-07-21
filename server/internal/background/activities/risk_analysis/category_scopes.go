@@ -97,29 +97,22 @@ func effectiveScope(rec RecommendedSet, specified map[categories.Category]Compil
 
 // CategoryScopes is the per-batch composition of per-category detection
 // scopes: policy-specified scopes merged over registry recommendations, with
-// the specified scope winning per category. The legacy policy scope still
-// intersects while `scope_include`/`scope_exempt` remain on policy rows.
-// Nil-safe zero value = policy scope only.
+// the specified scope winning per category.
 type CategoryScopes struct {
-	policy    CompiledScope
 	rec       RecommendedSet
 	specified map[categories.Category]CompiledScope
-	enabled   bool
 	metrics   *riskMetrics
 }
 
-// CategoryScopeMasks contains per-message policy and category scope exclusions.
+// CategoryScopeMasks contains per-message category scope exclusions.
 type CategoryScopeMasks struct {
-	policyOut   []bool
 	categoryOut map[categories.Category][]bool
 }
 
-func NewCategoryScopes(policy CompiledScope, rec RecommendedSet, specified map[categories.Category]CompiledScope, enabled bool, metrics *riskMetrics) CategoryScopes {
+func NewCategoryScopes(rec RecommendedSet, specified map[categories.Category]CompiledScope, metrics *riskMetrics) CategoryScopes {
 	return CategoryScopes{
-		policy:    policy,
 		rec:       rec,
 		specified: specified,
-		enabled:   enabled,
 		metrics:   metrics,
 	}
 }
@@ -128,31 +121,21 @@ func NewCategoryScopes(policy CompiledScope, rec RecommendedSet, specified map[c
 // enforcement: policy-specified detection scopes merged over registry
 // recommendations, specified winning per category.
 type CategoryScope struct {
-	policy    CompiledScope
 	rec       RecommendedSet
 	specified map[categories.Category]CompiledScope
-	enabled   bool
 }
 
-// NewCategoryScope builds a single-message category scope. Its zero value is
-// policy scope only.
-func NewCategoryScope(policy CompiledScope, rec RecommendedSet, specified map[categories.Category]CompiledScope, enabled bool) CategoryScope {
+// NewCategoryScope builds a single-message category scope. Its zero value
+// admits every message.
+func NewCategoryScope(rec RecommendedSet, specified map[categories.Category]CompiledScope) CategoryScope {
 	return CategoryScope{
-		policy:    policy,
 		rec:       rec,
 		specified: specified,
-		enabled:   enabled,
 	}
 }
 
 // InScope reports whether view is in scope for cat.
 func (s CategoryScope) InScope(view MessageView, cat categories.Category) bool {
-	if !s.policyIncludes(view) {
-		return false
-	}
-	if !s.enabled {
-		return true
-	}
 	scope, ok := effectiveScope(s.rec, s.specified, cat)
 	if !ok {
 		return true
@@ -166,7 +149,7 @@ func (s CategoryScope) InScope(view MessageView, cat categories.Category) bool {
 func (s CategoryScope) SourceInScope(view MessageView, source string) bool {
 	cats := SourceCategories(source)
 	if len(cats) == 0 {
-		return s.policyIncludes(view)
+		return true
 	}
 	for _, cat := range cats {
 		if s.InScope(view, cat) {
@@ -190,22 +173,14 @@ func (s CategoryScope) FilterFindings(view MessageView, findings []scanners.Find
 	return out
 }
 
-func (s CategoryScope) policyIncludes(view MessageView) bool {
-	if !s.policy.Active() {
-		return true
-	}
-	return s.policy.Includes(view) && !s.policy.Exempts(view)
-}
-
-// Masks computes the policy-scope mask and per-category detection scope masks
-// for the batch. Identical CEL programs are evaluated once per message and
-// shared by every category using that program.
+// Masks computes the per-category detection scope masks for the batch.
+// Identical CEL programs are evaluated once per message and shared by every
+// category using that program.
 func (s CategoryScopes) Masks(_ context.Context, messages []batchMessage) CategoryScopeMasks {
 	masks := CategoryScopeMasks{
-		policyOut:   s.policyExclusions(messages),
 		categoryOut: map[categories.Category][]bool{},
 	}
-	if !s.enabled || (len(s.rec.scopes) == 0 && len(s.specified) == 0) {
+	if len(s.rec.scopes) == 0 && len(s.specified) == 0 {
 		return masks
 	}
 
@@ -237,22 +212,7 @@ func (s CategoryScopes) Masks(_ context.Context, messages []batchMessage) Catego
 	return masks
 }
 
-func (s CategoryScopes) policyExclusions(messages []batchMessage) []bool {
-	if !s.policy.Active() {
-		return []bool{}
-	}
-	excluded := make([]bool, len(messages))
-	for i, msg := range messages {
-		view := batchMessageView(msg)
-		excluded[i] = !s.policy.Includes(view) || s.policy.Exempts(view)
-	}
-	return excluded
-}
-
 func (m CategoryScopeMasks) InScope(i int, cat categories.Category) bool {
-	if len(m.policyOut) > 0 && m.policyOut[i] {
-		return false
-	}
 	if categoryOut, ok := m.categoryOut[cat]; ok && categoryOut[i] {
 		return false
 	}
@@ -272,7 +232,7 @@ func (m CategoryScopeMasks) Subset(messages []batchMessage, contents []string, c
 	if len(messages) == 0 {
 		return nil, nil, nil
 	}
-	// Without category masks the prefilter is a no-op; policy-scope drops stay post-scan.
+	// Without category masks the prefilter is a no-op.
 	if len(m.categoryOut) == 0 {
 		indices := make([]int, len(messages))
 		for i := range indices {
@@ -307,9 +267,6 @@ func (m CategoryScopeMasks) RecommendedPrefilteredCount(cats []categories.Catego
 
 	skipped := 0
 	for i := range count {
-		if len(m.policyOut) > 0 && m.policyOut[i] {
-			continue
-		}
 		if m.AdmitsAny(i, cats) {
 			continue
 		}

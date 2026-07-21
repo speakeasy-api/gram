@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 	"time"
 
@@ -41,8 +40,8 @@ type MessageVerdict struct {
 // prompt the batch analyzer runs, so a workbench replay matches production
 // judging. It performs no writes, enforcement, or outbox side effects.
 //
-// Scoping is by message_types and CEL scope predicates; when both are empty
-// every supported message is judged.
+// Scoping is by the guardrail's effective detection scope predicates; when both
+// are empty every supported message is judged.
 func EvalPromptGuardrail(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -51,7 +50,6 @@ func EvalPromptGuardrail(
 	orgID, projectID, prompt string,
 	cfg promptpolicy.Config,
 	messages []EvalMessage,
-	messageTypes []string,
 	includeCEL, exemptCEL string,
 ) ([]MessageVerdict, error) {
 	scope, err := CompileScope(eng, includeCEL, exemptCEL)
@@ -64,9 +62,6 @@ func EvalPromptGuardrail(
 	for i, m := range messages {
 		msg, ok := newBatchMessage(ctx, logger, m.ID, m.Role, m.Content, m.ToolCalls)
 		if !ok {
-			continue
-		}
-		if len(messageTypes) > 0 && !slices.Contains(messageTypes, msg.Type) {
 			continue
 		}
 		ok, err := scope.InScope(batchMessageView(msg))

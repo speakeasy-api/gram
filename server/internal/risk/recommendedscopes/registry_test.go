@@ -33,7 +33,7 @@ func TestScopesCompile(t *testing.T) {
 	}
 }
 
-func TestAllCoversCategoriesExceptCustomWithNoDuplicates(t *testing.T) {
+func TestAllCoversEveryCategoryWithNoDuplicates(t *testing.T) {
 	t.Parallel()
 
 	seen := map[categories.Category]struct{}{}
@@ -44,15 +44,17 @@ func TestAllCoversCategoriesExceptCustomWithNoDuplicates(t *testing.T) {
 	}
 
 	for _, def := range categories.All() {
-		if def.Category == categories.CategoryCustom {
-			continue
-		}
 		_, ok := seen[def.Category]
 		require.Truef(t, ok, "missing category %q", def.Category)
 	}
 
-	_, ok := For(categories.CategoryCustom)
-	require.False(t, ok)
+	// Custom rules self-scope via detection_expr: the entry exists so policies
+	// can specify a scope for them, but carries no default restriction.
+	custom, ok := For(categories.CategoryCustom)
+	require.True(t, ok)
+	require.True(t, custom.Applicable)
+	require.Empty(t, custom.ScopeInclude)
+	require.Empty(t, custom.ScopeExempt)
 }
 
 func TestApplicableScopesExcludeAssistantMessages(t *testing.T) {
@@ -63,7 +65,9 @@ func TestApplicableScopesExcludeAssistantMessages(t *testing.T) {
 
 	assistant := celenv.Message{Type: "assistant_message", Content: "AKIAIOSFODNN7EXAMPLE and other sensitive text.", Tools: nil}
 	for _, rec := range All() {
-		if !rec.Applicable {
+		// Skip session-scoped categories and deliberately unrestricted ones
+		// (custom: rules self-scope via detection_expr).
+		if !rec.Applicable || (rec.ScopeInclude == "" && rec.ScopeExempt == "") {
 			continue
 		}
 		t.Run(string(rec.Category), func(t *testing.T) {

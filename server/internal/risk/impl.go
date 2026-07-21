@@ -315,7 +315,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err := validateCustomRuleIDs(payload.CustomRuleIds); err != nil {
 		return nil, err
 	}
-	if err := validateMessageTypes(payload.MessageTypes); err != nil {
+	if err := rejectLegacyScopeFields(payload.MessageTypes, payload.ScopeInclude, payload.ScopeExempt); err != nil {
 		return nil, err
 	}
 
@@ -366,15 +366,6 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").LogError(ctx, s.logger)
 	}
 
-	// Scope predicates (CEL) apply to both standard and prompt policies, so they
-	// are not gated by policyType like the detection fields.
-	if err := validateScopeExpr(s.celEng, payload.ScopeInclude); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid scope_include")
-	}
-	if err := validateScopeExpr(s.celEng, payload.ScopeExempt); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid scope_exempt")
-	}
-
 	analyzerConfig, err := ra.WithPresidioScoreThreshold(nil, payload.PresidioScoreThreshold)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
@@ -418,9 +409,6 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
 		DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
 		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
-		MessageTypes:         payload.MessageTypes,
-		ScopeInclude:         conv.PtrToPGText(payload.ScopeInclude),
-		ScopeExempt:          conv.PtrToPGText(payload.ScopeExempt),
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
@@ -701,28 +689,8 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		customRuleIds = payload.CustomRuleIds
 	}
 
-	messageTypes := current.MessageTypes
-	if payload.MessageTypes != nil {
-		if err := validateMessageTypes(payload.MessageTypes); err != nil {
-			return nil, err
-		}
-		messageTypes = payload.MessageTypes
-	}
-
-	// Scope predicates (CEL): omit to preserve; send (possibly empty) to replace.
-	scopeInclude := current.ScopeInclude
-	if payload.ScopeInclude != nil {
-		if err := validateScopeExpr(s.celEng, payload.ScopeInclude); err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid scope_include")
-		}
-		scopeInclude = conv.PtrToPGText(payload.ScopeInclude)
-	}
-	scopeExempt := current.ScopeExempt
-	if payload.ScopeExempt != nil {
-		if err := validateScopeExpr(s.celEng, payload.ScopeExempt); err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid scope_exempt")
-		}
-		scopeExempt = conv.PtrToPGText(payload.ScopeExempt)
+	if err := rejectLegacyScopeFields(payload.MessageTypes, payload.ScopeInclude, payload.ScopeExempt); err != nil {
+		return nil, err
 	}
 
 	enabled := current.Enabled
@@ -849,9 +817,6 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		PromptInjectionRules: promptInjectionRules,
 		DisabledRules:        disabledRules,
 		CustomRuleIds:        customRuleIds,
-		MessageTypes:         messageTypes,
-		ScopeInclude:         scopeInclude,
-		ScopeExempt:          scopeExempt,
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
@@ -2317,18 +2282,16 @@ func validateCustomRuleIDs(ids []string) error {
 	return nil
 }
 
-func validateMessageTypes(messageTypes []string) error {
-	for _, messageType := range messageTypes {
-		if message.IsTypeValid(messageType) {
-			continue
-		}
-		return oops.E(
-			oops.CodeInvalid,
-			nil,
-			"message_type %q must be one of: %s",
-			messageType,
-			strings.Join(message.AllTypes(), ", "),
-		)
+// rejectLegacyScopeFields rejects the removed policy-wide scoping fields with
+// a pointer at their replacement. Empty values are tolerated so older clients
+// sending `[]`/`""` for "no restriction" keep working through the deprecation
+// window.
+func rejectLegacyScopeFields(messageTypes []string, scopeInclude, scopeExempt *string) error {
+	if len(messageTypes) > 0 {
+		return oops.E(oops.CodeInvalid, nil, "message_types has been replaced by per-category detection_scopes")
+	}
+	if strings.TrimSpace(conv.PtrValOr(scopeInclude, "")) != "" || strings.TrimSpace(conv.PtrValOr(scopeExempt, "")) != "" {
+		return oops.E(oops.CodeInvalid, nil, "scope_include and scope_exempt have been replaced by per-category detection_scopes")
 	}
 	return nil
 }
@@ -2420,14 +2383,6 @@ func validateExpr(eng *celenv.Engine, expr string) error {
 		return fmt.Errorf("compile cel: %w", err)
 	}
 	return nil
-}
-
-// validateScopeExpr validates an optional CEL scope predicate from a payload.
-func validateScopeExpr(eng *celenv.Engine, expr *string) error {
-	if expr == nil {
-		return nil
-	}
-	return validateExpr(eng, *expr)
 }
 
 func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
@@ -2771,7 +2726,6 @@ func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.Eval
 		chatID,
 		prompt,
 		cfg,
-		payload.MessageTypes,
 		conv.PtrValOr(payload.ScopeInclude, ""),
 		conv.PtrValOr(payload.ScopeExempt, ""),
 	)
@@ -2784,7 +2738,6 @@ func (s *Service) evaluateGuardrailForChat(
 	chatID uuid.UUID,
 	prompt string,
 	cfg promptpolicy.Config,
-	messageTypes []string,
 	includeCEL string,
 	exemptCEL string,
 ) (*gen.PromptGuardrailEvalResult, error) {
@@ -2828,7 +2781,6 @@ func (s *Service) evaluateGuardrailForChat(
 		prompt,
 		cfg,
 		messages,
-		messageTypes,
 		includeCEL,
 		exemptCEL,
 	)
@@ -3254,9 +3206,6 @@ func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages in
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,
-		MessageTypes:           row.MessageTypes,
-		ScopeInclude:           conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:            conv.FromPGText[string](row.ScopeExempt),
 		Enabled:                row.Enabled,
 		Action:                 row.Action,
 		AudienceType:           row.AudienceType,
@@ -3291,9 +3240,6 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,
-		MessageTypes:           row.MessageTypes,
-		ScopeInclude:           conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:            conv.FromPGText[string](row.ScopeExempt),
 		Enabled:                row.Enabled,
 		Action:                 row.Action,
 		AudienceType:           row.AudienceType,

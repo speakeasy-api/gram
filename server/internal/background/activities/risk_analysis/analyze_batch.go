@@ -126,7 +126,6 @@ type AnalyzeBatchArgs struct {
 	PolicyVersion    int64
 	MessageIDs       []uuid.UUID
 	Sources          []string
-	MessageTypes     []string
 	PresidioEntities []string
 	// PresidioScoreThreshold is the per-policy minimum recognizer confidence
 	// (0.0-1.0). Do derives it from the refetched policy's analyzer_config, so it
@@ -206,7 +205,6 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
-	rows = filterMessagesByMessageTypes(rows, args.MessageTypes)
 	messages := newBatchMessages(ctx, a.logger, rows)
 	scannedCount = len(messages)
 
@@ -219,9 +217,9 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}
 
 	// Session-scoped account_identity findings are computed over the batch's
-	// full message-id set, before the message-type filter and CEL scope above
-	// apply: the detector reads the session's account attribution, not message
-	// content, so narrowing a policy's scope must not subset which sessions it
+	// full message-id set, outside the detection scope masks: the detector
+	// reads the session's account attribution, not message content, so
+	// narrowing a policy's detection scopes must not subset which sessions it
 	// evaluates. Exclusions apply on entry into the pipeline (in
 	// appendSessionFindings below) and disabled_rules at the shared filter
 	// step, mirroring the content path.
@@ -242,16 +240,11 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 
 	findings := make([][]scanners.Finding, len(messages))
 	if len(messages) > 0 {
-		scope, err := CompileScope(a.celEng, policy.ScopeInclude.String, policy.ScopeExempt.String)
-		if err != nil {
-			return nil, fmt.Errorf("compile policy scope: %w", err)
-		}
 		specified, err := CompileDetectionScopes(a.celEng, args.DetectionScopes)
 		if err != nil {
 			return nil, fmt.Errorf("compile detection scopes: %w", err)
 		}
-		recommendedEnabled := a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagRiskRecommendedScopes)
-		categoryScopes := NewCategoryScopes(scope, a.recommended, specified, recommendedEnabled, a.metrics)
+		categoryScopes := NewCategoryScopes(a.recommended, specified, a.metrics)
 		masks := categoryScopes.Masks(ctx, messages)
 
 		switch policy.PolicyType {

@@ -623,9 +623,6 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
-  , message_types
-  , scope_include
-  , scope_exempt
   , enabled
   , action
   , audience_type
@@ -648,17 +645,14 @@ VALUES (
   , $9
   , $10
   , COALESCE($11::text[], '{}'::text[])
-  , $12::text[]
-  , $13::text
-  , $14::text
+  , $12
+  , $13
+  , $14
   , $15
   , $16
-  , $17
-  , $18
-  , $19
-  , $20::text
-  , $21::jsonb
-  , COALESCE($22::double precision, 5.0)
+  , $17::text
+  , $18::jsonb
+  , COALESCE($19::double precision, 5.0)
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
@@ -676,9 +670,6 @@ type CreateRiskPolicyParams struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
-	MessageTypes         []string
-	ScopeInclude         pgtype.Text
-	ScopeExempt          pgtype.Text
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -702,9 +693,6 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.PromptInjectionRules,
 		arg.DisabledRules,
 		arg.CustomRuleIds,
-		arg.MessageTypes,
-		arg.ScopeInclude,
-		arg.ScopeExempt,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,
@@ -2292,6 +2280,67 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 	return items, nil
 }
 
+const listRiskPoliciesWithLegacyScope = `-- name: ListRiskPoliciesWithLegacyScope :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE deleted IS FALSE
+  AND (
+    COALESCE(cardinality(message_types), 0) > 0
+    OR NULLIF(TRIM(scope_include), '') IS NOT NULL
+    OR NULLIF(TRIM(scope_exempt), '') IS NOT NULL
+  )
+`
+
+// Backfill scan for the one-shot legacy-scope migration: every live policy
+// that still carries a message_types or scope_include/scope_exempt value.
+func (q *Queries) ListRiskPoliciesWithLegacyScope(ctx context.Context) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listRiskPoliciesWithLegacyScope)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.MessageTypes,
+			&i.ScopeInclude,
+			&i.ScopeExempt,
+			&i.Action,
+			&i.AudienceType,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskPolicyBypassRequests = `-- name: ListRiskPolicyBypassRequests :many
 SELECT id, organization_id, project_id, risk_policy_id, target_kind, target_label, target_key, target_dimensions, requester_user_id, requester_email, note, status, decided_by, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_bypass_requests
@@ -3396,6 +3445,33 @@ func (q *Queries) MarkRiskPolicyChallengeDeclined(ctx context.Context, arg MarkR
 	return i, err
 }
 
+const migrateRiskPolicyLegacyScope = `-- name: MigrateRiskPolicyLegacyScope :exec
+UPDATE risk_policies
+SET analyzer_config = $1::jsonb
+  , message_types = NULL
+  , scope_include = NULL
+  , scope_exempt = NULL
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type MigrateRiskPolicyLegacyScopeParams struct {
+	AnalyzerConfig []byte
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// One-shot backfill write: the legacy policy-wide scope has been composed into
+// analyzer_config.detection_scopes, so the legacy columns are cleared. The
+// version is deliberately untouched - effective scan behavior is unchanged, so
+// a re-scan of analyzed messages must not be triggered.
+func (q *Queries) MigrateRiskPolicyLegacyScope(ctx context.Context, arg MigrateRiskPolicyLegacyScopeParams) error {
+	_, err := q.db.Exec(ctx, migrateRiskPolicyLegacyScope, arg.AnalyzerConfig, arg.ID, arg.ProjectID)
+	return err
+}
+
 const refreshAccountIdentityFindingMatch = `-- name: RefreshAccountIdentityFindingMatch :execrows
 UPDATE risk_results rr
 SET description = $1, match = $2
@@ -3512,6 +3588,37 @@ func (q *Queries) RiskEvalChatBelongsToProject(ctx context.Context, arg RiskEval
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const setRiskPolicyLegacyScopeFields = `-- name: SetRiskPolicyLegacyScopeFields :exec
+UPDATE risk_policies
+SET message_types = $1::text[]
+  , scope_include = $2::text
+  , scope_exempt = $3::text
+WHERE id = $4
+  AND project_id = $5
+`
+
+type SetRiskPolicyLegacyScopeFieldsParams struct {
+	MessageTypes []string
+	ScopeInclude pgtype.Text
+	ScopeExempt  pgtype.Text
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+// Test fixture only: writes the deprecated legacy-scope columns that
+// application code no longer sets, so the backfill migration can be exercised
+// against rows shaped like pre-migration data.
+func (q *Queries) SetRiskPolicyLegacyScopeFields(ctx context.Context, arg SetRiskPolicyLegacyScopeFieldsParams) error {
+	_, err := q.db.Exec(ctx, setRiskPolicyLegacyScopeFields,
+		arg.MessageTypes,
+		arg.ScopeInclude,
+		arg.ScopeExempt,
+		arg.ID,
+		arg.ProjectID,
+	)
+	return err
 }
 
 const setRiskResultExcludedForTest = `-- name: SetRiskResultExcludedForTest :exec
@@ -3698,18 +3805,15 @@ SET name = $1
   , prompt_injection_rules = $5
   , disabled_rules = $6
   , custom_rule_ids = COALESCE($7::text[], '{}'::text[])
-  , message_types = $8::text[]
-  , scope_include = $9::text
-  , scope_exempt = $10::text
-  , enabled = $11
-  , action = $12
-  , audience_type = $13
-  , auto_name = $14
-  , user_message = $15
-  , prompt = $16::text
-  , model_config = $17::jsonb
+  , enabled = $8
+  , action = $9
+  , audience_type = $10
+  , auto_name = $11
+  , user_message = $12
+  , prompt = $13::text
+  , model_config = $14::jsonb
   -- Descriptive severity: preserve on omit, never contributes to the version bump.
-  , score = COALESCE($18::double precision, score)
+  , score = COALESCE($15::double precision, score)
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -3717,20 +3821,17 @@ SET name = $1
         OR prompt_injection_rules IS DISTINCT FROM $5
         OR disabled_rules IS DISTINCT FROM $6
         OR custom_rule_ids IS DISTINCT FROM COALESCE($7::text[], '{}'::text[])
-        OR message_types IS DISTINCT FROM $8::text[]
-        OR scope_include IS DISTINCT FROM $9::text
-        OR scope_exempt IS DISTINCT FROM $10::text
-        OR enabled IS DISTINCT FROM $11
-        OR action IS DISTINCT FROM $12
-        OR prompt IS DISTINCT FROM $16::text
-        OR model_config IS DISTINCT FROM $17::jsonb
-        OR audience_type IS DISTINCT FROM $13
+        OR enabled IS DISTINCT FROM $8
+        OR action IS DISTINCT FROM $9
+        OR prompt IS DISTINCT FROM $13::text
+        OR model_config IS DISTINCT FROM $14::jsonb
+        OR audience_type IS DISTINCT FROM $10
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $19
-  AND project_id = $20
+WHERE id = $16
+  AND project_id = $17
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 `
@@ -3743,9 +3844,6 @@ type UpdateRiskPolicyParams struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
-	MessageTypes         []string
-	ScopeInclude         pgtype.Text
-	ScopeExempt          pgtype.Text
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -3767,9 +3865,6 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.PromptInjectionRules,
 		arg.DisabledRules,
 		arg.CustomRuleIds,
-		arg.MessageTypes,
-		arg.ScopeInclude,
-		arg.ScopeExempt,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,

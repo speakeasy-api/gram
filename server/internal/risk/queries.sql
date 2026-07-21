@@ -11,9 +11,6 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
-  , message_types
-  , scope_include
-  , scope_exempt
   , enabled
   , action
   , audience_type
@@ -36,9 +33,6 @@ VALUES (
   , @prompt_injection_rules
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-  , sqlc.arg(message_types)::text[]
-  , sqlc.narg(scope_include)::text
-  , sqlc.narg(scope_exempt)::text
   , @enabled
   , @action
   , @audience_type
@@ -86,6 +80,44 @@ WHERE project_id = @project_id
   AND enabled IS TRUE
   AND deleted IS FALSE;
 
+-- name: ListRiskPoliciesWithLegacyScope :many
+-- Backfill scan for the one-shot legacy-scope migration: every live policy
+-- that still carries a message_types or scope_include/scope_exempt value.
+SELECT *
+FROM risk_policies
+WHERE deleted IS FALSE
+  AND (
+    COALESCE(cardinality(message_types), 0) > 0
+    OR NULLIF(TRIM(scope_include), '') IS NOT NULL
+    OR NULLIF(TRIM(scope_exempt), '') IS NOT NULL
+  );
+
+-- name: SetRiskPolicyLegacyScopeFields :exec
+-- Test fixture only: writes the deprecated legacy-scope columns that
+-- application code no longer sets, so the backfill migration can be exercised
+-- against rows shaped like pre-migration data.
+UPDATE risk_policies
+SET message_types = sqlc.narg(message_types)::text[]
+  , scope_include = sqlc.narg(scope_include)::text
+  , scope_exempt = sqlc.narg(scope_exempt)::text
+WHERE id = @id
+  AND project_id = @project_id;
+
+-- name: MigrateRiskPolicyLegacyScope :exec
+-- One-shot backfill write: the legacy policy-wide scope has been composed into
+-- analyzer_config.detection_scopes, so the legacy columns are cleared. The
+-- version is deliberately untouched - effective scan behavior is unchanged, so
+-- a re-scan of analyzed messages must not be triggered.
+UPDATE risk_policies
+SET analyzer_config = sqlc.arg(analyzer_config)::jsonb
+  , message_types = NULL
+  , scope_include = NULL
+  , scope_exempt = NULL
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
 -- name: UpdateRiskPolicy :one
 UPDATE risk_policies
 SET name = @name
@@ -95,9 +127,6 @@ SET name = @name
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-  , message_types = sqlc.arg(message_types)::text[]
-  , scope_include = sqlc.narg(scope_include)::text
-  , scope_exempt = sqlc.narg(scope_exempt)::text
   , enabled = @enabled
   , action = @action
   , audience_type = @audience_type
@@ -114,9 +143,6 @@ SET name = @name
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
-        OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
-        OR scope_include IS DISTINCT FROM sqlc.narg(scope_include)::text
-        OR scope_exempt IS DISTINCT FROM sqlc.narg(scope_exempt)::text
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text

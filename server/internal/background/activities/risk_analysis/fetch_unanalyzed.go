@@ -38,7 +38,6 @@ type PolicyForAnalysis struct {
 	OrganizationID   string
 	Version          int64
 	Sources          []string
-	MessageTypes     []string
 	PresidioEntities []string
 	CustomRuleIds    []string
 }
@@ -103,7 +102,6 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 			OrganizationID:   p.OrganizationID,
 			Version:          p.Version,
 			Sources:          p.Sources,
-			MessageTypes:     p.MessageTypes,
 			PresidioEntities: p.PresidioEntities,
 			CustomRuleIds:    p.CustomRuleIds,
 		}

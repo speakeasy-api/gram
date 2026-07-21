@@ -367,7 +367,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
-		Role:      "user",
+		Role:      "system",
 		Content:   "hello",
 	})
 	require.NoError(t, err)
@@ -425,7 +425,6 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		PolicyVersion:    td.policyVersion,
 		MessageIDs:       []uuid.UUID{msgID},
 		Sources:          []string{"gitleaks"},
-		MessageTypes:     []string{message.ToolRequest},
 		PresidioEntities: nil,
 		CustomRuleIds:    nil,
 	})
@@ -486,7 +485,6 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		Name:           "prompt policy",
 		PolicyType:     "prompt_based",
 		Sources:        []string{},
-		MessageTypes:   []string{message.ToolRequest},
 		Enabled:        true,
 		Action:         "flag",
 		AudienceType:   "everyone",
@@ -534,7 +532,6 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		PolicyVersion:    td.policyVersion,
 		MessageIDs:       []uuid.UUID{msgID},
 		Sources:          nil,
-		MessageTypes:     []string{message.ToolRequest},
 		PresidioEntities: nil,
 		CustomRuleIds:    nil,
 	})
@@ -581,7 +578,6 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		Name:           "prompt policy",
 		PolicyType:     "prompt_based",
 		Sources:        []string{},
-		MessageTypes:   []string{message.ToolRequest},
 		Enabled:        true,
 		Action:         "flag",
 		AudienceType:   "everyone",
@@ -637,7 +633,6 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		PolicyVersion:    td.policyVersion,
 		MessageIDs:       []uuid.UUID{msgID},
 		Sources:          nil,
-		MessageTypes:     []string{message.ToolRequest},
 		PresidioEntities: nil,
 		CustomRuleIds:    nil,
 	})
@@ -1305,7 +1300,6 @@ func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData
 		PromptInjectionRules: policy.PromptInjectionRules,
 		DisabledRules:        policy.DisabledRules,
 		CustomRuleIds:        []string{ruleID},
-		MessageTypes:         policy.MessageTypes,
 		Enabled:              policy.Enabled,
 		Action:               "flag",
 		AudienceType:         policy.AudienceType,

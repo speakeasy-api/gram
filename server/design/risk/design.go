@@ -38,9 +38,9 @@ var _ = Service("risk", func() {
 			Attribute("detection_scopes", ArrayOf(shared.RiskDetectionScope), "Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Empty/omitted = all recommendations apply unchanged.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
-			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
-			Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
-			Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.")
+			Attribute("message_types", ArrayOf(String), "Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.")
+			Attribute("scope_include", String, "Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.")
+			Attribute("scope_exempt", String, "Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -181,9 +181,9 @@ var _ = Service("risk", func() {
 			Attribute("detection_scopes", ArrayOf(shared.RiskDetectionScope), "Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Omit to preserve the current value; send empty to clear.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
-			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
-			Attribute("scope_include", String, "CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.")
-			Attribute("scope_exempt", String, "CEL exemption predicate. Omit to preserve the current value; send empty to clear.")
+			Attribute("message_types", ArrayOf(String), "Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.")
+			Attribute("scope_include", String, "Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.")
+			Attribute("scope_exempt", String, "Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -1348,7 +1348,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("evaluatePromptGuardrail", func() {
-		Description("Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation; message-type scoping and CEL scope predicates are both applied.")
+		Description("Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + effective detection scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation, applying the supplied scope predicates.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -1362,9 +1362,8 @@ var _ = Service("risk", func() {
 				MaxLength(10000)
 			})
 			Attribute("model_config", shared.RiskPolicyModelConfig, "Optional per-policy LLM-judge model configuration. Omit for the default judge model.")
-			Attribute("message_types", ArrayOf(String), "Message types to judge (user_message, assistant_message, tool_request, tool_response), matching a policy's message_types. When empty or omitted, judges all supported types.")
-			Attribute("scope_include", String, "CEL scope predicate: the replay judges a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
-			Attribute("scope_exempt", String, "CEL exemption predicate: the replay skips a message when this boolean expression is true. Omit/empty means no inline exemption.")
+			Attribute("scope_include", String, "CEL scope predicate: the replay judges a message only when this boolean expression is true. Pass the guardrail's effective prompt_policy detection scope. Omit/empty means all messages are in scope.")
+			Attribute("scope_exempt", String, "CEL exemption predicate: the replay skips a message when this boolean expression is true. Omit/empty means no exemption.")
 			Required("chat_id", "prompt")
 		})
 
