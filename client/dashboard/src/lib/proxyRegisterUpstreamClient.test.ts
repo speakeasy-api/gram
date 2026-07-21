@@ -72,7 +72,7 @@ describe("proxyRegisterUpstreamClient", () => {
     ).rejects.toThrow("scope not supported");
   });
 
-  it("uses a separate fallback body when no details are returned", async () => {
+  it("preserves the status fallback when no details are returned", async () => {
     const authedFetch: AuthedFetch = vi.fn(
       async () => new Response("gateway boom", { status: 502 }),
     );
@@ -83,7 +83,7 @@ describe("proxyRegisterUpstreamClient", () => {
 
     await expect(result).rejects.toMatchObject({
       title: "Registration failed (HTTP 502)",
-      message: "No additional error details were provided.",
+      message: "Registration failed (HTTP 502)",
     });
   });
 });

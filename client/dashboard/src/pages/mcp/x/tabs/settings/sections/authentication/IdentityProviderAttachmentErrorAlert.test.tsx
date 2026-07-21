@@ -38,4 +38,17 @@ describe("IdentityProviderAttachmentErrorAlert", () => {
     ).toBeDefined();
     expect(screen.getByText("The provider could not be saved.")).toBeDefined();
   });
+
+  it("uses a non-duplicative body when the IdP returns no details", () => {
+    render(
+      <IdentityProviderAttachmentErrorAlert
+        error={new ProxyRegistrationError(502)}
+      />,
+    );
+
+    expect(screen.getByText("Registration failed (HTTP 502)")).toBeDefined();
+    expect(
+      screen.getByText("No additional error details were provided."),
+    ).toBeDefined();
+  });
 });

@@ -18,10 +18,11 @@ export type ProxyRegisterUpstreamClientInput = {
 export class ProxyRegistrationError extends Error {
   readonly title: string;
 
-  constructor(status: number, message: string) {
-    super(message);
+  constructor(status: number, message?: string) {
+    const title = `Registration failed (HTTP ${status})`;
+    super(message ?? title);
     this.name = "ProxyRegistrationError";
-    this.title = `Registration failed (HTTP ${status})`;
+    this.title = title;
   }
 }
 
@@ -47,10 +48,8 @@ export async function proxyRegisterUpstreamClient(
   });
 
   if (!response.ok) {
-    const message =
-      (await registrationErrorMessage(response)) ??
-      "No additional error details were provided.";
-    throw new ProxyRegistrationError(response.status, message);
+    const message = await registrationErrorMessage(response);
+    throw new ProxyRegistrationError(response.status, message ?? undefined);
   }
 
   const result = (await response.json()) as {

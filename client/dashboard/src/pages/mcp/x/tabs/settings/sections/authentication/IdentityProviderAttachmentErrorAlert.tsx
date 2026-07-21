@@ -13,7 +13,13 @@ function errorContent(error: unknown): ErrorContent | null {
   }
 
   if (error instanceof ProxyRegistrationError) {
-    return { title: error.title, message: error.message };
+    return {
+      title: error.title,
+      message:
+        error.message === error.title
+          ? "No additional error details were provided."
+          : error.message,
+    };
   }
 
   return {
