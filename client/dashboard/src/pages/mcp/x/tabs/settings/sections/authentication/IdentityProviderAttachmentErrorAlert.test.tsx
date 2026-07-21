@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
 
 const scrollIntoView = vi.fn();
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "scrollIntoView",
+);
 
 beforeEach(() => {
   scrollIntoView.mockReset();
@@ -14,7 +18,18 @@ beforeEach(() => {
   };
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  if (originalScrollIntoView) {
+    Object.defineProperty(
+      HTMLElement.prototype,
+      "scrollIntoView",
+      originalScrollIntoView,
+    );
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+  }
+});
 
 describe("IdentityProviderAttachmentErrorAlert", () => {
   it("renders the registration status as the title and IdP detail as the body", () => {
