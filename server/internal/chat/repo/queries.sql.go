@@ -591,9 +591,12 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.user_account_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email
+SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.user_account_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+  at.assistant_id, a.name AS assistant_name
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
+LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.deleted IS FALSE
+LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
 WHERE c.id = $1 AND c.deleted IS FALSE
 `
 
@@ -614,6 +617,8 @@ type GetChatRow struct {
 	Deleted          bool
 	AccountType      string
 	AccountEmail     string
+	AssistantID      uuid.NullUUID
+	AssistantName    pgtype.Text
 }
 
 // Loads a chat plus the team/personal classification of the AI account that
@@ -640,6 +645,8 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (GetChatRow, error)
 		&i.Deleted,
 		&i.AccountType,
 		&i.AccountEmail,
+		&i.AssistantID,
+		&i.AssistantName,
 	)
 	return i, err
 }
@@ -1818,10 +1825,14 @@ limited_chats AS (
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
+    at.assistant_id,
+    a.name AS assistant_name,
     -- Window count runs before LIMIT/OFFSET, so every returned row carries the
     -- total number of filtered chats.
     COUNT(*) OVER ()::bigint AS total_count
   FROM filtered_chats fc
+  LEFT JOIN assistant_threads at ON at.chat_id = fc.id AND at.deleted IS FALSE
+  LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
   ORDER BY
     -- Recency is pure message time. Hook rows persist at their occurred_at,
     -- so a chat whose only new traffic is spool-replayed backlog keeps its
@@ -1863,6 +1874,8 @@ SELECT
   ) AS risk_findings_count,
   lc.account_type,
   lc.account_email,
+  lc.assistant_id,
+  lc.assistant_name,
   lc.total_count
 FROM limited_chats lc
 `
@@ -1901,6 +1914,8 @@ type ListChatsRow struct {
 	RiskFindingsCount    int32
 	AccountType          string
 	AccountEmail         string
+	AssistantID          uuid.NullUUID
+	AssistantName        pgtype.Text
 	TotalCount           int64
 }
 
@@ -1954,6 +1969,8 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.RiskFindingsCount,
 			&i.AccountType,
 			&i.AccountEmail,
+			&i.AssistantID,
+			&i.AssistantName,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

@@ -537,10 +537,14 @@ limited_chats AS (
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
+    at.assistant_id,
+    a.name AS assistant_name,
     -- Window count runs before LIMIT/OFFSET, so every returned row carries the
     -- total number of filtered chats.
     COUNT(*) OVER ()::bigint AS total_count
   FROM filtered_chats fc
+  LEFT JOIN assistant_threads at ON at.chat_id = fc.id AND at.deleted IS FALSE
+  LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
   ORDER BY
     -- Recency is pure message time. Hook rows persist at their occurred_at,
     -- so a chat whose only new traffic is spool-replayed backlog keeps its
@@ -582,6 +586,8 @@ SELECT
   ) AS risk_findings_count,
   lc.account_type,
   lc.account_email,
+  lc.assistant_id,
+  lc.assistant_name,
   lc.total_count
 FROM limited_chats lc;
 
@@ -617,9 +623,12 @@ ORDER BY latest.source;
 -- produced it (chats.user_account_id has no FK), scoped by organization. Returns
 -- '' for account_type/account_email when the chat has no linked account or it
 -- is unclassified.
-SELECT c.*, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email
+SELECT c.*, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+  at.assistant_id, a.name AS assistant_name
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
+LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.deleted IS FALSE
+LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
 WHERE c.id = @id AND c.deleted IS FALSE;
 
 -- name: GetChatTitlesByIDs :many

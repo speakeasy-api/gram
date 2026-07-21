@@ -23,6 +23,14 @@ export type Chat = {
   accountType?: string | undefined;
   agentUsage?: AgentUsage | undefined;
   /**
+   * The ID of the assistant that produced this chat, if any
+   */
+  assistantId?: string | undefined;
+  /**
+   * The name of the assistant that produced this chat, if any
+   */
+  assistantName?: string | undefined;
+  /**
    * When the chat was created.
    */
   createdAt: Date;
@@ -118,6 +126,8 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     account_email: z.optional(z.string()),
     account_type: z.optional(z.string()),
     agent_usage: z.optional(AgentUsage$inboundSchema),
+    assistant_id: z.optional(z.string()),
+    assistant_name: z.optional(z.string()),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -155,6 +165,8 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "account_email": "accountEmail",
       "account_type": "accountType",
       "agent_usage": "agentUsage",
+      "assistant_id": "assistantId",
+      "assistant_name": "assistantName",
       "created_at": "createdAt",
       "external_user_id": "externalUserId",
       "has_more_after": "hasMoreAfter",
