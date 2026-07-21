@@ -298,7 +298,7 @@ class ProcessPoolScanner(_AsyncCloseable):
         # create is cancelled, waiting for the constructor to finish lets the
         # cleanup path below take ownership of the completed executor rather
         # than leaking a pool that finished constructing in an abandoned thread.
-        executor = await to_thread.run_sync(
+        executor = await asyncify(
             partial(
                 ProcessPoolExecutor,
                 max_workers=max_workers,
@@ -312,7 +312,7 @@ class ProcessPoolScanner(_AsyncCloseable):
                     else None
                 ),
             )
-        )
+        )()
         scanner = cls(
             executor,
             scan_timeout=scan_timeout,
