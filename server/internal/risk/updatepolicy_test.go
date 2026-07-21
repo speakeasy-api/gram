@@ -157,11 +157,11 @@ func TestUpdateRiskPolicy_ShadowMCPAllowedURLsRequireCurrentProjectInventory(t *
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	observedURL := "https://github.example.com/mcp"
 	lookupCalls := 0
-	ti.shadowMCPInventoryURLLookup = func(_ context.Context, projectID uuid.UUID, canonicalURL string) (bool, error) {
+	ti.shadowMCPInventoryURLLookup = func(_ context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		lookupCalls++
 		require.Equal(t, *authCtx.ProjectID, projectID)
-		require.Equal(t, observedURL, canonicalURL)
-		return true, nil
+		require.Equal(t, []string{observedURL}, canonicalURLs)
+		return canonicalURLs, nil
 	}
 
 	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
@@ -188,9 +188,9 @@ func TestUpdateRiskPolicy_ShadowMCPUnobservedURLRejectedBeforeMutation(t *testin
 	invalidationsBefore := ti.cacheDeletes.DeleteCountContaining("shadow_mcp_policy_enabled")
 	lookupCalls := 0
 	reconcileCalls := 0
-	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, string) (bool, error) {
+	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, []string) ([]string, error) {
 		lookupCalls++
-		return false, nil
+		return nil, nil
 	}
 	ti.reconcileShadowMCPPolicyURLs = func(context.Context, riskrepo.DBTX, policybypass.ReconcilePolicyURLsInput) error {
 		reconcileCalls++
@@ -224,8 +224,11 @@ func TestUpdateRiskPolicy_ShadowMCPURLObservedOnlyByAnotherProjectRejected(t *te
 	})
 	require.NoError(t, err)
 	otherProjectID := uuid.New()
-	ti.shadowMCPInventoryURLLookup = func(_ context.Context, projectID uuid.UUID, _ string) (bool, error) {
-		return projectID == otherProjectID, nil
+	ti.shadowMCPInventoryURLLookup = func(_ context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
+		if projectID == otherProjectID {
+			return canonicalURLs, nil
+		}
+		return nil, nil
 	}
 
 	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
@@ -324,8 +327,8 @@ func TestUpdateRiskPolicy_ShadowMCPEmptyAllowedURLsClearsWhileChangingToFlag(t *
 		ShadowMcpAllowedUrls: []string{"https://clear.example.com/mcp"},
 	})
 	require.NoError(t, err)
-	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, string) (bool, error) {
-		return false, errors.New("inventory lookup must not run for explicit clear")
+	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, []string) ([]string, error) {
+		return nil, errors.New("inventory lookup must not run for explicit clear")
 	}
 
 	flag := "flag"

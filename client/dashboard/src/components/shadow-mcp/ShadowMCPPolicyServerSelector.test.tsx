@@ -147,6 +147,14 @@ describe("ShadowMCPPolicyServerSelector", () => {
     expect(within(section).queryByText("0 servers selected")).toBeNull();
   });
 
+  it("distinguishes an empty inventory from empty search results", () => {
+    render(<ControlledSelector servers={[]} />);
+
+    const dialog = openSelector();
+    expect(within(dialog).getByText("No Shadow MCP servers")).toBeTruthy();
+    expect(within(dialog).queryByText("No matching servers")).toBeNull();
+  });
+
   it("shows an action-first table for a new policy selection", () => {
     render(
       <ControlledSelector

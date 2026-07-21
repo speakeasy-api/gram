@@ -1197,15 +1197,15 @@ func newStartCommand() *cli.Command {
 				builtinPresets,
 				hookPromptJudge,
 				policybypass.ReconcilePolicyURLs,
-				func(ctx context.Context, projectID uuid.UUID, canonicalURL string) (bool, error) {
-					row, err := shadowMCPInventoryRepo.GetShadowMCPInventoryURL(ctx, telemetryrepo.GetShadowMCPInventoryURLParams{
-						GramProjectID:      projectID.String(),
-						CanonicalServerURL: canonicalURL,
+				func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
+					urls, err := shadowMCPInventoryRepo.ListExistingShadowMCPInventoryURLs(ctx, telemetryrepo.ListExistingShadowMCPInventoryURLsParams{
+						GramProjectID:       projectID.String(),
+						CanonicalServerURLs: canonicalURLs,
 					})
 					if err != nil {
-						return false, fmt.Errorf("get shadow mcp inventory url: %w", err)
+						return nil, fmt.Errorf("list existing shadow mcp inventory urls: %w", err)
 					}
-					return row != nil, nil
+					return urls, nil
 				},
 			)
 			chatWriter.AddObserver(riskService)

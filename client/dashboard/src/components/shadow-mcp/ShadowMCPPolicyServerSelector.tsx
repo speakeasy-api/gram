@@ -15,6 +15,10 @@ import {
 } from "@speakeasy-api/moonshine";
 import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import {
+  ShadowMCPInventoryServerCell,
+  ShadowMCPInventoryUsageCell,
+} from "./ShadowMCPInventoryCells";
+import {
   shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusLabel,
   type ShadowMCPInventoryStatus,
@@ -49,6 +53,11 @@ function countLabel(count: number, singular: string, plural: string): string {
 
 function selectedCountLabel(count: number): string {
   return countLabel(count, "server selected", "servers selected");
+}
+
+function selectorEmptyMessage(search: string): string {
+  if (search.trim()) return "No matching servers";
+  return "No Shadow MCP servers";
 }
 
 function inventoryAccessStatus(
@@ -87,45 +96,6 @@ function policyServerAction(
   if (!originalURLs.has(url)) return "add";
   if (!selectedURLs.has(url)) return "remove";
   return "no-change";
-}
-
-function ServerCell({ server }: { server: ShadowMCPInventoryServer }) {
-  return (
-    <div className="min-w-0 space-y-1">
-      <div className="flex items-center gap-2">
-        <Type variant="small" className="truncate font-medium">
-          {serverLabel(server)}
-        </Type>
-        {server.requestCount > 0 && (
-          <Badge variant="warning" size="sm" background={false}>
-            <Badge.LeftIcon>
-              <Icon name="shield-alert" />
-            </Badge.LeftIcon>
-            <Badge.Text>
-              {server.requestCount} Access Request
-              {server.requestCount > 1 && "s"}
-            </Badge.Text>
-          </Badge>
-        )}
-      </div>
-      <Type muted small className="truncate text-xs">
-        {server.canonicalServerUrl}
-      </Type>
-    </div>
-  );
-}
-
-function UsageCell({ server }: { server: ShadowMCPInventoryServer }) {
-  return (
-    <div className="space-y-1">
-      <Type variant="small">
-        {countLabel(server.observedUseCount, "call", "calls")}
-      </Type>
-      <Type muted small className="text-xs">
-        {countLabel(server.userCount, "user", "users")}
-      </Type>
-    </div>
-  );
 }
 
 function StatusCell({ server }: { server: ShadowMCPInventoryServer }) {
@@ -350,7 +320,7 @@ export function ShadowMCPPolicyServerSelector({
             .trim()
             .toLowerCase(),
         width: "2fr",
-        render: (server) => <ServerCell server={server} />,
+        render: (server) => <ShadowMCPInventoryServerCell server={server} />,
       },
       {
         key: "status",
@@ -377,17 +347,21 @@ export function ShadowMCPPolicyServerSelector({
         sortable: true,
         sortValue: (server) => server.observedUseCount,
         width: "0.5fr",
-        render: (server) => <UsageCell server={server} />,
+        render: (server) => <ShadowMCPInventoryUsageCell server={server} />,
       },
     ],
     [draftURLs, toggleURL],
   );
 
-  const sortedServers = sortTableData(
-    filteredServers,
-    columns,
-    sort,
-  ) as ShadowMCPInventoryServer[];
+  const sortedServers = useMemo(
+    () =>
+      sortTableData(
+        filteredServers,
+        columns,
+        sort,
+      ) as ShadowMCPInventoryServer[],
+    [columns, filteredServers, sort],
+  );
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
@@ -513,7 +487,7 @@ export function ShadowMCPPolicyServerSelector({
               onRowClick={(server) => toggleURL(server.canonicalServerUrl)}
               noResultsMessage={
                 <Type muted small>
-                  No matching servers
+                  {selectorEmptyMessage(deferredSearch)}
                 </Type>
               }
               className="min-h-0 content-start overflow-y-auto"

@@ -218,8 +218,8 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		cacheAdapter:                 cacheAdapter,
 		judge:                        judge,
 		reconcileShadowMCPPolicyURLs: policybypass.ReconcilePolicyURLs,
-		shadowMCPInventoryURLLookup: func(context.Context, uuid.UUID, string) (bool, error) {
-			return true, nil
+		shadowMCPInventoryURLLookup: func(_ context.Context, _ uuid.UUID, canonicalURLs []string) ([]string, error) {
+			return canonicalURLs, nil
 		},
 		completionClient: nil,
 		cacheDeletes:     cacheAdapter,
@@ -229,8 +229,8 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	}
 	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
-	}, func(ctx context.Context, projectID uuid.UUID, canonicalURL string) (bool, error) {
-		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURL)
+	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
+		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
 	})
 
 	return ctx, ti

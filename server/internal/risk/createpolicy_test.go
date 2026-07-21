@@ -185,6 +185,15 @@ func TestCreateRiskPolicy_ShadowMCPAllowedURLsAreAtomic(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestRiskService(t)
+	lookupCalls := 0
+	ti.shadowMCPInventoryURLLookup = func(_ context.Context, _ uuid.UUID, canonicalURLs []string) ([]string, error) {
+		lookupCalls++
+		require.Equal(t, []string{
+			"https://github.example.com/mcp",
+			"https://linear.example.com/sse",
+		}, canonicalURLs)
+		return canonicalURLs, nil
+	}
 	name := "Shadow MCP Block"
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
 		Name:    &name,
@@ -196,6 +205,7 @@ func TestCreateRiskPolicy_ShadowMCPAllowedURLsAreAtomic(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+	require.Equal(t, 1, lookupCalls)
 	require.Equal(t, []string{
 		"https://github.example.com/mcp",
 		"https://linear.example.com/sse",
@@ -209,11 +219,11 @@ func TestCreateRiskPolicy_ShadowMCPAllowedURLsRequireCurrentProjectInventory(t *
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	observedURL := "https://github.example.com/mcp"
 	lookupCalls := 0
-	ti.shadowMCPInventoryURLLookup = func(_ context.Context, projectID uuid.UUID, canonicalURL string) (bool, error) {
+	ti.shadowMCPInventoryURLLookup = func(_ context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		lookupCalls++
 		require.Equal(t, *authCtx.ProjectID, projectID)
-		require.Equal(t, observedURL, canonicalURL)
-		return true, nil
+		require.Equal(t, []string{observedURL}, canonicalURLs)
+		return canonicalURLs, nil
 	}
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
@@ -233,9 +243,9 @@ func TestCreateRiskPolicy_ShadowMCPUnobservedURLRejectedBeforeMutation(t *testin
 	ctx, ti := newTestRiskService(t)
 	lookupCalls := 0
 	reconcileCalls := 0
-	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, string) (bool, error) {
+	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, []string) ([]string, error) {
 		lookupCalls++
-		return false, nil
+		return nil, nil
 	}
 	ti.reconcileShadowMCPPolicyURLs = func(context.Context, riskrepo.DBTX, policybypass.ReconcilePolicyURLsInput) error {
 		reconcileCalls++
@@ -262,8 +272,11 @@ func TestCreateRiskPolicy_ShadowMCPURLObservedOnlyByAnotherProjectRejected(t *te
 	ctx, ti := newTestRiskService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	otherProjectID := uuid.New()
-	ti.shadowMCPInventoryURLLookup = func(_ context.Context, projectID uuid.UUID, _ string) (bool, error) {
-		return projectID == otherProjectID, nil
+	ti.shadowMCPInventoryURLLookup = func(_ context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
+		if projectID == otherProjectID {
+			return canonicalURLs, nil
+		}
+		return nil, nil
 	}
 
 	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
@@ -280,8 +293,8 @@ func TestCreateRiskPolicy_ShadowMCPInventoryLookupFailureIsUnexpected(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestRiskService(t)
-	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, string) (bool, error) {
-		return false, errors.New("clickhouse unavailable")
+	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, []string) ([]string, error) {
+		return nil, errors.New("clickhouse unavailable")
 	}
 	name := "Inventory Failure Shadow MCP"
 
@@ -301,8 +314,8 @@ func TestCreateRiskPolicy_ShadowMCPEmptyAllowedURLsSkipsInventoryLookup(t *testi
 	t.Parallel()
 
 	ctx, ti := newTestRiskService(t)
-	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, string) (bool, error) {
-		return false, errors.New("inventory lookup must not run")
+	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, []string) ([]string, error) {
+		return nil, errors.New("inventory lookup must not run")
 	}
 
 	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
