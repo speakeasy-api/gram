@@ -56,6 +56,7 @@ type AiIntegrationSync struct {
 	Schedule              pgtype.Text
 	Kind                  pgtype.Text
 	PollWatermarkAt       pgtype.Timestamptz
+	PollCheckpoint        pgtype.Text
 	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
 	LastPollError         pgtype.Text

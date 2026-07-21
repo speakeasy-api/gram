@@ -3007,6 +3007,7 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   -- the expand-contract transition, same as schedule.
   kind TEXT NULL,
   poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  poll_checkpoint TEXT,
   last_cursor_id TEXT,
   next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_poll_error TEXT,
