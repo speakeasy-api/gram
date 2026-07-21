@@ -68,19 +68,17 @@ function ToolbarRoot({
   // type, so they can be written in any order.
   let search: ReactNode = null;
   let filters: ReactNode = null;
-  let segments: ReactNode = null;
   let sort: ReactNode = null;
   const trailing: ReactNode[] = [];
   React.Children.forEach(children, (child) => {
     if (!React.isValidElement(child)) return;
     if (child.type === ToolbarSearch) search = child;
     else if (child.type === ToolbarFilters) filters = child;
-    else if (child.type === ToolbarSegments) segments = child;
     else if (child.type === ToolbarSortBy) sort = child;
     else trailing.push(child);
   });
 
-  const hasLeft = search != null || filters != null || segments != null;
+  const hasLeft = search != null || filters != null;
   const right: ReactNode[] = [sort, ...trailing].filter((n) => n != null);
 
   return (
@@ -97,7 +95,6 @@ function ToolbarRoot({
             <div className="bg-border h-6 w-px shrink-0" />
           )}
           {filters}
-          {segments}
         </div>
       )}
       {right.length > 0 && (
@@ -397,17 +394,6 @@ function ToolbarActions({ children }: { children: ReactNode }): JSX.Element {
   return <>{children}</>;
 }
 
-/**
- * Left-anchored slot beside Search for a segmented track that re-cuts the
- * collection (e.g. the costs page's breakdown axes). Distinct from a
- * two-option mode toggle, which belongs in Actions on the right: a re-cut
- * track is a primary "what am I looking at" control, so it reads with the
- * search rather than with the ordering/view controls.
- */
-function ToolbarSegments({ children }: { children: ReactNode }): JSX.Element {
-  return <>{children}</>;
-}
-
 // Minimum time the refresh button stays in its spinning state, so a
 // fast/cached refetch still reads as having done something.
 const MIN_REFRESH_MS = 2000;
@@ -454,7 +440,6 @@ function ToolbarRefresh({
 export const Toolbar = Object.assign(ToolbarRoot, {
   Search: ToolbarSearch,
   Filters: ToolbarFilters,
-  Segments: ToolbarSegments,
   SortBy: ToolbarSortBy,
   ViewAs: ToolbarViewAs,
   Count: ToolbarCount,

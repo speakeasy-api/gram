@@ -71,11 +71,11 @@ export function BreakdownBar({
   searchValue: string;
   onSearchChange: (value: string) => void;
   searchPlaceholder: string;
-  // Controls that belong to the table below (e.g. CSV export), rendered beside
-  // the axis track.
+  // Controls that belong to the table below (e.g. CSV export), anchored to
+  // the right of the bar's bottom row.
   actions?: ReactNode;
-  // Page-scope controls (dataset selector + date-range picker), rendered after
-  // a divider so re-cut/table controls and scope controls read as two groups.
+  // Page-scope controls (dataset selector + date-range picker), leading the
+  // bar's bottom row.
   trailing?: ReactNode;
 }): JSX.Element {
   const { segments, overflow } = partitionAxes(axisOptions, axisValue);
@@ -106,23 +106,18 @@ export function BreakdownBar({
   );
 
   return (
-    // The standard list-page control strip: search narrows the rows on the
-    // left; the preset axis track (re-cut, not narrow), table actions, and the
-    // page-scope controls keep their place on the right.
-    <Page.Toolbar>
-      {/* Narrower than the default w-64: this bar carries more controls than
-          most (axis track + export + dataset + range), and every saved pixel
-          keeps it on one row longer before wrapping. */}
-      <Page.Toolbar.Search
-        value={searchValue}
-        onChange={onSearchChange}
-        placeholder={searchPlaceholder}
-        className="w-48"
-      />
-      {/* The axis track sits with search on the left — both control what the
-          collection shows — so a narrow window wraps the bar into two clean
-          rows: search + track above, actions + scope controls below. */}
-      <Page.Toolbar.Segments>
+    // A deliberate two-row control bar (same visual shell as Page.Toolbar,
+    // which is single-row): the top row shapes the view — search on the left,
+    // the axis track anchored right; the bottom row scopes and acts — dataset
+    // + range on the left, table actions on the right. Every row spans the
+    // full bar at every width, so nothing clips and nothing rags.
+    <div className="border-border bg-muted/40 flex w-full flex-col gap-2 rounded-lg border p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Page.Toolbar.Search
+          value={searchValue}
+          onChange={onSearchChange}
+          placeholder={searchPlaceholder}
+        />
         {/* A lone axis is no choice at all — at a session leaf (Agent, Model)
             "Sessions" is the only option, and a track you can't move reads as
             a broken toggle. The section title already names the cut. */}
@@ -134,16 +129,11 @@ export function BreakdownBar({
             trailing={more}
           />
         )}
-      </Page.Toolbar.Segments>
-      <Page.Toolbar.Actions>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">{trailing}</div>
         {actions}
-        {trailing && (
-          <>
-            <div className="bg-border h-6 w-px shrink-0" />
-            {trailing}
-          </>
-        )}
-      </Page.Toolbar.Actions>
-    </Page.Toolbar>
+      </div>
+    </div>
   );
 }
