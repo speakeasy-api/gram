@@ -95,6 +95,8 @@ candidate_chats AS (
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
+  -- Join users table to enable searching by user display name
+  LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = $5
     AND c.deleted IS FALSE
     AND ($6 = '' OR c.external_user_id = $6)
@@ -109,6 +111,7 @@ candidate_chats AS (
       OR c.id::text ILIKE '%' || $9 || '%'
       OR c.external_user_id ILIKE '%' || $9 || '%'
       OR c.title ILIKE '%' || $9 || '%'
+      OR u.display_name ILIKE '%' || $9 || '%'
     )
     AND (
       $10 = ''
@@ -230,6 +233,7 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 const countChatsWithResolutions = `-- name: CountChatsWithResolutions :one
 SELECT COUNT(DISTINCT c.id) as total
 FROM chats c
+LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
 WHERE c.project_id = $1
   AND c.deleted IS FALSE
   AND ($2 = '' OR c.external_user_id = $2)
@@ -240,6 +244,7 @@ WHERE c.project_id = $1
     OR c.id::text ILIKE '%' || $5 || '%'
     OR c.external_user_id ILIKE '%' || $5 || '%'
     OR c.title ILIKE '%' || $5 || '%'
+    OR u.display_name ILIKE '%' || $5 || '%'
   )
   AND (
     $6 = ''
@@ -307,6 +312,7 @@ type CountChatsWithResolutionsParams struct {
 	HasRiskFilter    string
 }
 
+// Join users table to enable searching by user display name
 func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsWithResolutionsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countChatsWithResolutions,
 		arg.ProjectID,
@@ -1699,6 +1705,8 @@ candidate_chats AS (
   -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
   -- matching chats.user_id) to expose its team/personal classification.
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
+  -- Join users table to enable searching by user display name
+  LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
     AND ($4 = '' OR c.external_user_id = $4)
@@ -1713,6 +1721,7 @@ candidate_chats AS (
       OR c.id::text ILIKE '%' || $7 || '%'
       OR c.external_user_id ILIKE '%' || $7 || '%'
       OR c.title ILIKE '%' || $7 || '%'
+      OR u.display_name ILIKE '%' || $7 || '%'
     )
     AND (
       $8 = ''
