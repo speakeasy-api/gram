@@ -7,7 +7,11 @@ const scrollIntoView = vi.fn();
 
 beforeEach(() => {
   scrollIntoView.mockReset();
-  HTMLElement.prototype.scrollIntoView = scrollIntoView;
+  HTMLElement.prototype.scrollIntoView = (
+    arg?: boolean | ScrollIntoViewOptions,
+  ): void => {
+    scrollIntoView(arg);
+  };
 });
 
 afterEach(cleanup);

@@ -56,11 +56,13 @@ export function IdentityProviderAttachmentErrorAlert({
   }
 
   return (
-    <Alert ref={alertRef} variant="error" dismissible={false}>
-      <Stack gap={1}>
-        <Type className="font-medium">{content.title}</Type>
-        <Type small>{content.message}</Type>
-      </Stack>
-    </Alert>
+    <div ref={alertRef}>
+      <Alert variant="error" dismissible={false}>
+        <Stack gap={1}>
+          <Type className="font-medium">{content.title}</Type>
+          <Type small>{content.message}</Type>
+        </Stack>
+      </Alert>
+    </div>
   );
 }
