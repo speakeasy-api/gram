@@ -138,7 +138,6 @@ export function StackedTimeSeriesPanel({
   emptyMessage,
   loading,
   onSelectRange,
-  initialGranularity = "day",
 }: {
   // The panel title, with the info-tooltip copy beside it.
   title: string;
@@ -163,10 +162,8 @@ export function StackedTimeSeriesPanel({
   // narrows the page's period to it (drill-down). Bars aren't clickable
   // without it.
   onSelectRange?: (start: Date, end: Date) => void;
-  initialGranularity?: Granularity;
 }): JSX.Element {
-  const [granularity, setGranularity] =
-    useState<Granularity>(initialGranularity);
+  const [granularity, setGranularity] = useState<Granularity>("day");
   const [cumulative, setCumulative] = useState(false);
   // Series hidden via the legend, keyed by label so toggles survive
   // granularity switches. Labels from other stack sets are simply inert.

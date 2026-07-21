@@ -12,9 +12,9 @@ import { displayName, isAttributionDim } from "./taxonomy";
 // Stacked cost-over-time chart for the costs explorer: the shared time-series
 // panel fed with the slice's per-group daily cost series — the same
 // telemetry.query response that drives the breakdown table and its row
-// sparklines, so the chart always stacks by the table's current axis. Opens
-// on weekly bars so period-over-period comparison (DNO-279) is the default
-// read; the granularity toggles and drag-to-zoom come with the panel.
+// sparklines, so the chart always stacks by the table's current axis. The
+// weekly/monthly toggles give the period-over-period comparison read
+// (DNO-279); drag-to-zoom comes with the panel.
 
 // The chart keeps this many named series and rolls the rest into "Other" —
 // the query returns up to 100 groups (the table wants them all) but a legend
@@ -95,7 +95,6 @@ export function CostBreakdownChart({
       emptyMessage="No cost data in this range."
       loading={loading}
       onSelectRange={onSelectRange}
-      initialGranularity="week"
     />
   );
 }
