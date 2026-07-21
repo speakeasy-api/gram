@@ -39,6 +39,18 @@ func (failing) Transform(_ context.Context, _ int) ([]int, error) { return nil, 
 
 var errBoom = errors.New("boom")
 
+// failOnSecond passes the first record through then errors on the second, so a
+// prior record is buffered in the sink when the failure hits.
+type failOnSecond struct{ seen int }
+
+func (f *failOnSecond) Transform(_ context.Context, in int) ([]int, error) {
+	f.seen++
+	if f.seen >= 2 {
+		return nil, errBoom
+	}
+	return []int{in}, nil
+}
+
 // collectSink records everything it drains from its input channel.
 type collectSink struct {
 	in  chan int
@@ -209,6 +221,25 @@ func TestRunFlushesFinalPartialBatch(t *testing.T) {
 	require.Equal(t, []int{2, 4, 6, 8, 10}, sink.got)
 	// Two full batches (2+2) plus the partial final batch (1) flushed on close.
 	require.Equal(t, 3, sink.flushes)
+}
+
+func TestRunDoesNotFlushOnUpstreamError(t *testing.T) {
+	t.Parallel()
+
+	// batchSize larger than the run so the buffered first record only ever
+	// reaches the destination via a close-triggered flush — which must NOT happen
+	// on a transform error.
+	src := &fakeSource{items: []int{1, 2, 3}}
+	sink := &batchSink{in: make(chan int, 4), batchSize: 10}
+
+	err := pipeline.Run[int, int](t.Context(), src, &failOnSecond{}, sink, pipeline.Criteria{}, 2)
+	require.Error(t, err)
+	require.ErrorIs(t, err, errBoom)
+
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	require.Empty(t, sink.got, "sink must not flush a partial batch when the pipeline fails")
+	require.Zero(t, sink.flushes)
 }
 
 func TestRunProcessesEveryItem(t *testing.T) {

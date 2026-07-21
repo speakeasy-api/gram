@@ -147,6 +147,7 @@ func (s *Sink) flush(ctx context.Context, rows []FindingRow) error {
 	}
 
 	if err := batch.Send(); err != nil {
+		_ = batch.Abort()
 		return fmt.Errorf("send batch: %w", err)
 	}
 	return nil

@@ -128,14 +128,19 @@ func run() int {
 	printReport(cfg, source.Scanned(), sink.Inserted(), sink.LastCommitted())
 
 	if runErr != nil {
-		// A cancelled run is an incomplete backfill, not a success: report it
-		// distinctly and with a nonzero status so shell automation does not treat
-		// an interrupted migration as done.
+		// Both interruption and hard failure leave an incomplete backfill: exit
+		// nonzero and, whenever anything was durably committed, point the operator
+		// at the cursor to resume from so shell automation never treats a partial
+		// run as done.
+		resumeHint := ""
+		if committed := sink.LastCommitted(); committed != uuid.Nil {
+			resumeHint = fmt.Sprintf("; resume with -cursor %s (repeat the same -from/-to/-org/-project/-policy)", committed)
+		}
 		if errors.Is(runErr, context.Canceled) {
-			log.Printf("migration interrupted before completion; resume with -cursor %s", sink.LastCommitted())
+			log.Printf("migration interrupted before completion%s", resumeHint)
 			return 130
 		}
-		log.Printf("migration failed: %v", runErr)
+		log.Printf("migration failed: %v%s", runErr, resumeHint)
 		return 1
 	}
 	return 0

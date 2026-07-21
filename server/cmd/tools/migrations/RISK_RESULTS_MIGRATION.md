@@ -19,22 +19,20 @@ Implemented in the `riskfindings` package:
 
 ### What gets transformed
 
-**Only real findings are migrated.** The source filters `found IS TRUE AND
+**Only clean true positives are migrated.** The source filters `found IS TRUE AND
 rule_id IS NOT NULL`, mirroring the live outbox emission
-(`findingCreatedPayloads` in `risk_result_writer.go`). The "nothing found"
+(`findingCreatedPayloads` in `risk_result_writer.go`), so the "nothing found"
 `SourceNone` sentinel rows and dead-letter rows — which never reach ClickHouse
-through the live path — are excluded, so the backfill cannot inflate risk-event
+through the live path — are excluded, and the backfill cannot inflate risk-event
 counts with non-findings.
 
-**False positives are intentionally included.** Rows with
-`false_positive_at IS NOT NULL` (noise the Presidio sweep classified and the
-dashboard hides) are **not** filtered out. `risk_findings` is an append-only
-event log, and the live writer emits a finding at creation time — before the
-sweep runs — so live ClickHouse already holds rows later marked false-positive in
-Postgres, with no annotation (ClickHouse has no false-positive column). Including
-them keeps the backfilled window consistent with the live-ingested window;
-filtering here is the alternative if a future CH read path learns to suppress
-them.
+**False positives are excluded** (`false_positive_at IS NULL`). Rows the Presidio
+false-positive sweep has classified as noise (reserved IPs, placeholder emails,
+…) are dropped. ClickHouse is becoming the source of truth for risk findings and
+has no false-positive column, so importing known noise would leave permanently
+unannotated junk in the store — we keep the backfilled set clean instead. If
+false-positive tracking is needed later, a dedicated column can be added to
+`risk_findings` and this filter revisited.
 
 The Postgres and ClickHouse shapes differ — this is **not** a column-for-column
 copy:

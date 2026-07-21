@@ -45,6 +45,13 @@ type Transformer[A, B any] interface {
 // Sink consumes records from the buffered channel it exposes via Input and
 // writes them to a destination in batches. Run drains Input until it is closed,
 // flushes the final partial batch, and returns.
+//
+// The pipeline closes Input only after the upstream stages finish successfully,
+// so a closed channel means "all records delivered" — Run may safely flush its
+// final batch on close. On an upstream failure the channel is NOT closed;
+// instead ctx is cancelled, and Run must return on ctx.Done without flushing, so
+// a failing run never performs a partial write. Run must therefore always select
+// on ctx.Done alongside its input channel.
 type Sink[T any] interface {
 	Input() chan<- T
 	Run(ctx context.Context) error
@@ -71,10 +78,13 @@ func Run[A, B any](ctx context.Context, src Source[A], tf Transformer[A, B], sin
 		return nil
 	})
 
-	// Transform stage: the sole producer to the sink channel, which it closes
-	// once the source channel is drained so the sink can finish.
+	// Transform stage: the sole producer to the sink channel. It closes that
+	// channel ONLY after cleanly draining the source, so a closed sink channel
+	// unambiguously means "producer finished successfully". On any error it
+	// returns WITHOUT closing sinkCh; the shared context is cancelled, and the
+	// sink unwinds via ctx.Done rather than mistaking the failure for EOF and
+	// flushing a partial batch.
 	g.Go(func() error {
-		defer close(sinkCh)
 		for a := range srcCh {
 			// Stop transforming buffered items promptly once a peer stage fails,
 			// rather than draining the whole source buffer first.
@@ -93,6 +103,7 @@ func Run[A, B any](ctx context.Context, src Source[A], tf Transformer[A, B], sin
 				}
 			}
 		}
+		close(sinkCh)
 		return nil
 	})
 

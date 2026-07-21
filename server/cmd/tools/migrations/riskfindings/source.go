@@ -67,18 +67,18 @@ type SourceRow struct {
 // Optional filters use the "$n IS NULL OR col = $n" idiom so a single prepared
 // statement serves every filter combination.
 //
-// Only real findings are migrated: found IS TRUE AND rule_id IS NOT NULL mirrors
-// the live outbox emission (findingCreatedPayloads in risk_result_writer.go), so
-// the "nothing found" SourceNone sentinels and dead-letter rows — which never
-// reach ClickHouse through the live path — are excluded here too.
+// Only true-positive findings are migrated: found IS TRUE AND rule_id IS NOT NULL
+// mirrors the live outbox emission (findingCreatedPayloads in
+// risk_result_writer.go), so the "nothing found" SourceNone sentinels and
+// dead-letter rows — which never reach ClickHouse through the live path — are
+// excluded here too.
 //
-// false_positive_at is deliberately NOT filtered. risk_findings is an append-only
-// event log, and the live writer emits a finding at creation time — before the
-// Presidio false-positive sweep runs — so live ClickHouse already contains rows
-// later marked false-positive in Postgres, unannotated (there is no CH
-// false-positive column). Including them here keeps the backfilled window
-// consistent with the live-ingested window; excluding them would make historical
-// data cleaner than going-forward data.
+// false_positive_at IS NULL additionally drops rows the Presidio false-positive
+// sweep has classified as noise. ClickHouse is becoming the source of truth for
+// risk findings and has no false-positive column, so importing known noise would
+// leave permanently-unannotated junk in the store. We keep the backfilled set
+// clean; if false-positive tracking is needed later, a dedicated column can be
+// added.
 const selectPage = `
 SELECT id, created_at, organization_id, project_id, risk_policy_id,
        risk_policy_version, chat_message_id, source, found, rule_id, description,
@@ -93,6 +93,7 @@ WHERE ($1::text IS NULL OR organization_id = $1)
   AND id > $6
   AND found IS TRUE
   AND rule_id IS NOT NULL
+  AND false_positive_at IS NULL
 ORDER BY id
 LIMIT $7
 `
