@@ -215,6 +215,7 @@ export function ShadowMCPInventoryActionMenu({
 
 function PolicySelection({
   disabled,
+  emptyMessage,
   members,
   onSelectionChange,
   policies,
@@ -222,6 +223,7 @@ function PolicySelection({
   selectedPolicyIDs,
 }: {
   disabled: boolean;
+  emptyMessage: string;
   members: AccessMember[];
   onSelectionChange: (policyIDs: string[]) => void;
   policies: ShadowMCPPolicy[];
@@ -238,7 +240,7 @@ function PolicySelection({
       <div className="space-y-2">
         {policies.length === 0 && (
           <Type muted small>
-            {ALLOW_RULE_POLICY_REQUIRED}
+            {emptyMessage}
           </Type>
         )}
         {policies.map((policy) => {
@@ -287,6 +289,7 @@ export function ShadowMCPInventoryActionSheet({
   onOpenChange,
   onSubmit,
   open,
+  policyUnavailableMessage = ALLOW_RULE_POLICY_REQUIRED,
   roles,
   shadowMCPPolicies,
 }: {
@@ -300,6 +303,7 @@ export function ShadowMCPInventoryActionSheet({
     policyIDs: string[];
   }) => Promise<void>;
   open: boolean;
+  policyUnavailableMessage?: string;
   roles: Role[];
   shadowMCPPolicies: ShadowMCPPolicy[];
 }): JSX.Element | null {
@@ -413,6 +417,7 @@ export function ShadowMCPInventoryActionSheet({
           {needsPolicySelection && (
             <PolicySelection
               disabled={isSubmitting}
+              emptyMessage={policyUnavailableMessage}
               members={members}
               onSelectionChange={setSelectedPolicyIDs}
               policies={shadowMCPPolicies}

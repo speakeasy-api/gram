@@ -251,11 +251,13 @@ function TopUsersTable({
 }
 
 function DetailActionButtons({
+  allowRuleUnavailableMessage,
   canManageAllowRules,
   disabled,
   onOpenAction,
   server,
 }: {
+  allowRuleUnavailableMessage: string;
   canManageAllowRules: boolean;
   disabled: boolean;
   onOpenAction: (mode: InventoryActionMode) => void;
@@ -303,7 +305,7 @@ function DetailActionButtons({
       </div>
       {hasVisibleAllowRuleAction && !canManageAllowRules && (
         <Type muted small>
-          {ALLOW_RULE_POLICY_REQUIRED}
+          {allowRuleUnavailableMessage}
         </Type>
       )}
     </div>
@@ -320,8 +322,15 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const policyState = policiesQuery.isError
     ? "unavailable"
     : shadowMCPPolicyState(policiesQuery.data?.policies);
-  const shadowMCPPolicies: ShadowMCPPolicy[] =
-    eligibleShadowMCPAllowRulePolicies(policiesQuery.data?.policies);
+  let shadowMCPPolicies: ShadowMCPPolicy[] = [];
+  if (!policiesQuery.isError) {
+    shadowMCPPolicies = eligibleShadowMCPAllowRulePolicies(
+      policiesQuery.data?.policies,
+    );
+  }
+  const allowRuleUnavailableMessage = policiesQuery.isError
+    ? "Policy status is unavailable. Refresh the page to try again."
+    : ALLOW_RULE_POLICY_REQUIRED;
   const queryEnabled = project.id.length > 0 && serverSlug.length > 0;
   const [usersCursor, setUsersCursor] = useState<string | undefined>(undefined);
   const [userPages, setUserPages] = useState<UsersPage[]>([]);
@@ -571,6 +580,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             <Page.Section.CTA>
               {server && (
                 <DetailActionButtons
+                  allowRuleUnavailableMessage={allowRuleUnavailableMessage}
                   canManageAllowRules={shadowMCPPolicies.length > 0}
                   disabled={isSubmitting}
                   onOpenAction={openAction}
@@ -603,6 +613,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     }}
                     onSubmit={submitInventoryAction}
                     open={activeAction !== null}
+                    policyUnavailableMessage={allowRuleUnavailableMessage}
                     roles={rolesQuery.data?.roles ?? []}
                     shadowMCPPolicies={shadowMCPPolicies}
                   />

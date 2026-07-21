@@ -891,6 +891,92 @@ describe("ShadowMCPServerDetail", () => {
     ).toBeTruthy();
   });
 
+  it("explains when allow-rule policy status is unavailable", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            action: "block",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "cached-policy",
+            name: "Cached blocking policy",
+            sources: ["shadow_mcp"],
+          },
+        ],
+      },
+      isError: true,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Edit Rule",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText(
+        "Policy status is unavailable. Refresh the page to try again.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("An enabled blocking Shadow MCP policy is required."),
+    ).toBeNull();
+  });
+
+  it("explains unavailable policy status while reviewing a pending request", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            action: "block",
+            audiencePrincipalUrns: ["user:all"],
+            audienceType: "everyone",
+            enabled: true,
+            id: "cached-policy",
+            name: "Cached blocking policy",
+            sources: ["shadow_mcp"],
+          },
+        ],
+      },
+      isError: true,
+      isLoading: false,
+    });
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({
+        access: "none",
+        allowedPolicyIds: [],
+        latestRequest: {
+          id: "request-1",
+          policyId: "cached-policy",
+          requestedAt: new Date("2026-01-04T11:30:00Z"),
+          requesterEmail: "requester@example.com",
+          requesterUserId: "user-1",
+        },
+        requestCount: 1,
+      }),
+      error: null,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Review Request" }));
+    expect(
+      screen.getByText(
+        "Policy status is unavailable. Refresh the page to try again.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("An enabled blocking Shadow MCP policy is required."),
+    ).toBeNull();
+  });
+
   it("explains why edit is disabled while review and delete remain available", () => {
     mocks.useRiskListPolicies.mockReturnValue({
       data: {
