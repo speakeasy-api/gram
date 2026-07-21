@@ -44,6 +44,7 @@ type SourceRow struct {
 	RiskPolicyVersion int64
 	ChatMessageID     uuid.UUID
 	Source            string
+	Found             bool
 	RuleID            *string
 	Description       *string
 	Match             *string
@@ -71,7 +72,7 @@ type SourceRow struct {
 // sub-millisecond -from/-to boundaries the coarse id window cannot.
 const selectPage = `
 SELECT id, created_at, organization_id, project_id, risk_policy_id,
-       risk_policy_version, chat_message_id, source, rule_id, description,
+       risk_policy_version, chat_message_id, source, found, rule_id, description,
        match, start_pos, end_pos, confidence, tags, dead_letter_reason,
        excluded_at, excluded_exclusion_id
 FROM risk_results
@@ -180,7 +181,7 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 			var r SourceRow
 			if err := rows.Scan(
 				&r.ID, &r.CreatedAt, &r.OrganizationID, &r.ProjectID, &r.RiskPolicyID,
-				&r.RiskPolicyVersion, &r.ChatMessageID, &r.Source, &r.RuleID, &r.Description,
+				&r.RiskPolicyVersion, &r.ChatMessageID, &r.Source, &r.Found, &r.RuleID, &r.Description,
 				&r.Match, &r.StartPos, &r.EndPos, &r.Confidence, &r.Tags, &r.DeadLetterReason,
 				&r.ExcludedAt, &r.ExclusionID,
 			); err != nil {

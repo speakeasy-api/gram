@@ -2,6 +2,8 @@ package riskfindings
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 
@@ -109,7 +111,7 @@ func (s *Sink) Run(ctx context.Context) error {
 }
 
 // flush writes one batch. A deterministic per-batch deduplication token makes a
-// re-run of the same page idempotent on Replicated engines (ignored on plain
+// re-run of the same batch idempotent on Replicated engines (ignored on plain
 // MergeTree, where resuming from the checkpoint bounds any duplication to the
 // single in-flight batch).
 func (s *Sink) flush(ctx context.Context, rows []FindingRow) error {
@@ -117,7 +119,7 @@ func (s *Sink) flush(ctx context.Context, rows []FindingRow) error {
 		return nil
 	}
 
-	token := fmt.Sprintf("riskfindings-backfill:%s:%s", rows[0].ID, rows[len(rows)-1].ID)
+	token := deduplicationToken(rows)
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
 		"insert_deduplication_token": token,
 		// risk_findings is PARTITION BY toYYYYMMDD(created_at). A single backfill
@@ -141,6 +143,21 @@ func (s *Sink) flush(ctx context.Context, rows []FindingRow) error {
 		return fmt.Errorf("send batch: %w", err)
 	}
 	return nil
+}
+
+// deduplicationToken identifies a batch by the full ordered set of its row ids,
+// not just its endpoints: two batches can share the same first and last id but
+// differ in their interior (e.g. reruns under a different -batch-size or filter),
+// and an endpoints-only token would make a Replicated engine wrongly drop the
+// second as a duplicate. Hashing every id makes the token collide only for a
+// genuinely identical batch.
+func deduplicationToken(rows []FindingRow) string {
+	h := sha256.New()
+	for i := range rows {
+		id := rows[i].ID
+		_, _ = h.Write(id[:])
+	}
+	return "riskfindings-backfill:" + hex.EncodeToString(h.Sum(nil))
 }
 
 func appendRows(batch driver.Batch, rows []FindingRow) error {

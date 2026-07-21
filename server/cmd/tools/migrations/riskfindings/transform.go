@@ -70,6 +70,14 @@ func NewTransformer(fingerprinter risk.Fingerprinter) *Transformer {
 
 // Transform implements pipeline.Transformer.
 func (t *Transformer) Transform(_ context.Context, in SourceRow) ([]FindingRow, error) {
+	// Only real findings become ClickHouse events. Drop the "nothing found"
+	// SourceNone sentinels (found=false) and any row without a rule, matching the
+	// live outbox emission. The source already filters these out; this guard keeps
+	// the transform correct if it is ever fed an unfiltered source.
+	if !in.Found || conv.PtrValOr(in.RuleID, "") == "" {
+		return nil, nil
+	}
+
 	orgID := strings.TrimSpace(in.OrganizationID)
 
 	match := conv.PtrValOr(in.Match, "")

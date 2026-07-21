@@ -76,6 +76,11 @@ func Run[A, B any](ctx context.Context, src Source[A], tf Transformer[A, B], sin
 	g.Go(func() error {
 		defer close(sinkCh)
 		for a := range srcCh {
+			// Stop transforming buffered items promptly once a peer stage fails,
+			// rather than draining the whole source buffer first.
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("transform cancelled: %w", err)
+			}
 			bs, err := tf.Transform(ctx, a)
 			if err != nil {
 				return fmt.Errorf("transform: %w", err)

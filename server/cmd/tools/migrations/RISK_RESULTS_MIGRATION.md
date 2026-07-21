@@ -45,25 +45,39 @@ copy:
 
 ## Flags
 
-| Flag              | Env fallback                           | Default     | Meaning                                                                         |
-| ----------------- | -------------------------------------- | ----------- | ------------------------------------------------------------------------------- |
-| `-db`             | `GRAM_DATABASE_URL`                    | —           | Postgres connection string (required)                                           |
-| `-pepper-keyring` | `GRAM_RISK_FINGERPRINT_PEPPER_KEYRING` | —           | JSON pepper keyring for fingerprinting (required)                               |
-| `-ch-host`        | `CLICKHOUSE_HOST`                      | `localhost` | ClickHouse host                                                                 |
-| `-ch-database`    | `CLICKHOUSE_DATABASE`                  | `default`   | ClickHouse database                                                             |
-| `-ch-username`    | `CLICKHOUSE_USERNAME`                  | `gram`      | ClickHouse username                                                             |
-| `-ch-password`    | `CLICKHOUSE_PASSWORD`                  | `gram`      | ClickHouse password                                                             |
-| `-ch-native-port` | `CLICKHOUSE_NATIVE_PORT`               | `9440`      | ClickHouse native protocol port                                                 |
-| `-ch-insecure`    | `CLICKHOUSE_INSECURE`                  | `false`     | Skip ClickHouse TLS verification                                                |
-| `-org`            | —                                      | (all)       | Scope to one `organization_id`                                                  |
-| `-project`        | —                                      | (all)       | Scope to one `project_id` (uuid)                                                |
-| `-policy`         | —                                      | (all)       | Scope to one `risk_policy_id` (uuid)                                            |
-| `-from`           | —                                      | (beginning) | Lower time bound, RFC3339                                                       |
-| `-to`             | —                                      | (end)       | Upper time bound, RFC3339                                                       |
-| `-cursor`         | —                                      | —           | Resume after this `risk_results` id (exclusive); overrides `-from`              |
-| `-batch-size`     | —                                      | `5000`      | Rows per source page and sink batch                                             |
-| `-buffer`         | —                                      | `5000`      | Channel buffer between pipeline stages                                          |
-| `-dry-run`        | —                                      | `true`      | When true, read + transform but do not write (and do not connect to ClickHouse) |
+Secrets are **never** flag values — they would leak through `argv` / `ps`. The
+Postgres URL, ClickHouse password, and fingerprint pepper come from the
+environment only (the pepper may also come from a file):
+
+| Secret (env var)                       | Alt                           | Meaning                                           |
+| -------------------------------------- | ----------------------------- | ------------------------------------------------- |
+| `GRAM_DATABASE_URL`                    | —                             | Postgres connection string (required)             |
+| `CLICKHOUSE_PASSWORD`                  | —                             | ClickHouse password                               |
+| `GRAM_RISK_FINGERPRINT_PEPPER_KEYRING` | `-pepper-keyring-file <path>` | JSON pepper keyring for fingerprinting (required) |
+
+Non-secret flags:
+
+| Flag                   | Env fallback             | Default     | Meaning                                                                         |
+| ---------------------- | ------------------------ | ----------- | ------------------------------------------------------------------------------- |
+| `-pepper-keyring-file` | —                        | —           | Path to a file holding the pepper keyring (alternative to the env var)          |
+| `-ch-host`             | `CLICKHOUSE_HOST`        | `localhost` | ClickHouse host (IPv4, IPv6, or DNS)                                            |
+| `-ch-database`         | `CLICKHOUSE_DATABASE`    | `default`   | ClickHouse database                                                             |
+| `-ch-username`         | `CLICKHOUSE_USERNAME`    | `gram`      | ClickHouse username                                                             |
+| `-ch-native-port`      | `CLICKHOUSE_NATIVE_PORT` | `9440`      | ClickHouse native protocol port                                                 |
+| `-ch-insecure`         | `CLICKHOUSE_INSECURE`    | `false`     | Skip ClickHouse TLS verification                                                |
+| `-org`                 | —                        | (all)       | Scope to one `organization_id`                                                  |
+| `-project`             | —                        | (all)       | Scope to one `project_id` (uuid)                                                |
+| `-policy`              | —                        | (all)       | Scope to one `risk_policy_id` (uuid)                                            |
+| `-from`                | —                        | (beginning) | Lower time bound, RFC3339                                                       |
+| `-to`                  | —                        | (end)       | Upper time bound, RFC3339                                                       |
+| `-cursor`              | —                        | —           | Resume after this `risk_results` id (exclusive); overrides `-from`              |
+| `-batch-size`          | —                        | `5000`      | Rows per source page and sink batch                                             |
+| `-buffer`              | —                        | `5000`      | Channel buffer between pipeline stages                                          |
+| `-dry-run`             | —                        | `true`      | When true, read + transform but do not write (and do not connect to ClickHouse) |
+
+An interrupted run (Ctrl-C / SIGTERM) exits with a **nonzero** status and logs
+the `-cursor` to resume from, so shell automation never mistakes a partial
+backfill for a completed one.
 
 The pepper keyring JSON has the shape (base64-encoded keys):
 
@@ -105,9 +119,10 @@ cloud-sql-proxy --port 5432 <instance-connection-name> &
 # open a ClickHouse tunnel on 9440
 
 GRAM_DATABASE_URL=postgres://USER:PASS@127.0.0.1:5432/gram \
-GRAM_RISK_FINGERPRINT_PEPPER_KEYRING="$(< pepper.json)" \
+CLICKHOUSE_PASSWORD="$CH_PASS" \
   go run ./server/cmd/tools/migrations \
-  -ch-host 127.0.0.1 -ch-database gram -ch-username gram -ch-password "$CH_PASS" \
+  -pepper-keyring-file ./pepper.json \
+  -ch-host 127.0.0.1 -ch-database gram -ch-username gram \
   -from 2024-01-01T00:00:00Z -to 2025-01-01T00:00:00Z \
   -dry-run=false
 ```
@@ -129,10 +144,12 @@ will not join.
 - **No plaintext in ClickHouse.** Only length, redacted string, and fingerprints
   are written.
 - **Idempotency depends on the engine.** Each batch carries a deterministic
-  `insert_deduplication_token`. On a _Replicated_ MergeTree this dedups an
-  identical re-inserted block; on a plain `MergeTree` the token is ignored, so a
-  re-run inserts duplicates. When re-running, resume from `-cursor` so any
-  overlap is bounded to the single in-flight batch.
+  `insert_deduplication_token` hashed over the full ordered set of its row ids
+  (not just the endpoints, which could collide between batches with the same
+  first/last id but different interiors). On a _Replicated_ MergeTree this dedups
+  a genuinely identical re-inserted batch; on a plain `MergeTree` the token is
+  ignored, so a re-run inserts duplicates. When re-running, resume from `-cursor`
+  so any overlap is bounded to the single in-flight batch.
 - **Partition limit.** `risk_findings` is `PARTITION BY toYYYYMMDD(created_at)`.
   A backfill batch can span more than the default 100 partitions when historical
   data is sparse, so the sink sets `max_partitions_per_insert_block = 0` for its

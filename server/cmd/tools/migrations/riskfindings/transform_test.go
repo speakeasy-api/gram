@@ -36,6 +36,7 @@ func TestTransformComputesFingerprintsAndRedaction(t *testing.T) {
 		RiskPolicyVersion: 7,
 		ChatMessageID:     uuid.New(),
 		Source:            "presidio",
+		Found:             true,
 		RuleID:            conv.PtrEmpty("pii.email_address"),
 		Description:       conv.PtrEmpty("email"),
 		Match:             conv.PtrEmpty("alice@example.com"),
@@ -77,8 +78,8 @@ func TestTransformIsDeterministic(t *testing.T) {
 	in := SourceRow{
 		ID: uuid.New(), CreatedAt: time.Now().UTC(), OrganizationID: "org_abc",
 		ProjectID: uuid.New(), RiskPolicyID: uuid.New(), RiskPolicyVersion: 1,
-		ChatMessageID: uuid.New(), Source: "gitleaks", Match: conv.PtrEmpty("secret-token"),
-		Tags: []string{"secret"},
+		ChatMessageID: uuid.New(), Source: "gitleaks", Found: true, RuleID: conv.PtrEmpty("secret.token"),
+		Match: conv.PtrEmpty("secret-token"), Tags: []string{"secret"},
 	}
 
 	first, err := tf.Transform(t.Context(), in)
@@ -98,6 +99,7 @@ func TestTransformTenantFingerprintIsOrgScoped(t *testing.T) {
 	base := SourceRow{
 		ID: uuid.New(), CreatedAt: time.Now().UTC(), ProjectID: uuid.New(),
 		RiskPolicyID: uuid.New(), ChatMessageID: uuid.New(), Source: "gitleaks",
+		Found: true, RuleID: conv.PtrEmpty("secret.token"),
 		Match: conv.PtrEmpty("same-secret"), Tags: []string{},
 	}
 
@@ -116,26 +118,46 @@ func TestTransformTenantFingerprintIsOrgScoped(t *testing.T) {
 	require.NotEqual(t, ra[0].FingerprintTenantHS256, rb[0].FingerprintTenantHS256)
 }
 
-func TestTransformDeadLetterSkipsFingerprints(t *testing.T) {
+func TestTransformDropsDeadLetterSentinel(t *testing.T) {
 	t.Parallel()
 
+	// Dead-letter rows are found=false sentinels; the live path never emits them
+	// to ClickHouse, so the transform drops them.
 	tf := NewTransformer(testFingerprinter(t))
 	in := SourceRow{
 		ID: uuid.New(), CreatedAt: time.Now().UTC(), OrganizationID: "org_123",
 		ProjectID: uuid.New(), RiskPolicyID: uuid.New(), ChatMessageID: uuid.New(),
-		Source: "presidio", DeadLetterReason: conv.PtrEmpty("could not analyze"),
+		Source: "presidio", Found: false, DeadLetterReason: conv.PtrEmpty("could not analyze"),
 	}
 
 	out, err := tf.Transform(t.Context(), in)
 	require.NoError(t, err)
-	row := out[0]
+	require.Empty(t, out)
+}
 
-	require.Empty(t, row.FingerprintGlobalHS256)
-	require.Empty(t, row.FingerprintTenantHS256)
-	require.Empty(t, row.FingerprintPepperVersion)
-	require.Equal(t, "could not analyze", row.DeadLetterReason)
-	require.Equal(t, uint32(0), row.MatchLen)
-	require.Equal(t, "<redacted len=0>", row.MatchRedacted)
+func TestTransformDropsNonFinding(t *testing.T) {
+	t.Parallel()
+
+	// found=true but no rule_id, and found=false with a rule_id, are both dropped.
+	tf := NewTransformer(testFingerprinter(t))
+	noRule := SourceRow{
+		ID: uuid.New(), CreatedAt: time.Now().UTC(), OrganizationID: "org_123",
+		ProjectID: uuid.New(), RiskPolicyID: uuid.New(), ChatMessageID: uuid.New(),
+		Source: "none", Found: true, RuleID: nil,
+	}
+	notFound := SourceRow{
+		ID: uuid.New(), CreatedAt: time.Now().UTC(), OrganizationID: "org_123",
+		ProjectID: uuid.New(), RiskPolicyID: uuid.New(), ChatMessageID: uuid.New(),
+		Source: "none", Found: false, RuleID: conv.PtrEmpty("pii.email_address"),
+	}
+
+	outNoRule, err := tf.Transform(t.Context(), noRule)
+	require.NoError(t, err)
+	require.Empty(t, outNoRule)
+
+	outNotFound, err := tf.Transform(t.Context(), notFound)
+	require.NoError(t, err)
+	require.Empty(t, outNotFound)
 }
 
 func TestTransformMapsExclusion(t *testing.T) {
@@ -147,7 +169,8 @@ func TestTransformMapsExclusion(t *testing.T) {
 	in := SourceRow{
 		ID: uuid.New(), CreatedAt: time.Now().UTC(), OrganizationID: "org_123",
 		ProjectID: uuid.New(), RiskPolicyID: uuid.New(), ChatMessageID: uuid.New(),
-		Source: "presidio", Match: conv.PtrEmpty("x"), ExcludedAt: &excludedAt, ExclusionID: &exclusionID,
+		Source: "presidio", Found: true, RuleID: conv.PtrEmpty("pii.email_address"),
+		Match: conv.PtrEmpty("x"), ExcludedAt: &excludedAt, ExclusionID: &exclusionID,
 	}
 
 	out, err := tf.Transform(t.Context(), in)
@@ -165,7 +188,8 @@ func TestTransformNilTagsBecomeEmptySlice(t *testing.T) {
 	in := SourceRow{
 		ID: uuid.New(), CreatedAt: time.Now().UTC(), OrganizationID: "org_123",
 		ProjectID: uuid.New(), RiskPolicyID: uuid.New(), ChatMessageID: uuid.New(),
-		Source: "presidio", Match: conv.PtrEmpty("x"), Tags: nil,
+		Source: "presidio", Found: true, RuleID: conv.PtrEmpty("pii.email_address"),
+		Match: conv.PtrEmpty("x"), Tags: nil,
 	}
 
 	out, err := tf.Transform(t.Context(), in)

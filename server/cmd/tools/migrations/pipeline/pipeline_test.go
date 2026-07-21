@@ -66,6 +66,151 @@ func (s *collectSink) Run(ctx context.Context) error {
 	}
 }
 
+// fanout emits n copies of each input.
+type fanout struct{ n int }
+
+func (f fanout) Transform(_ context.Context, in int) ([]int, error) {
+	out := make([]int, f.n)
+	for i := range out {
+		out[i] = in
+	}
+	return out, nil
+}
+
+// oddOnly drops even inputs (returns an empty slice) and passes odds through.
+type oddOnly struct{}
+
+func (oddOnly) Transform(_ context.Context, in int) ([]int, error) {
+	if in%2 == 0 {
+		return nil, nil
+	}
+	return []int{in}, nil
+}
+
+// cancelSink cancels the shared context the first time it receives a record.
+type cancelSink struct {
+	in     chan int
+	cancel context.CancelFunc
+	mu     sync.Mutex
+	got    []int
+}
+
+func (s *cancelSink) Input() chan<- int { return s.in }
+
+func (s *cancelSink) Run(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("sink cancelled: %w", ctx.Err())
+		case v, ok := <-s.in:
+			if !ok {
+				return nil
+			}
+			s.mu.Lock()
+			s.got = append(s.got, v)
+			s.mu.Unlock()
+			s.cancel()
+		}
+	}
+}
+
+// batchSink flushes every batchSize records and once more on channel close,
+// recording every flushed record and counting flushes.
+type batchSink struct {
+	in        chan int
+	batchSize int
+	mu        sync.Mutex
+	got       []int
+	flushes   int
+}
+
+func (s *batchSink) Input() chan<- int { return s.in }
+
+func (s *batchSink) Run(ctx context.Context) error {
+	buf := make([]int, 0, s.batchSize)
+	flush := func() {
+		if len(buf) == 0 {
+			return
+		}
+		s.mu.Lock()
+		s.got = append(s.got, buf...)
+		s.flushes++
+		s.mu.Unlock()
+		buf = buf[:0]
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("sink cancelled: %w", ctx.Err())
+		case v, ok := <-s.in:
+			if !ok {
+				flush()
+				return nil
+			}
+			buf = append(buf, v)
+			if len(buf) >= s.batchSize {
+				flush()
+			}
+		}
+	}
+}
+
+func TestRunFansOut(t *testing.T) {
+	t.Parallel()
+
+	src := &fakeSource{items: []int{1, 2, 3}}
+	sink := newCollectSink(8)
+
+	err := pipeline.Run[int, int](t.Context(), src, fanout{n: 3}, sink, pipeline.Criteria{}, 2)
+	require.NoError(t, err)
+
+	sort.Ints(sink.got)
+	require.Equal(t, []int{1, 1, 1, 2, 2, 2, 3, 3, 3}, sink.got)
+}
+
+func TestRunDropsFilteredRecords(t *testing.T) {
+	t.Parallel()
+
+	src := &fakeSource{items: []int{1, 2, 3, 4, 5, 6}}
+	sink := newCollectSink(8)
+
+	err := pipeline.Run[int, int](t.Context(), src, oddOnly{}, sink, pipeline.Criteria{}, 2)
+	require.NoError(t, err)
+
+	sort.Ints(sink.got)
+	require.Equal(t, []int{1, 3, 5}, sink.got)
+}
+
+func TestRunCancelsPromptly(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	// Many items with an unbuffered source channel keep the source/transform
+	// stages actively producing when the sink cancels, so cancellation must
+	// unwind them rather than drain the whole source.
+	src := &fakeSource{items: make([]int, 1000)}
+	sink := &cancelSink{in: make(chan int, 1), cancel: cancel}
+
+	err := pipeline.Run[int, int](ctx, src, doubler{}, sink, pipeline.Criteria{}, 0)
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestRunFlushesFinalPartialBatch(t *testing.T) {
+	t.Parallel()
+
+	src := &fakeSource{items: []int{1, 2, 3, 4, 5}}
+	sink := &batchSink{in: make(chan int, 4), batchSize: 2}
+
+	err := pipeline.Run[int, int](t.Context(), src, doubler{}, sink, pipeline.Criteria{}, 2)
+	require.NoError(t, err)
+
+	sort.Ints(sink.got)
+	require.Equal(t, []int{2, 4, 6, 8, 10}, sink.got)
+	// Two full batches (2+2) plus the partial final batch (1) flushed on close.
+	require.Equal(t, 3, sink.flushes)
+}
+
 func TestRunProcessesEveryItem(t *testing.T) {
 	t.Parallel()
 
