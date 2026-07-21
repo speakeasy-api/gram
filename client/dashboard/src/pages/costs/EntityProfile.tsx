@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";
 import type { ReactNode } from "react";
-import { ChevronLeft, Download, Home, Info } from "lucide-react";
+import { ChevronLeft, Download, Home, Info, RotateCcw } from "lucide-react";
 import { CostMeasureLabel } from "@/components/estimated-cost";
 import { BreakdownBar } from "./BreakdownBar";
 import { breakdownCaption, breakdownTitle } from "./breakdownCopy";
@@ -121,6 +121,10 @@ function entityPalette(name: string): { mesh: string } {
 
 // ── Small presentational pieces ─────────────────────────────────────────────
 
+// The control bar's bordered action buttons (Export CSV, Reset) share one look.
+const BAR_BUTTON_CLASS =
+  "text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border bg-transparent px-3 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-40";
+
 // A headline metric in the profile header (Cost / Sessions / …), echoing the
 // big Followers/Following/Likes numbers in the reference design.
 function HeaderStat({
@@ -212,6 +216,9 @@ export type EntityProfileProps = {
   // Switch the breakdown to the per-session list — wired to the clickable
   // "Agent sessions" header stat. Omitted when already in sessions mode.
   onViewSessions?: () => void;
+  // Reset the whole view to its defaults (drill path, axis, dataset, range,
+  // search) — the control bar's Reset button.
+  onReset: () => void;
   // Per-group daily cost series for the row sparklines.
   seriesByGroup: Map<string, number[]>;
   // The active dataset (spend slice) and its options, rendered in the top
@@ -264,6 +271,7 @@ export function EntityProfile({
   tableOverride,
   overrideCsv,
   onViewSessions,
+  onReset,
   seriesByGroup,
   datasetValue,
   datasetOptions,
@@ -512,15 +520,25 @@ export function EntityProfile({
           onSearchChange={onSearchChange}
           searchPlaceholder={searchPlaceholder}
           actions={
-            <button
-              type="button"
-              onClick={csvExport.run}
-              disabled={csvExport.rowCount === 0}
-              className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border bg-transparent px-3 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-40"
-            >
-              <Download className="size-3.5 shrink-0" />
-              Export CSV
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={csvExport.run}
+                disabled={csvExport.rowCount === 0}
+                className={BAR_BUTTON_CLASS}
+              >
+                <Download className="size-3.5 shrink-0" />
+                Export CSV
+              </button>
+              <button
+                type="button"
+                onClick={onReset}
+                className={BAR_BUTTON_CLASS}
+              >
+                <RotateCcw className="size-3.5 shrink-0" />
+                Reset
+              </button>
+            </div>
           }
           trailing={
             <>

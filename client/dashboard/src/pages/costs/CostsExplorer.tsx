@@ -996,6 +996,16 @@ export function CostsExplorer(): JSX.Element {
   const goHome = () =>
     goToNode([], defaultGroupBy([], availableDims), false, "all");
 
+  // The control bar's Reset: back to the default view in one navigation —
+  // root drill path, default axis, `all` dataset, default date range (drops
+  // the from/to/range/label params goToNode would preserve), search cleared.
+  const resetView = () => {
+    setBreakdownSearch("");
+    const params = new URLSearchParams();
+    params.set(BREAKDOWN_PARAM, defaultGroupBy([], availableDims));
+    void navigate(`${costsBase}?${params.toString()}`);
+  };
+
   // Re-pivot the current node's breakdown axis without drilling (view-only).
   const changeGroupBy = (axis: Axis) => goToNode(path, axis, true);
 
@@ -1307,6 +1317,7 @@ export function CostsExplorer(): JSX.Element {
             : undefined
         }
         onViewSessions={onViewSessions}
+        onReset={resetView}
         chart={breakdownChart}
         seriesByGroup={seriesByGroup}
         datasetValue={dataset}
