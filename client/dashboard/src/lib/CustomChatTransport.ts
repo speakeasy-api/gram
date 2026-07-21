@@ -3,6 +3,7 @@ import {
   convertToModelMessages,
   UIMessage,
   smoothStream,
+  toUIMessageStream,
   type ChatTransport,
   type LanguageModel,
   type ToolSet,
@@ -47,12 +48,12 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       tools,
       temperature: this.config.temperature,
       maxOutputTokens: this.config.maxGeneratedTokens,
-      system: systemPrompt,
+      instructions: systemPrompt,
       experimental_transform: smoothStream({ delayInMs: 15 }),
       onError: this.config.onError,
     });
 
-    return result.toUIMessageStream();
+    return toUIMessageStream({ stream: result.stream, tools });
   }
 
   reconnectToStream(): Promise<ReadableStream<UIMessageChunk> | null> {

@@ -43,9 +43,10 @@ import {
   lastAssistantMessageIsCompleteWithToolCalls,
   LanguageModel,
   smoothStream,
-  stepCountIs,
+  isStepCount,
   streamText,
   ToolSet,
+  toUIMessageStream,
   type ChatTransport,
   type UIMessage,
 } from "ai";
@@ -95,7 +96,7 @@ type ExecutableTool = {
  * that contains the tool definition with execute function.
  *
  * The AI SDK's `ToolExecuteFunction<INPUT, OUTPUT>` signature is too strict on
- * its second parameter (a typed `ToolCallOptions`) and too broad on its return
+ * its second parameter (a typed `ToolExecutionOptions`) and too broad on its return
  * (`AsyncIterable | PromiseLike | OUTPUT`) to match `ExecutableTool.execute`
  * directly. The reference is copied as-is — no runtime wrapping — and only the
  * type surface is widened.
@@ -424,9 +425,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // This works around AI SDK bug where these fields cause validation failures
           const cleanedMessages = cleanMessagesForModel(messages);
           // Filter out system messages from the UI state — the system prompt
-          // is already provided via the `system:` parameter to streamText().
+          // is already provided via the `instructions:` parameter to streamText().
           // Without this, loaded chat history includes the system message which
-          // gets sent alongside the `system:` param, causing duplication.
+          // gets sent alongside the `instructions:` param, causing duplication.
           const nonSystemMessages = cleanedMessages.filter(
             (m) => m.role !== "system",
           );
@@ -456,11 +457,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           const modelMessages = compaction.messages;
 
           const result = streamText({
-            system: systemPromptRef.current,
+            instructions: systemPromptRef.current,
             model: modelToUse,
             messages: modelMessages,
             tools,
-            stopWhen: stepCountIs(10),
+            stopWhen: isStepCount(10),
             experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
             onError: ({ error }) => {
@@ -497,7 +498,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // credits prompt for 402, otherwise keep the masking intact.
           return createUIMessageStream({
             execute: ({ writer }) => {
-              writer.merge(result.toUIMessageStream());
+              writer.merge(toUIMessageStream({ stream: result.stream, tools }));
             },
             originalMessages: messages,
             onError: (error) =>
