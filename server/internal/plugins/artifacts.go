@@ -37,6 +37,7 @@ const HooksReleaseRoutePrefix = "/hooks/releases/"
 // version's path, and dropping it bricks their cold installs.
 var hooksArtifactIndex = map[string]map[string]hooksBinaryTarget{
 	hooksBinaryVersion: hooksBinaryTargets,
+	"0.1.1":            hooksBinaryTargets0_1_1,
 }
 
 // Release archives are ~15MB; anything past this limit means the upstream

@@ -16,7 +16,7 @@ import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBilli
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, RotateCcw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { BillingCyclePicker } from "./billing-cycle-picker";
 import {
@@ -32,6 +32,7 @@ import {
 import {
   BREAKDOWN_TOTAL,
   breakdownValueLabel,
+  isServerRollupRow,
   stackModeFor,
 } from "./breakdown-options";
 import { BreakdownPicker } from "./breakdown-picker";
@@ -79,11 +80,14 @@ function TumTokenBreakdown({
 
   // The selected dimension's rows. "" rows are real observed traffic that
   // lacks the attribute — charted as "(unset)", same as the details table.
+  // The server's top-N remainder row is flagged as the rollup so the chart
+  // pins it to the neutral color by identity, not by label.
   const groups = useMemo<GroupSeries[]>(() => {
     const rows = data?.breakdowns.find((b) => b.key === dimension)?.rows ?? [];
-    return rows.map((r) => ({
+    return rows.map((r, i) => ({
       label: breakdownValueLabel(dimension, r.value, projectNames),
       series: r.series,
+      rollup: isServerRollupRow(rows, i) || undefined,
     }));
   }, [data, dimension, projectNames]);
 
@@ -284,14 +288,22 @@ export const TumUsageSection = (): JSX.Element => {
   }, [period, cycles]);
 
   // Bar-click drill-down, clamped to the current period (week/month buckets
-  // can overhang the period's edges).
-  const handleBarSelect = (start: Date, end: Date): void => {
-    if (!period) return;
-    const s = Math.max(start.getTime(), period.start.getTime());
-    const e = Math.min(end.getTime(), period.end.getTime());
-    if (e <= s) return;
-    setCustomRange({ start: new Date(s), end: new Date(e), label: undefined });
-  };
+  // can overhang the period's edges). Stable identity — it feeds the chart
+  // panel's chartOptions memo.
+  const handleBarSelect = useCallback(
+    (start: Date, end: Date): void => {
+      if (!period) return;
+      const s = Math.max(start.getTime(), period.start.getTime());
+      const e = Math.min(end.getTime(), period.end.getTime());
+      if (e <= s) return;
+      setCustomRange({
+        start: new Date(s),
+        end: new Date(e),
+        label: undefined,
+      });
+    },
+    [period],
+  );
 
   return (
     <Page.Section>

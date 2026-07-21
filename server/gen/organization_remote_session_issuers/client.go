@@ -16,26 +16,30 @@ import (
 
 // Client is the "organizationRemoteSessionIssuers" service client.
 type Client struct {
-	CreateIssuerEndpoint             goa.Endpoint
-	ListIssuersEndpoint              goa.Endpoint
-	GetIssuerEndpoint                goa.Endpoint
-	GetIssuerDeletePreflightEndpoint goa.Endpoint
-	UpdateIssuerEndpoint             goa.Endpoint
-	DeleteIssuerEndpoint             goa.Endpoint
-	MoveIssuerEndpoint               goa.Endpoint
+	CreateIssuerEndpoint              goa.Endpoint
+	ListIssuersEndpoint               goa.Endpoint
+	GetIssuerEndpoint                 goa.Endpoint
+	GetIssuerDeletePreflightEndpoint  goa.Endpoint
+	UpdateIssuerEndpoint              goa.Endpoint
+	DeleteIssuerEndpoint              goa.Endpoint
+	MoveIssuerEndpoint                goa.Endpoint
+	GetIssuerMigratePreflightEndpoint goa.Endpoint
+	MigrateIssuerEndpoint             goa.Endpoint
 }
 
 // NewClient initializes a "organizationRemoteSessionIssuers" service client
 // given the endpoints.
-func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, updateIssuer, deleteIssuer, moveIssuer goa.Endpoint) *Client {
+func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, updateIssuer, deleteIssuer, moveIssuer, getIssuerMigratePreflight, migrateIssuer goa.Endpoint) *Client {
 	return &Client{
-		CreateIssuerEndpoint:             createIssuer,
-		ListIssuersEndpoint:              listIssuers,
-		GetIssuerEndpoint:                getIssuer,
-		GetIssuerDeletePreflightEndpoint: getIssuerDeletePreflight,
-		UpdateIssuerEndpoint:             updateIssuer,
-		DeleteIssuerEndpoint:             deleteIssuer,
-		MoveIssuerEndpoint:               moveIssuer,
+		CreateIssuerEndpoint:              createIssuer,
+		ListIssuersEndpoint:               listIssuers,
+		GetIssuerEndpoint:                 getIssuer,
+		GetIssuerDeletePreflightEndpoint:  getIssuerDeletePreflight,
+		UpdateIssuerEndpoint:              updateIssuer,
+		DeleteIssuerEndpoint:              deleteIssuer,
+		MoveIssuerEndpoint:                moveIssuer,
+		GetIssuerMigratePreflightEndpoint: getIssuerMigratePreflight,
+		MigrateIssuerEndpoint:             migrateIssuer,
 	}
 }
 
@@ -194,4 +198,50 @@ func (c *Client) MoveIssuer(ctx context.Context, p *MoveIssuerPayload) (res *typ
 		return
 	}
 	return ires.(*types.RemoteSessionIssuer), nil
+}
+
+// GetIssuerMigratePreflight calls the "getIssuerMigratePreflight" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+// GetIssuerMigratePreflight may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetIssuerMigratePreflight(ctx context.Context, p *GetIssuerMigratePreflightPayload) (res *OrganizationIssuerMigratePreflight, err error) {
+	var ires any
+	ires, err = c.GetIssuerMigratePreflightEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*OrganizationIssuerMigratePreflight), nil
+}
+
+// MigrateIssuer calls the "migrateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// MigrateIssuer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) MigrateIssuer(ctx context.Context, p *MigrateIssuerPayload) (res *MigrateOrganizationRemoteSessionIssuerResult, err error) {
+	var ires any
+	ires, err = c.MigrateIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*MigrateOrganizationRemoteSessionIssuerResult), nil
 }
