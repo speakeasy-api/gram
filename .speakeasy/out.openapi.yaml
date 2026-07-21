@@ -7800,11 +7800,11 @@ paths:
       operationId: listChats
       parameters:
         - allowEmptyValue: true
-          description: Search query (searches chat ID, user ID, and title)
+          description: Search query (searches chat ID, user ID, user name, and title)
           in: query
           name: search
           schema:
-            description: Search query (searches chat ID, user ID, and title)
+            description: Search query (searches chat ID, user ID, user name, and title)
             type: string
         - allowEmptyValue: true
           description: Filter by external user ID

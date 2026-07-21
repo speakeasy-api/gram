@@ -345,7 +345,7 @@ type ListChatsPayload struct {
 	SessionToken      *string
 	ProjectSlugInput  *string
 	ChatSessionsToken *string
-	// Search query (searches chat ID, user ID, and title)
+	// Search query (searches chat ID, user ID, user name, and title)
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
