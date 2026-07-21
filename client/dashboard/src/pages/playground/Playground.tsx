@@ -62,14 +62,14 @@ type PlaygroundServerRef =
       key: string;
       name: string;
       mcpServerId: string;
-      isIssuerGated: boolean;
+      userSessionIssuerId: string | undefined;
     }
   | {
       kind: "tunneled";
       key: string;
       name: string;
       mcpServerId: string;
-      isIssuerGated: boolean;
+      userSessionIssuerId: string | undefined;
     };
 
 const toolsetServerKey = (slug: string) => `toolset:${slug}`;
@@ -110,7 +110,7 @@ function usePlaygroundServers(): {
         key: mcpServerKey(server.id),
         name: server.name ?? server.slug ?? "Remote MCP server",
         mcpServerId: server.id,
-        isIssuerGated: !!server.userSessionIssuerId,
+        userSessionIssuerId: server.userSessionIssuerId,
       }));
 
     // Tunneled servers serve at the same /mcp/<slug> path and are the same
@@ -123,7 +123,7 @@ function usePlaygroundServers(): {
             key: mcpServerKey(server.id),
             name: server.name ?? server.slug ?? "Tunneled MCP server",
             mcpServerId: server.id,
-            isIssuerGated: !!server.userSessionIssuerId,
+            userSessionIssuerId: server.userSessionIssuerId,
           }))
       : [];
 
@@ -311,7 +311,7 @@ function PlaygroundInner() {
               selectedServer?.kind === "tunneled") && (
               <ProxiedServerPanel
                 mcpServerId={selectedServer.mcpServerId}
-                isIssuerGated={selectedServer.isIssuerGated}
+                userSessionIssuerId={selectedServer.userSessionIssuerId}
                 serverSelector={serverSelector}
                 temperature={temperature}
                 setTemperature={setTemperature}
@@ -342,7 +342,7 @@ function PlaygroundInner() {
                 selectedServer?.kind === "tunneled") && (
                 <PlaygroundProxiedChat
                   mcpServerId={selectedServer.mcpServerId}
-                  isIssuerGated={selectedServer.isIssuerGated}
+                  userSessionIssuerId={selectedServer.userSessionIssuerId}
                   environmentSlug={selectedEnvironment}
                   model={model}
                   additionalActions={additionalActions}
@@ -637,7 +637,7 @@ function ToolsetPanel({
  */
 function ProxiedServerPanel({
   mcpServerId,
-  isIssuerGated,
+  userSessionIssuerId,
   serverSelector,
   temperature,
   setTemperature,
@@ -647,9 +647,9 @@ function ProxiedServerPanel({
   setMaxTokens,
 }: PanelConfigProps & {
   mcpServerId: string;
-  isIssuerGated: boolean;
+  userSessionIssuerId: string | undefined;
 }) {
-  const { tools } = useProxiedMcpConnection(mcpServerId, isIssuerGated);
+  const { tools } = useProxiedMcpConnection(mcpServerId, userSessionIssuerId);
 
   const remoteTools = useMemo(
     () =>
