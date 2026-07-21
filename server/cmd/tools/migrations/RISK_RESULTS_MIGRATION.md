@@ -139,7 +139,7 @@ will not join.
 - **Resumable, from the committed cursor.** On an applied run the final report's
   `last cursor` is the **sink's** last durably-written id, not the source's read
   position (which runs ahead). Resume an interrupted run by passing that value to
-  `-cursor`; rows that were read but not yet flushed on interruption are re-read,
+  `-cursor`; repeat the original `-org`, `-project`, `-policy`, and `-to` filters when resuming because the cursor does not encode query scope; rows that were read but not yet flushed on interruption are re-read,
   never skipped. `-cursor` replaces `-from` as the lower bound (the committed id
   already sits past `-from`'s rows), so the `-from` predicate is dropped while
   resuming to avoid skipping rows between the cursor and `-from`.
