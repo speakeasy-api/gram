@@ -13,12 +13,17 @@ CREATE TABLE `skill_efficacy_scores` (
   `trace_id` Nullable(FixedString(32)) COMMENT 'W3C trace ID for the evaluated session when available.',
   `gram_chat_id` String DEFAULT '' COMMENT 'Gram chat identifier when available.' CODEC(ZSTD(1)),
   `score` Float64 COMMENT 'Skill efficacy score in the range 0.0 to 1.0.',
-  `rationale` String COMMENT 'Judge rationale for the score, capped by the producer at 200 characters.' CODEC(ZSTD(1)),
+  `rationale` String COMMENT 'Judge rationale for the score, capped at 200 characters.' CODEC(ZSTD(1)),
   `est_turns_saved` Nullable(Float64) COMMENT 'Estimated conversation turns saved.',
   `est_minutes_saved` Nullable(Float64) COMMENT 'Estimated minutes saved.',
-  `roi_confidence` LowCardinality(String) COMMENT 'ROI estimate confidence: low | medium | high.',
+  `roi_confidence` LowCardinality(Nullable(String)) COMMENT 'ROI estimate confidence when estimated: low | med | high.',
   `flags` Array(LowCardinality(String)) COMMENT 'Assessment flags: ignored | misapplied | partially_followed | harmful.',
   `judge_model` LowCardinality(String) COMMENT 'Model used to judge efficacy.',
-  `judge_prompt_version` LowCardinality(String) COMMENT 'Judge prompt version.'
+  `judge_prompt_version` LowCardinality(String) COMMENT 'Judge prompt version.',
+  CONSTRAINT `score_valid` CHECK isFinite(score) AND score >= 0 AND score <= 1,
+  CONSTRAINT `rationale_valid` CHECK lengthUTF8(rationale) <= 200,
+  CONSTRAINT `surface_valid` CHECK surface IN ('dev', 'assistant'),
+  CONSTRAINT `roi_confidence_valid` CHECK isNull(roi_confidence) OR roi_confidence IN ('low', 'med', 'high'),
+  CONSTRAINT `flags_valid` CHECK arrayAll(flag -> flag IN ('ignored', 'misapplied', 'partially_followed', 'harmful'), flags)
 ) ENGINE = MergeTree
 PRIMARY KEY (`organization_id`, `project_id`, `skill_id`, `skill_version_id`, `created_at`, `id`) ORDER BY (`organization_id`, `project_id`, `skill_id`, `skill_version_id`, `created_at`, `id`) PARTITION BY (toYYYYMM(created_at)) TTL toDateTime(created_at) + toIntervalDay(730) SETTINGS index_granularity = 8192 COMMENT 'Skill efficacy scores produced after scoring sessions complete.';
