@@ -23,7 +23,7 @@ describe("IdentityProviderAttachmentErrorAlert", () => {
         error={
           new ProxyRegistrationError(
             400,
-            "The callback URL is not allowed by this identity provider.",
+            "the callback URL is not allowed by this identity provider.",
           )
         }
       />,
@@ -72,7 +72,7 @@ describe("IdentityProviderAttachmentErrorAlert", () => {
 
     expect(scrollIntoView).toHaveBeenCalledWith({
       behavior: "smooth",
-      block: "nearest",
+      block: "center",
     });
   });
 });

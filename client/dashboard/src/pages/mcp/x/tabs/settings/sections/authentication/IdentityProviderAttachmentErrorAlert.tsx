@@ -8,6 +8,10 @@ type ErrorContent = {
   message: string;
 };
 
+function capitalizeFirstCharacter(value: string): string {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
 function errorContent(error: unknown): ErrorContent | null {
   if (!error) {
     return null;
@@ -46,7 +50,7 @@ export function IdentityProviderAttachmentErrorAlert({
 
     alertRef.current?.scrollIntoView({
       behavior: "smooth",
-      block: "nearest",
+      block: "center",
     });
   }, [error]);
 
@@ -60,7 +64,7 @@ export function IdentityProviderAttachmentErrorAlert({
       <Alert variant="error" dismissible={false}>
         <Stack gap={1}>
           <Type className="font-medium">{content.title}</Type>
-          <Type small>{content.message}</Type>
+          <Type small>{capitalizeFirstCharacter(content.message)}</Type>
         </Stack>
       </Alert>
     </div>
