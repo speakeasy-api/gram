@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
+	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
 
@@ -27,6 +28,10 @@ func TestPollRejectedByProviderMatchesPermanentProviderFailures(t *testing.T) {
 	require.True(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 403, Status: "403 Forbidden"}))
 	require.True(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 404, Status: "404 Not Found"}))
 	require.False(t, pollRejectedByProvider(&anthropicapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable"}))
+	require.True(t, pollRejectedByProvider(&codexapi.HTTPError{StatusCode: 401, Status: "401 Unauthorized"}))
+	require.True(t, pollRejectedByProvider(&codexapi.HTTPError{StatusCode: 403, Status: "403 Forbidden"}))
+	require.True(t, pollRejectedByProvider(&codexapi.HTTPError{StatusCode: 404, Status: "404 Not Found"}))
+	require.False(t, pollRejectedByProvider(&codexapi.HTTPError{StatusCode: 503, Status: "503 Service Unavailable"}))
 	require.False(t, pollRejectedByProvider(errors.New("network timeout")))
 }
 

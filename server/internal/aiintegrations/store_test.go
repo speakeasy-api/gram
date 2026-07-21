@@ -79,6 +79,25 @@ func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
 	require.Equal(t, int64(1), countAIIntegrationConfigs(t, ctx, conn, orgID, false))
 }
 
+func TestRecordUsagePollSuccessAtSeparatesWatermarkFromNextPoll(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	externalOrgID := "org-openai"
+	watermark := time.Now().UTC().Add(-initialUsagePollLookback)
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCodexCompliance, "codex-key", true, true, &externalOrgID, &watermark)
+
+	nextWatermark := watermark.Add(time.Hour)
+	completedAt := watermark.Add(12 * time.Hour)
+	require.NoError(t, store.RecordUsagePollSuccessAt(ctx, created.Config.ID, ProviderCodexCompliance, nextWatermark, completedAt, ""))
+
+	cfg, _, err := store.loadForOrgAndProviderRow(ctx, orgID, ProviderCodexCompliance)
+	require.NoError(t, err)
+	require.Equal(t, nextWatermark, cfg.PollWatermarkAt)
+	require.Equal(t, completedAt.Add(usagePollIntervalFor(ProviderCodexCompliance)), cfg.NextPollAfter)
+}
+
 func upsertConfigWithTx(
 	t *testing.T,
 	ctx context.Context,

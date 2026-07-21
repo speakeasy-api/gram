@@ -12,9 +12,9 @@ var Config = Type("AIIntegrationConfig", func() {
 	Required("organization_id", "provider", "enabled", "has_api_key")
 	Attribute("id", String, "Config ID. Omitted when no config is set for the provider.")
 	Attribute("organization_id", String, "Organization the config belongs to.")
-	Attribute("provider", String, "AI provider identifier. Supported values include cursor and anthropic_compliance.")
+	Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.")
 	Attribute("project_id", String, "Project used as the telemetry write target. Omitted when no config is set.")
-	Attribute("external_organization_id", String, "Provider organization identifier. Required for anthropic_compliance; omitted for providers that do not need one.")
+	Attribute("external_organization_id", String, "Provider organization identifier. Required for anthropic_compliance and codex_compliance; omitted for providers that do not need one.")
 	Attribute("billing_mode", String, "How the provider org is billed: 'metered' (pay-per-token; dashboard cost is real spend), 'flat_rate' (subscription seats; cost is an estimate), or 'unknown'. Empty/omitted when not declared.")
 	Attribute("enabled", Boolean, "Whether the provider integration is active.")
 	Attribute("has_api_key", Boolean, "Whether an API key is currently stored. The key itself is never returned.")
@@ -55,7 +55,7 @@ var _ = Service("aiIntegrations", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
-			Attribute("provider", String, "AI provider identifier. Supported values include cursor and anthropic_compliance.")
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.")
 			Required("provider")
 		})
 
@@ -85,9 +85,9 @@ var _ = Service("aiIntegrations", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
-			Attribute("provider", String, "AI provider identifier. Supported values include cursor and anthropic_compliance.")
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.")
 			Attribute("api_key", String, "Provider API key. Stored encrypted at rest; never returned on reads.")
-			Attribute("external_organization_id", String, "Provider organization identifier. Required for anthropic_compliance.")
+			Attribute("external_organization_id", String, "Provider organization identifier. Required for anthropic_compliance and codex_compliance.")
 			Attribute("billing_mode", String, "How the provider org is billed: 'metered', 'flat_rate', or 'unknown'. Free-form; omit to leave the existing value unchanged.")
 			Attribute("enabled", Boolean, "Whether the integration should be active.")
 			Required("provider", "api_key", "enabled")
@@ -118,7 +118,7 @@ var _ = Service("aiIntegrations", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
-			Attribute("provider", String, "AI provider identifier. Supported values include cursor and anthropic_compliance.")
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.")
 			Required("provider")
 		})
 

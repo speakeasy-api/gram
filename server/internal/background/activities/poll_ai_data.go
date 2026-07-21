@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
+	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
 
@@ -49,6 +50,7 @@ type PollAIData struct {
 	integrations       *aiintegrations.Store
 	cursorUsagePoller  *aiintegrations.UsagePollService
 	complianceImporter *aiintegrations.ComplianceImportService
+	codexCostImporter  *aiintegrations.CodexCostImportService
 }
 
 func NewPollAIData(
@@ -70,6 +72,13 @@ func NewPollAIData(
 		complianceImporter: aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, func(ctx context.Context, scope string, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
 				"provider": aiintegrations.ProviderAnthropicCompliance,
+				"scope":    scope,
+				"page":     page,
+			})
+		}),
+		codexCostImporter: aiintegrations.NewCodexCostImportService(logger, telemetryLogger, guardianPolicy, func(ctx context.Context, scope string, page int) {
+			activity.RecordHeartbeat(ctx, map[string]any{
+				"provider": aiintegrations.ProviderCodexCompliance,
 				"scope":    scope,
 				"page":     page,
 			})
@@ -124,6 +133,7 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 	// Providers with cursor-based pagination advance lastCursor; time-window
 	// providers leave the stored value untouched.
 	lastCursor := cfg.LastCursor
+	pollWatermarkAt := endTime
 	switch cfg.Provider {
 	case aiintegrations.ProviderCursor:
 		if err := p.cursorUsagePoller.SyncCursorUsage(ctx, cfg, endTime); err != nil {
@@ -148,11 +158,28 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic compliance data")
 		}
 		lastCursor = nextCursor
+	case aiintegrations.ProviderCodexCompliance:
+		nextWatermark, err := p.codexCostImporter.SyncCodexCosts(ctx, cfg)
+		if err != nil {
+			var httpErr *codexapi.HTTPError
+			if errors.As(err, &httpErr) {
+				switch httpErr.StatusCode {
+				case 401, 403:
+					return oops.E(oops.CodeUnauthorized, err, "codex compliance rejected the configured api key")
+				case 404:
+					return oops.E(oops.CodeNotFound, err, "codex compliance organization not found or compliance api access not enabled")
+				}
+			}
+			return oops.E(oops.CodeUnexpected, err, "sync codex cost data")
+		}
+		if !nextWatermark.IsZero() {
+			pollWatermarkAt = nextWatermark
+		}
 	default:
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
 	}
 
-	if err := p.integrations.RecordUsagePollSuccess(ctx, id, cfg.Provider, endTime, lastCursor); err != nil {
+	if err := p.integrations.RecordUsagePollSuccessAt(ctx, id, cfg.Provider, pollWatermarkAt, endTime, lastCursor); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record usage poll success")
 	}
 	return nil
@@ -172,6 +199,10 @@ func pollRejectedByProvider(err error) bool {
 	var anthropicErr *anthropicapi.HTTPError
 	if errors.As(err, &anthropicErr) {
 		return anthropicErr.StatusCode == 401 || anthropicErr.StatusCode == 403 || anthropicErr.StatusCode == 404
+	}
+	var codexErr *codexapi.HTTPError
+	if errors.As(err, &codexErr) {
+		return codexErr.StatusCode == 401 || codexErr.StatusCode == 403 || codexErr.StatusCode == 404
 	}
 	return false
 }

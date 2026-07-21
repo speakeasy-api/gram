@@ -420,7 +420,16 @@ const (
 	// CodexUsageToolTokensKey stores Codex's tool_token_count verbatim for
 	// fidelity. It equals input + output, so it is intentionally not summed
 	// into any total downstream.
-	CodexUsageToolTokensKey = attribute.Key("codex.usage.tool_tokens")
+	CodexUsageToolTokensKey       = attribute.Key("codex.usage.tool_tokens")
+	CodexComplianceEventIDKey     = attribute.Key("codex.compliance.event_id")
+	CodexComplianceLogIDKey       = attribute.Key("codex.compliance.log_id")
+	CodexComplianceCostUnitKey    = attribute.Key("codex.compliance.cost_unit")
+	CodexComplianceClientKey      = attribute.Key("codex.compliance.client")
+	CodexComplianceSurfaceKey     = attribute.Key("codex.compliance.surface")
+	CodexComplianceServiceTierKey = attribute.Key("codex.compliance.service_tier")
+	CodexComplianceReasoningKey   = attribute.Key("codex.compliance.reasoning")
+	CodexComplianceProductKey     = attribute.Key("codex.compliance.product")
+	CodexComplianceBillingSKUsKey = attribute.Key("codex.compliance.billing_skus")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")

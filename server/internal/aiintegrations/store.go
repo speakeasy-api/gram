@@ -22,22 +22,28 @@ import (
 const (
 	ProviderCursor              = "cursor"
 	ProviderAnthropicCompliance = "anthropic_compliance"
+	ProviderCodexCompliance     = "codex_compliance"
 )
 
 const (
 	initialUsagePollLookback             = time.Hour * 24
 	cursorUsagePollInterval              = time.Hour
 	anthropicComplianceUsagePollInterval = 5 * time.Minute
+	codexComplianceUsagePollInterval     = 5 * time.Minute
 	maxUsagePollErrorMessage             = 4000
 )
 
 // usagePollIntervalFor returns the delay between polls for a provider.
 // Unknown providers fall back to the cursor interval.
 func usagePollIntervalFor(provider string) time.Duration {
-	if provider == ProviderAnthropicCompliance {
+	switch provider {
+	case ProviderAnthropicCompliance:
 		return anthropicComplianceUsagePollInterval
+	case ProviderCodexCompliance:
+		return codexComplianceUsagePollInterval
+	default:
+		return cursorUsagePollInterval
 	}
-	return cursorUsagePollInterval
 }
 
 type Store struct {
@@ -95,7 +101,7 @@ func normalizeProvider(provider string) (string, error) {
 		return "", oops.E(oops.CodeInvalid, nil, "provider is required")
 	}
 	switch provider {
-	case ProviderCursor, ProviderAnthropicCompliance:
+	case ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance:
 	default:
 		return "", oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider: %s", provider)
 	}
@@ -132,8 +138,8 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		return UpsertResult{}, err
 	}
 
-	if provider == ProviderAnthropicCompliance && externalOrganizationID == nil {
-		return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id is required for anthropic_compliance")
+	if providerRequiresExternalOrganizationID(provider) && externalOrganizationID == nil {
+		return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id is required for %s", provider)
 	}
 
 	q := repo.New(dbtx)
@@ -214,6 +220,10 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		Row:                  &row,
 		CreatedNewGeneration: createdNewGeneration,
 	}, nil
+}
+
+func providerRequiresExternalOrganizationID(provider string) bool {
+	return provider == ProviderAnthropicCompliance || provider == ProviderCodexCompliance
 }
 
 func (s *Store) softDeleteWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string) error {
@@ -300,10 +310,14 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID) (Con
 }
 
 func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, provider string, t time.Time, lastCursor string) error {
+	return s.RecordUsagePollSuccessAt(ctx, configID, provider, t, t, lastCursor)
+}
+
+func (s *Store) RecordUsagePollSuccessAt(ctx context.Context, configID uuid.UUID, provider string, pollWatermarkAt time.Time, completedAt time.Time, lastCursor string) error {
 	if err := s.repo.RecordUsagePollSuccess(ctx, repo.RecordUsagePollSuccessParams{
 		AiIntegrationConfigID: configID,
-		PollWatermarkAt:       conv.ToPGTimestamptz(t),
-		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollIntervalFor(provider))),
+		PollWatermarkAt:       conv.ToPGTimestamptz(pollWatermarkAt),
+		NextPollAfter:         conv.ToPGTimestamptz(completedAt.UTC().Add(usagePollIntervalFor(provider))),
 		LastCursorID:          conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll success")
