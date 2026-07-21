@@ -853,6 +853,29 @@ SET risk_analyzed_at = clock_timestamp()
 WHERE id = ANY(@message_ids::uuid[])
   AND project_id = @project_id;
 
+-- name: ListMessageIDsForAdhocRiskAnalysis :many
+-- Keyset-pages chat messages for an ad-hoc (operator-triggered) risk analysis
+-- run over a time window expressed as UUIDv7 id bounds, scanning
+-- chat_messages_project_id_id_idx. Deliberately ignores risk_analyzed_at:
+-- ad-hoc runs re-scan already-analyzed messages. id_cursor is an exclusive
+-- paging cursor (all-zero uuid on the first page); id_lower_bound is the
+-- inclusive window start and id_upper_bound the exclusive window end.
+SELECT cm.id
+FROM chat_messages cm
+WHERE cm.project_id = @project_id
+  AND cm.id >= @id_lower_bound
+  AND cm.id > @id_cursor
+  AND cm.id < @id_upper_bound
+ORDER BY cm.id ASC
+LIMIT @batch_limit;
+
+-- name: CountMessagesForAdhocRiskAnalysis :one
+SELECT COUNT(*)
+FROM chat_messages cm
+WHERE cm.project_id = @project_id
+  AND cm.id >= @id_lower_bound
+  AND cm.id < @id_upper_bound;
+
 -- name: GetMessageContentBatch :many
 -- The scanned user's id rides along so the LLM judge's completion telemetry
 -- can attribute scanning volume to whose traffic was analyzed. Same

@@ -1146,6 +1146,7 @@ func newStartCommand() *cli.Command {
 			// synchronously in the drain goroutine below, while Temporal is still open.
 			riskReconciler := &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger}
 			riskResultsCleaner := &background.TemporalRiskPolicyResultsCleaner{TemporalEnv: temporalEnv, Logger: logger}
+			riskAdhocClient := &background.TemporalRiskAdhocAnalysisClient{TemporalEnv: temporalEnv, Logger: logger}
 			riskService := risk.NewService(
 				logger,
 				tracerProvider,
@@ -1155,6 +1156,7 @@ func newStartCommand() *cli.Command {
 				riskSignaler,
 				riskReconciler,
 				riskResultsCleaner,
+				riskAdhocClient,
 				completionsClient,
 				shadowMCPClient,
 				auditLogger,

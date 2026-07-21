@@ -423,6 +423,27 @@ func (q *Queries) CountFindingsByPolicy(ctx context.Context, arg CountFindingsBy
 	return column_1, err
 }
 
+const countMessagesForAdhocRiskAnalysis = `-- name: CountMessagesForAdhocRiskAnalysis :one
+SELECT COUNT(*)
+FROM chat_messages cm
+WHERE cm.project_id = $1
+  AND cm.id >= $2
+  AND cm.id < $3
+`
+
+type CountMessagesForAdhocRiskAnalysisParams struct {
+	ProjectID    uuid.NullUUID
+	IDLowerBound uuid.UUID
+	IDUpperBound uuid.UUID
+}
+
+func (q *Queries) CountMessagesForAdhocRiskAnalysis(ctx context.Context, arg CountMessagesForAdhocRiskAnalysisParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMessagesForAdhocRiskAnalysis, arg.ProjectID, arg.IDLowerBound, arg.IDUpperBound)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRiskResultsByPolicyID = `-- name: CountRiskResultsByPolicyID :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results
@@ -1945,6 +1966,57 @@ func (q *Queries) ListEnabledToolIdentityPoliciesByProject(ctx context.Context, 
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMessageIDsForAdhocRiskAnalysis = `-- name: ListMessageIDsForAdhocRiskAnalysis :many
+SELECT cm.id
+FROM chat_messages cm
+WHERE cm.project_id = $1
+  AND cm.id >= $2
+  AND cm.id > $3
+  AND cm.id < $4
+ORDER BY cm.id ASC
+LIMIT $5
+`
+
+type ListMessageIDsForAdhocRiskAnalysisParams struct {
+	ProjectID    uuid.NullUUID
+	IDLowerBound uuid.UUID
+	IDCursor     uuid.UUID
+	IDUpperBound uuid.UUID
+	BatchLimit   int32
+}
+
+// Keyset-pages chat messages for an ad-hoc (operator-triggered) risk analysis
+// run over a time window expressed as UUIDv7 id bounds, scanning
+// chat_messages_project_id_id_idx. Deliberately ignores risk_analyzed_at:
+// ad-hoc runs re-scan already-analyzed messages. id_cursor is an exclusive
+// paging cursor (all-zero uuid on the first page); id_lower_bound is the
+// inclusive window start and id_upper_bound the exclusive window end.
+func (q *Queries) ListMessageIDsForAdhocRiskAnalysis(ctx context.Context, arg ListMessageIDsForAdhocRiskAnalysisParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMessageIDsForAdhocRiskAnalysis,
+		arg.ProjectID,
+		arg.IDLowerBound,
+		arg.IDCursor,
+		arg.IDUpperBound,
+		arg.BatchLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

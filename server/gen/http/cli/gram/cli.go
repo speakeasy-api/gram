@@ -17,6 +17,7 @@ import (
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
 	adminremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/admin_remote_sessions/client"
+	adminriskanalysisc "github.com/speakeasy-api/gram/server/gen/http/admin_risk_analysis/client"
 	agentc "github.com/speakeasy-api/gram/server/gen/http/agent/client"
 	aiintegrationsc "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
@@ -115,6 +116,7 @@ func UsageCommands() []string {
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
+		"admin-risk-analysis (trigger|status)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
@@ -1240,6 +1242,16 @@ func ParseEndpoint(
 		packagesPublishApikeyTokenFlag      = packagesPublishFlags.String("apikey-token", "", "")
 		packagesPublishSessionTokenFlag     = packagesPublishFlags.String("session-token", "", "")
 		packagesPublishProjectSlugInputFlag = packagesPublishFlags.String("project-slug-input", "", "")
+
+		adminRiskAnalysisFlags = flag.NewFlagSet("admin-risk-analysis", flag.ContinueOnError)
+
+		adminRiskAnalysisTriggerFlags            = flag.NewFlagSet("trigger", flag.ExitOnError)
+		adminRiskAnalysisTriggerBodyFlag         = adminRiskAnalysisTriggerFlags.String("body", "REQUIRED", "")
+		adminRiskAnalysisTriggerSessionTokenFlag = adminRiskAnalysisTriggerFlags.String("session-token", "", "")
+
+		adminRiskAnalysisStatusFlags            = flag.NewFlagSet("status", flag.ExitOnError)
+		adminRiskAnalysisStatusProjectIDFlag    = adminRiskAnalysisStatusFlags.String("project-id", "REQUIRED", "")
+		adminRiskAnalysisStatusSessionTokenFlag = adminRiskAnalysisStatusFlags.String("session-token", "", "")
 
 		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
 
@@ -2863,6 +2875,10 @@ func ParseEndpoint(
 	packagesListVersionsFlags.Usage = packagesListVersionsUsage
 	packagesPublishFlags.Usage = packagesPublishUsage
 
+	adminRiskAnalysisFlags.Usage = adminRiskAnalysisUsage
+	adminRiskAnalysisTriggerFlags.Usage = adminRiskAnalysisTriggerUsage
+	adminRiskAnalysisStatusFlags.Usage = adminRiskAnalysisStatusUsage
+
 	pluginsFlags.Usage = pluginsUsage
 	pluginsListPluginsFlags.Usage = pluginsListPluginsUsage
 	pluginsGetPluginFlags.Usage = pluginsGetPluginUsage
@@ -3225,6 +3241,8 @@ func ParseEndpoint(
 			svcf = otelForwardingFlags
 		case "packages":
 			svcf = packagesFlags
+		case "admin-risk-analysis":
+			svcf = adminRiskAnalysisFlags
 		case "plugins":
 			svcf = pluginsFlags
 		case "features":
@@ -4008,6 +4026,16 @@ func ParseEndpoint(
 
 			case "publish":
 				epf = packagesPublishFlags
+
+			}
+
+		case "admin-risk-analysis":
+			switch epn {
+			case "trigger":
+				epf = adminRiskAnalysisTriggerFlags
+
+			case "status":
+				epf = adminRiskAnalysisStatusFlags
 
 			}
 
@@ -5550,6 +5578,16 @@ func ParseEndpoint(
 			case "publish":
 				endpoint = c.Publish()
 				data, err = packagesc.BuildPublishPayload(*packagesPublishBodyFlag, *packagesPublishApikeyTokenFlag, *packagesPublishSessionTokenFlag, *packagesPublishProjectSlugInputFlag)
+			}
+		case "admin-risk-analysis":
+			c := adminriskanalysisc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "trigger":
+				endpoint = c.Trigger()
+				data, err = adminriskanalysisc.BuildTriggerPayload(*adminRiskAnalysisTriggerBodyFlag, *adminRiskAnalysisTriggerSessionTokenFlag)
+			case "status":
+				endpoint = c.Status()
+				data, err = adminriskanalysisc.BuildStatusPayload(*adminRiskAnalysisStatusProjectIDFlag, *adminRiskAnalysisStatusSessionTokenFlag)
 			}
 		case "plugins":
 			c := pluginsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -11218,6 +11256,58 @@ func packagesPublishUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages publish --body '{\n      \"deployment_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"version\": \"abc123\",\n      \"visibility\": \"private\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// adminRiskAnalysisUsage displays the usage of the admin-risk-analysis command
+// and its subcommands.
+func adminRiskAnalysisUsage() {
+	fmt.Fprintln(os.Stderr, `Platform-admin triggering and monitoring of ad-hoc risk analysis runs over an explicit time window. Speakeasy-staff only; every method requires the platform-admin flag.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-risk-analysis COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    trigger: Start an ad-hoc risk analysis run re-scanning a project's chat messages against a policy over a time window. One run per project may be in flight at a time. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    status: Get the status and progress of a project's most recent ad-hoc risk analysis run. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s admin-risk-analysis COMMAND --help\n", os.Args[0])
+}
+func adminRiskAnalysisTriggerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-risk-analysis trigger", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Start an ad-hoc risk analysis run re-scanning a project's chat messages against a policy over a time window. One run per project may be in flight at a time. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-risk-analysis trigger --body '{\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"risk_policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }' --session-token \"abc123\"")
+}
+
+func adminRiskAnalysisStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-risk-analysis status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the status and progress of a project's most recent ad-hoc risk analysis run. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-risk-analysis status --project-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 // pluginsUsage displays the usage of the plugins command and its subcommands.

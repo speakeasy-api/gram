@@ -71,6 +71,8 @@ trackedFiles:
   src/funcs/adminRemoteSessionsListGlobalIssuers.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalIssuer.ts: {}
+  src/funcs/adminRiskAnalysisStatus.ts: {}
+  src/funcs/adminRiskAnalysisTrigger.ts: {}
   src/funcs/agentGetPlugins.ts: {}
   src/funcs/agentListSyncedUsers.ts: {}
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
@@ -471,6 +473,8 @@ trackedFiles:
   src/models/components/addpackageform.ts: {}
   src/models/components/addpluginserverform.ts: {}
   src/models/components/addskillversionrequestbody.ts: {}
+  src/models/components/adhocriskanalysisprogress.ts: {}
+  src/models/components/adhocriskanalysisstatus.ts: {}
   src/models/components/agentmarketplace.ts: {}
   src/models/components/agentplugin.ts: {}
   src/models/components/agentusage.ts: {}
@@ -1009,6 +1013,7 @@ trackedFiles:
   src/models/components/triggerdefinition.ts: {}
   src/models/components/triggerenvrequirement.ts: {}
   src/models/components/triggerinstance.ts: {}
+  src/models/components/triggerrequestbody.ts: {}
   src/models/components/triggerriskanalysisrequestbody.ts: {}
   src/models/components/tumdetailsbreakdown.ts: {}
   src/models/components/tumdetailsbreakdownrow.ts: {}
@@ -1218,6 +1223,7 @@ trackedFiles:
   src/models/operations/generatetitle.ts: {}
   src/models/operations/generateworkosadminportallink.ts: {}
   src/models/operations/getactivedeployment.ts: {}
+  src/models/operations/getadhocriskanalysisstatus.ts: {}
   src/models/operations/getagentplugins.ts: {}
   src/models/operations/getaiintegrationconfig.ts: {}
   src/models/operations/getassistant.ts: {}
@@ -1448,6 +1454,7 @@ trackedFiles:
   src/models/operations/switchauthscopes.ts: {}
   src/models/operations/testdetectionrule.ts: {}
   src/models/operations/tokenexchange.ts: {}
+  src/models/operations/triggeradhocriskanalysis.ts: {}
   src/models/operations/triggerriskanalysis.ts: {}
   src/models/operations/undistributeskill.ts: {}
   src/models/operations/unmaskriskresult.ts: {}
@@ -1509,6 +1516,8 @@ trackedFiles:
   src/react-query/addOAuthProxyServer.ts: {}
   src/react-query/addPluginServer.ts: {}
   src/react-query/addSkillVersion.ts: {}
+  src/react-query/adhocRiskAnalysisStatus.core.ts: {}
+  src/react-query/adhocRiskAnalysisStatus.ts: {}
   src/react-query/agentPlugins.core.ts: {}
   src/react-query/agentPlugins.ts: {}
   src/react-query/aiIntegrationConfig.core.ts: {}
@@ -2026,6 +2035,7 @@ trackedFiles:
   src/react-query/toolset.ts: {}
   src/react-query/trigger.core.ts: {}
   src/react-query/trigger.ts: {}
+  src/react-query/triggerAdhocRiskAnalysis.ts: {}
   src/react-query/triggerDefinitions.core.ts: {}
   src/react-query/triggerDefinitions.ts: {}
   src/react-query/triggers.core.ts: {}
@@ -2096,6 +2106,7 @@ trackedFiles:
   src/react-query/verifyRemoteMcpURL.ts: {}
   src/sdk/access.ts: {}
   src/sdk/adminremotesessions.ts: {}
+  src/sdk/adminriskanalysis.ts: {}
   src/sdk/agent.ts: {}
   src/sdk/aiintegrations.ts: {}
   src/sdk/assets.ts: {}
@@ -3557,6 +3568,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getAdhocRiskAnalysisStatus:
+    speakeasy-default-get-adhoc-risk-analysis-status:
+      parameters:
+        query:
+          project_id: "c73fa004-7046-45ce-a404-42222b94d5bd"
+      responses:
+        "200":
+          application/json: {"status": "<value>", "workflow_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getAgentPlugins:
     speakeasy-default-get-agent-plugins:
       parameters:
@@ -6068,6 +6091,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  triggerAdhocRiskAnalysis:
+    speakeasy-default-trigger-adhoc-risk-analysis:
+      requestBody:
+        application/json: {"from": "2024-03-21T08:07:55.255Z", "project_id": "4fff777b-8ae0-4618-b57e-f84cb8cfb68c", "risk_policy_id": "3844b101-2071-4f39-849f-08d16ddb576b"}
+      responses:
+        "200":
+          application/json: {"status": "<value>", "workflow_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   triggerRiskAnalysis:
     speakeasy-default-trigger-risk-analysis:
       requestBody:

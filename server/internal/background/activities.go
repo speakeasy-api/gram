@@ -97,6 +97,7 @@ type Activities struct {
 	analyzeSegment                  *resolution_activities.AnalyzeSegment
 	getUserFeedbackForChat          *resolution_activities.GetUserFeedbackForChat
 	fetchUnanalyzedMessages         *risk_analysis.FetchUnanalyzed
+	fetchAdhocMessages              *risk_analysis.FetchAdhoc
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
 	markMessagesAnalyzed            *risk_analysis.MarkMessagesAnalyzed
 	reconcileExclusion              *risk_exclusion.Reconcile
@@ -228,6 +229,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
+		fetchAdhocMessages:              risk_analysis.NewFetchAdhoc(logger, tracerProvider, db),
 		analyzeBatch:                    analyzeBatch,
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
@@ -432,6 +434,22 @@ func (a *Activities) FetchUnanalyzedMessages(ctx context.Context, input risk_ana
 		return nil, fmt.Errorf("fetch unanalyzed messages: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) FetchAdhocAnalysisMessages(ctx context.Context, input risk_analysis.FetchAdhocArgs) (*risk_analysis.FetchAdhocResult, error) {
+	result, err := a.fetchAdhocMessages.Fetch(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("fetch adhoc analysis messages: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) CountAdhocAnalysisMessages(ctx context.Context, input risk_analysis.CountAdhocArgs) (int64, error) {
+	total, err := a.fetchAdhocMessages.Count(ctx, input)
+	if err != nil {
+		return 0, fmt.Errorf("count adhoc analysis messages: %w", err)
+	}
+	return total, nil
 }
 
 func (a *Activities) AnalyzeBatch(ctx context.Context, input risk_analysis.AnalyzeBatchArgs) (*risk_analysis.AnalyzeBatchResult, error) {
