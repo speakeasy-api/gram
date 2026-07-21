@@ -374,11 +374,6 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider)
-			if err != nil {
-				return err
-			}
-
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -394,6 +389,11 @@ func newWorkerCommand() *cli.Command {
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
+			}
+
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
+			if err != nil {
+				return err
 			}
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))

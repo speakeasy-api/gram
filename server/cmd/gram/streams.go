@@ -235,11 +235,6 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub topology")
 			}
 
-			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider)
-			if err != nil {
-				return err
-			}
-
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -269,7 +264,11 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
-			_ = redisClient
+
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
+			if err != nil {
+				return err
+			}
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 			var featureFlags feature.Provider = posthogClient
