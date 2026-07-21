@@ -158,9 +158,8 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
   },
   {
     provider: "codex_compliance",
-    name: "Codex",
-    description:
-      "Import Codex usage and spend from OpenAI compliance cost logs.",
+    name: "OpenAI Compliance Logs",
+    description: "Import Codex usage and spend from OpenAI Compliance Logs.",
     onboardingDescription:
       "Connect OpenAI's Compliance Logs API so the platform can import Codex cost data for reporting.",
     setupGuide: {
@@ -184,8 +183,8 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
       ],
     },
     icon: CodexIcon,
-    apiKeyLabel: "OpenAI Compliance API key",
-    apiKeyPlaceholder: "Paste your OpenAI Compliance API key",
+    apiKeyLabel: "OpenAI Compliance Logs API key",
+    apiKeyPlaceholder: "Paste your OpenAI Compliance Logs API key",
     requiresOrganizationId: true,
     organizationIdLabel: "OpenAI organization ID",
     organizationIdPlaceholder: "org-...",
