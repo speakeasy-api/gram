@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     provider String MATERIALIZED toString(attributes.gram.provider) COMMENT 'AI provider for the session account (e.g. anthropic, openai). Set by ingest (materialized from attributes.gram.provider).',
     external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator. Normalized by ingest (materialized from attributes.gram.external_org_id).',
     account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account). Set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
-    billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).'
+    billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).',
+    event_urn String MATERIALIZED toString(attributes.gram.event.urn) COMMENT 'Canonical event identity in the form urn:gram:telemetry:event:<origin>:<kind>:<type> where origin is the observation channel (provider_otel | provider_api | agent_hook | gram_gateway | gram_runtime | gram_worker | unknown), kind is the signal shape (log | metric) and type is the producer event type. Stamped by telemetry.Logger. Empty on rows written before the column existed (materialized from attributes.gram.event.urn).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -100,6 +101,10 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_org_id ON telemetry_l
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs (account_type) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_provider ON telemetry_logs (provider) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_billing_mode ON telemetry_logs (billing_mode) TYPE set(0) GRANULARITY 4;
+-- set index (not bloom_filter): event_urn is low-cardinality and its primary
+-- access pattern is prefix filtering (startsWith), which set indexes can
+-- evaluate and bloom filters cannot.
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_event_urn ON telemetry_logs (event_urn) TYPE set(0) GRANULARITY 4;
 
 -- telemetry_logs_staging parks Claude OTEL api_request rows whose inline MCP
 -- attribution was redacted (mcp_server.name = 'custom') until the
