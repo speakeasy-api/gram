@@ -1,3 +1,4 @@
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import type { AgentPlatform } from "./types";
 
 export const AGENT_PLATFORMS: AgentPlatform[] = [
@@ -124,8 +125,7 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
       },
       {
         title: "Mark the observability plugin as Required",
-        description:
-          "After the repo syncs, your plugins appear in a table on Claude.ai. Find the observability plugin row (slug below), open its Default access dropdown, and set it to Required. That pre-installs it for every org member and prevents them from disabling it — so tool events flow to Speakeasy without per-user opt-in.",
+        description: `After the repo syncs, your plugins appear in a table on Claude.ai. Find the observability plugin row (slug below), open its Default access dropdown, and set it to Required. That pre-installs it for every org member and prevents them from disabling it — so tool events flow to Speakeasy without per-user opt-in. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
         screenshot: {
           src: "/setup/claude-cowork-set-required.png",
           alt: "Claude.ai plugin access dropdown showing four options (Available to install, Installed by default, Not available, Required) with Required selected",
