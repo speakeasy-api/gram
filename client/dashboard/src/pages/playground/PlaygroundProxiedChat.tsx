@@ -3,29 +3,29 @@ import { Type } from "@/components/ui/type";
 import { PlugZap } from "lucide-react";
 import { useEffect } from "react";
 import { PlaygroundChat } from "./PlaygroundChat";
-import { useRemoteMcpConnection } from "./useRemoteMcpConnection";
+import { useProxiedMcpConnection } from "./useProxiedMcpConnection";
 
-interface PlaygroundRemoteChatProps {
+interface PlaygroundProxiedChatProps {
   mcpServerId: string;
-  isIssuerGated: boolean;
+  userSessionIssuerId: string | undefined;
   environmentSlug: string | null;
   model: string;
   additionalActions?: React.ReactNode;
 }
 
 /**
- * The remote-MCP-backed playground variant: resolves the server's proxied
+ * The proxied-MCP-backed playground variant: resolves the server's proxied
  * `/mcp/<slug>` URL and issuer-gated token, prompts for an upstream connect
  * when needed, then renders the shared {@link PlaygroundChat}. Environment and
- * MCP-App registration don't apply to remote servers, so both are omitted.
+ * MCP-App registration don't apply to proxied servers, so both are omitted.
  */
-export function PlaygroundRemoteChat({
+export function PlaygroundProxiedChat({
   mcpServerId,
-  isIssuerGated,
+  userSessionIssuerId,
   environmentSlug,
   model,
   additionalActions,
-}: PlaygroundRemoteChatProps): JSX.Element {
+}: PlaygroundProxiedChatProps): JSX.Element {
   const {
     mcpUrl,
     gatewayToken,
@@ -35,7 +35,7 @@ export function PlaygroundRemoteChat({
     refetch,
     isLoading,
     connectionReady,
-  } = useRemoteMcpConnection(mcpServerId, isIssuerGated);
+  } = useProxiedMcpConnection(mcpServerId, userSessionIssuerId);
 
   // When the user comes back from the connect tab, re-attempt the connection so
   // a freshly linked session surfaces without a manual refresh.
@@ -47,16 +47,16 @@ export function PlaygroundRemoteChat({
   }, [needsAuth, refetch]);
 
   if (needsAuth) {
-    return <RemoteConnectPrompt connectUrl={connectUrl} />;
+    return <ProxiedConnectPrompt connectUrl={connectUrl} />;
   }
 
   if (isError) {
     return (
-      <RemoteStatusNotice message="Couldn't connect to this MCP server to list its tools.">
+      <ProxiedStatusNotice message="Couldn't connect to this MCP server to list its tools.">
         <Button variant="secondary" onClick={refetch}>
           Try again
         </Button>
-      </RemoteStatusNotice>
+      </ProxiedStatusNotice>
     );
   }
 
@@ -72,7 +72,7 @@ export function PlaygroundRemoteChat({
   // open an unauthenticated chat that would 401 on every request.
   if (!connectionReady) {
     return (
-      <RemoteStatusNotice message="Couldn't authenticate with this MCP server. Check the server's identity provider configuration." />
+      <ProxiedStatusNotice message="Couldn't authenticate with this MCP server. Check the server's identity provider configuration." />
     );
   }
 
@@ -87,7 +87,7 @@ export function PlaygroundRemoteChat({
   );
 }
 
-function RemoteStatusNotice({
+function ProxiedStatusNotice({
   message,
   children,
 }: {
@@ -107,7 +107,7 @@ function RemoteStatusNotice({
   );
 }
 
-function RemoteConnectPrompt({
+function ProxiedConnectPrompt({
   connectUrl,
 }: {
   connectUrl: string | undefined;

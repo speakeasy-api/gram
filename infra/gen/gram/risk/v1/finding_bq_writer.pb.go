@@ -21,6 +21,12 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Deprecated: the BigQuery risk_findings writer has been decommissioned in
+// favor of the ClickHouse writer (FindingCHWriter). This subscription is
+// retained but marked deprecated so cc-gen labels the GCP resource
+// `deprecated` rather than deleting it (avoids abrupt teardown / message loss).
+//
+// Deprecated: Marked as deprecated in gram/risk/v1/finding_bq_writer.proto.
 type FindingBQWriter struct {
 	state         protoimpl.MessageState `protogen:"opaque.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -52,6 +58,7 @@ func (x *FindingBQWriter) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
+// Deprecated: Marked as deprecated in gram/risk/v1/finding_bq_writer.proto.
 type FindingBQWriter_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -68,10 +75,10 @@ var File_gram_risk_v1_finding_bq_writer_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_finding_bq_writer_proto_rawDesc = "" +
 	"\n" +
-	"$gram/risk/v1/finding_bq_writer.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"D\n" +
-	"\x0fFindingBQWriter:1\x92\xb5\x18-\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\t\n" +
+	"$gram/risk/v1/finding_bq_writer.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"F\n" +
+	"\x0fFindingBQWriter:3\x92\xb5\x18-\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\t\n" +
 	"\x02\b\n" +
-	"\x12\x03\b\xd8\x04R\x14gram.risk.v1.FindingB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
+	"\x12\x03\b\xd8\x04R\x14gram.risk.v1.Finding\x18\x01B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_finding_bq_writer_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_risk_v1_finding_bq_writer_proto_goTypes = []any{

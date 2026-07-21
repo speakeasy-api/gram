@@ -1826,8 +1826,10 @@ export function OAuthDetailsModal({
                         onEditRequest();
                       }}
                     >
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit
+                      <Button.LeftIcon>
+                        <Pencil aria-hidden="true" className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Edit</Button.Text>
                     </Button>
                     <Button
                       variant="tertiary"
@@ -1841,8 +1843,10 @@ export function OAuthDetailsModal({
                         })
                       }
                     >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Unlink
+                      <Button.LeftIcon>
+                        <Trash2 aria-hidden="true" className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Unlink</Button.Text>
                     </Button>
                   </div>
                 </div>
@@ -2014,8 +2018,10 @@ export function OAuthDetailsModal({
                 })
               }
             >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Unlink
+              <Button.LeftIcon>
+                <Trash2 aria-hidden="true" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Unlink</Button.Text>
             </Button>
           </Dialog.Footer>
         )}

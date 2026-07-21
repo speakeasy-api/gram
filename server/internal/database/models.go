@@ -53,6 +53,8 @@ type AiIntegrationSync struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
+	Kind                  pgtype.Text
 	PollWatermarkAt       pgtype.Timestamptz
 	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
@@ -1714,12 +1716,6 @@ type SkillVersion struct {
 	ValidationErrors []byte
 	CreatedAt        pgtype.Timestamptz
 	CreatedByUserID  string
-}
-
-type SkillVersionLineage struct {
-	SkillVersionID       uuid.UUID
-	SkillID              uuid.UUID
-	DerivedFromVersionID uuid.UUID
 }
 
 type SkillVersionOrigin struct {

@@ -41,10 +41,13 @@ func TestSkillInsightsReportsVersionAdoptionAndDrift(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	insertSkillObservationWithHostname(t, ti, "adopted-skill", contentSHA256(oldContent), "machine-a", now.Add(-2*time.Hour))
-	insertSkillObservationWithHostname(t, ti, "adopted-skill", contentSHA256(newContent), "MACHINE-A", now.Add(-time.Hour))
-	insertSkillObservationWithHostname(t, ti, "adopted-skill", contentSHA256(oldContent), "machine-b", now.Add(-time.Hour))
-	insertSkillObservationWithHostname(t, ti, "adopted-skill", "", "machine-c", now.Add(-time.Hour))
+	// Anchor in-window observations to yesterday noon UTC so they always land
+	// in one UTC-day timeline bucket regardless of when the test runs.
+	base := now.Add(-24 * time.Hour).Truncate(24 * time.Hour).Add(12 * time.Hour)
+	insertSkillObservationWithHostname(t, ti, "adopted-skill", contentSHA256(oldContent), "machine-a", base.Add(-time.Hour))
+	insertSkillObservationWithHostname(t, ti, "adopted-skill", contentSHA256(newContent), "MACHINE-A", base)
+	insertSkillObservationWithHostname(t, ti, "adopted-skill", contentSHA256(oldContent), "machine-b", base)
+	insertSkillObservationWithHostname(t, ti, "adopted-skill", "", "machine-c", base)
 	insertSkillObservationWithHostname(t, ti, "adopted-skill", contentSHA256(oldContent), "old-machine", now.Add(-31*24*time.Hour))
 	insertSkillObservationWithHostname(t, ti, "adopted-skill", contentSHA256(oldContent), "future-machine", now.Add(time.Hour))
 	result, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)

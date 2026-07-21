@@ -1,5 +1,5 @@
 import type { Dimension } from "@gram/client/models/components/queryfilter.js";
-import type { Measures } from "./taxonomy";
+import { type Measures, unsetLabel } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
 import { movingAverage, resample, smoothPath } from "./sparkline-math";
 import { EstimatedCostIndicator } from "@/components/estimated-cost";
@@ -327,7 +327,7 @@ function MixCard({
             return (
               <MixRowItem
                 key={r.label}
-                label={r.label}
+                label={r.label === "" ? unsetLabel(dim) : r.label}
                 cost={r.cost}
                 barPct={(r.cost / max) * 100}
                 barColor={gradeColor(t)}
