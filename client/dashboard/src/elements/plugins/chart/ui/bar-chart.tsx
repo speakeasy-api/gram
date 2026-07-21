@@ -12,10 +12,10 @@ import {
   Legend,
   Cell,
   ResponsiveContainer,
-  TooltipProps,
+  TooltipContentProps,
 } from "recharts";
 
-const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
+const CustomTooltip = ({ active, payload }: TooltipContentProps) => {
   if (!active || !payload || payload.length === 0) return null;
   const value = payload[0]?.value;
   return (
@@ -116,7 +116,7 @@ export const BarChart: FC<BarChartProps> = ({
                 />
               </>
             )}
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={CustomTooltip} />
             {showLegend && (
               <Legend
                 wrapperStyle={{ color: "var(--foreground)" }}

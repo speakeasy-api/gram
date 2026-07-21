@@ -9,10 +9,10 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  TooltipProps,
+  TooltipContentProps,
 } from "recharts";
 
-const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
+const CustomTooltip = ({ active, payload }: TooltipContentProps) => {
   if (!active || !payload || payload.length === 0) return null;
   const entry = payload[0];
   return (
@@ -134,7 +134,7 @@ export const DonutChart: FC<DonutChartProps> = ({
                 />
               ))}
             </Pie>
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={CustomTooltip} />
             {showLegend && (
               <Legend
                 verticalAlign="bottom"
