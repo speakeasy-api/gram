@@ -17,7 +17,7 @@ import {
   type ProxiedMcpTool,
   type ProxiedMcpToolAnnotations,
 } from "@/hooks/useProxiedMcpTools";
-import { useProxiedMcpUserSessionToken } from "@/hooks/useProxiedMcpUserSessionToken";
+import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
 import { Badge, Button } from "@speakeasy-api/moonshine";
@@ -34,8 +34,12 @@ type RemoteMcpToolsSectionProps = {
   isResolvingUrl: boolean;
   /** The mcp_server id, used to mint the user-session JWT. */
   mcpServerId: string | undefined;
-  /** Whether the server is issuer-gated (has a user_session_issuer). */
-  isIssuerGated: boolean;
+  /**
+   * The server's user_session_issuer id, if it has one. Doubles as the
+   * issuer-gated flag and keys the minted JWT, so relinking the server to a
+   * different issuer discards the token bound to the old one.
+   */
+  userSessionIssuerId: string | undefined;
   /** Disabled servers cannot serve MCP requests. */
   isDisabled: boolean;
   /**
@@ -78,7 +82,7 @@ export function RemoteMcpToolsSection(
           fallbackRender={(fallbackProps) => (
             <RemoteMcpToolsErrorFallback
               {...fallbackProps}
-              isIssuerGated={props.isIssuerGated}
+              isIssuerGated={!!props.userSessionIssuerId}
               authSettingsHref={props.authSettingsHref}
             />
           )}
@@ -155,10 +159,14 @@ function RemoteMcpToolsSectionInner({
   mcpUrl,
   isResolvingUrl,
   mcpServerId,
-  isIssuerGated,
+  userSessionIssuerId,
 }: RemoteMcpToolsSectionProps): JSX.Element {
-  const { accessToken, isLoading: isTokenLoading } =
-    useProxiedMcpUserSessionToken({ mcpServerId, isIssuerGated });
+  const isIssuerGated = !!userSessionIssuerId;
+
+  const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
+    target: { kind: "mcpServer", id: mcpServerId },
+    userSessionIssuerId,
+  });
 
   // Issuer-gated servers must wait for the JWT before connecting, otherwise the
   // unauthenticated request 401s and caches a spurious `needsAuth`.

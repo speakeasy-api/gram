@@ -187,8 +187,14 @@ export const ToolifyDialog = ({
               onClick={() => void onSubmit()}
               disabled={!purpose || inProgress}
             >
-              {inProgress && <Spinner />}
-              {inProgress ? "Generating..." : "Toolify"}
+              {inProgress && (
+                <Button.LeftIcon>
+                  <Spinner />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {inProgress ? "Generating..." : "Toolify"}
+              </Button.Text>
             </Button>
           </div>
         </Dialog.Footer>

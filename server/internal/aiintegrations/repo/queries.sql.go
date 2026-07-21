@@ -52,16 +52,19 @@ const ensureSync = `-- name: EnsureSync :one
 WITH inserted AS (
   INSERT INTO ai_integration_syncs (
     ai_integration_config_id
-  ) VALUES (
-    $1
   )
-  ON CONFLICT (ai_integration_config_id) DO NOTHING
-  RETURNING created_at, updated_at, ai_integration_config_id, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+  SELECT $1
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM ai_integration_syncs
+    WHERE ai_integration_config_id = $1
+  )
+  RETURNING created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
 )
-SELECT created_at, updated_at, ai_integration_config_id, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
 FROM inserted
 UNION ALL
-SELECT created_at, updated_at, ai_integration_config_id, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = $1
 LIMIT 1
@@ -71,6 +74,8 @@ type EnsureSyncRow struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
+	Kind                  pgtype.Text
 	PollWatermarkAt       pgtype.Timestamptz
 	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
@@ -81,6 +86,10 @@ type EnsureSyncRow struct {
 	ID                    uuid.UUID
 }
 
+// The config-only unique index was replaced by (config_id, schedule) in the
+// sync-schedule expand migration, so this insert guards with NOT EXISTS
+// instead of ON CONFLICT on the dropped index. The schedule-aware upsert that
+// follows in the feature change replaces this query entirely.
 func (q *Queries) EnsureSync(ctx context.Context, aiIntegrationConfigID uuid.UUID) (EnsureSyncRow, error) {
 	row := q.db.QueryRow(ctx, ensureSync, aiIntegrationConfigID)
 	var i EnsureSyncRow
@@ -88,6 +97,8 @@ func (q *Queries) EnsureSync(ctx context.Context, aiIntegrationConfigID uuid.UUI
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AiIntegrationConfigID,
+		&i.Schedule,
+		&i.Kind,
 		&i.PollWatermarkAt,
 		&i.LastCursorID,
 		&i.NextPollAfter,

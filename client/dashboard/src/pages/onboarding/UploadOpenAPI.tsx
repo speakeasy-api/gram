@@ -110,8 +110,10 @@ function FooterActions() {
     case "completed":
       return (
         <Button variant="primary" onClick={() => routes.mcp.goTo()}>
-          Continue
-          <ArrowRightIcon className="size-4" />
+          <Button.Text>Continue</Button.Text>
+          <Button.RightIcon>
+            <ArrowRightIcon className="size-4" />
+          </Button.RightIcon>
         </Button>
       );
     case "error":
@@ -119,8 +121,10 @@ function FooterActions() {
         // This should never happen, but just in case
         return (
           <Button variant="primary" onClick={stepper.reset}>
-            <RefreshCcwIcon className="size-4" />
-            Try Again
+            <Button.LeftIcon>
+              <RefreshCcwIcon className="size-4" />
+            </Button.LeftIcon>
+            <Button.Text>Try Again</Button.Text>
           </Button>
         );
       }
@@ -131,8 +135,10 @@ function FooterActions() {
             variant="primary"
             onClick={() => routes.deployments.deployment.goTo(deploymentId)}
           >
-            View Logs
-            <ArrowRightIcon className="size-4" />
+            <Button.Text>View Logs</Button.Text>
+            <Button.RightIcon>
+              <ArrowRightIcon className="size-4" />
+            </Button.RightIcon>
           </Button>
         </>
       );

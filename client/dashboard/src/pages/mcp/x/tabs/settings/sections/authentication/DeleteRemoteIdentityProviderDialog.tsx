@@ -157,16 +157,12 @@ function DeleteRemoteIdentityProviderDialogBody({
           disabled={!inputMatches || submitting}
           onClick={() => void handleConfirm()}
         >
-          {submitting ? (
-            <>
-              <Button.LeftIcon>
-                <Loader2 className="size-4 animate-spin" />
-              </Button.LeftIcon>
-              <Button.Text>Removing</Button.Text>
-            </>
-          ) : (
-            <Button.Text>Remove</Button.Text>
+          {submitting && (
+            <Button.LeftIcon>
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+            </Button.LeftIcon>
           )}
+          <Button.Text>{submitting ? "Removing" : "Remove"}</Button.Text>
         </Button>
       </Dialog.Footer>
     </>

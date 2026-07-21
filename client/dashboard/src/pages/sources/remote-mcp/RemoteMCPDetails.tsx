@@ -603,15 +603,11 @@ function NameSection({
               onClick={() => void handleSave()}
             >
               {update.isPending ? (
-                <>
-                  <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
-                  </Button.LeftIcon>
-                  <Button.Text>Saving</Button.Text>
-                </>
-              ) : (
-                <Button.Text>Save</Button.Text>
-              )}
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+              ) : null}
+              <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>
             </Button>
           </RequireScope>
         </Stack>
@@ -744,15 +740,11 @@ function UrlSection({
               onClick={() => void handleSave()}
             >
               {update.isPending ? (
-                <>
-                  <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
-                  </Button.LeftIcon>
-                  <Button.Text>Saving</Button.Text>
-                </>
-              ) : (
-                <Button.Text>Save</Button.Text>
-              )}
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+              ) : null}
+              <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>
             </Button>
           </RequireScope>
         </Stack>

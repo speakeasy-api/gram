@@ -78,9 +78,11 @@ export function RegistryCacheSection(): JSX.Element {
                   }}
                 >
                   {isClearing && (
-                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    <Button.LeftIcon>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    </Button.LeftIcon>
                   )}
-                  Clear Cache
+                  <Button.Text>Clear Cache</Button.Text>
                 </Button>
               </Stack>
             );

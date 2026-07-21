@@ -196,7 +196,7 @@ async function provisionHooksAuth(serverURL, session, projectSlug, rootDir) {
     ].join("\n"),
     { mode: 0o600 },
   );
-  return authFile;
+  return { authFile, key: keyRes.value.key };
 }
 function psqlArgs(sql) {
   const databaseURL = process.env.GRAM_DATABASE_URL;
@@ -279,19 +279,80 @@ async function runProcess(command, args, opts = {}) {
     child.stdin.end();
   });
 }
-// session_capture gates hook ingest; logs gates telemetry_logs writes — the
-// evidence checks read both, so provision both.
-async function enableSessionCapture(organizationId) {
+// session_capture gates hook ingest; logs gates telemetry_logs writes; skills
+// enables content capture. Keep metadata-only disabled so the E2E exercises
+// the upload path.
+async function setProductFeature(serverURL, sessionId, featureName, enabled) {
+  const res = await fetchOrFail(
+    `${serverURL}/rpc/productFeatures.set`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Gram-Session": sessionId,
+      },
+      body: JSON.stringify({ feature_name: featureName, enabled }),
+    },
+    `set ${featureName}=${enabled}`,
+  );
+  if (!res.ok) {
+    fail(
+      `failed to set ${featureName}=${enabled}: ${res.status} ${await res.text()}`,
+    );
+  }
+}
+async function enableSessionCapture(serverURL, session) {
   const sql = `
-    INSERT INTO organization_features (organization_id, feature_name)
-    VALUES
-      ('${sqlString(organizationId)}', 'session_capture'),
-      ('${sqlString(organizationId)}', 'logs')
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+    SELECT feature_name
+    FROM organization_features
+    WHERE organization_id = '${sqlString(session.organizationId)}'
+      AND feature_name IN ('session_capture', 'logs', 'skills', 'skill_capture_metadata_only')
+      AND deleted IS FALSE
+    ORDER BY feature_name;
   `;
   const res = await runProcess("psql", psqlArgs(sql));
   if (res.exitCode !== 0) {
     fail(`failed to enable session_capture:\n${res.stderr || res.stdout}`);
+  }
+  const previous = res.stdout.trim().split("\n").filter(Boolean);
+  try {
+    await setProductFeature(
+      serverURL,
+      session.sessionId,
+      "skill_capture_metadata_only",
+      false,
+    );
+    for (const feature of ["session_capture", "logs", "skills"]) {
+      await setProductFeature(serverURL, session.sessionId, feature, true);
+    }
+  } catch (err) {
+    await restoreSessionCapture(serverURL, session, previous);
+    throw err;
+  }
+  return previous;
+}
+async function restoreSessionCapture(serverURL, session, previousFeatures) {
+  const previous = new Set(previousFeatures);
+  const errors = [];
+  for (const feature of [
+    "session_capture",
+    "logs",
+    "skills",
+    "skill_capture_metadata_only",
+  ]) {
+    try {
+      await setProductFeature(
+        serverURL,
+        session.sessionId,
+        feature,
+        previous.has(feature),
+      );
+    } catch (err) {
+      errors.push(err);
+    }
+  }
+  if (errors.length > 0) {
+    throw new AggregateError(errors, "failed to restore capture features");
   }
 }
 function sqlString(value) {
@@ -892,8 +953,6 @@ async function runProviderScenario(args) {
         "--trust",
         "--force",
         "--approve-mcps",
-        "--plugin-dir",
-        args.pluginDir,
         "--workspace",
         args.workdir,
         prompt,
@@ -968,8 +1027,6 @@ async function runProviderShadowMCPScenario(args) {
         "--trust",
         "--force",
         "--approve-mcps",
-        "--plugin-dir",
-        args.pluginDir,
         "--workspace",
         args.workdir,
         prompt,
@@ -1001,6 +1058,8 @@ async function prepareCursorProjectHooks(pluginDir, workdir) {
   const targetDir = path.join(workdir, ".cursor");
   const targetPath = path.join(targetDir, "hooks.json");
   const hooks = JSON.parse(await fs.readFile(sourcePath, "utf8"));
+  // Project hooks are the single registration path for headless runs. Passing
+  // the same directory through --plugin-dir races two identical hook commands.
   const escapedPluginDir = pluginDir.replace(/(["\\$`])/g, "\\$1");
   for (const entries of Object.values(hooks.hooks ?? {})) {
     if (!Array.isArray(entries)) {
@@ -1214,6 +1273,115 @@ async function listChatMessages(projectId, runId) {
         toolCallID,
       };
     });
+}
+async function getSkillCaptureEvidence(projectId, skillName, expectedProvider) {
+  const providerAliases = SOURCE_ALIASES[expectedProvider]
+    .map((alias) => `'${sqlString(alias)}'`)
+    .join(", ");
+  const sql = `
+    WITH latest AS (
+      SELECT
+        provider,
+        COALESCE(source_level, '') AS source_level,
+        COALESCE(source_path, '') AS source_path,
+        COALESCE(raw_sha256, '') AS raw_sha256
+      FROM skill_observations
+      WHERE project_id = '${sqlString(projectId)}'
+        AND skill_name = '${sqlString(skillName)}'
+        AND provider IN (${providerAliases})
+      ORDER BY seen_at DESC, id DESC
+      LIMIT 1
+    ), mapped AS (
+      SELECT
+        latest.*,
+        skill_raw_hashes.canonical_sha256
+      FROM latest
+      LEFT JOIN skill_raw_hashes
+        ON skill_raw_hashes.project_id = '${sqlString(projectId)}'
+        AND skill_raw_hashes.raw_sha256 = latest.raw_sha256
+    )
+    SELECT
+      provider,
+      source_level,
+      source_path,
+      raw_sha256,
+      canonical_sha256 IS NOT NULL,
+      EXISTS (
+        SELECT 1
+        FROM skills
+        JOIN skill_versions
+          ON skill_versions.skill_id = skills.id
+          AND skill_versions.canonical_sha256 = mapped.canonical_sha256
+        JOIN skill_version_origins
+          ON skill_version_origins.skill_version_id = skill_versions.id
+          AND skill_version_origins.skill_id = skills.id
+          AND skill_version_origins.project_id = skills.project_id
+          AND skill_version_origins.origin = 'captured'
+        WHERE skills.project_id = '${sqlString(projectId)}'
+          AND skills.name = '${sqlString(skillName)}'
+          AND skills.archived_at IS NULL
+      )
+    FROM mapped;
+  `;
+  const res = await runProcess("psql", psqlArgs(sql));
+  if (res.exitCode !== 0) {
+    fail(`skill capture query failed:\n${res.stderr || res.stdout}`);
+  }
+  const line = res.stdout.trim();
+  if (!line) {
+    return null;
+  }
+  const [
+    provider = "",
+    sourceLevel = "",
+    sourcePath = "",
+    rawSHA256 = "",
+    hasRawHashMapping = "f",
+    hasCapturedVersion = "f",
+  ] = line.split("\x1f");
+  return {
+    provider,
+    sourceLevel,
+    sourcePath,
+    rawSHA256,
+    hasRawHashMapping: hasRawHashMapping === "t",
+    hasCapturedVersion: hasCapturedVersion === "t",
+  };
+}
+async function countSkillObservations(projectId, skillName) {
+  const sql = `
+    SELECT COUNT(*)
+    FROM skill_observations
+    WHERE project_id = '${sqlString(projectId)}'
+      AND skill_name = '${sqlString(skillName)}';
+  `;
+  const res = await runProcess("psql", psqlArgs(sql));
+  if (res.exitCode !== 0) {
+    fail(`skill observation count query failed:\n${res.stderr || res.stdout}`);
+  }
+  return Number(res.stdout.trim() || "0");
+}
+function skillCaptureCheck(provider, fixture, evidence) {
+  const expectedRawSHA256 = crypto
+    .createHash("sha256")
+    .update(fixture.content)
+    .digest("hex");
+  const matches =
+    evidence !== null &&
+    SOURCE_ALIASES[provider].includes(evidence.provider) &&
+    evidence.sourceLevel === (provider === "codex" ? "personal" : "project") &&
+    evidence.sourcePath === fixture.manifestPath &&
+    evidence.rawSHA256 === expectedRawSHA256 &&
+    evidence.hasRawHashMapping &&
+    evidence.hasCapturedVersion;
+  return {
+    provider,
+    feature: "skill.content_captured",
+    status: matches ? "PASS" : "FAIL",
+    detail: evidence
+      ? `provider=${evidence.provider} level=${evidence.sourceLevel} path=${evidence.sourcePath} raw_sha256=${evidence.rawSHA256} mapped=${evidence.hasRawHashMapping} captured-origin=${evidence.hasCapturedVersion}`
+      : `no skill_observations row found for ${fixture.skillName}`,
+  };
 }
 async function verifyOnboarding(args) {
   const url = new URL(
@@ -1563,7 +1731,7 @@ function featureChecks(provider, evidence, chats, opts = {}) {
         ? "provider rows load in one chat generation"
         : `chat rows split across generations: ${splitGenerationChats.join("; ")}`,
   });
-  if (provider === "claude" || provider === "codex") {
+  if (["claude", "cursor", "codex"].includes(provider)) {
     const skillName = opts.skillName;
     const skillActivated = evidence.some(
       (r) =>
@@ -1795,24 +1963,141 @@ function shadowMCPChecks(provider, phase, res, evidence, blocks, extra = {}) {
   return checks;
 }
 async function prepareSkillFixture(skillsRoot, runId, provider) {
-  const skillName = `gram-hooks-e2e-skill-${runId.split("-").pop()}`;
+  const skillName = `gram-hooks-e2e-skill-${provider}-${runId.split("-").pop()}`;
   const skillDir = path.join(skillsRoot, skillName);
+  const manifestPath = path.join(skillDir, "SKILL.md");
+  const content = [
+    "---",
+    `name: ${skillName}`,
+    `description: Gram hooks E2E skill-activation probe for run ${runId}. Activate this skill whenever the user asks to run the Gram hooks E2E skill probe.`,
+    "---",
+    "",
+    "# Gram hooks E2E skill probe",
+    "",
+    `Once activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} ${provider} skill`,
+    "",
+  ].join("\n");
   await fs.mkdir(skillDir, { recursive: true });
-  await fs.writeFile(
-    path.join(skillDir, "SKILL.md"),
-    [
-      "---",
-      `name: ${skillName}`,
-      `description: Gram hooks E2E skill-activation probe for run ${runId}. Activate this skill whenever the user asks to run the Gram hooks E2E skill probe.`,
-      "---",
-      "",
-      "# Gram hooks E2E skill probe",
-      "",
-      `Once activated, reply with exactly: GRAM_HOOKS_E2E_OK ${runId} ${provider} skill`,
-      "",
-    ].join("\n"),
+  await fs.writeFile(manifestPath, content);
+  const realManifestPath = await fs.realpath(manifestPath);
+  return {
+    skillName,
+    skillDir: path.dirname(realManifestPath),
+    manifestPath: realManifestPath,
+    content,
+  };
+}
+async function startHookRequestProbe(targetServerURL) {
+  let uploadRequests = 0;
+  const server = http.createServer(async (req, res) => {
+    try {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      if (req.url?.startsWith("/rpc/hooks.uploadSkillContent")) {
+        uploadRequests++;
+      }
+      const headers = { ...req.headers };
+      for (const name of [
+        "host",
+        "connection",
+        "content-length",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+      ]) {
+        delete headers[name];
+      }
+      const upstream = await fetch(new URL(req.url ?? "/", targetServerURL), {
+        method: req.method,
+        headers,
+        body: chunks.length > 0 ? Buffer.concat(chunks) : undefined,
+        redirect: "manual",
+      });
+      const responseHeaders = new Headers(upstream.headers);
+      // fetch transparently decodes compressed responses, so forwarding the
+      // original encoding or length would corrupt the downstream response.
+      for (const name of [
+        "connection",
+        "content-encoding",
+        "content-length",
+        "transfer-encoding",
+      ]) {
+        responseHeaders.delete(name);
+      }
+      res.setHeaders(responseHeaders);
+      res.writeHead(upstream.status);
+      res.end(Buffer.from(await upstream.arrayBuffer()));
+    } catch (err) {
+      res.writeHead(502);
+      res.end(String(err));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    fail("hook request probe did not bind a TCP port");
+  }
+  return {
+    serverURL: `http://127.0.0.1:${address.port}`,
+    uploadRequests: () => uploadRequests,
+    close: async () =>
+      await new Promise((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      ),
+  };
+}
+async function uploadCountRemains(probe, expected, deadlineMs) {
+  const observed = await poll(
+    deadlineMs,
+    () => probe.uploadRequests(),
+    (count) => count !== expected,
   );
-  return { skillName, skillDir };
+  return observed === expected;
+}
+async function runSyntheticClaudeSkillActivation(args) {
+  const configDir = path.join(args.rootDir, "synthetic-skill-hook");
+  const configPath = path.join(configDir, "speakeasy.json");
+  await fs.mkdir(configDir, { recursive: true });
+  await fs.writeFile(
+    configPath,
+    JSON.stringify({
+      server_url: args.serverURL,
+      project: args.projectSlug,
+      org: args.organizationId,
+    }),
+  );
+  const payload = JSON.stringify({
+    session_id: crypto.randomUUID(),
+    cwd: args.workdir,
+    hook_event_name: "PreToolUse",
+    permission_mode: "default",
+    tool_name: "Skill",
+    tool_input: { skill: args.skillName },
+    tool_use_id: crypto.randomUUID(),
+  });
+  return await runProcess(
+    args.binary,
+    [`--config=${configPath}`, "agenthooks", "run", "--provider=claude-code"],
+    {
+      cwd: args.workdir,
+      input: payload,
+      env: {
+        GRAM_HOOKS_API_KEY: args.hookKey,
+        GRAM_HOOKS_DISABLE_LOCAL_AUTH: "1",
+      },
+      timeoutMs: args.timeoutMs,
+    },
+  );
 }
 // Codex has no Skill tool: the sender infers activation from a $name prompt
 // mention (validated against the skill roots on disk) or from a reader tool
@@ -1823,6 +2108,13 @@ function skillPrompt(runId, skillName, provider, skillDir) {
       `Gram hooks E2E skill run ${runId} for codex.`,
       `Use the $${skillName} skill: read ${path.join(skillDir, "SKILL.md")} and follow its instructions.`,
       `Then reply with exactly: GRAM_HOOKS_E2E_OK ${runId} codex skill`,
+    ].join(" ");
+  }
+  if (provider === "cursor") {
+    return [
+      `Gram hooks E2E skill run ${runId} for cursor.`,
+      `Use the ${skillName} skill and follow its instructions.`,
+      `Then reply with exactly: GRAM_HOOKS_E2E_OK ${runId} cursor skill`,
     ].join(" ");
   }
   return [
@@ -1854,6 +2146,27 @@ async function runSkillScenario(args) {
       { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
     );
     res.provider = "codex";
+    return res;
+  }
+  if (args.provider === "cursor") {
+    await prepareCursorProjectHooks(args.pluginDir, args.workdir);
+    const res = await runProcess(
+      "cursor",
+      [
+        "agent",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--trust",
+        "--force",
+        "--approve-mcps",
+        "--workspace",
+        args.workdir,
+        prompt,
+      ],
+      { cwd: args.workdir, timeoutMs: args.timeoutMs },
+    );
+    res.provider = "cursor";
     return res;
   }
   const sessionId = crypto.randomUUID();
@@ -1945,9 +2258,169 @@ async function runRatchetSuite(args) {
   return { checks, commandResults };
 }
 
+async function runSkillUploadControlSuite(args) {
+  const checks = [];
+  const commandResults = [];
+  if (!args.providers.includes("claude")) {
+    return { checks, commandResults };
+  }
+  const binary = await buildHookBinary(args.artifactsDir);
+  const probe = await startHookRequestProbe(args.serverURL);
+  let metadataOnlyEnabled = false;
+  try {
+    const fixture = await prepareSkillFixture(
+      path.join(args.workdir, ".claude", "skills"),
+      `${args.runId}-known-hash`,
+      "control",
+    );
+    const run = async (skillFixture, label) => {
+      const result = await runSyntheticClaudeSkillActivation({
+        binary,
+        rootDir: args.rootDir,
+        workdir: args.workdir,
+        serverURL: probe.serverURL,
+        projectSlug: args.projectSlug,
+        organizationId: args.session.organizationId,
+        hookKey: args.hookKey,
+        skillName: skillFixture.skillName,
+        timeoutMs: args.timeoutSeconds * 1000,
+      });
+      result.provider = "claude";
+      commandResults.push(result);
+      await writeCommandArtifacts(args.artifactsDir, "claude", label, result);
+      if (result.exitCode !== 0 || result.timedOut) {
+        fail(
+          `synthetic ${label} activation failed:\n${result.stderr || result.stdout}`,
+        );
+      }
+    };
+
+    await run(fixture, "capture-skill-unknown-hash");
+    const initial = await poll(
+      Date.now() + args.pollSeconds * 1000,
+      async () =>
+        skillCaptureCheck(
+          "claude",
+          fixture,
+          await getSkillCaptureEvidence(
+            args.session.projectId,
+            fixture.skillName,
+            "claude",
+          ),
+        ),
+      (check) => check.status === "PASS",
+    );
+    checks.push(initial);
+    const baselineUploads = probe.uploadRequests();
+    const observationsBefore = await countSkillObservations(
+      args.session.projectId,
+      fixture.skillName,
+    );
+
+    await run(fixture, "capture-skill-known-hash");
+    const knownHashDeadline = Date.now() + args.pollSeconds * 1000;
+    const observationsAfter = await poll(
+      knownHashDeadline,
+      () => countSkillObservations(args.session.projectId, fixture.skillName),
+      (count) => count > observationsBefore,
+    );
+    const knownHashUploadCountStable = await uploadCountRemains(
+      probe,
+      baselineUploads,
+      knownHashDeadline,
+    );
+    checks.push({
+      provider: "claude",
+      feature: "skill.known_hash_metadata_only",
+      status:
+        baselineUploads > 0 &&
+        observationsAfter > observationsBefore &&
+        knownHashUploadCountStable
+          ? "PASS"
+          : "FAIL",
+      detail: `observations=${observationsBefore}->${observationsAfter} uploads=${baselineUploads}->${probe.uploadRequests()}`,
+    });
+
+    await setProductFeature(
+      args.serverURL,
+      args.session.sessionId,
+      "skill_capture_metadata_only",
+      true,
+    );
+    metadataOnlyEnabled = true;
+    const metadataFixture = await prepareSkillFixture(
+      path.join(args.workdir, ".claude", "skills"),
+      `${args.runId}-metadata-only`,
+      "privacy",
+    );
+    const uploadsBeforeMetadata = probe.uploadRequests();
+    await run(metadataFixture, "capture-skill-metadata-only");
+    const metadataDeadline = Date.now() + args.pollSeconds * 1000;
+    const metadataEvidence = await poll(
+      metadataDeadline,
+      () =>
+        getSkillCaptureEvidence(
+          args.session.projectId,
+          metadataFixture.skillName,
+          "claude",
+        ),
+      (evidence) => evidence !== null,
+    );
+    const expectedMetadataHash = crypto
+      .createHash("sha256")
+      .update(metadataFixture.content)
+      .digest("hex");
+    const metadataUploadCountStable = await uploadCountRemains(
+      probe,
+      uploadsBeforeMetadata,
+      metadataDeadline,
+    );
+    checks.push({
+      provider: "claude",
+      feature: "skill.metadata_only_org_does_not_upload",
+      status:
+        metadataEvidence !== null &&
+        SOURCE_ALIASES.claude.includes(metadataEvidence.provider) &&
+        metadataEvidence.rawSHA256 === expectedMetadataHash &&
+        metadataEvidence.sourcePath === metadataFixture.manifestPath &&
+        metadataEvidence.sourceLevel === "project" &&
+        !metadataEvidence.hasRawHashMapping &&
+        !metadataEvidence.hasCapturedVersion &&
+        metadataUploadCountStable
+          ? "PASS"
+          : "FAIL",
+      detail: metadataEvidence
+        ? `raw_sha256=${metadataEvidence.rawSHA256} mapped=${metadataEvidence.hasRawHashMapping} captured-origin=${metadataEvidence.hasCapturedVersion} uploads=${uploadsBeforeMetadata}->${probe.uploadRequests()}`
+        : `no skill_observations row found for ${metadataFixture.skillName}`,
+    });
+  } finally {
+    const cleanups = [probe.close()];
+    if (metadataOnlyEnabled) {
+      cleanups.push(
+        setProductFeature(
+          args.serverURL,
+          args.session.sessionId,
+          "skill_capture_metadata_only",
+          false,
+        ),
+      );
+    }
+    const failed = (await Promise.allSettled(cleanups)).filter(
+      (result) => result.status === "rejected",
+    );
+    if (failed.length > 0) {
+      throw new AggregateError(
+        failed.map((result) => result.reason),
+        "failed to clean up skill upload controls",
+      );
+    }
+  }
+  return { checks, commandResults };
+}
+
 async function runCaptureSuite(args) {
   const commandResults = [];
-  const skillNamesByProvider = new Map();
+  const skillFixturesByProvider = new Map();
   for (const provider of args.providers) {
     for (const scenario of ["success", "failure"]) {
       log.info(`${provider}: running capture ${scenario} scenario`);
@@ -2002,16 +2475,20 @@ async function runCaptureSuite(args) {
         }
       }
     }
-    if (provider === "claude" || provider === "codex") {
+    if (["claude", "cursor", "codex"].includes(provider)) {
       // Codex validates $name mentions against the skill roots on disk;
       // CODEX_HOME/skills is the only root the isolated env controls
       // regardless of the hook process cwd.
       const skillsRoot =
         provider === "codex"
           ? path.join(args.codexEnv.CODEX_HOME, "skills")
-          : path.join(args.workdir, ".claude", "skills");
+          : path.join(
+              args.workdir,
+              provider === "cursor" ? ".cursor" : ".claude",
+              "skills",
+            );
       const skill = await prepareSkillFixture(skillsRoot, args.runId, provider);
-      skillNamesByProvider.set(provider, skill.skillName);
+      skillFixturesByProvider.set(provider, skill);
       log.info(`${provider}: running capture skill-activation scenario`);
       const skillRes = await runSkillScenario({
         provider,
@@ -2049,7 +2526,8 @@ async function runCaptureSuite(args) {
   });
   const checks = [];
   for (const provider of args.providers) {
-    const skillName = skillNamesByProvider.get(provider) ?? null;
+    const skillFixture = skillFixturesByProvider.get(provider) ?? null;
+    const skillName = skillFixture?.skillName ?? null;
     // Cursor Agent headless does not reliably emit afterAgentResponse
     // (featureChecks marks it SKIP), so don't burn the whole poll window
     // waiting for it.
@@ -2092,7 +2570,27 @@ async function runCaptureSuite(args) {
         rows.some((r) => r.role === "assistant"),
     );
     checks.push(...featureChecks(provider, evidence, chats, { skillName }));
+    if (skillFixture) {
+      const captureCheck = await poll(
+        Date.now() + args.pollSeconds * 1000,
+        async () =>
+          skillCaptureCheck(
+            provider,
+            skillFixture,
+            await getSkillCaptureEvidence(
+              args.session.projectId,
+              skillFixture.skillName,
+              provider,
+            ),
+          ),
+        (check) => check.status === "PASS",
+      );
+      checks.push(captureCheck);
+    }
   }
+  const uploadControls = await runSkillUploadControlSuite(args);
+  checks.push(...uploadControls.checks);
+  commandResults.push(...uploadControls.commandResults);
   return { checks, commandResults };
 }
 async function runShadowMCPSuite(args) {
@@ -2391,7 +2889,9 @@ async function main() {
   const serverURL = requireEnv("GRAM_SERVER_URL");
   const runId = `gram-hooks-e2e-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
   const startedUnixNano = BigInt(Date.now()) * 1000000n;
-  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), `${runId}-`));
+  const rootDir = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), `${runId}-`)),
+  );
   const artifactsDir = path.join(rootDir, "artifacts");
   const workdir = path.join(rootDir, "workspace");
   let codexEnv = null;
@@ -2403,14 +2903,20 @@ async function main() {
   );
   intro(`Gram hooks E2E ${runId}`);
   let success = false;
+  let organizationId = null;
+  let sessionId = null;
+  let previousCaptureFeatures = null;
+  let cleanupError = null;
   try {
     const session = await getSessionInfo(serverURL, args.project);
+    organizationId = session.organizationId;
+    sessionId = session.sessionId;
     log.info(
       `Authenticated as ${session.userEmail}; org=${session.organizationId} project=${args.project}`,
     );
-    await enableSessionCapture(session.organizationId);
-    log.info("Enabled session_capture for the active org");
-    const hooksAuthFile = await provisionHooksAuth(
+    previousCaptureFeatures = await enableSessionCapture(serverURL, session);
+    log.info("Enabled session_capture, logs, and skills for the active org");
+    const hooksAuth = await provisionHooksAuth(
       serverURL,
       session,
       args.project,
@@ -2418,10 +2924,10 @@ async function main() {
     );
     // Make the provisioned cache authoritative for every provider spawn:
     // scrub ambient key env vars that would otherwise short-circuit it.
-    process.env.GRAM_HOOKS_AUTH_FILE = hooksAuthFile;
+    process.env.GRAM_HOOKS_AUTH_FILE = hooksAuth.authFile;
     delete process.env.GRAM_HOOKS_API_KEY;
     delete process.env.GRAM_API_KEY;
-    log.info(`Provisioned hooks auth cache at ${hooksAuthFile}`);
+    log.info(`Provisioned hooks auth cache at ${hooksAuth.authFile}`);
     if (args.providers.includes("codex")) {
       codexEnv = await prepareCodexEnv(rootDir);
       log.info(`Prepared isolated Codex home at ${codexEnv.HOME}`);
@@ -2465,6 +2971,7 @@ async function main() {
       serverURL,
       session,
       projectSlug: args.project,
+      hookKey: hooksAuth.key,
       startedUnixNano,
     };
     if (args.suites.includes("capture")) {
@@ -2496,12 +3003,29 @@ async function main() {
     }
     success = true;
   } finally {
+    if (organizationId && sessionId && previousCaptureFeatures) {
+      try {
+        await restoreSessionCapture(
+          serverURL,
+          { organizationId, sessionId },
+          previousCaptureFeatures,
+        );
+        log.info("Restored capture feature settings for the active org");
+      } catch (err) {
+        cleanupError = err;
+        success = false;
+        console.error(`failed to restore capture feature settings: ${err}`);
+      }
+    }
     if (args.keepArtifacts || !success) {
       log.info(`Artifacts kept at ${rootDir}`);
     } else {
       await fs.rm(rootDir, { recursive: true, force: true });
     }
     outro(success ? "hooks:e2e passed" : "hooks:e2e failed");
+  }
+  if (cleanupError) {
+    throw cleanupError;
   }
 }
 try {
