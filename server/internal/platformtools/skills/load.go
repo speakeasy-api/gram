@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -94,7 +95,8 @@ func (t *Load) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.
 			)
 			return nil
 		}
-		writeCtx := context.WithoutCancel(ctx)
+		writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
 		if err := queries.RecordAssistantSkillObservation(writeCtx, assistantrepo.RecordAssistantSkillObservationParams{
 			SessionID:      chatID.String(),
 			SkillVersionID: loaded.SkillVersionID,
