@@ -557,7 +557,7 @@ func newWorkerCommand() *cli.Command {
 				backgroundWorkOSClient = workos.NewStubClient()
 			}
 
-			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled)
+			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
