@@ -272,6 +272,10 @@ CREATE TABLE IF NOT EXISTS skills (
   source_kind TEXT NOT NULL DEFAULT 'manual',
   classification TEXT NOT NULL DEFAULT 'custom',
 
+  first_seen_at timestamptz,
+  last_seen_at timestamptz,
+  seen_count bigint NOT NULL DEFAULT 0,
+
   archived_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -334,14 +338,19 @@ CREATE TABLE IF NOT EXISTS skill_observations (
   hostname TEXT,
   session_id TEXT,
   skill_name TEXT NOT NULL,
+  source TEXT,
   source_level TEXT,
   source_path TEXT,
   raw_sha256 TEXT,
   seen_at timestamptz NOT NULL,
+  skill_id uuid,
+  reconciled_at timestamptz,
+  reconcile_error_code TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT skill_observations_pkey PRIMARY KEY (id),
-  CONSTRAINT skill_observations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT skill_observations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_observations_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_observations_project_id_idempotency_key_key
@@ -354,6 +363,14 @@ ON skill_observations (project_id, skill_name, seen_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS skill_observations_project_id_raw_sha256_idx
 ON skill_observations (project_id, raw_sha256)
 WHERE raw_sha256 IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_pending_reconciliation_idx
+ON skill_observations (project_id, seen_at, id)
+WHERE reconciled_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_id_seen_at_idx
+ON skill_observations (project_id, skill_id, seen_at DESC)
+WHERE skill_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS skill_raw_hashes (
   project_id uuid NOT NULL,

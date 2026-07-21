@@ -19,7 +19,7 @@ SET archived_at = clock_timestamp(),
 WHERE project_id = $1
   AND id = $2
   AND archived_at IS NULL
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type ArchiveSkillParams struct {
@@ -38,6 +38,9 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -63,7 +66,7 @@ INSERT INTO skills (
 )
 ON CONFLICT (project_id, name) WHERE archived_at IS NULL
 DO NOTHING
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type CreateCapturedSkillParams struct {
@@ -89,6 +92,9 @@ func (q *Queries) CreateCapturedSkill(ctx context.Context, arg CreateCapturedSki
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -114,7 +120,7 @@ INSERT INTO skills (
 )
 ON CONFLICT (project_id, name) WHERE archived_at IS NULL
 DO NOTHING
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type CreateSkillParams struct {
@@ -140,6 +146,9 @@ func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (Skill
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -459,7 +468,7 @@ func (q *Queries) GetPluginForDistribution(ctx context.Context, arg GetPluginFor
 }
 
 const getSkill = `-- name: GetSkill :one
-SELECT id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
 WHERE project_id = $1
   AND id = $2
@@ -482,6 +491,9 @@ func (q *Queries) GetSkill(ctx context.Context, arg GetSkillParams) (Skill, erro
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -490,7 +502,7 @@ func (q *Queries) GetSkill(ctx context.Context, arg GetSkillParams) (Skill, erro
 }
 
 const getSkillByNameForUpdate = `-- name: GetSkillByNameForUpdate :one
-SELECT id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
 WHERE project_id = $1
   AND name = $2
@@ -514,6 +526,9 @@ func (q *Queries) GetSkillByNameForUpdate(ctx context.Context, arg GetSkillByNam
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -523,7 +538,7 @@ func (q *Queries) GetSkillByNameForUpdate(ctx context.Context, arg GetSkillByNam
 
 const getSkillDetails = `-- name: GetSkillDetails :one
 SELECT
-  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.archived_at, s.created_at, s.updated_at,
+  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
   latest.id, latest.skill_id, latest.content, latest.canonical_sha256, latest.raw_sha256, latest.description, latest.metadata, latest.spec_valid, latest.validation_errors, latest.created_at, latest.created_by_user_id,
   state.version_count,
   (
@@ -581,6 +596,9 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 		&i.Skill.Summary,
 		&i.Skill.SourceKind,
 		&i.Skill.Classification,
+		&i.Skill.FirstSeenAt,
+		&i.Skill.LastSeenAt,
+		&i.Skill.SeenCount,
 		&i.Skill.ArchivedAt,
 		&i.Skill.CreatedAt,
 		&i.Skill.UpdatedAt,
@@ -602,7 +620,7 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 }
 
 const getSkillForUpdate = `-- name: GetSkillForUpdate :one
-SELECT id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 FROM skills
 WHERE project_id = $1
   AND id = $2
@@ -626,6 +644,9 @@ func (q *Queries) GetSkillForUpdate(ctx context.Context, arg GetSkillForUpdatePa
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -994,7 +1015,7 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 
 const listSkills = `-- name: ListSkills :many
 SELECT
-  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.archived_at, s.created_at, s.updated_at,
+  s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
   latest.id AS latest_version_id,
   latest.version_count
 FROM skills s
@@ -1046,6 +1067,9 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 			&i.Skill.Summary,
 			&i.Skill.SourceKind,
 			&i.Skill.Classification,
+			&i.Skill.FirstSeenAt,
+			&i.Skill.LastSeenAt,
+			&i.Skill.SeenCount,
 			&i.Skill.ArchivedAt,
 			&i.Skill.CreatedAt,
 			&i.Skill.UpdatedAt,
@@ -1249,7 +1273,7 @@ SET display_name = $1,
 WHERE project_id = $3
   AND id = $4
   AND archived_at IS NULL
-RETURNING id, project_id, name, display_name, summary, source_kind, classification, archived_at, created_at, updated_at
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
 type UpdateSkillParams struct {
@@ -1275,6 +1299,9 @@ func (q *Queries) UpdateSkill(ctx context.Context, arg UpdateSkillParams) (Skill
 		&i.Summary,
 		&i.SourceKind,
 		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
 		&i.ArchivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,

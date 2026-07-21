@@ -551,7 +551,7 @@ func (q *Queries) ListHooksServerNameOverrides(ctx context.Context, projectID uu
 }
 
 const listSkillObservations = `-- name: ListSkillObservations :many
-SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source_level, source_path, raw_sha256, seen_at, created_at
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, reconciled_at, reconcile_error_code, created_at
 FROM skill_observations
 WHERE project_id = $1
 ORDER BY seen_at ASC, id ASC
@@ -576,10 +576,14 @@ func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID
 			&i.Hostname,
 			&i.SessionID,
 			&i.SkillName,
+			&i.Source,
 			&i.SourceLevel,
 			&i.SourcePath,
 			&i.RawSha256,
 			&i.SeenAt,
+			&i.SkillID,
+			&i.ReconciledAt,
+			&i.ReconcileErrorCode,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
