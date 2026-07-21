@@ -16,7 +16,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { resolveScopeBillingMode } from "@/components/estimated-cost-utils";
@@ -71,6 +71,11 @@ import {
 // Server-side cap on the per-session list (ranked by cost). SessionTable's
 // truncation footer and the search zero-match copy both key off it.
 const SESSION_LIMIT = 100;
+
+// Server-side cap on breakdown groups per query. Beyond it the server appends
+// one synthetic rollup row — detected by row count below so the chart can fold
+// it into its own remainder bucket instead of charting it as a real group.
+const BREAKDOWN_TOP_N = 100;
 
 const EMPTY_MEASURES: Measures = {
   cost: 0,
@@ -472,7 +477,7 @@ export function CostsExplorer(): JSX.Element {
                 to,
                 groupBy: groupBy as GroupBy,
                 sortBy: "total_cost",
-                topN: 100,
+                topN: BREAKDOWN_TOP_N,
                 // Daily buckets → ~30 points per group for the row trend sparklines.
                 granularitySeconds: 86400,
                 filters: filters.length ? filters : undefined,
@@ -512,7 +517,7 @@ export function CostsExplorer(): JSX.Element {
             to: prevTo,
             groupBy: groupBy as GroupBy,
             sortBy: "total_cost",
-            topN: 100,
+            topN: BREAKDOWN_TOP_N,
             filters: filters.length ? filters : undefined,
           },
         }),
@@ -603,6 +608,27 @@ export function CostsExplorer(): JSX.Element {
 
   const rows = data?.table ?? [];
 
+  // The server's synthetic remainder row, present only when the slice has
+  // more groups than BREAKDOWN_TOP_N — the server always appends it last. The
+  // chart folds its series into the client-side remainder bucket so the two
+  // rollups read as one "everything else".
+  const serverRollupValue =
+    rows.length > BREAKDOWN_TOP_N
+      ? rows[rows.length - 1]!.groupValue
+      : undefined;
+
+  // The axis the FETCHED slice is actually grouped by. With keepPreviousData,
+  // `data` lags `groupBy` for the refetch window after a re-pivot — labeling
+  // or filtering the old rows under the new axis would mislabel (and could
+  // wrongly merge) them. Everything that RENDERS the slice (table rows, chart
+  // stacks, section title, drill targets) keys off this; the live `groupBy`
+  // keeps driving the queries and the control bar, so the lit segment answers
+  // the click instantly while the content swaps atomically when data lands.
+  const rawDataGroupBy = data?.groupBy;
+  const dataGroupBy: Dimension = isDimension(rawDataGroupBy)
+    ? rawDataGroupBy
+    : groupBy;
+
   // The view's billing mode drives whether cost reads as real spend or an
   // estimate: confidently "metered" only when every row in the view is metered.
   const viewBillingMode = useMemo(() => {
@@ -615,7 +641,7 @@ export function CostsExplorer(): JSX.Element {
 
   // Attribution breakdowns hide the "" group — it's spend where the attribute
   // is not applicable ("not included"), not an "(unset)" slice worth drilling.
-  const visibleRows = isAttributionDim(groupBy)
+  const visibleRows = isAttributionDim(dataGroupBy)
     ? rows.filter((r) => r.groupValue !== "")
     : rows;
 
@@ -627,7 +653,7 @@ export function CostsExplorer(): JSX.Element {
     ? visibleRows.filter(
         (r) =>
           r.groupValue.toLowerCase().includes(normalizedSearch) ||
-          displayName(groupBy, r.groupValue)
+          displayName(dataGroupBy, r.groupValue)
             .toLowerCase()
             .includes(normalizedSearch),
       )
@@ -636,10 +662,11 @@ export function CostsExplorer(): JSX.Element {
   // At the root, an attribution breakdown is presented as a "collection" (e.g.
   // "MCP Servers") rather than the project — and its headline stats then sum
   // only the attributed rows, so the hero reconciles with the residual-hidden
-  // table below. Everywhere else the hero keeps the full slice total.
+  // table below. Everywhere else the hero keeps the full slice total. Keyed to
+  // the fetched axis so the hero identity flips together with the rows.
   const collectionDim: Dimension | null =
-    path.length === 0 && !sessionsMode && isAttributionDim(groupBy)
-      ? groupBy
+    path.length === 0 && !sessionsMode && isAttributionDim(dataGroupBy)
+      ? dataGroupBy
       : null;
 
   // Roll the child rows up into the current entity's headline stats. Cost,
@@ -829,7 +856,8 @@ export function CostsExplorer(): JSX.Element {
       isSessionLeaf(dim) || nextAvailableDimension(dim, availableDims) !== null;
     // A user breakdown already ranks people in its table — surface the top
     // spenders as a compact card too (reuses the main rows, no extra query).
-    if (groupBy === Dimension.Email) {
+    // Keyed to the FETCHED axis: the rows are only user rows once they land.
+    if (dataGroupBy === Dimension.Email) {
       const userRows = (data?.table ?? [])
         .filter((r) => r.groupValue !== "Other")
         .slice(0, 5);
@@ -913,7 +941,7 @@ export function CostsExplorer(): JSX.Element {
     mixDataB,
     mixLoadingA,
     mixLoadingB,
-    groupBy,
+    dataGroupBy,
     availableDims,
     stats,
     data,
@@ -972,16 +1000,19 @@ export function CostsExplorer(): JSX.Element {
     goToNode([...path, { dim, value }], next, false, ds);
   };
 
-  // Drill into a main-table row: use the current breakdown axis.
+  // Drill into a main-table row: use the FETCHED axis — the displayed rows'
+  // groupValues belong to it, and during a re-pivot's keepPreviousData window
+  // drilling must target what the user actually sees, not the pending axis.
   const drillInto = (row: QueryRow) =>
-    drillIntoDim(groupBy, row.groupValue, row.dimensionValues);
+    drillIntoDim(dataGroupBy, row.groupValue, row.dimensionValues);
 
-  // Rows are drillable only when there's a *populated* level below the current
-  // axis — so you can't drill into an empty breakdown. (Availability-unknown
-  // during load falls back to the static chain, keeping rows drillable.)
+  // Rows are drillable only when there's a *populated* level below the
+  // displayed axis — so you can't drill into an empty breakdown.
+  // (Availability-unknown during load falls back to the static chain, keeping
+  // rows drillable.)
   const canDrill =
-    isSessionLeaf(groupBy) ||
-    nextAvailableDimension(groupBy, availableDims) !== null;
+    isSessionLeaf(dataGroupBy) ||
+    nextAvailableDimension(dataGroupBy, availableDims) !== null;
 
   // Go up one ancestor: drop the deepest filter and regroup by the axis that
   // produced it (the removed crumb's dimension) — i.e. show the parent's profile.
@@ -1194,13 +1225,17 @@ export function CostsExplorer(): JSX.Element {
 
   // Chart drill-down: a clicked/dragged bucket becomes the page's custom date
   // range, clamped to the current period (week/month buckets can overhang its
-  // edges, and a week bar can extend past "now").
-  const handleChartRangeSelect = (start: Date, end: Date): void => {
-    const s = new Date(Math.max(start.getTime(), from.getTime()));
-    const e = new Date(Math.min(end.getTime(), to.getTime()));
-    if (e <= s) return;
-    setCustomRangeParam(s, e);
-  };
+  // edges, and a week bar can extend past "now"). Stable identity — it feeds
+  // the chart panel's chartOptions memo.
+  const handleChartRangeSelect = useCallback(
+    (start: Date, end: Date): void => {
+      const s = new Date(Math.max(start.getTime(), from.getTime()));
+      const e = new Date(Math.min(end.getTime(), to.getTime()));
+      if (e <= s) return;
+      setCustomRangeParam(s, e);
+    },
+    [from, to, setCustomRangeParam],
+  );
 
   const widgets = (
     <CostWidgets
@@ -1224,8 +1259,10 @@ export function CostsExplorer(): JSX.Element {
   const breakdownChart = sessionsMode ? undefined : (
     <CostBreakdownChart
       data={data}
-      groupBy={groupBy}
+      groupBy={dataGroupBy}
+      serverRollupValue={serverRollupValue}
       loading={loadingSlice}
+      isError={isError}
       onSelectRange={handleChartRangeSelect}
     />
   );
@@ -1278,7 +1315,10 @@ export function CostsExplorer(): JSX.Element {
         projectName={project.name}
         parentValue={parentValue}
         stats={stats}
-        groupBy={groupBy}
+        // The FETCHED axis: the rows/table/section title render what the data
+        // is actually grouped by, while axisValue (the lit segment) tracks the
+        // live selection — see dataGroupBy.
+        groupBy={dataGroupBy}
         canDrill={canDrill}
         axisValue={axisValue}
         axisOptions={axisOptions}

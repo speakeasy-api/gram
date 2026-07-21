@@ -37,6 +37,15 @@ const compactTokens = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
+// Module-scope so the panel receives stable identities — its chartOptions
+// memo keys on the formatter props.
+function formatTokens(value: number): string {
+  return `${value.toLocaleString()} tokens`;
+}
+function formatTokensAxis(value: number): string {
+  return compactTokens.format(value);
+}
+
 // A daily series from the details response's dimension rows, aligned to the
 // points grid by index.
 export type GroupSeries = { label: string; series: number[] };
@@ -123,8 +132,8 @@ export function TokenUsagePanel({
       bucketsMs={bucketsMs}
       stacks={stacks}
       headerControls={breakdownPicker}
-      formatValue={(value) => `${value.toLocaleString()} tokens`}
-      formatAxisValue={(value) => compactTokens.format(value)}
+      formatValue={formatTokens}
+      formatAxisValue={formatTokensAxis}
       emptyMessage="No token usage in this range."
       loading={loading}
       onSelectRange={onSelectRange}

@@ -24,8 +24,14 @@ export const OTHER_COLOR = "#94a3b8"; // slate — the top-N remainder rollup
 export const OTHER_STACK_LABEL = "Other";
 
 // One stacked series: a daily value series aligned by index to the panel's
-// bucket grid.
-export type TimeSeriesStack = { label: string; series: number[] };
+// bucket grid. `rollup` marks a synthetic top-N remainder series — it renders
+// in the neutral OTHER_COLOR regardless of its label, so a real group that
+// happens to display as "Other" can't be mistaken for it.
+export type TimeSeriesStack = {
+  label: string;
+  series: number[];
+  rollup?: boolean;
+};
 
 // Telemetry bucket timestamps arrive as unix-nano strings, which exceed
 // Number precision — divide as BigInt first.

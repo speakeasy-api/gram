@@ -90,7 +90,7 @@ function bucketLabel(ms: number, granularity: Granularity): string {
     : dayLabelFormat.format(date);
 }
 
-type Stack = { label: string; byBucket: Map<number, number> };
+type Stack = { label: string; rollup?: boolean; byBucket: Map<number, number> };
 
 function addTo(map: Map<number, number>, bucket: number, value: number): void {
   if (value === 0) return;
@@ -110,15 +110,20 @@ function rolledUpStacks(
       bucketsMs.forEach((ms, i) => {
         addTo(byBucket, floorBucket(ms, granularity), s.series[i] ?? 0);
       });
-      return { label: s.label, byBucket };
+      return { label: s.label, rollup: s.rollup, byBucket };
     })
     .filter((s) => [...s.byBucket.values()].some((v) => v > 0));
 }
 
-// The bar color for a stack: the top-N "Other" roll-up stays neutral,
-// everything else walks the palette.
-function stackColor(label: string, index: number): string {
-  if (label === OTHER_STACK_LABEL) return OTHER_COLOR;
+// The bar color for a stack: a top-N roll-up stays neutral, everything else
+// walks the palette. The label match is a fallback for callers that don't set
+// the rollup flag (the billing breakdowns, whose server rollup is labeled
+// "Other" with no marker).
+function stackColor(
+  stack: { label: string; rollup?: boolean },
+  index: number,
+): string {
+  if (stack.rollup || stack.label === OTHER_STACK_LABEL) return OTHER_COLOR;
   return CHART_COLORS[index % CHART_COLORS.length]!;
 }
 
@@ -185,57 +190,74 @@ export function StackedTimeSeriesPanel({
   const dragTeardownRef = useRef<(() => void) | null>(null);
   useEffect(() => () => dragTeardownRef.current?.(), []);
 
-  const chart = useMemo(() => {
-    const rolled = rolledUpStacks(bucketsMs, stacks, granularity);
+  // The expensive pass — granularity roll-up, axis derivation, cumulative
+  // sums, base colors — keyed on the data inputs only. Hover/toggle state
+  // stays out so sweeping the legend doesn't rebuild the bucketing.
+  const rolled = useMemo(() => {
+    const rolledStacks = rolledUpStacks(bucketsMs, stacks, granularity);
     // The time axis comes from every bucket the caller supplied (gap-filled
     // with zeros), not just buckets with usage — zero days must keep their
     // slot so the axis stays continuous.
     const axisSource = bucketsMs.map((ms) => floorBucket(ms, granularity));
     const buckets = [...new Set(axisSource)].sort((a, b) => a - b);
 
-    // Focusing a hidden series resolves to no focus — otherwise hiding an
-    // item while hovering it would leave every visible series dimmed.
-    const focus =
-      focusLabel !== null && !hiddenLabels.has(focusLabel) ? focusLabel : null;
-
-    const datasets = rolled.map((s, i) => {
+    const datasets = rolledStacks.map((s, i) => {
       const values = buckets.map((b) => s.byBucket.get(b) ?? 0);
       if (cumulative) {
         for (let j = 1; j < values.length; j++) {
           values[j] = values[j]! + values[j - 1]!;
         }
       }
-      const base = stackColor(s.label, i);
-      return {
-        label: s.label,
-        data: values,
-        backgroundColor:
-          focus === null || s.label === focus ? base : dimmed(base),
-      };
+      return { label: s.label, data: values, base: stackColor(s, i) };
     });
 
     return {
-      data: {
-        labels: buckets.map((b) => bucketLabel(b, granularity)),
-        datasets,
-      },
+      labels: buckets.map((b) => bucketLabel(b, granularity)),
+      datasets,
       // Bucket start times parallel to the axis, for bar-click drill-down.
       buckets,
     };
-  }, [bucketsMs, stacks, granularity, cumulative, focusLabel, hiddenLabels]);
+  }, [bucketsMs, stacks, granularity, cumulative]);
 
-  const hasData = chart.data.datasets.length > 0;
+  // The cheap pass: map base colors through the hover spotlight.
+  const chart = useMemo(() => {
+    // Focusing a hidden series resolves to no focus — otherwise hiding an
+    // item while hovering it would leave every visible series dimmed.
+    const focus =
+      focusLabel !== null && !hiddenLabels.has(focusLabel) ? focusLabel : null;
+    return {
+      data: {
+        labels: rolled.labels,
+        datasets: rolled.datasets.map(({ base, ...d }) => ({
+          ...d,
+          backgroundColor:
+            focus === null || d.label === focus ? base : dimmed(base),
+        })),
+      },
+      buckets: rolled.buckets,
+    };
+  }, [rolled, focusLabel, hiddenLabels]);
+
+  const hasData = rolled.datasets.length > 0;
 
   // Sync legend toggles into the chart instance (visibility is imperative
-  // Chart.js state, not part of the data props).
+  // Chart.js state, not part of the data props). Keyed on the dataset LABELS,
+  // not the chart object: visibility is index-based on the instance, so it
+  // only needs re-asserting when the set of series changes or a toggle flips
+  // — value-only data changes and hover recolors are handled by the Bar
+  // component's own update.
+  const datasetLabels = useMemo(
+    () => rolled.datasets.map((d) => d.label),
+    [rolled],
+  );
   useEffect(() => {
     const instance = chartRef.current;
     if (!instance) return;
-    chart.data.datasets.forEach((d, i) => {
-      instance.setDatasetVisibility(i, !hiddenLabels.has(d.label));
+    datasetLabels.forEach((label, i) => {
+      instance.setDatasetVisibility(i, !hiddenLabels.has(label));
     });
     instance.update();
-  }, [chart, hiddenLabels]);
+  }, [datasetLabels, hiddenLabels]);
 
   // Selects the buckets covered by [x1, x2] (container pixels) as a date
   // range, re-bucketing daily. Pixel positions map to axis indexes through
@@ -424,7 +446,7 @@ export function StackedTimeSeriesPanel({
             {/* HTML legend: hoverable, clearly clickable buttons that toggle
                 their series; hovering spotlights the series in the chart. */}
             <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-              {chart.data.datasets.map((d, i) => {
+              {rolled.datasets.map((d) => {
                 const hidden = hiddenLabels.has(d.label);
                 return (
                   <button
@@ -448,7 +470,7 @@ export function StackedTimeSeriesPanel({
                         hidden && "opacity-40",
                       )}
                       style={{
-                        backgroundColor: stackColor(d.label, i),
+                        backgroundColor: d.base,
                       }}
                     />
                     {d.label}

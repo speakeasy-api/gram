@@ -16,7 +16,7 @@ import { useSetBillingMetadataMutation } from "@gram/client/react-query/setBilli
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, RotateCcw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { BillingCyclePicker } from "./billing-cycle-picker";
 import {
@@ -284,14 +284,22 @@ export const TumUsageSection = (): JSX.Element => {
   }, [period, cycles]);
 
   // Bar-click drill-down, clamped to the current period (week/month buckets
-  // can overhang the period's edges).
-  const handleBarSelect = (start: Date, end: Date): void => {
-    if (!period) return;
-    const s = Math.max(start.getTime(), period.start.getTime());
-    const e = Math.min(end.getTime(), period.end.getTime());
-    if (e <= s) return;
-    setCustomRange({ start: new Date(s), end: new Date(e), label: undefined });
-  };
+  // can overhang the period's edges). Stable identity — it feeds the chart
+  // panel's chartOptions memo.
+  const handleBarSelect = useCallback(
+    (start: Date, end: Date): void => {
+      if (!period) return;
+      const s = Math.max(start.getTime(), period.start.getTime());
+      const e = Math.min(end.getTime(), period.end.getTime());
+      if (e <= s) return;
+      setCustomRange({
+        start: new Date(s),
+        end: new Date(e),
+        label: undefined,
+      });
+    },
+    [period],
+  );
 
   return (
     <Page.Section>
