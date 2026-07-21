@@ -487,6 +487,57 @@ func TestCreateLog_ToolIOBodyContentNotPresentWhenNotRecorded(t *testing.T) {
 	require.NotContains(t, log.Attributes, "gen_ai.tool.call.result")
 }
 
+func TestCreateLog_StampsDerivedEventURN(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	attrs := telemetry.HTTPLogAttributes{
+		attr.EventSourceKey: string(telemetry.EventSourceToolCall),
+	}
+	attrs.RecordMethod("POST")
+	attrs.RecordStatusCode(200)
+
+	toolInfo := newTestToolInfo(ti.orgID)
+	timestamp := time.Now().UTC()
+
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+
+	require.Contains(t, log.Attributes, "urn:gram:telemetry:event:gram_gateway:log:tool_call")
+}
+
+func TestCreateLog_ExplicitEventURNWins(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	explicit := "urn:gram:telemetry:event:gram_worker:log:custom_type"
+	attrs := telemetry.HTTPLogAttributes{
+		attr.EventSourceKey: string(telemetry.EventSourceToolCall),
+		attr.EventURNKey:    explicit,
+	}
+	attrs.RecordMethod("POST")
+	attrs.RecordStatusCode(200)
+
+	toolInfo := newTestToolInfo(ti.orgID)
+	timestamp := time.Now().UTC()
+
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+
+	require.Contains(t, log.Attributes, explicit)
+	require.NotContains(t, log.Attributes, "urn:gram:telemetry:event:gram_gateway")
+}
+
 func newTestToolInfo(orgID string) telemetry.ToolInfo {
 	return telemetry.ToolInfo{
 		ID:             uuid.New().String(),

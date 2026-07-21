@@ -268,6 +268,16 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	allAttrs[attr.TimeUnixNanoKey] = params.Timestamp.UnixNano()
 	allAttrs[attr.ServiceNameKey] = serviceName
 
+	// Stamp the canonical event identity (urn:gram:telemetry:event:...) on
+	// every row so consumers can classify by one column (the event_urn
+	// materialized column) instead of re-deriving meaning from gram_urn
+	// prefixes, hook names, and attribute presence. Callers that already set
+	// gram.event.urn win; everything else is derived from the signals the
+	// writer stamped.
+	if getString(allAttrs, attr.EventURNKey) == "" {
+		allAttrs[attr.EventURNKey] = deriveEventURN(params.ToolInfo.URN, allAttrs)
+	}
+
 	spanAttrs, resourceAttrs, err := parseAttributesWithExplicitResources(allAttrs, params.resourceAttributes)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "parse log attributes")
