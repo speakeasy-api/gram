@@ -40,6 +40,8 @@ const BODY_TARGETS = new Set(["content", "prompt", "assistant", "tool_result"]);
 type RowState = "in" | "exempt" | "out";
 
 type EvaluatedSample = {
+  // Source chat-message id; keeps row identity stable across regrouping.
+  id: string;
   sample: CelSample;
   state: RowState;
   spans: CelSpan[];
@@ -73,7 +75,8 @@ export function CelTrafficPreview({
       sortOrder: SortOrder.Desc,
     },
     undefined,
-    { staleTime: 5 * 60 * 1000 },
+    // Auxiliary preview: report failures inline, never the error boundary.
+    { staleTime: 5 * 60 * 1000, throwOnError: false },
   );
   const chatIds = useMemo(
     () => (chatsQuery.data?.chats ?? []).map((c) => c.id),
@@ -91,10 +94,13 @@ export function CelTrafficPreview({
         ),
       staleTime: 5 * 60 * 1000,
       retry: 1,
+      throwOnError: false,
     })),
   });
   const loading =
     chatsQuery.isLoading || messageQueries.some((q) => q.isLoading);
+  const loadFailed =
+    chatsQuery.isError || messageQueries.some((q) => q.isError);
 
   // useQueries returns a fresh array of fresh results each render, so key the
   // memo on a stable fingerprint of which chats have loaded (data is immutable
@@ -105,12 +111,13 @@ export function CelTrafficPreview({
     .join("|");
   // Newest chats first, each chat's messages newest first, capped.
   const samples = useMemo(() => {
-    const out: CelSample[] = [];
+    const out: { id: string; sample: CelSample }[] = [];
     for (const chat of chatData) {
       const messages = chat?.messages ?? [];
       for (let i = messages.length - 1; i >= 0; i--) {
-        const sample = sampleFromChatMessage(messages[i]!);
-        if (sample) out.push(sample);
+        const message = messages[i]!;
+        const sample = sampleFromChatMessage(message);
+        if (sample) out.push({ id: message.id, sample });
         if (out.length >= SAMPLE_CAP) return out;
       }
     }
@@ -145,7 +152,7 @@ export function CelTrafficPreview({
     }
 
     const rows: EvaluatedSample[] = [];
-    for (const sample of samples) {
+    for (const { id, sample } of samples) {
       const message = celMessageFromSample(sample);
       let state: RowState = "in";
       let spans: CelSpan[] = [];
@@ -163,7 +170,7 @@ export function CelTrafficPreview({
         if (!result.ok) continue;
         if (result.matched) state = "exempt";
       }
-      rows.push({ sample, state, spans });
+      rows.push({ id, sample, state, spans });
     }
     return { kind: "ok", rows };
   }, [engine, samples, debounced, mode]);
@@ -178,7 +185,12 @@ export function CelTrafficPreview({
           <Loader2 className="h-3 w-3 animate-spin" /> sampling messages…
         </span>
       )}
-      {!loading && samples.length === 0 && (
+      {!loading && samples.length === 0 && loadFailed && (
+        <span className="text-muted-foreground">
+          couldn't load recent messages.
+        </span>
+      )}
+      {!loading && samples.length === 0 && !loadFailed && (
         <span className="text-muted-foreground">
           no recent messages to sample.
         </span>
@@ -244,8 +256,8 @@ function TrafficSummary({
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
             <ul className="border-border divide-border divide-y rounded-md border">
-              {sorted.map((row, i) => (
-                <TrafficRow key={i} row={row} mode={mode} />
+              {sorted.map((row) => (
+                <TrafficRow key={row.id} row={row} mode={mode} />
               ))}
             </ul>
           </div>

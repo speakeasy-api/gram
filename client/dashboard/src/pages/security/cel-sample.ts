@@ -95,16 +95,27 @@ export function sampleFromChatMessage(msg: ChatMessage): CelSample | null {
     case "tool":
       return { kind: "tool_response", content, tools: [] };
     case "assistant": {
-      const rawCalls = (msg.toolCalls ?? "").trim();
+      const rawCalls = msg.toolCalls ?? "";
       if (rawCalls === "") {
         return { kind: "assistant_message", content, tools: [] };
       }
-      let calls: RecordedToolCall[] = [];
+      // Any recorded tool_calls blob (even `[]` or malformed) is a tool_request,
+      // mirroring messageTypeForRole in batch_messages.go.
+      let calls: RecordedToolCall[] | null = null;
       try {
         const parsed = JSON.parse(rawCalls) as unknown;
         if (Array.isArray(parsed)) calls = parsed as RecordedToolCall[];
+        else if (parsed === null) calls = [];
       } catch {
-        // Malformed tool calls: treat as plain assistant text.
+        // Fall through to the malformed fallback below.
+      }
+      if (calls === null) {
+        // Mirrors parseRecordedToolCalls: one pseudo-call carrying the raw blob.
+        return {
+          kind: "tool_request",
+          content,
+          tools: [{ name: "tool_calls", args: rawCalls }],
+        };
       }
       const tools = calls
         .filter(
@@ -116,9 +127,6 @@ export function sampleFromChatMessage(msg: ChatMessage): CelSample | null {
           name: c.function?.name ?? "",
           args: c.function?.arguments ?? "",
         }));
-      if (tools.length === 0) {
-        return { kind: "assistant_message", content, tools: [] };
-      }
       return { kind: "tool_request", content, tools };
     }
     default:

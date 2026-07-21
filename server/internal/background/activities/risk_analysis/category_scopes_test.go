@@ -226,6 +226,25 @@ func TestRecommendedCategoryScopesSubset(t *testing.T) {
 	require.Len(t, presidioMessages, 3)
 }
 
+func TestSubsetWithoutCategoryMasksScansEverything(t *testing.T) {
+	t.Parallel()
+
+	eng, err := celenv.New()
+	require.NoError(t, err)
+	policy, err := CompileScope(eng, `kind == "user_message"`, "")
+	require.NoError(t, err)
+
+	messages := []batchMessage{msg(message.Assistant), msg(message.User)}
+	contents := messageContents(messages)
+	masks := NewCategoryScopes(policy, mustRecommendedSet(t), nil, false, nil).Masks(t.Context(), messages)
+
+	subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
+	require.Equal(t, []int{0, 1}, indices, "flag off: policy-scope-out messages still reach the scanner")
+	require.Len(t, subMessages, 2)
+	require.Equal(t, contents, subContents)
+	require.Equal(t, 0, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
+}
+
 func TestSourceCategoriesConsistentWithClassify(t *testing.T) {
 	t.Parallel()
 

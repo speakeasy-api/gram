@@ -144,6 +144,7 @@ func TestRiskPolicyDetectionScopesValidation(t *testing.T) {
 		name   string
 		scopes []*types.RiskDetectionScope
 	}{
+		{"null scope", []*types.RiskDetectionScope{nil}},
 		{"unknown category", []*types.RiskDetectionScope{
 			{Category: "not_a_category", ScopeInclude: nil, ScopeExempt: nil},
 		}},

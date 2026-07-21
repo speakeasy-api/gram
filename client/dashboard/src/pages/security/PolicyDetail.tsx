@@ -804,21 +804,30 @@ function PromptPolicyEditor({
     scopeInclude: promptPolicyDef?.recommendedScopeInclude ?? "",
     scopeExempt: promptPolicyDef?.recommendedScopeExempt ?? "",
   };
+  // A preserved legacy policy-level scope still intersects the category scope
+  // in production (scanner: includes AND, exempts OR), so compose it here too.
   const guardrail = useMemo<Guardrail>(
     () => ({
       prompt,
       model,
       temperature,
       failOpen,
-      messageTypes: [],
-      scopeInclude: effectiveScope.scopeInclude,
-      scopeExempt: effectiveScope.scopeExempt,
+      messageTypes: policy?.messageTypes ?? [],
+      scopeInclude: intersectScopeExprs(
+        policy?.scopeInclude ?? "",
+        effectiveScope.scopeInclude,
+      ),
+      scopeExempt: unionScopeExprs(
+        policy?.scopeExempt ?? "",
+        effectiveScope.scopeExempt,
+      ),
     }),
     [
       prompt,
       model,
       temperature,
       failOpen,
+      policy,
       effectiveScope.scopeInclude,
       effectiveScope.scopeExempt,
     ],
@@ -1132,7 +1141,10 @@ function RecommendedScopesPanel({
   scopeOverrides: Map<string, ScopeOverride>;
   setScopeOverrides: (next: Map<string, ScopeOverride>) => void;
 }): JSX.Element | null {
-  const categoriesQuery = useRiskCategories();
+  // Handled inline (retry below) instead of the route error boundary.
+  const categoriesQuery = useRiskCategories(undefined, undefined, {
+    throwOnError: false,
+  });
 
   const rows = useMemo(() => {
     if (!categoriesQuery.data?.categories) return [];
@@ -1143,11 +1155,31 @@ function RecommendedScopesPanel({
       .filter((category) => hasDisplayableRecommendedScope(category));
   }, [categoriesQuery.data?.categories, selectedCategories]);
 
-  if (
-    categoriesQuery.isLoading ||
-    categoriesQuery.isError ||
-    rows.length === 0
-  ) {
+  if (categoriesQuery.isLoading) {
+    return (
+      <Type small muted className="flex items-center gap-2">
+        <Loader2 className="size-4 animate-spin" />
+        Loading detection scopes…
+      </Type>
+    );
+  }
+  if (categoriesQuery.isError) {
+    return (
+      <div className="flex items-center gap-3">
+        <Type small muted>
+          Failed to load detection scopes.
+        </Type>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void categoriesQuery.refetch()}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </div>
+    );
+  }
+  if (rows.length === 0) {
     return null;
   }
 
@@ -1700,6 +1732,24 @@ function scopeSummaryText(customizedScopeCount: number): string {
   return customizedScopeCount > 0
     ? `Recommended scopes (${customizedScopeCount} customized)`
     : "Recommended scopes";
+}
+
+// Combine two include expressions: a message must satisfy both.
+function intersectScopeExprs(a: string, b: string): string {
+  const left = a.trim();
+  const right = b.trim();
+  if (left === "") return right;
+  if (right === "") return left;
+  return `(${left}) && (${right})`;
+}
+
+// Combine two exempt expressions: either one takes the message out.
+function unionScopeExprs(a: string, b: string): string {
+  const left = a.trim();
+  const right = b.trim();
+  if (left === "") return right;
+  if (right === "") return left;
+  return `(${left}) || (${right})`;
 }
 
 function detectionScopesPayload(

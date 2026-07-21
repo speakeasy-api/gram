@@ -272,6 +272,14 @@ func (m CategoryScopeMasks) Subset(messages []batchMessage, contents []string, c
 	if len(messages) == 0 {
 		return nil, nil, nil
 	}
+	// Without category masks the prefilter is a no-op; policy-scope drops stay post-scan.
+	if len(m.categoryOut) == 0 {
+		indices := make([]int, len(messages))
+		for i := range indices {
+			indices[i] = i
+		}
+		return messages, contents, indices
+	}
 	subMessages := make([]batchMessage, 0, len(messages))
 	subContents := make([]string, 0, len(contents))
 	indices := make([]int, 0, len(messages))

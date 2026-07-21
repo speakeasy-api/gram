@@ -5,6 +5,8 @@ import type { CelSpan } from "./cel-wasm";
 // we slice in byte space and decode (correct for non-ASCII).
 export function highlight(text: string, spans: CelSpan[]): ReactNode[] {
   const ranges = spans
+    // .get(path) spans carry offsets into the extracted JSON value, not `text`.
+    .filter((s) => s.Path === "")
     .map((s) => ({ start: s.Start, end: s.End }))
     .filter((r) => r.end > r.start)
     .sort((a, b) => a.start - b.start);

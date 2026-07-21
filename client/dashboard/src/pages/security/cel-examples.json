@@ -17,7 +17,7 @@
   "scope_exempt": [
     {
       "label": "Read-only tools",
-      "expr": "tool_calls.exists(t, t.function.matchGlob(\"*get*\") || t.function.matchGlob(\"*list*\"))"
+      "expr": "tool_calls.size() > 0 && tool_calls.all(t, t.function.matchGlob(\"*get*\") || t.function.matchGlob(\"*list*\"))"
     },
     {
       "label": "A safelisted server",
@@ -35,7 +35,7 @@
     },
     {
       "label": "Destructive shell",
-      "expr": "tool_calls.exists(t, t.function.matchRegex(\"bash\") && t.args.get(\"command\").matchRegex(\"rm -rf\"))"
+      "expr": "tool_calls.exists(t, t.function.matchText(\"bash\") && t.args.get(\"command\").matchRegex(\"rm -rf\"))"
     },
     {
       "label": "Tool error output",

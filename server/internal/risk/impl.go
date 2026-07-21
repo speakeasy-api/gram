@@ -2341,7 +2341,7 @@ func validateDetectionScopes(eng *celenv.Engine, specs []*types.RiskDetectionSco
 	seen := make(map[categories.Category]bool, len(specs))
 	for _, spec := range specs {
 		if spec == nil {
-			continue
+			return nil, oops.E(oops.CodeInvalid, nil, "detection scope must not be null")
 		}
 		cat := categories.Category(spec.Category)
 		rec, ok := recommendedscopes.For(cat)
