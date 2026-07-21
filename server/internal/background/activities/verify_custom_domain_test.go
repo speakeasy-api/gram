@@ -280,7 +280,9 @@ func TestVerifyCustomDomain_CNAMEFailsButARecordExists(t *testing.T) {
 	const domain = "a-record.example.com"
 	ctx, ti := newTestInstance(t, orgID, domain)
 
-	// CNAME fails but A record exists — should continue to TXT check
+	// CNAME fails but the domain's A records intersect the expected target's
+	// (the mock resolves every host to 1.2.3.4) — routing passes and
+	// verification continues to the TXT check.
 	ti.resolver = dns.NewMockResolver(dns.MockResolverConfig{
 		LookupCNAMEFunc: func(context.Context, string) (string, error) { return "", fmt.Errorf("no CNAME") },
 		LookupHostFunc:  func(context.Context, string) ([]string, error) { return []string{"1.2.3.4"}, nil },

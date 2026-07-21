@@ -2,6 +2,7 @@ package customdomains
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"slices"
 
@@ -217,6 +218,9 @@ func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*
 	domain, err := repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
+	}
+	if !domain.Activated {
+		return nil, oops.E(oops.CodeBadRequest, errors.New("custom domain is not activated"), "custom domain is not activated yet; health checks run after activation").LogError(ctx, s.logger)
 	}
 
 	run, err := s.temporalClient.ExecuteCustomDomainHealthCheck(ctx, authCtx.ActiveOrganizationID, domain.ID)

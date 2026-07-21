@@ -17,6 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 
 	"github.com/stretchr/testify/require"
 )
@@ -127,6 +129,65 @@ func TestCheckCustomDomainInfrastructureFutureCertificateIsUnhealthy(t *testing.
 
 	require.NoError(t, err)
 	require.Equal(t, CustomDomainInfrastructureIssueCertificateInvalid, health.Issue)
+}
+
+func TestListManagedCustomDomainResourcesReturnsLabeledResources(t *testing.T) {
+	t.Parallel()
+
+	const namespace = "gram-test"
+	clientset := fake.NewSimpleClientset(
+		&networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "managed-ingress",
+				Namespace: namespace,
+				Labels: map[string]string{
+					managedByLabelKey:    managedByLabelValue,
+					customDomainLabelKey: "managed.example.com",
+				},
+			},
+		},
+		&networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "unmanaged-ingress",
+				Namespace: namespace,
+			},
+		},
+	)
+	gatewayClientset := gatewayfake.NewSimpleClientset(
+		&gatewayv1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "managed-route",
+				Namespace: namespace,
+				Labels: map[string]string{
+					managedByLabelKey:    managedByLabelValue,
+					customDomainLabelKey: "route.example.com",
+				},
+			},
+		},
+	)
+	clients := &KubernetesClients{
+		Clientset:     clientset,
+		gatewayClient: gatewayClientset,
+		namespace:     namespace,
+		enabled:       true,
+	}
+
+	resources, err := clients.ListManagedCustomDomainResources(t.Context())
+	require.NoError(t, err)
+	require.ElementsMatch(t, []ManagedCustomDomainResource{
+		{Kind: ProvisionerKindIngress, Name: "managed-ingress", Domain: "managed.example.com"},
+		{Kind: ProvisionerKindGateway, Name: "managed-route", Domain: "route.example.com"},
+	}, resources)
+}
+
+func TestListManagedCustomDomainResourcesDisabledClientReturnsNothing(t *testing.T) {
+	t.Parallel()
+
+	clients := &KubernetesClients{enabled: false}
+
+	resources, err := clients.ListManagedCustomDomainResources(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, resources)
 }
 
 func newCustomDomainHealthTestClients(t *testing.T, namespace, domain, resourceName, secretName string, notBefore, expiresAt time.Time, ready bool) *KubernetesClients {

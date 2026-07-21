@@ -90,7 +90,7 @@ func buildSecurityPolicy(namespace, routeName string, ipAllowlist []string) *uns
 				"name":      routeName,
 				"namespace": namespace,
 				"labels": map[string]any{
-					"app.kubernetes.io/managed-by": "custom-domain-chart",
+					managedByLabelKey: managedByLabelValue,
 				},
 			},
 			"spec": map[string]any{

@@ -37,10 +37,54 @@ type CustomDomainInfrastructureCheck struct {
 	ProvisionerKind ProvisionerKind
 }
 
+// ManagedCustomDomainResource identifies a Kubernetes resource carrying the
+// gram custom-domain management labels.
+type ManagedCustomDomainResource struct {
+	Kind   ProvisionerKind
+	Name   string
+	Domain string
+}
+
 var certificateGVR = schema.GroupVersionResource{
 	Group:    "cert-manager.io",
 	Version:  "v1",
 	Resource: "certificates",
+}
+
+// ListManagedCustomDomainResources returns every Ingress and HTTPRoute in the
+// namespace labeled as managed by the custom domain provisioners, so callers
+// can reconcile them against the custom_domains table and flag orphans.
+func (k *KubernetesClients) ListManagedCustomDomainResources(ctx context.Context) ([]ManagedCustomDomainResource, error) {
+	if !k.enabled {
+		return nil, nil
+	}
+	labelSelector := managedByLabelKey + "=" + managedByLabelValue
+
+	resources := []ManagedCustomDomainResource{}
+	ingresses, err := k.Clientset.NetworkingV1().Ingresses(k.namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+	if err != nil {
+		return nil, fmt.Errorf("list managed custom domain ingresses: %w", err)
+	}
+	for _, ingress := range ingresses.Items {
+		resources = append(resources, ManagedCustomDomainResource{
+			Kind:   ProvisionerKindIngress,
+			Name:   ingress.Name,
+			Domain: ingress.Labels[customDomainLabelKey],
+		})
+	}
+
+	routes, err := k.gatewayClient.GatewayV1().HTTPRoutes(k.namespace).List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+	if err != nil {
+		return nil, fmt.Errorf("list managed custom domain http routes: %w", err)
+	}
+	for _, route := range routes.Items {
+		resources = append(resources, ManagedCustomDomainResource{
+			Kind:   ProvisionerKindGateway,
+			Name:   route.Name,
+			Domain: route.Labels[customDomainLabelKey],
+		})
+	}
+	return resources, nil
 }
 
 func (k *KubernetesClients) CheckCustomDomainInfrastructure(ctx context.Context, check CustomDomainInfrastructureCheck) (CustomDomainInfrastructureHealth, error) {

@@ -23,8 +23,8 @@ var CustomDomain = Type("CustomDomain", func() {
 	})
 	Attribute("is_updating", Boolean, "The custom domain is actively being registered")
 	Attribute("ip_allowlist", ArrayOf(String), "IP addresses or CIDR ranges allowed to access this domain. Empty list means unrestricted.")
-	Attribute("health_status", String, "The latest observed domain health status")
-	Attribute("health_issue", String, "The reason the domain was last observed as unhealthy")
+	Attribute("health_status", String, "The latest observed domain health status. One of: unknown, healthy, unhealthy.")
+	Attribute("health_issue", String, "The reason the domain was last observed as unhealthy. One of: dns_not_found, dns_target_mismatch, resource_missing, certificate_missing, certificate_not_ready, certificate_expired, certificate_invalid, check_failed.")
 	Attribute("health_checked_at", String, func() {
 		Description("When the domain health was last checked.")
 		Format(FormatDateTime)

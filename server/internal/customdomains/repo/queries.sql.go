@@ -314,6 +314,32 @@ func (q *Queries) ListActivatedCustomDomainsForHealthCheck(ctx context.Context, 
 	return items, nil
 }
 
+const listActiveCustomDomainNames = `-- name: ListActiveCustomDomainNames :many
+SELECT domain
+FROM custom_domains
+WHERE deleted IS FALSE
+`
+
+func (q *Queries) ListActiveCustomDomainNames(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listActiveCustomDomainNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var domain string
+		if err := rows.Scan(&domain); err != nil {
+			return nil, err
+		}
+		items = append(items, domain)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateCustomDomain = `-- name: UpdateCustomDomain :one
 UPDATE custom_domains
 SET

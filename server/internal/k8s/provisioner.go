@@ -13,6 +13,15 @@ const (
 	ProvisionerKindGateway ProvisionerKind = "gateway"
 )
 
+// Labels stamped on every provisioned custom domain resource. The orphan
+// detection in ListManagedCustomDomainResources selects on the managed-by
+// pair, so all provisioners must apply these.
+const (
+	managedByLabelKey    = "app.kubernetes.io/managed-by"
+	managedByLabelValue  = "custom-domain-chart"
+	customDomainLabelKey = "custom-domain"
+)
+
 // SetupResult carries the provisioned resource identifiers.
 // SecretName is empty when the provisioner does not own a TLS Secret
 // (Gateway rows: parent Gateway owns TLS, HTTPRoute does not reference a Secret).

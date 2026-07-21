@@ -1,6 +1,10 @@
 package customdomains
 
-import "time"
+import (
+	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/k8s"
+)
 
 type HealthStatus string
 
@@ -12,14 +16,16 @@ const (
 
 type HealthIssue string
 
+// Infrastructure issues alias the k8s constants so the two packages cannot
+// drift apart; the activity casts k8s issues straight into HealthIssue.
 const (
 	HealthIssueDNSNotFound         HealthIssue = "dns_not_found"
 	HealthIssueDNSTargetMismatch   HealthIssue = "dns_target_mismatch"
-	HealthIssueResourceMissing     HealthIssue = "resource_missing"
-	HealthIssueCertificateMissing  HealthIssue = "certificate_missing"
-	HealthIssueCertificateNotReady HealthIssue = "certificate_not_ready"
-	HealthIssueCertificateExpired  HealthIssue = "certificate_expired"
-	HealthIssueCertificateInvalid  HealthIssue = "certificate_invalid"
+	HealthIssueResourceMissing     HealthIssue = HealthIssue(k8s.CustomDomainInfrastructureIssueResourceMissing)
+	HealthIssueCertificateMissing  HealthIssue = HealthIssue(k8s.CustomDomainInfrastructureIssueCertificateMissing)
+	HealthIssueCertificateNotReady HealthIssue = HealthIssue(k8s.CustomDomainInfrastructureIssueCertificateNotReady)
+	HealthIssueCertificateExpired  HealthIssue = HealthIssue(k8s.CustomDomainInfrastructureIssueCertificateExpired)
+	HealthIssueCertificateInvalid  HealthIssue = HealthIssue(k8s.CustomDomainInfrastructureIssueCertificateInvalid)
 	HealthIssueCheckFailed         HealthIssue = "check_failed"
 )
 
