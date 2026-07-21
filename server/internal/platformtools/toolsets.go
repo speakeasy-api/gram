@@ -25,6 +25,7 @@ type Toolset struct {
 // external service or pre-built tool slice.
 type ToolsetDependencies struct {
 	AssistantMemoryTools          []ExternalTool
+	AssistantSkillTools           []ExternalTool
 	AssistantTriggerTools         []ExternalTool
 	ManagedAssistantInsightsTools []ExternalTool
 }
@@ -33,8 +34,9 @@ type toolsetBuilder func(deps ToolsetDependencies) Toolset
 
 var toolsetRegistry = []toolsetBuilder{
 	func(deps ToolsetDependencies) Toolset {
-		tools := make([]ExternalTool, 0, len(deps.AssistantMemoryTools)+len(deps.AssistantTriggerTools))
+		tools := make([]ExternalTool, 0, len(deps.AssistantMemoryTools)+len(deps.AssistantSkillTools)+len(deps.AssistantTriggerTools))
 		tools = append(tools, deps.AssistantMemoryTools...)
+		tools = append(tools, deps.AssistantSkillTools...)
 		tools = append(tools, deps.AssistantTriggerTools...)
 		return NewAssistantsToolset(tools...)
 	},

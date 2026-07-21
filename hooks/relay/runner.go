@@ -130,9 +130,9 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("event=%s config-error path=%s err=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ConfigPath, r.cfg.ConfigError)
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks cannot read the plugin config at %q. Reinstall the Speakeasy hooks plugin.", r.cfg.ConfigPath)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateNeverAuthed
 	}
 
 	// Refuse to send credentials over plaintext HTTP before resolving them,
@@ -142,26 +142,38 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ServerURL)
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks refused insecure Gram server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateNeverAuthed
 	}
 
 	c, ok := resolveAuth(r.cfg)
 	if !ok {
 		if reauthNeeded() {
 			r.debugf("event=%s no-creds state=reauth-needed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil}, stateReauthNeeded
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateReauthNeeded
 		}
 		if authEstablished() {
 			r.debugf("event=%s no-creds state=broken authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateBroken
 		}
 		r.debugf("event=%s no-creds state=never-authed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateNeverAuthed
 	}
 
 	payload := buildEnvelope(typed, hostname())
+	resolvedSkill := resolveActivatedSkill(typed, &payload)
+	if resolvedSkill != nil {
+		if resolvedSkill.sourceLevel != "" {
+			payload.Data.Skill.SourceLevel = new(resolvedSkill.sourceLevel)
+		}
+		if resolvedSkill.sourcePath != "" {
+			payload.Data.Skill.SourcePath = new(resolvedSkill.sourcePath)
+		}
+		if resolvedSkill.rawSHA256 != "" {
+			payload.Data.Skill.RawSha256 = new(resolvedSkill.rawSHA256)
+		}
+	}
 	base := agenthooks.EventOf(typed)
 	if base.Provider == agenthooks.ProviderClaudeCode &&
 		(base.Kind == agenthooks.KindSessionStart || base.NativeName == "ConfigChange") {
@@ -177,6 +189,8 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// event per key, so every redelivery path is safe.
 	idemKey := newIdempotencyToken()
 	res := r.send(ctx, c, payload, idemKey)
+	finalCreds := c
+	state := stateReady
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
 	if res.authRejected && c.Source == credEnv {
 		// The configured key is authoritative and a re-login can never replace
@@ -186,7 +200,6 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		} else {
 			res.decision.Message = envKeyRejectedMessage
 		}
-		return res, stateReady
 	}
 	if res.authRejected && c.Source == credCache && !disableLocalAuth() {
 		// A rejected personal cache is forgotten. When the published plugin has
@@ -194,6 +207,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		// key does not interrupt telemetry or policy enforcement.
 		forgetAuth()
 		markReauthNeeded()
+		state = stateReauthNeeded
 		if r.cfg.HooksAPIKey != "" {
 			if c.Email != "" {
 				payload.Source.UserEmail = new(c.Email)
@@ -206,19 +220,21 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 				Org:       r.cfg.OrgID,
 				Source:    credOrg,
 			}
+			finalCreds = orgCreds
 			res = r.send(ctx, orgCreds, payload, idemKey)
+			state = stateReady
 			r.debugf("event=%s auth-retry=org status=%d denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.decision.denied())
-			r.finishExchange(idemKey, payload, res)
-			return res, stateReady
 		}
-		return res, stateReauthNeeded
 	}
 	// The exchange is final: an unsent payload (unreachable/5xx/429/408) is
 	// kept for replay, a healthy exchange flushes any backlog, and a
 	// definitive 4xx does neither — the server answered, and would reject a
 	// replay identically.
-	r.finishExchange(idemKey, payload, res)
-	return res, stateReady
+	r.finishExchange(idemKey, payload, res, resolvedSkill)
+	if err := startSkillContentUpload(finalCreds, res, resolvedSkill); err != nil {
+		r.debugf("skill upload: %v", err)
+	}
+	return res, state
 }
 
 // send posts one envelope through the ingest client and mirrors any

@@ -301,6 +301,9 @@ const (
 	RiskScanMaxAttemptsKey            = attribute.Key("gram.risk.scan.max_attempts")
 	RiskScanBatchIndexKey             = attribute.Key("gram.risk.scan.batch_index")
 	RiskScanTextSizeKey               = attribute.Key("gram.risk.scan.text_size_bytes")
+	RiskScanRequestIDKey              = attribute.Key("gram.risk.scan.request_id")
+	RiskScanEngineKey                 = attribute.Key("gram.risk.scan.engine")
+	RiskScanGateReasonKey             = attribute.Key("gram.risk.scan.gate_reason")
 	SecretNameKey                     = attribute.Key("gram.secret.name")
 	SecurityPlacementKey              = attribute.Key("gram.security.placement")
 	SecuritySchemeKey                 = attribute.Key("gram.security.scheme")
@@ -417,6 +420,11 @@ const (
 	CursorUsageEventHashKey = attribute.Key("cursor.event_hash")
 	CursorChargedCentsKey   = attribute.Key("cursor.charged_cents")
 
+	// ClaudeChatEventHashKey fingerprints one Admin Analytics report row
+	// (aggregation key + values) so consumers needing exact-once sums can
+	// dedupe re-ingested windows by (gram_project_id, claude_chat.event_hash).
+	ClaudeChatEventHashKey = attribute.Key("claude_chat.event_hash")
+
 	// CodexUsageToolTokensKey stores Codex's tool_token_count verbatim for
 	// fidelity. It equals input + output, so it is intentionally not summed
 	// into any total downstream.
@@ -445,6 +453,7 @@ const (
 	GitHubUsernameKey = attribute.Key("gram.github.username")
 
 	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration.config_id")
+	AIIntegrationSyncScheduleKey       = attribute.Key("gram.ai_integration.sync_schedule")
 	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
 
 	ResilienceBreakerStateKey           = attribute.Key("gram.circuit_breaker.state")
@@ -1337,6 +1346,21 @@ func SlogRiskScanBatchIndex(v int) slog.Attr      { return slog.Int(string(RiskS
 func RiskScanTextSize(v int) attribute.KeyValue { return RiskScanTextSizeKey.Int(v) }
 func SlogRiskScanTextSize(v int) slog.Attr      { return slog.Int(string(RiskScanTextSizeKey), v) }
 
+func RiskScanRequestID(v string) attribute.KeyValue { return RiskScanRequestIDKey.String(v) }
+func SlogRiskScanRequestID(v string) slog.Attr {
+	return slog.String(string(RiskScanRequestIDKey), v)
+}
+
+func RiskScanEngine(v string) attribute.KeyValue { return RiskScanEngineKey.String(v) }
+func SlogRiskScanEngine(v string) slog.Attr      { return slog.String(string(RiskScanEngineKey), v) }
+
+func RiskScanGateReason[V ~string](v V) attribute.KeyValue {
+	return RiskScanGateReasonKey.String(string(v))
+}
+func SlogRiskScanGateReason(v string) slog.Attr {
+	return slog.String(string(RiskScanGateReasonKey), v)
+}
+
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
 
@@ -1807,6 +1831,13 @@ func SlogGitHubUsername(v string) slog.Attr      { return slog.String(string(Git
 func AIIntegrationConfigID(v string) attribute.KeyValue { return AIIntegrationConfigIDKey.String(v) }
 func SlogAIIntegrationConfigID(v string) slog.Attr {
 	return slog.String(string(AIIntegrationConfigIDKey), v)
+}
+
+func AIIntegrationSyncSchedule(v string) attribute.KeyValue {
+	return AIIntegrationSyncScheduleKey.String(v)
+}
+func SlogAIIntegrationSyncSchedule(v string) slog.Attr {
+	return slog.String(string(AIIntegrationSyncScheduleKey), v)
 }
 
 func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {

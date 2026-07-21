@@ -1,5 +1,23 @@
 # dashboard
 
+## 0.91.1
+
+### Patch Changes
+
+- 50289f1: Show the number of active skills carried by each plugin on the Plugins page.
+
+## 0.91.0
+
+### Minor Changes
+
+- f83c87f: Manage skill distributions from the dashboard. Skills now open as a dedicated detail page with an at-a-glance sidebar, section navigation, and a plugin distribution banner for distributing the skill to plugins and revoking distributions. The plugin detail page's Skills section replaces the coming-soon placeholder with the actual list of skills the plugin carries, including add and remove controls. Skill distributions can now also be listed filtered by skill or plugin.
+
+### Patch Changes
+
+- b1e392a: Fix the plugin assignments dropdown not scrolling when it contains many users/roles. The multi-select popover is portaled inside the modal assignments sheet, so make its popover modal to restore mouse-wheel scrolling of the options list.
+- f4f4f92: Add a copy-to-clipboard button next to the plugin version badge on the plugin detail page so the version string can be copied in one click.
+- 4f4eff9: Resolve chat session owners from organization members instead of displaying opaque external user IDs.
+
 ## 0.90.0
 
 ### Minor Changes

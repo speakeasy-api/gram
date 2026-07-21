@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import {
-  useAssistantState,
+  useAuiState,
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
 import { useToolApproval } from "@/elements/hooks/useToolApproval";
@@ -28,7 +28,7 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
   const pendingApproval = pendingApprovals.get(toolCallId);
   // Selecting the whole message would re-render this card on every streamed
   // chunk; select only the derived value.
-  const needsTrailingBorder = useAssistantState(({ message }) => {
+  const needsTrailingBorder = useAuiState(({ message }) => {
     const toolParts = message.parts.filter((part) => part.type === "tool-call");
     const index = toolParts.findIndex((part) => part.toolCallId === toolCallId);
     return index !== -1 && index !== toolParts.length - 1;

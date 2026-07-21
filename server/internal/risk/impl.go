@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -388,6 +389,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 		}
 	}
+	if len(payload.DetectionScopes) > 0 {
+		specs, err := validateDetectionScopes(s.celEng, payload.DetectionScopes)
+		if err != nil {
+			return nil, err
+		}
+		analyzerConfig, err = ra.WithDetectionScopes(analyzerConfig, specs)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -470,16 +481,55 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies").LogError(ctx, s.logger)
 	}
 
+	if len(rows) == 0 {
+		return &gen.ListRiskPoliciesResult{Policies: []*types.RiskPolicy{}}, nil
+	}
+
+	// Enrichment is resolved once for the whole set rather than per policy (the
+	// old N+1). totalMessages is project-wide and identical for every policy;
+	// analyzed counts and audience grants are batched into one query each and
+	// looked up per row below.
+	totalMessages, err := s.repo.CountTotalMessages(ctx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true})
+	if err != nil {
+		totalMessages = 0
+	}
+
+	// Analyzed counts are optional status enrichment, so a failure degrades to
+	// zero (pending = total) rather than failing the whole list — matching the
+	// tolerance of the single-policy CountAnalyzedMessages path.
+	analyzedByPolicy := map[analyzedMessagesKey]int64{}
+	if analyzedRows, err := s.repo.CountAnalyzedMessagesByProject(ctx, *authCtx.ProjectID); err != nil {
+		s.logger.WarnContext(ctx, "count analyzed messages for risk policy list failed", attr.SlogError(err))
+	} else {
+		analyzedByPolicy = make(map[analyzedMessagesKey]int64, len(analyzedRows))
+		for _, r := range analyzedRows {
+			analyzedByPolicy[analyzedMessagesKey{policyID: r.RiskPolicyID, version: r.RiskPolicyVersion}] = r.AnalyzedMessages
+		}
+	}
+
+	policyIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		policyIDs = append(policyIDs, row.ID.String())
+	}
+	audienceByPolicy, err := riskPolicyAudienceURNsByPolicy(ctx, s.db, authCtx.ActiveOrganizationID, policyIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audiences").LogError(ctx, s.logger)
+	}
+
 	policies := make([]*types.RiskPolicy, 0, len(rows))
 	for _, row := range rows {
-		p, err := s.policyToType(ctx, row)
-		if err != nil {
-			return nil, err
-		}
-		policies = append(policies, p)
+		analyzedMessages := analyzedByPolicy[analyzedMessagesKey{policyID: row.ID, version: row.Version}]
+		policies = append(policies, buildRiskPolicyType(row, totalMessages, analyzedMessages, audienceByPolicy[row.ID.String()]))
 	}
 
 	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
+}
+
+// analyzedMessagesKey keys the batched analyzed-message counts by the
+// (policy, version) pair they were aggregated on.
+type analyzedMessagesKey struct {
+	policyID uuid.UUID
+	version  int64
 }
 
 // ListBuiltinExclusions returns the built-in exclusion library grouped by
@@ -615,6 +665,18 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			return nil, err
 		}
 		updated, err := ra.WithApprovedEmailDomains(analyzerConfig, domains)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+		analyzerConfig = updated
+	}
+	// Omit to preserve; send (possibly empty, to clear) to replace.
+	if payload.DetectionScopes != nil {
+		specs, err := validateDetectionScopes(s.celEng, payload.DetectionScopes)
+		if err != nil {
+			return nil, err
+		}
+		updated, err := ra.WithDetectionScopes(analyzerConfig, specs)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 		}
@@ -1391,13 +1453,22 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	}
 
 	window := riskOverviewWindowParams(from, to)
-	counts, err := s.repo.GetRiskOverviewCounts(ctx, repo.GetRiskOverviewCountsParams{
+	scanCounts, err := s.repo.GetRiskOverviewScanCounts(ctx, repo.GetRiskOverviewScanCountsParams{
 		ProjectID: *authCtx.ProjectID,
 		FromTime:  window.from,
 		ToTime:    window.to,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview counts").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview scan counts").LogError(ctx, s.logger)
+	}
+
+	findingCounts, err := s.repo.GetRiskOverviewFindingCounts(ctx, repo.GetRiskOverviewFindingCountsParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  window.from,
+		ToTime:    window.to,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get risk overview finding counts").LogError(ctx, s.logger)
 	}
 
 	userRows, err := s.repo.ListRiskOverviewTopUsers(ctx, repo.ListRiskOverviewTopUsersParams{
@@ -1467,10 +1538,10 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 	return &gen.RiskOverviewResult{
 		From:               from.UTC().Format(time.RFC3339),
 		To:                 to.UTC().Format(time.RFC3339),
-		MessagesScanned:    counts.MessagesScanned,
-		Findings:           counts.Findings,
-		FlaggedSessions:    counts.FlaggedSessions,
-		ActivePolicies:     counts.ActivePolicies,
+		MessagesScanned:    scanCounts.MessagesScanned,
+		Findings:           findingCounts.Findings,
+		FlaggedSessions:    findingCounts.FlaggedSessions,
+		ActivePolicies:     scanCounts.ActivePolicies,
 		TopCategories:      topCategories,
 		TopUsers:           topUsers,
 		TopRules:           topRules,
@@ -1639,22 +1710,47 @@ func (s *Service) ListRiskCategories(ctx context.Context, payload *gen.ListRiskC
 
 	defs := categories.All()
 	out := make([]*gen.RiskCategoryDefinition, 0, len(defs))
+	// The definition list carries trailing scanner-source fallback entries for
+	// Classify precedence (duplicate secrets/pii keys); the API surface is one
+	// entry per category, keeping the canonical (first) definition.
+	seen := make(map[categories.Category]bool, len(defs))
 	for _, def := range defs {
+		if seen[def.Category] {
+			continue
+		}
+		seen[def.Category] = true
 		ruleIDs := def.RuleIDs
 		if ruleIDs == nil {
 			ruleIDs = []string{}
 		}
+		rec, ok := recommendedscopes.For(def.Category)
+		if !ok {
+			rec = recommendedscopes.Recommendation{
+				Category:     def.Category,
+				ScopeInclude: "",
+				ScopeExempt:  "",
+				Rationale:    "",
+				Applicable:   true,
+			}
+		}
 		out = append(out, &gen.RiskCategoryDefinition{
-			Key:          string(def.Category),
-			Label:        def.Label,
-			Description:  def.Description,
-			Icon:         def.Icon,
-			Source:       def.Source,
-			RuleIds:      ruleIDs,
-			RuleIDPrefix: def.RulePrefix,
+			Key:                        string(def.Category),
+			Label:                      def.Label,
+			Description:                def.Description,
+			Icon:                       def.Icon,
+			Source:                     def.Source,
+			RuleIds:                    ruleIDs,
+			RuleIDPrefix:               def.RulePrefix,
+			RecommendedScopeInclude:    rec.ScopeInclude,
+			RecommendedScopeExempt:     rec.ScopeExempt,
+			RecommendedScopeRationale:  rec.Rationale,
+			RecommendedScopeApplicable: rec.Applicable,
 		})
 	}
-	return &gen.RiskCategoriesResult{Categories: out}, nil
+	return &gen.RiskCategoriesResult{
+		Categories:               out,
+		RecommendedScopesVersion: recommendedscopes.Version,
+	}, nil
 }
 
 // CompileExpr compiles a single CEL expression without evaluating it, so the
@@ -2239,6 +2335,56 @@ func validateMessageTypes(messageTypes []string) error {
 		)
 	}
 	return nil
+}
+
+// validateDetectionScopes checks each specified scope's category (must be a
+// registry category whose message scoping applies) and CEL predicates, and
+// converts to the analyzer_config representation.
+func validateDetectionScopes(eng *celenv.Engine, specs []*types.RiskDetectionScope) ([]ra.DetectionScopeConfig, error) {
+	out := make([]ra.DetectionScopeConfig, 0, len(specs))
+	seen := make(map[categories.Category]bool, len(specs))
+	for _, spec := range specs {
+		if spec == nil {
+			return nil, oops.E(oops.CodeInvalid, nil, "detection scope must not be null")
+		}
+		cat := categories.Category(spec.Category)
+		rec, ok := recommendedscopes.For(cat)
+		if !ok {
+			return nil, oops.E(oops.CodeInvalid, nil, "detection scope category %q is not recognized", spec.Category)
+		}
+		if !rec.Applicable {
+			return nil, oops.E(oops.CodeInvalid, nil, "category %q is session-scoped; message detection scopes do not apply", spec.Category)
+		}
+		if seen[cat] {
+			return nil, oops.E(oops.CodeInvalid, nil, "detection scope category %q specified more than once", spec.Category)
+		}
+		seen[cat] = true
+		include := strings.TrimSpace(conv.PtrValOr(spec.ScopeInclude, ""))
+		exempt := strings.TrimSpace(conv.PtrValOr(spec.ScopeExempt, ""))
+		if _, err := ra.CompileScope(eng, include, exempt); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "detection scope for %q does not compile", spec.Category)
+		}
+		out = append(out, ra.DetectionScopeConfig{Category: string(cat), ScopeInclude: include, ScopeExempt: exempt})
+	}
+	return out, nil
+}
+
+// detectionScopesToAPI maps the analyzer_config detection scopes into the API
+// representation.
+func detectionScopesToAPI(analyzerConfig []byte) []*types.RiskDetectionScope {
+	specs := ra.DetectionScopesFromConfig(analyzerConfig)
+	if len(specs) == 0 {
+		return nil
+	}
+	out := make([]*types.RiskDetectionScope, 0, len(specs))
+	for _, spec := range specs {
+		out = append(out, &types.RiskDetectionScope{
+			Category:     spec.Category,
+			ScopeInclude: conv.PtrEmpty(spec.ScopeInclude),
+			ScopeExempt:  conv.PtrEmpty(spec.ScopeExempt),
+		})
+	}
+	return out
 }
 
 func validateCustomDetectionRule(eng *celenv.Engine, ruleID, title, detectionExpr, severity string) error {
@@ -3083,12 +3229,21 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	if err != nil {
 		analyzedMessages = 0
 	}
-	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	audiencePrincipalURNs, err := riskPolicyAudiencePrincipalURNs(ctx, s.db, row.OrganizationID, row.ID.String())
 	if err != nil {
 		return nil, fmt.Errorf("load risk policy audience: %w", err)
 	}
+
+	return buildRiskPolicyType(row, totalMessages, analyzedMessages, audiencePrincipalURNs), nil
+}
+
+// buildRiskPolicyType assembles the API type from a policy row and its already
+// resolved message counts and audience. The enrichment queries are the caller's
+// responsibility so batched paths (ListRiskPolicies) can resolve them once for
+// the whole set instead of per policy.
+func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages int64, audiencePrincipalURNs []string) *types.RiskPolicy {
+	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	return &types.RiskPolicy{
 		ID:                     row.ID.String(),
@@ -3099,6 +3254,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PresidioEntities:       row.PresidioEntities,
 		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
 		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
+		DetectionScopes:        detectionScopesToAPI(row.AnalyzerConfig),
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,
@@ -3119,7 +3275,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
 		PendingMessages:        pendingMessages,
 		TotalMessages:          totalMessages,
-	}, nil
+	}
 }
 
 func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []string) *types.RiskPolicy {
@@ -3135,6 +3291,7 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		PresidioEntities:       row.PresidioEntities,
 		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
 		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
+		DetectionScopes:        detectionScopesToAPI(row.AnalyzerConfig),
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,

@@ -10,18 +10,19 @@ import (
 type Feature string
 
 const (
-	FeatureLogs                  Feature = "logs"
-	FeatureToolIOLogs            Feature = "tool_io_logs"
-	FeatureRBAC                  Feature = "rbac"
-	FeatureSessionCapture        Feature = "session_capture"
-	FeatureAuthzChallengeLogging Feature = "authz_challenge_logging"
-	FeatureWebhooks              Feature = "webhooks"
-	FeatureSSO                   Feature = "sso"
-	FeatureSCIM                  Feature = "scim"
-	FeatureHooksBrowserLogin     Feature = "hooks_browser_login"
-	FeatureHooksFailOpen         Feature = "hooks_fail_open"
-	FeatureCustomModelKeys       Feature = "custom_model_keys"
-	FeatureSkills                Feature = "skills"
+	FeatureLogs                     Feature = "logs"
+	FeatureToolIOLogs               Feature = "tool_io_logs"
+	FeatureRBAC                     Feature = "rbac"
+	FeatureSessionCapture           Feature = "session_capture"
+	FeatureAuthzChallengeLogging    Feature = "authz_challenge_logging"
+	FeatureWebhooks                 Feature = "webhooks"
+	FeatureSSO                      Feature = "sso"
+	FeatureSCIM                     Feature = "scim"
+	FeatureHooksBrowserLogin        Feature = "hooks_browser_login"
+	FeatureHooksFailOpen            Feature = "hooks_fail_open"
+	FeatureCustomModelKeys          Feature = "custom_model_keys"
+	FeatureSkills                   Feature = "skills"
+	FeatureSkillCaptureMetadataOnly Feature = "skill_capture_metadata_only"
 )
 
 type FeatureCache struct {

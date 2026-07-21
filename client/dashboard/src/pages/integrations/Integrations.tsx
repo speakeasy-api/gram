@@ -306,14 +306,12 @@ function IntegrationCard({
           </Button>
         ) : (
           <Button variant="secondary" onClick={() => void toggleEnabled()}>
-            {isEnabled ? (
-              <>
+            {isEnabled && (
+              <Button.LeftIcon>
                 <CheckIcon className="h-4 w-4" />
-                Enabled
-              </>
-            ) : (
-              "Enable"
+              </Button.LeftIcon>
             )}
+            <Button.Text>{isEnabled ? "Enabled" : "Enable"}</Button.Text>
           </Button>
         )}
       </Card.Header>

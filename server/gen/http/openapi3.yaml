@@ -4598,13 +4598,13 @@ paths:
             operationId: getAgentPlugins
             parameters:
                 - allowEmptyValue: true
-                  description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+                  description: Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
                   example: dev@acme.corp
                   in: query
                   name: email
                   required: true
                   schema:
-                    description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+                    description: Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
                     example: dev@acme.corp
                     type: string
                 - allowEmptyValue: true
@@ -14279,6 +14279,95 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
+    /rpc/hooks.uploadSkillContent:
+        post:
+            description: Uploads skill manifest content requested by the unified hook ingest endpoint.
+            operationId: uploadSkillContent
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UploadSkillContentPayload'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: uploadSkillContent hooks
+            tags:
+                - hooks
+            x-speakeasy-name-override: uploadSkillContent
     /rpc/hooks.upsertServerNameOverride:
         post:
             tags:
@@ -32201,7 +32290,7 @@ paths:
                 name: CreateSkill
     /rpc/skills.distribute:
         post:
-            description: Create or update the active distribution of a skill to a plugin. Repeating the request for the same skill and plugin updates the version pin or is a no-op.
+            description: Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.
             operationId: distributeSkill
             parameters:
                 - allowEmptyValue: true
@@ -32228,6 +32317,9 @@ paths:
             requestBody:
                 content:
                     application/json:
+                        example:
+                            id: 550e8400-e29b-41d4-a716-446655440000
+                            plugin_id: 550e8400-e29b-41d4-a716-446655440001
                         schema:
                             $ref: '#/components/schemas/DistributeSkillRequestBody'
                 required: true
@@ -32540,6 +32632,22 @@ paths:
             operationId: listSkillDistributions
             parameters:
                 - allowEmptyValue: true
+                  description: Only return distributions of this skill.
+                  in: query
+                  name: skill_id
+                  schema:
+                    description: Only return distributions of this skill.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Only return distributions carried by this plugin.
+                  in: query
+                  name: plugin_id
+                  schema:
+                    description: Only return distributions carried by this plugin.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Cursor for the next page of skill distributions.
                   in: query
                   name: cursor
@@ -32658,6 +32766,130 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: SkillDistributions
+    /rpc/skills.listUnknownActivations:
+        get:
+            description: List terminal skill activations that could not be attributed to a skill version.
+            operationId: listUnknownSkillActivations
+            parameters:
+                - allowEmptyValue: true
+                  description: Cursor for the next page of unknown activations.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of unknown activations.
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of unknown activations to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: The number of unknown activations to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUnknownSkillActivationsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listUnknownActivations skills
+            tags:
+                - skills
+            x-speakeasy-name-override: listUnknownActivations
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: UnknownSkillActivations
     /rpc/skills.listVersions:
         get:
             description: List immutable versions of an active skill, newest first. The implementation requires the skills product feature and skill read scope.
@@ -32793,7 +33025,7 @@ paths:
                 name: SkillVersions
     /rpc/skills.undistribute:
         post:
-            description: Revoke a skill's active distribution to a plugin. Repeated requests are a no-op.
+            description: Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.
             operationId: undistributeSkill
             parameters:
                 - allowEmptyValue: true
@@ -32820,6 +33052,9 @@ paths:
             requestBody:
                 content:
                     application/json:
+                        example:
+                            id: 550e8400-e29b-41d4-a716-446655440000
+                            plugin_id: 550e8400-e29b-41d4-a716-446655440001
                         schema:
                             $ref: '#/components/schemas/UndistributeSkillRequestBody'
                 required: true
@@ -32891,6 +33126,110 @@ paths:
             x-speakeasy-name-override: undistribute
             x-speakeasy-react-hook:
                 name: UndistributeSkill
+    /rpc/skills.update:
+        post:
+            description: Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.
+            operationId: updateSkill
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSkillRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Skill'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: update skills
+            tags:
+                - skills
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateSkill
     /rpc/telemetry.captureEvent:
         post:
             description: Capture a telemetry event and forward it to PostHog
@@ -33210,6 +33549,111 @@ paths:
             x-speakeasy-name-override: getHooksSummary
             x-speakeasy-react-hook:
                 name: GetHooksSummary
+                type: query
+    /rpc/telemetry.getMcpServerActivity:
+        post:
+            description: Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.
+            operationId: getMcpServerActivity
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetMcpServerActivityPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetMcpServerActivityResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getMcpServerActivity telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getMcpServerActivity
+            x-speakeasy-react-hook:
+                name: GetMcpServerActivity
                 type: query
     /rpc/telemetry.getObservabilityOverview:
         post:
@@ -35693,6 +36137,91 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateTemplate
+    /rpc/tokenExchange.exchange:
+        post:
+            description: Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent_user' scope. Authenticated with an org-scoped API key carrying the 'agent' scope — deliberately broader than the 'agent_user' scope the minted per-user keys carry, so a leaked per-user key cannot re-enter this endpoint to forge another user's key. The raw key is returned exactly once.
+            operationId: tokenExchange
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ExchangeRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TokenResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: exchange tokenExchange
+            tags:
+                - tokenExchange
+            x-speakeasy-name-override: exchange
     /rpc/tools.list:
         get:
             description: List all tools for a project
@@ -42016,6 +42545,10 @@ components:
                 content:
                     type: string
                     description: The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
+                derived_from_version_id:
+                    type: string
+                    description: The optional source version this new version was derived from.
+                    format: uuid
                 id:
                     type: string
                     description: The skill ID.
@@ -42426,6 +42959,11 @@ components:
                     type: string
                     description: The project ID owning the assistant.
                     format: uuid
+                skills:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AssistantSkillRef'
+                    description: Skills attached to the assistant.
                 status:
                     type: string
                     description: The assistant status.
@@ -42453,6 +42991,7 @@ components:
                 - instructions
                 - toolsets
                 - mcp_servers
+                - skills
                 - warm_ttl_seconds
                 - max_concurrency
                 - status
@@ -42528,6 +43067,24 @@ components:
                 - updated_at
                 - last_access
                 - valid_at
+        AssistantSkillRef:
+            type: object
+            properties:
+                pinned_version_id:
+                    type: string
+                    description: The pinned version, absent when tracking latest valid.
+                    format: uuid
+                resolved_version_id:
+                    type: string
+                    description: The currently resolved valid version.
+                    format: uuid
+                skill_id:
+                    type: string
+                    description: The attached skill ID.
+                    format: uuid
+            required:
+                - skill_id
+                - resolved_version_id
         AssistantToolsetRef:
             type: object
             properties:
@@ -44197,6 +44754,9 @@ components:
                 client_id_metadata_document_supported:
                     type: boolean
                     description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
+                client_setup_documentation_url:
+                    type: string
+                    description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
                 grant_types_supported:
                     type: array
                     items:
@@ -44585,6 +45145,9 @@ components:
                 client_id_metadata_document_supported:
                     type: boolean
                     description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
+                client_setup_documentation_url:
+                    type: string
+                    description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
                 grant_types_supported:
                     type: array
                     items:
@@ -44801,6 +45364,11 @@ components:
                     items:
                         type: string
                     description: 'Custom detection rule ids to attach as detectors: a match produces a finding.'
+                detection_scopes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskDetectionScope'
+                    description: Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Empty/omitted = all recommendations apply unchanged.
                 disabled_rules:
                     type: array
                     items:
@@ -45769,6 +46337,10 @@ components:
         DistributeSkillRequestBody:
             type: object
             properties:
+                assistant_id:
+                    type: string
+                    description: The assistant that carries the skill.
+                    format: uuid
                 id:
                     type: string
                     description: The skill ID.
@@ -45781,9 +46353,11 @@ components:
                     type: string
                     description: The plugin that carries the skill.
                     format: uuid
+            example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                plugin_id: 550e8400-e29b-41d4-a716-446655440001
             required:
                 - id
-                - plugin_id
         EmployeeDataFlowEdge:
             type: object
             properties:
@@ -46053,6 +46627,15 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        ExchangeRequestBody:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Email address of the enrolled user to mint a per-user key for. Resolved to a user within the authenticated org.
+                    example: dev@acme.corp
+            required:
+                - email
         ExportMcpMetadataRequestBody:
             type: object
             properties:
@@ -47173,6 +47756,38 @@ components:
             properties:
                 metadata:
                     $ref: '#/components/schemas/McpMetadata'
+        GetMcpServerActivityPayload:
+            type: object
+            properties:
+                recent_window_days:
+                    type: integer
+                    description: Size of the recent-activity window in days. A server with tool calls in the overall lookback window but none inside this window is flagged as stale. Defaults to 14.
+                    default: 14
+                    format: int64
+                    minimum: 1
+                    maximum: 90
+            description: Payload for per-MCP-server tool-call activity used by the Distribute MCP listing indicators
+        GetMcpServerActivityResult:
+            type: object
+            properties:
+                activity:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/McpServerActivity'
+                    description: One entry per MCP server (hosted or tunneled) that has received at least one tool call within the lookback window
+                lookback_days:
+                    type: integer
+                    description: The overall lookback window size in days (bounded by telemetry retention)
+                    format: int64
+                recent_window_days:
+                    type: integer
+                    description: The recent-activity window size in days that was applied
+                    format: int64
+            description: Per-MCP-server tool-call activity. Only servers with at least one tool call inside the lookback window are returned; a server absent from the list has never received a tool call (within the telemetry retention window).
+            required:
+                - activity
+                - recent_window_days
+                - lookback_days
         GetMetricsSummaryResult:
             type: object
             properties:
@@ -47315,6 +47930,9 @@ components:
                 session_capture_enabled:
                     type: boolean
                     description: Whether Claude Code session capture is enabled
+                skill_capture_metadata_only:
+                    type: boolean
+                    description: Whether skill capture stores activation metadata without requesting manifest content
                 skills_enabled:
                     type: boolean
                     description: Whether the Skills page is enabled for the organization
@@ -47339,6 +47957,7 @@ components:
                 - hooks_fail_open_enabled
                 - custom_model_keys_enabled
                 - skills_enabled
+                - skill_capture_metadata_only
                 - device_agent
         GetProjectForm:
             type: object
@@ -47457,14 +48076,30 @@ components:
         GetSkillResult:
             type: object
             properties:
+                adoption:
+                    $ref: '#/components/schemas/SkillAdoption'
+                assistant_count:
+                    type: integer
+                    description: The number of active, non-deleted assistants using the skill.
+                    format: int64
+                drift:
+                    $ref: '#/components/schemas/SkillDrift'
                 latest_version:
                     $ref: '#/components/schemas/SkillVersion'
+                sighting_timeline:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillSightingTimelinePoint'
+                    description: Daily activations in the adoption window.
                 skill:
                     $ref: '#/components/schemas/Skill'
             description: An active skill and its derived latest version.
             required:
                 - skill
-                - latest_version
+                - adoption
+                - sighting_timeline
+                - drift
+                - assistant_count
         GetToolUsageFilterOptionsPayload:
             type: object
             properties:
@@ -47923,9 +48558,23 @@ components:
                 name:
                     type: string
                     description: Activated skill name.
+                    maxLength: 256
+                raw_sha256:
+                    type: string
+                    description: SHA-256 of the raw skill manifest, if available.
+                    maxLength: 128
                 source:
                     type: string
                     description: Skill source or namespace, if available.
+                    maxLength: 256
+                source_level:
+                    type: string
+                    description: Scope where the skill was resolved, if available.
+                    maxLength: 64
+                source_path:
+                    type: string
+                    description: Local path where the skill was resolved, if available.
+                    maxLength: 4096
             description: Skill activation payload.
             required:
                 - name
@@ -49381,8 +50030,8 @@ components:
                 distributions:
                     type: array
                     items:
-                        $ref: '#/components/schemas/SkillDistribution'
-                    description: The active skill distributions in this page.
+                        $ref: '#/components/schemas/PluginSkillDistribution'
+                    description: The active plugin skill distributions in this page.
                 next_cursor:
                     type: string
                     description: Cursor for the next page; absent when exhausted.
@@ -49639,6 +50288,20 @@ components:
             description: Result type for listing tunneled MCP servers
             required:
                 - tunneled_mcp_servers
+        ListUnknownSkillActivationsResult:
+            type: object
+            properties:
+                activations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UnknownSkillActivation'
+                    description: Unknown activations in this page.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; absent when exhausted.
+            description: A page of terminal skill activations without exact version attribution.
+            required:
+                - activations
         ListUserGrantsResult:
             type: object
             properties:
@@ -50141,6 +50804,40 @@ components:
                 - visibility
                 - created_at
                 - updated_at
+        McpServerActivity:
+            type: object
+            properties:
+                last_tool_call_at:
+                    type: string
+                    description: ISO 8601 timestamp of the most recent tool call
+                    format: date-time
+                recent_tool_calls:
+                    type: integer
+                    description: Number of tool calls observed inside the recent-activity window
+                    format: int64
+                target_id:
+                    type: string
+                    description: 'Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers'
+                target_label:
+                    type: string
+                    description: User-facing label for the target
+                target_type:
+                    type: string
+                    description: MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
+                    enum:
+                        - hosted_mcp_server
+                        - tunneled_mcp_server
+                total_tool_calls:
+                    type: integer
+                    description: Number of tool calls observed across the whole lookback window
+                    format: int64
+            description: Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers)
+            required:
+                - target_type
+                - target_id
+                - target_label
+                - total_tool_calls
+                - recent_tool_calls
         MigrateLegacyGramRegistrationsForm:
             type: object
             properties:
@@ -51370,6 +52067,10 @@ components:
                     items:
                         $ref: '#/components/schemas/PluginServer'
                     description: Servers included in this plugin.
+                skill_count:
+                    type: integer
+                    description: Number of active skills in this plugin.
+                    format: int64
                 slug:
                     type: string
                     description: URL-safe identifier, unique per org.
@@ -51436,6 +52137,72 @@ components:
                 - policy
                 - sort_order
                 - created_at
+        PluginSkillDistribution:
+            type: object
+            properties:
+                channel:
+                    type: string
+                    description: The distribution channel.
+                    enum:
+                        - plugin
+                created_at:
+                    type: string
+                    description: When the distribution was created.
+                    format: date-time
+                created_by_user_id:
+                    type: string
+                    description: The user that created the distribution.
+                id:
+                    type: string
+                    description: The distribution ID.
+                    format: uuid
+                pinned_version_id:
+                    type: string
+                    description: The pinned version, absent when tracking the latest valid version.
+                    format: uuid
+                plugin_id:
+                    type: string
+                    description: The plugin that carries the skill.
+                    format: uuid
+                plugin_name:
+                    type: string
+                    description: The name of the plugin that carries the skill.
+                project_id:
+                    type: string
+                    description: The project that owns the distribution.
+                    format: uuid
+                resolved_version_id:
+                    type: string
+                    description: The version currently targeted by this distribution.
+                    format: uuid
+                skill_display_name:
+                    type: string
+                    description: The display name of the distributed skill.
+                skill_id:
+                    type: string
+                    description: The distributed skill ID.
+                    format: uuid
+                skill_name:
+                    type: string
+                    description: The canonical name of the distributed skill.
+                updated_at:
+                    type: string
+                    description: When the distribution configuration last changed.
+                    format: date-time
+            description: An active plugin distribution of a project skill.
+            required:
+                - id
+                - project_id
+                - skill_id
+                - skill_name
+                - skill_display_name
+                - plugin_id
+                - plugin_name
+                - resolved_version_id
+                - channel
+                - created_by_user_id
+                - created_at
+                - updated_at
         Project:
             type: object
             properties:
@@ -52059,6 +52826,7 @@ components:
                         - division_name
                         - cost_center_name
                         - email
+                        - hostname
                         - model
                         - hook_source
                         - account_type
@@ -52155,6 +52923,7 @@ components:
                         - division_name
                         - cost_center_name
                         - email
+                        - hostname
                         - model
                         - hook_source
                         - account_type
@@ -52562,6 +53331,9 @@ components:
                 client_id_metadata_document_supported:
                     type: boolean
                     description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+                client_setup_documentation_url:
+                    type: string
+                    description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.
                 created_at:
                     type: string
                     format: date-time
@@ -52938,9 +53710,14 @@ components:
                     items:
                         $ref: '#/components/schemas/RiskCategoryDefinition'
                     description: Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.
+                recommended_scopes_version:
+                    type: integer
+                    description: Version of the recommended-scope registry; bumps when any recommendation changes.
+                    format: int64
             description: Canonical risk category definitions used to classify findings, in classification-priority order. Consumers should iterate in order and pick the first match.
             required:
                 - categories
+                - recommended_scopes_version
         RiskCategoryDefinition:
             type: object
             properties:
@@ -52956,6 +53733,18 @@ components:
                 label:
                     type: string
                     description: Human-readable category label for UI rendering.
+                recommended_scope_applicable:
+                    type: boolean
+                    description: False when the category is session-scoped and message scoping does not apply (e.g. account_identity).
+                recommended_scope_exempt:
+                    type: string
+                    description: Centrally recommended CEL exemption predicate; empty = no exemption.
+                recommended_scope_include:
+                    type: string
+                    description: Centrally recommended CEL scope predicate for this category; empty = no include restriction.
+                recommended_scope_rationale:
+                    type: string
+                    description: User-facing explanation of the recommended scope and the consequences of disabling it. Empty when the category has no recommendation.
                 rule_id_prefix:
                     type: string
                     description: When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').
@@ -52976,6 +53765,10 @@ components:
                 - source
                 - rule_ids
                 - rule_id_prefix
+                - recommended_scope_include
+                - recommended_scope_exempt
+                - recommended_scope_rationale
+                - recommended_scope_applicable
         RiskChatSummary:
             type: object
             properties:
@@ -53049,6 +53842,20 @@ components:
                 - severity
                 - created_at
                 - updated_at
+        RiskDetectionScope:
+            type: object
+            properties:
+                category:
+                    type: string
+                    description: Risk category key this detection scope applies to.
+                scope_exempt:
+                    type: string
+                    description: 'CEL exemption predicate: the category skips a message when this boolean expression is true. Empty means no exemption.'
+                scope_include:
+                    type: string
+                    description: 'CEL scope predicate: the category detects on a message only when this boolean expression is true. Empty means every message surface is included.'
+            required:
+                - category
         RiskExclusion:
             type: object
             properties:
@@ -53258,6 +54065,11 @@ components:
                     items:
                         type: string
                     description: 'Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.'
+                detection_scopes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskDetectionScope'
+                    description: Per-category detection scopes specified for this policy. The scan surface merges these with the recommended scopes, the specified scope winning on category conflict. Empty means every recommendation applies unchanged.
                 disabled_rules:
                     type: array
                     items:
@@ -55031,6 +55843,7 @@ components:
                         - hooks_fail_open
                         - custom_model_keys
                         - skills
+                        - skill_capture_metadata_only
                     maxLength: 60
             required:
                 - feature_name
@@ -55473,11 +56286,19 @@ components:
                     format: date-time
                 display_name:
                     type: string
-                    description: The display name from the latest recorded manifest.
+                    description: The user-facing registry name.
+                first_seen_at:
+                    type: string
+                    description: When this skill was first activated.
+                    format: date-time
                 id:
                     type: string
                     description: The skill ID.
                     format: uuid
+                last_seen_at:
+                    type: string
+                    description: When this skill was most recently activated.
+                    format: date-time
                 latest_version_id:
                     type: string
                     description: The derived latest version ID, selected from immutable version creation order.
@@ -55489,12 +56310,16 @@ components:
                     type: string
                     description: The project that owns the skill.
                     format: uuid
+                seen_count:
+                    type: integer
+                    description: The number of reconciled activations observed for this skill.
+                    format: int64
                 source_kind:
                     type: string
                     description: How the skill entered the registry.
                 summary:
                     type: string
-                    description: The optional summary from the latest recorded manifest.
+                    description: The optional registry summary.
                 updated_at:
                     type: string
                     description: When the skill was last updated.
@@ -55511,10 +56336,35 @@ components:
                 - display_name
                 - source_kind
                 - classification
-                - latest_version_id
                 - version_count
+                - seen_count
                 - created_at
                 - updated_at
+        SkillAdoption:
+            type: object
+            properties:
+                activations_in_window:
+                    type: integer
+                    description: Activations observed during the rolling window.
+                    format: int64
+                distinct_hostnames:
+                    type: integer
+                    description: Distinct non-empty hostnames that activated the skill during the rolling window.
+                    format: int64
+                window_end:
+                    type: string
+                    description: End of the rolling adoption window.
+                    format: date-time
+                window_start:
+                    type: string
+                    description: Start of the rolling adoption window.
+                    format: date-time
+            description: Activation adoption metrics for a skill.
+            required:
+                - window_start
+                - window_end
+                - distinct_hostnames
+                - activations_in_window
         SkillBreakdownRow:
             type: object
             properties:
@@ -55536,11 +56386,19 @@ components:
         SkillDistribution:
             type: object
             properties:
+                assistant_id:
+                    type: string
+                    description: The assistant that carries the skill.
+                    format: uuid
+                assistant_name:
+                    type: string
+                    description: The name of the assistant that carries the skill.
                 channel:
                     type: string
                     description: The distribution channel.
                     enum:
                         - plugin
+                        - assistant
                 created_at:
                     type: string
                     description: When the distribution was created.
@@ -55571,26 +56429,97 @@ components:
                     type: string
                     description: The version currently targeted by this distribution.
                     format: uuid
+                skill_display_name:
+                    type: string
+                    description: The display name of the distributed skill.
                 skill_id:
                     type: string
                     description: The distributed skill ID.
                     format: uuid
+                skill_name:
+                    type: string
+                    description: The canonical name of the distributed skill.
                 updated_at:
                     type: string
                     description: When the distribution configuration last changed.
                     format: date-time
-            description: An active plugin distribution of a project skill.
+            description: An active plugin or assistant distribution of a project skill.
             required:
                 - id
                 - project_id
                 - skill_id
-                - plugin_id
-                - plugin_name
+                - skill_name
+                - skill_display_name
                 - resolved_version_id
                 - channel
                 - created_by_user_id
                 - created_at
                 - updated_at
+        SkillDrift:
+            type: object
+            properties:
+                active_machines:
+                    type: integer
+                    description: Machines that activated the skill during the window.
+                    format: int64
+                drifted_machines:
+                    type: integer
+                    description: Active machines whose latest attributed activation used another version.
+                    format: int64
+                indeterminate_machines:
+                    type: integer
+                    description: Active machines without a version or without one unambiguous target.
+                    format: int64
+                on_target_machines:
+                    type: integer
+                    description: Active machines whose latest activation used the target version.
+                    format: int64
+                target_state:
+                    type: string
+                    description: Whether the skill has no distribution target, one target, or conflicting targets.
+                    enum:
+                        - not_distributed
+                        - single
+                        - ambiguous
+                target_version_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Distinct versions targeted by active plugin distributions.
+                window_end:
+                    type: string
+                    description: End of the active-machine window.
+                    format: date-time
+                window_start:
+                    type: string
+                    description: Start of the active-machine window.
+                    format: date-time
+            description: Active-machine convergence against the skill's plugin distribution target.
+            required:
+                - window_start
+                - window_end
+                - target_state
+                - target_version_ids
+                - active_machines
+                - on_target_machines
+                - drifted_machines
+                - indeterminate_machines
+        SkillSightingTimelinePoint:
+            type: object
+            properties:
+                activation_count:
+                    type: integer
+                    description: Activations observed during the day.
+                    format: int64
+                bucket_start:
+                    type: string
+                    description: Start of the UTC day.
+                    format: date-time
+            description: A UTC-day activation bucket for a skill.
+            required:
+                - bucket_start
+                - activation_count
         SkillSummary:
             type: object
             properties:
@@ -55661,9 +56590,17 @@ components:
                 created_by_user_id:
                     type: string
                     description: The user that recorded this version.
+                derived_from_version_id:
+                    type: string
+                    description: The source version this version was derived from.
+                    format: uuid
                 description:
                     type: string
                     description: The optional description from this manifest version.
+                first_seen_at:
+                    type: string
+                    description: When this exact version was first activated.
+                    format: date-time
                 frontmatter:
                     type: object
                     description: All top-level frontmatter fields parsed from this manifest version.
@@ -55672,6 +56609,10 @@ components:
                     type: string
                     description: The skill version ID.
                     format: uuid
+                last_seen_at:
+                    type: string
+                    description: When this exact version was most recently activated.
+                    format: date-time
                 metadata:
                     type: object
                     description: Metadata parsed from this manifest version.
@@ -55679,6 +56620,10 @@ components:
                 raw_sha256:
                     type: string
                     description: The SHA-256 digest of the exact uploaded SKILL.md content.
+                seen_count:
+                    type: integer
+                    description: The number of activations attributed to this exact version.
+                    format: int64
                 skill_id:
                     type: string
                     description: The skill that owns this version.
@@ -55704,6 +56649,7 @@ components:
                 - validation_errors
                 - created_at
                 - created_by_user_id
+                - seen_count
         SourceEnvironmentLink:
             type: object
             properties:
@@ -56196,6 +57142,28 @@ components:
                 - failed_tool_calls
                 - avg_tool_latency_ms
                 - avg_session_duration_ms
+        TokenResult:
+            type: object
+            properties:
+                access_token:
+                    type: string
+                    description: The raw per-user API key (carries the `agent_user` scope). Returned exactly once; store it securely. Presented as the Gram-Key on downstream user-scoped endpoints.
+                expires_in:
+                    type: integer
+                    description: Always zero. The minted key has no expiry (api_keys has no TTL).
+                    format: int64
+                refresh_token:
+                    type: string
+                    description: Always empty. The minted key is long-lived and does not refresh; its lifecycle lever is revocation.
+                user_email:
+                    type: string
+                    description: Email the key was minted for.
+            description: A minted per-user API key for the device agent.
+            required:
+                - access_token
+                - refresh_token
+                - expires_in
+                - user_email
         TokensUnderManagement:
             type: object
             properties:
@@ -57812,6 +58780,10 @@ components:
         UndistributeSkillRequestBody:
             type: object
             properties:
+                assistant_id:
+                    type: string
+                    description: The assistant the skill was distributed to.
+                    format: uuid
                 id:
                     type: string
                     description: The skill ID.
@@ -57820,9 +58792,48 @@ components:
                     type: string
                     description: The plugin the skill was distributed to.
                     format: uuid
+            example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                plugin_id: 550e8400-e29b-41d4-a716-446655440001
             required:
                 - id
-                - plugin_id
+        UnknownSkillActivation:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The activation observation ID.
+                    format: uuid
+                provider:
+                    type: string
+                    description: The agent provider that reported the activation.
+                reason:
+                    type: string
+                    description: Why exact version attribution failed.
+                    enum:
+                        - invalid_name
+                        - unresolved_hash
+                        - ambiguous_hash
+                seen_at:
+                    type: string
+                    description: When the activation occurred.
+                    format: date-time
+                skill_name:
+                    type: string
+                    description: The skill name reported by the agent.
+                source:
+                    type: string
+                    description: The optional provider-specific source.
+                source_level:
+                    type: string
+                    description: The optional source precedence level.
+            description: A completed activation that could not be attributed to a skill version.
+            required:
+                - id
+                - skill_name
+                - provider
+                - seen_at
+                - reason
         UpdateAssistantForm:
             type: object
             properties:
@@ -58334,6 +59345,9 @@ components:
                 client_id_metadata_document_supported:
                     type: boolean
                     description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+                client_setup_documentation_url:
+                    type: string
+                    description: Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
                 grant_types_supported:
                     type: array
                     items:
@@ -58488,6 +59502,11 @@ components:
                     items:
                         type: string
                     description: 'Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.'
+                detection_scopes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskDetectionScope'
+                    description: Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Omit to preserve the current value; send empty to clear.
                 disabled_rules:
                     type: array
                     items:
@@ -58712,6 +59731,29 @@ components:
                 - project_id
                 - server_url
                 - name
+        UpdateSkillRequestBody:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                    description: The user-facing skill name.
+                    maxLength: 256
+                id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: The canonical skill name.
+                    maxLength: 64
+                summary:
+                    type: string
+                    description: The optional skill summary.
+                    maxLength: 1024
+            required:
+                - id
+                - name
+                - display_name
         UpdateToolsetForm:
             type: object
             properties:
@@ -58990,6 +60032,26 @@ components:
                     $ref: '#/components/schemas/Asset'
             required:
                 - asset
+        UploadSkillContentPayload:
+            type: object
+            properties:
+                content:
+                    type: string
+                    description: Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.
+                raw_sha256:
+                    type: string
+                    description: Lowercase SHA-256 of the raw content.
+                    pattern: ^[0-9a-f]{64}$
+                schema_version:
+                    type: string
+                    description: Contract version.
+                    enum:
+                        - hook.skill-content.v1
+            description: Content for a skill manifest requested by a prior hook ingest response.
+            required:
+                - schema_version
+                - raw_sha256
+                - content
         UpsertAllowedOriginForm:
             type: object
             properties:
@@ -59641,7 +60703,7 @@ tags:
     - name: admin
       description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: agent
-      description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.
+      description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.
     - name: aiIntegrations
       description: Manage organization-level AI provider integrations.
     - name: assets
@@ -59730,6 +60792,8 @@ tags:
       description: Fetch telemetry data for tools in Gram.
     - name: templates
       description: Manages re-usable prompt templates and higher-order tools for a project.
+    - name: tokenExchange
+      description: 'Device-agent token exchange: trade an org-scoped install credential (an API key with the ''agent'' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.'
     - name: tools
       description: Dashboard API for interacting with tools.
     - name: toolsets

@@ -29,6 +29,8 @@ type Service interface {
 	// Feature-first unified endpoint for hook events from supported coding
 	// assistants.
 	Ingest(context.Context, *IngestPayload) (res *IngestHookResult, err error)
+	// Uploads skill manifest content requested by the unified hook ingest endpoint.
+	UploadSkillContent(context.Context, *UploadSkillContentPayload) (err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
@@ -57,7 +59,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"claude", "cursor", "codex", "ingest", "logs", "metrics"}
+var MethodNames = [7]string{"claude", "cursor", "codex", "ingest", "uploadSkillContent", "logs", "metrics"}
 
 // ClaudeHookResult is the result type of the hooks service claude method.
 type ClaudeHookResult struct {
@@ -381,6 +383,12 @@ type HookSkillData struct {
 	Name string
 	// Skill source or namespace, if available.
 	Source *string
+	// Scope where the skill was resolved, if available.
+	SourceLevel *string
+	// Local path where the skill was resolved, if available.
+	SourcePath *string
+	// SHA-256 of the raw skill manifest, if available.
+	RawSha256 *string
 }
 
 // Tool call feature payload.
@@ -622,6 +630,20 @@ type OTELSum struct {
 	IsMonotonic *bool
 	// Data points
 	DataPoints []*OTELNumberDataPoint
+}
+
+// UploadSkillContentPayload is the payload type of the hooks service
+// uploadSkillContent method.
+type UploadSkillContentPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Contract version.
+	SchemaVersion string
+	// Lowercase SHA-256 of the raw content.
+	RawSha256 string
+	// Raw UTF-8 skill manifest content. The server rejects content whose UTF-8
+	// encoding exceeds 65,536 bytes.
+	Content string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

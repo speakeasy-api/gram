@@ -15,6 +15,7 @@ export const Dimension = {
   DivisionName: "division_name",
   CostCenterName: "cost_center_name",
   Email: "email",
+  Hostname: "hostname",
   Model: "model",
   HookSource: "hook_source",
   AccountType: "account_type",

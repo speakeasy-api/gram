@@ -28,7 +28,7 @@ describe("scopePhrase", () => {
     {
       name: "a user's agent",
       path: [ADAM, CLAUDE_CODE],
-      spend: "Adam's claude-code spend",
+      spend: "Adam's Claude Code spend",
     },
     {
       name: "two org levels",
@@ -38,7 +38,7 @@ describe("scopePhrase", () => {
     {
       name: "the full chain",
       path: [RND, ENGINEERING, ADAM, CLAUDE_CODE],
-      spend: "R&D's Engineering's Adam's claude-code spend",
+      spend: "R&D's Engineering's Adam's Claude Code spend",
     },
   ];
 
@@ -50,7 +50,7 @@ describe("scopePhrase", () => {
     expect(scopePhrase([], "sessions")).toBe("all project sessions");
     expect(scopePhrase([ADAM], "sessions")).toBe("Adam's sessions");
     expect(scopePhrase([ADAM, CLAUDE_CODE], "sessions")).toBe(
-      "Adam's claude-code sessions",
+      "Adam's Claude Code sessions",
     );
   });
 
@@ -70,6 +70,15 @@ describe("scopePhrase", () => {
   it("keeps an unset value legible", () => {
     expect(scopePhrase([at(Dimension.DivisionName, "")], "spend")).toBe(
       "(unset)'s spend",
+    );
+  });
+
+  // The empty user bucket is the company credential's spend (Claude Code on an
+  // API key/gateway emits no user identity), so it reads as the shared team
+  // account rather than "(unset)".
+  it("names the unset user bucket the team-wide account", () => {
+    expect(scopePhrase([at(Dimension.Email, "")], "spend")).toBe(
+      "Team-wide API Usage's spend",
     );
   });
 });
@@ -164,6 +173,13 @@ const CASES: Case[] = [
     split: "Showing all project spend — $4.04 across 3 Providers.",
   },
   {
+    dim: Dimension.Hostname,
+    title: "Cost by Device",
+    empty: "Showing all project spend, broken down by Device.",
+    single: "Showing all project spend — $4.04, all from a single Device.",
+    split: "Showing all project spend — $4.04 across 3 Devices.",
+  },
+  {
     dim: Dimension.Role,
     title: "Cost by Role",
     empty: "Showing all project spend, broken down by Role.",
@@ -236,7 +252,7 @@ describe("breakdown copy", () => {
         costLabel: COST,
         groupCount: 2,
       }),
-    ).toBe("Showing Adam's claude-code spend — $4.04 across 2 Models.");
+    ).toBe("Showing Adam's Claude Code spend — $4.04 across 2 Models.");
   });
 
   describe("the sessions axis", () => {
@@ -257,7 +273,7 @@ describe("breakdown copy", () => {
         "Showing all project sessions, listed individually.",
       );
       expect(sessions([ADAM, CLAUDE_CODE])).toBe(
-        "Showing Adam's claude-code sessions, listed individually.",
+        "Showing Adam's Claude Code sessions, listed individually.",
       );
     });
 

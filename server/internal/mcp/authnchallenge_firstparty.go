@@ -4,12 +4,33 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
+
+// HandleFirstPartyConnect is the chi handler at
+// `GET /mcp/{mcpSlug}/connect/first-party` on the toolset-keyed surface. It
+// resolves the slug to a `/mcp`-keyed ResolvedMcpEndpoint and delegates to
+// ServeFirstPartyConnect — the dashboard's entry point for linking an
+// issuer-gated toolset's upstream sessions. /x/mcp registers the equivalent
+// via its mcp_endpoint-keyed adapter (see xmcp.Service.handleFirstPartyConnect).
+func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
+	}
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	if err != nil {
+		return err
+	}
+	return s.ServeFirstPartyConnect(w, r, endpoint)
+}
 
 // ServeFirstPartyConnect is the dashboard's entry point for establishing the
 // upstream remote_sessions an issuer-gated MCP server needs. It mints a
@@ -25,8 +46,8 @@ import (
 // HandleIDPCallback enforces access once the IDP identifies the user).
 //
 // No ClientID/RedirectURI: a first-party challenge has no MCP client to grant
-// to or redirect back to. Once the user links the cards on the consent page,
-// the flow is terminal (they close the tab).
+// to or redirect back to. Once the user links every card on the consent page,
+// the flow is terminal and the page closes its dashboard-opened tab.
 func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)

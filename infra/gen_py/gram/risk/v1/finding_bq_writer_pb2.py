@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$gram/risk/v1/finding_bq_writer.proto\x12\x0cgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"D\n\x0f\x46indingBQWriter:1\x92\xb5\x18-\x12\x04\x08\x80\xf5$\x18\x01\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04R\x14gram.risk.v1.FindingB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$gram/risk/v1/finding_bq_writer.proto\x12\x0cgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"F\n\x0f\x46indingBQWriter:3\x18\x01\x92\xb5\x18-\x12\x04\x08\x80\xf5$\x18\x01\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04R\x14gram.risk.v1.FindingB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1'
   _globals['_FINDINGBQWRITER']._loaded_options = None
-  _globals['_FINDINGBQWRITER']._serialized_options = b'\222\265\030-\022\004\010\200\365$\030\001\"\002\010<2\t\n\002\010\n\022\003\010\330\004R\024gram.risk.v1.Finding'
+  _globals['_FINDINGBQWRITER']._serialized_options = b'\030\001\222\265\030-\022\004\010\200\365$\030\001\"\002\010<2\t\n\002\010\n\022\003\010\330\004R\024gram.risk.v1.Finding'
   _globals['_FINDINGBQWRITER']._serialized_start=83
-  _globals['_FINDINGBQWRITER']._serialized_end=151
+  _globals['_FINDINGBQWRITER']._serialized_end=153
 # @@protoc_insertion_point(module_scope)

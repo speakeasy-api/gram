@@ -224,15 +224,13 @@ function CreateTunneledMcpForm() {
           <Stack direction="horizontal" gap={2}>
             <Button type="submit" variant="primary" disabled={submitDisabled}>
               {createSource.isPending ? (
-                <>
-                  <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
-                  </Button.LeftIcon>
-                  <Button.Text>Adding</Button.Text>
-                </>
-              ) : (
-                <Button.Text>Add server</Button.Text>
-              )}
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+              ) : null}
+              <Button.Text>
+                {createSource.isPending ? "Adding" : "Add server"}
+              </Button.Text>
             </Button>
             <Button
               type="button"

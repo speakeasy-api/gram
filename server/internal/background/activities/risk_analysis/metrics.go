@@ -5,24 +5,31 @@ import (
 	"log/slog"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
+	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 )
 
 const (
-	meterRiskScanEvents          = "risk.scan.events"
-	meterRiskScanDuration        = "risk.scan.duration"
-	meterRiskRuleConfidence      = "risk.rule.confidence"
-	meterRiskPresidioScanSkipped = "risk.presidio.scan_skipped"
+	meterRiskScanEvents                         = "risk.scan.events"
+	meterRiskScanDuration                       = "risk.scan.duration"
+	meterRiskRuleConfidence                     = "risk.rule.confidence"
+	meterRiskPresidioScanSkipped                = "risk.presidio.scan_skipped"
+	meterRiskRecommendedScopePrefiltered        = "risk.recommended_scope.messages_prefiltered"
+	meterRiskRecommendedScopeFindingsSuppressed = "risk.recommended_scope.findings_suppressed"
 )
 
 type riskMetrics struct {
-	scanEvents          metric.Int64Counter
-	scanDuration        metric.Float64Histogram
-	ruleConfidence      metric.Float64Histogram
-	presidioScanSkipped metric.Int64Counter
+	scanEvents                          metric.Int64Counter
+	scanDuration                        metric.Float64Histogram
+	ruleConfidence                      metric.Float64Histogram
+	presidioScanSkipped                 metric.Int64Counter
+	recommendedScopeMessagesPrefiltered metric.Int64Counter
+	recommendedScopeFindingsSuppressed  metric.Int64Counter
 }
 
 func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *riskMetrics {
@@ -67,11 +74,31 @@ func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *ri
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskPresidioScanSkipped), attr.SlogError(err))
 	}
 
+	recommendedScopeMessagesPrefiltered, err := meter.Int64Counter(
+		meterRiskRecommendedScopePrefiltered,
+		metric.WithDescription("Messages skipped before expensive scanners by recommended category scopes"),
+		metric.WithUnit("{message}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskRecommendedScopePrefiltered), attr.SlogError(err))
+	}
+
+	recommendedScopeFindingsSuppressed, err := meter.Int64Counter(
+		meterRiskRecommendedScopeFindingsSuppressed,
+		metric.WithDescription("Findings suppressed by recommended category scopes"),
+		metric.WithUnit("{finding}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskRecommendedScopeFindingsSuppressed), attr.SlogError(err))
+	}
+
 	return &riskMetrics{
-		scanEvents:          scanEvents,
-		scanDuration:        scanDuration,
-		ruleConfidence:      ruleConfidence,
-		presidioScanSkipped: presidioScanSkipped,
+		scanEvents:                          scanEvents,
+		scanDuration:                        scanDuration,
+		ruleConfidence:                      ruleConfidence,
+		presidioScanSkipped:                 presidioScanSkipped,
+		recommendedScopeMessagesPrefiltered: recommendedScopeMessagesPrefiltered,
+		recommendedScopeFindingsSuppressed:  recommendedScopeFindingsSuppressed,
 	}
 }
 
@@ -99,5 +126,27 @@ func (m *riskMetrics) RecordFindingConfidence(ctx context.Context, orgID string,
 	m.ruleConfidence.Record(ctx, confidence, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attr.RiskRuleID(ruleID),
+	))
+}
+
+func (m *riskMetrics) RecordRecommendedScopePrefiltered(ctx context.Context, orgID, source string, count int) {
+	if count <= 0 || m == nil || m.recommendedScopeMessagesPrefiltered == nil {
+		return
+	}
+	m.recommendedScopeMessagesPrefiltered.Add(ctx, int64(count), metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attr.RiskSource(source),
+		attribute.Int("risk.recommended_scopes.version", recommendedscopes.Version),
+	))
+}
+
+func (m *riskMetrics) RecordRecommendedScopeSuppressed(ctx context.Context, orgID string, cat categories.Category) {
+	if m == nil || m.recommendedScopeFindingsSuppressed == nil {
+		return
+	}
+	m.recommendedScopeFindingsSuppressed.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attribute.String("risk.category", string(cat)),
+		attribute.Int("risk.recommended_scopes.version", recommendedscopes.Version),
 	))
 }

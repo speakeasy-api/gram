@@ -106,6 +106,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					// policy's AnalyzerConfig (defaults to true). The zero value here
 					// does NOT disable the library; it is required only by exhaustruct.
 					BuiltinPresetsEnabled: false,
+					DetectionScopes:       nil,
 				})
 				futures = append(futures, f)
 			}

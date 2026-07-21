@@ -46,8 +46,8 @@ jobs:
       preview-tag: ${{ steps.preview-retag.outputs.tag }}
     steps:
       - name: Checkout source code
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         name: Check for changed packages
         id: filter
         with:
@@ -212,7 +212,7 @@ jobs:
         include: ${{ fromJSON(needs.changes.outputs.preview-retag-components) }}
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
         with:
           # Full history so the retag step can compare against main commits.
           fetch-depth: 0
@@ -252,7 +252,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
         with:
           # Full history so hk can diff against the PR merge base.
           fetch-depth: 0
@@ -311,7 +311,7 @@ jobs:
       GOMAXPROCS: 4
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Download server build artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -372,7 +372,7 @@ jobs:
     if: needs.changes.outputs.pystreams == 'true'
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
@@ -428,7 +428,7 @@ jobs:
     if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -527,7 +527,7 @@ jobs:
 
       - name: Extract assistant runtime metadata for GCR
         id: assistantMetaGcr
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-assistant-runtime
           tags: |
@@ -557,7 +557,7 @@ jobs:
 
       - name: "[DEV] Extract assistant runtime metadata"
         id: assistantMetaDev
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.assistantFlyCreateDev.outputs.flyAppRegistry }}
           tags: |
@@ -587,7 +587,7 @@ jobs:
 
       - name: "[PROD] Extract assistant runtime metadata"
         id: assistantMetaProd
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.assistantFlyCreateProd.outputs.flyAppRegistry }}
           tags: |
@@ -616,7 +616,7 @@ jobs:
     if: needs.changes.outputs.otel-collector == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && !github.event.pull_request.head.repo.fork))
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -668,7 +668,7 @@ jobs:
 
       - name: "[DEV] Extract collector metadata"
         id: collectorMetaDev
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.collectorFlyCreateDev.outputs.flyAppRegistry }}
           tags: |
@@ -705,7 +705,7 @@ jobs:
 
       - name: "[PROD] Extract collector metadata"
         id: collectorMetaProd
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.collectorFlyCreateProd.outputs.flyAppRegistry }}
           tags: |
@@ -757,7 +757,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -795,7 +795,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
         with:
           fetch-depth: 0
 
@@ -819,7 +819,7 @@ jobs:
         run: bash .mise-tasks/lint/migrations.sh
 
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@v1.14.5
+        uses: ariga/atlas-action/migrate/lint@v1.15.6
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -830,7 +830,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@v1.14.5
+        uses: ariga/atlas-action/migrate/lint@v1.15.6
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -901,7 +901,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
         with:
           fetch-depth: 0
 
@@ -922,7 +922,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@v1.14.5
+        uses: ariga/atlas-action/migrate/push@v1.15.6
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -930,7 +930,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@v1.14.5
+        uses: ariga/atlas-action/migrate/push@v1.15.6
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -947,7 +947,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1009,7 +1009,7 @@ jobs:
           - 5439:5432
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1102,7 +1102,7 @@ jobs:
       GOMAXPROCS: 4
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1168,7 +1168,7 @@ jobs:
     if: needs.changes.outputs.pystreams == 'true'
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1223,7 +1223,7 @@ jobs:
           - 5439:5432
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1277,7 +1277,7 @@ jobs:
       GOMAXPROCS: 4
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1320,7 +1320,7 @@ jobs:
       GOMAXPROCS: 4
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1377,7 +1377,7 @@ jobs:
       TESTCONTAINERS_RYUK_DISABLED: true
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1418,7 +1418,7 @@ jobs:
       GRAM_GIT_SHA: "${{ github.sha }}"
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1447,6 +1447,16 @@ jobs:
         env:
           NODE_ENV: production
         run: mise exec --env viteprod -- pnpm build
+
+      # Published for upload-dashboard-assets so the CDN bucket receives the
+      # exact assets this image ships with (a rebuild there could hash
+      # differently, e.g. GRAM_GIT_SHA is only set in this job).
+      - name: Upload built assets artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dashboard-assets
+          path: client/dashboard/dist/assets
+          retention-days: 2
 
       - name: Upload source maps to DataDog
         env:
@@ -1496,6 +1506,62 @@ jobs:
         if: success()
         run: pnpm store prune
 
+  upload-dashboard-assets:
+    name: Upload dashboard assets to CDN bucket (${{ matrix.environment }})
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: [docker-build-client]
+    # Syncs the dist/assets the dashboard image was built from (via artifact,
+    # not a rebuild) into the private GCS buckets that will become the CDN
+    # origins (gram-infra: infra/terraform/k8s/cdn-bucket.tf). Runs on PRs too
+    # so preview images' hashed assets are already in the buckets before any
+    # deploy references them. Forks and dependabot are skipped: their runs
+    # cannot mint the OIDC token needed for workload identity auth.
+    if: |
+      !cancelled() &&
+      needs.docker-build-client.result == 'success' &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      !github.event.pull_request.head.repo.fork
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: dev
+            bucket_secret: ASSET_BUCKET_DEV
+            workload_identity_provider_secret: GCP_WORKLOAD_IDENTITY_PROVIDER_DEV
+            service_account_secret: ASSET_BUCKET_SERVICE_ACCOUNT_DEV
+          - environment: prod
+            bucket_secret: ASSET_BUCKET_PROD
+            workload_identity_provider_secret: GCP_WORKLOAD_IDENTITY_PROVIDER_PROD
+            service_account_secret: ASSET_BUCKET_SERVICE_ACCOUNT_PROD
+    steps:
+      - name: Download built assets artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dashboard-assets
+          path: dist/assets
+
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ secrets[matrix.workload_identity_provider_secret] }}
+          service_account: ${{ secrets[matrix.service_account_secret] }}
+
+      - name: Upload assets to bucket
+        uses: google-github-actions/upload-cloud-storage@6397bd7208e18d13ba2619ee21b9873edc94427a # v3.0.0
+        with:
+          path: dist/assets
+          destination: ${{ secrets[matrix.bucket_secret] }}/assets
+          parent: false
+          # The CDN compresses at the edge (compression_mode AUTOMATIC) and
+          # skips responses that are already content-encoded, so objects must
+          # be stored uncompressed.
+          gzip: false
+          process_gcloudignore: false
+          # Filenames are content-hashed, so they are safe to cache forever.
+          headers: |-
+            cache-control: public, max-age=31536000, immutable
+
   client-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, sdk-gen-check]
@@ -1505,7 +1571,7 @@ jobs:
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1559,7 +1625,7 @@ jobs:
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1601,7 +1667,7 @@ jobs:
       SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1646,7 +1712,7 @@ jobs:
     if: needs.changes.outputs.functions == 'true'
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1746,7 +1812,7 @@ jobs:
             apko-config: ./images/nodejs24-alpine3.23.yaml
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1838,7 +1904,7 @@ jobs:
       - name: Extract Docker metadata
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         id: meta
-        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: |
             ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
@@ -1892,7 +1958,7 @@ jobs:
     if: needs.changes.outputs.tsframework == 'true'
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
@@ -1941,6 +2007,7 @@ jobs:
       - server-test
       - docker-build-server
       - docker-build-client
+      - upload-dashboard-assets
       - docker-build-pystreams
       - client-build-lint
       - client-test
@@ -1991,7 +2058,7 @@ jobs:
       SVIX_OPENAPI_FILE: server/internal/outbox/events/catalog_gen.yaml
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
       - name: Upload event types to Svix (dev)
         uses: svix/svix-event-type-import-action@4e3a9d81b05db38e57187434b6b291e1fef50250 # v1.2.0
         with:
@@ -2007,8 +2074,26 @@ jobs:
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [ci-gate]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      [
+        ci-gate,
+        docker-build-server,
+        assistant-runtime-image,
+        svix-sync-webhooks,
+      ]
+    # ci-gate's transitive needs include path-filtered jobs, and a skipped job
+    # anywhere in the needs chain skips dependents under the default success()
+    # condition even when every direct need succeeded. !cancelled() opts out of
+    # that propagation, so each need's result must be checked explicitly: ci-gate
+    # green gates the release, and the image/sync jobs succeeding (not skipped)
+    # keeps docs-only pushes from dispatching one.
+    if: >-
+      !cancelled() &&
+      needs.ci-gate.result == 'success' &&
+      needs.docker-build-server.result == 'success' &&
+      needs.assistant-runtime-image.result == 'success' &&
+      needs.svix-sync-webhooks.result == 'success' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Generate GitHub App Token
         id: generate-token
@@ -2034,7 +2119,7 @@ jobs:
     if: needs.changes.outputs.tunnel == 'true'
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
       - name: Build image (no push)

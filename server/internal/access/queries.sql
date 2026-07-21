@@ -29,6 +29,21 @@ WHERE organization_id = @organization_id
   )
 ORDER BY principal_urn;
 
+-- name: ListPrincipalGrantsByResourceIDs :many
+-- Returns grant rows for a set of resources under one scope in an org. Batched
+-- form of ListPrincipalGrantsByResource that stays scoped to the caller's
+-- resource ids, so listing one project's resources never loads the whole org.
+-- Callers group the results by the selector's resource_id.
+SELECT principal_urn, scope, effect, selectors
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = @scope
+  AND selectors @> jsonb_build_object(
+    'resource_kind', sqlc.arg(resource_kind)::text
+  )
+  AND selectors->>'resource_id' = ANY(@resource_ids::text[])
+ORDER BY principal_urn;
+
 -- name: UpsertPrincipalGrant :one
 -- Creates or updates a single grant row. On conflict (same org/principal/scope/effect/selectors),
 -- the updated_at is refreshed. Uses COALESCE to match the functional unique index.
@@ -498,6 +513,7 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE our.organization_id = @organization_id
   AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
 ORDER BY users.email, users.id;
 
 -- name: ListAccessNotificationUsers :many

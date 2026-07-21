@@ -37,7 +37,7 @@ function serverMatchesRef(server: PluginServer, ref: HostedServerRef): boolean {
 // A little fanned stack of client badges — purely decorative, gestures at
 // "this is what publishing unlocks" without claiming these are the only
 // supported clients.
-function ClientIconFan(): React.JSX.Element {
+export function ClientIconFan(): React.JSX.Element {
   return (
     <div className="relative hidden h-36 shrink-0 sm:block" aria-hidden="true">
       <div className="absolute inset-6 rounded-full bg-black/15 blur-2xl" />
@@ -222,6 +222,10 @@ export function PluginStatusBanner({
     }
   };
 
+  let saveButtonText = "Publish";
+  if (isPublished) saveButtonText = "Update";
+  if (isSaving) saveButtonText = "Publishing";
+
   return (
     <div className="border border-border/70 relative overflow-hidden rounded-xl shadow-sm">
       <div
@@ -317,15 +321,12 @@ export function PluginStatusBanner({
                   disabled={!hasChanges || isSaving}
                   onClick={() => void handleSave()}
                 >
-                  {isSaving ? (
-                    <>
-                      <Spinner /> Publishing
-                    </>
-                  ) : isPublished ? (
-                    "Update"
-                  ) : (
-                    "Publish"
+                  {isSaving && (
+                    <Button.LeftIcon>
+                      <Spinner />
+                    </Button.LeftIcon>
                   )}
+                  <Button.Text>{saveButtonText}</Button.Text>
                 </Button>
               </div>
             )}

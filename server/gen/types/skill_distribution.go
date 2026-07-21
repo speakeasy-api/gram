@@ -15,10 +15,18 @@ type SkillDistribution struct {
 	ProjectID string
 	// The distributed skill ID.
 	SkillID string
+	// The canonical name of the distributed skill.
+	SkillName string
+	// The display name of the distributed skill.
+	SkillDisplayName string
 	// The plugin that carries the skill.
-	PluginID string
+	PluginID *string
 	// The name of the plugin that carries the skill.
-	PluginName string
+	PluginName *string
+	// The assistant that carries the skill.
+	AssistantID *string
+	// The name of the assistant that carries the skill.
+	AssistantName *string
 	// The pinned version, absent when tracking the latest valid version.
 	PinnedVersionID *string
 	// The version currently targeted by this distribution.

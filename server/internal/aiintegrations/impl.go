@@ -2,6 +2,8 @@ package aiintegrations
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -43,7 +45,7 @@ var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
 type ConfigPoller interface {
-	Poll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error
+	Poll(ctx context.Context, organizationSlug string, syncID uuid.UUID) error
 }
 
 func NewService(
@@ -282,8 +284,29 @@ func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, c
 	if s.configPoller == nil {
 		return nil
 	}
-	if err := s.configPoller.Poll(ctx, organizationSlug, configID, provider); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "start ai integration usage poll")
+
+	schedules, err := s.store.ListSyncSchedules(ctx, configID)
+	if err != nil {
+		return err
+	}
+	syncIDsBySchedule := make(map[string]uuid.UUID, len(schedules))
+	for _, syncSchedule := range schedules {
+		syncIDsBySchedule[syncSchedule.Schedule] = syncSchedule.ID
+	}
+
+	var startErr error
+	for _, syncSchedule := range syncSchedulesFor(provider) {
+		syncID, ok := syncIDsBySchedule[syncSchedule.schedule]
+		if !ok {
+			startErr = errors.Join(startErr, fmt.Errorf("missing %s sync schedule", syncSchedule.schedule))
+			continue
+		}
+		if err := s.configPoller.Poll(ctx, organizationSlug, syncID); err != nil {
+			startErr = errors.Join(startErr, fmt.Errorf("start %s schedule: %w", syncSchedule.schedule, err))
+		}
+	}
+	if startErr != nil {
+		return oops.E(oops.CodeUnexpected, startErr, "start ai integration sync schedules")
 	}
 	return nil
 }

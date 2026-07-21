@@ -17,15 +17,6 @@ import tailwindcss from "@tailwindcss/vite";
 const manualChunkGroups: [string, string[]][] = [
   ["lucide-react", ["lucide-react"]],
   [
-    "three",
-    [
-      "@react-three/drei",
-      "@react-three/fiber",
-      "@react-three/postprocessing",
-      "three",
-    ],
-  ],
-  [
     "externals",
     [
       "posthog-js",

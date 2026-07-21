@@ -2,7 +2,7 @@
 import { useTelemetry } from "@/contexts/Telemetry.tsx";
 import { cn } from "@/lib/utils.ts";
 import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
-import { InitialChoiceStep } from "@/pages/onboarding/Wizard.tsx";
+import { InitialChoiceStep } from "@/components/onboarding-choice-step.tsx";
 import { useRoutes } from "@/routes.tsx";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import React, { ReactElement } from "react";
@@ -239,9 +239,9 @@ export function EmptyState({
 
   // For non-empty projects or loading state, show the standard empty state
   let CTA: React.ReactNode = (
-    <routes.onboarding.Link>
+    <routes.sources.Link>
       <Button size="sm">Get Started</Button>
-    </routes.onboarding.Link>
+    </routes.sources.Link>
   );
 
   if (isLoading) {

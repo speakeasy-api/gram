@@ -16,29 +16,33 @@ import (
 
 // Client is the "skills" service client.
 type Client struct {
-	CreateEndpoint            goa.Endpoint
-	AddVersionEndpoint        goa.Endpoint
-	ListEndpoint              goa.Endpoint
-	GetEndpoint               goa.Endpoint
-	ListVersionsEndpoint      goa.Endpoint
-	ArchiveEndpoint           goa.Endpoint
-	DistributeEndpoint        goa.Endpoint
-	UndistributeEndpoint      goa.Endpoint
-	ListDistributionsEndpoint goa.Endpoint
+	CreateEndpoint                 goa.Endpoint
+	AddVersionEndpoint             goa.Endpoint
+	UpdateEndpoint                 goa.Endpoint
+	ListEndpoint                   goa.Endpoint
+	GetEndpoint                    goa.Endpoint
+	ListUnknownActivationsEndpoint goa.Endpoint
+	ListVersionsEndpoint           goa.Endpoint
+	ArchiveEndpoint                goa.Endpoint
+	DistributeEndpoint             goa.Endpoint
+	UndistributeEndpoint           goa.Endpoint
+	ListDistributionsEndpoint      goa.Endpoint
 }
 
 // NewClient initializes a "skills" service client given the endpoints.
-func NewClient(create, addVersion, list, get, listVersions, archive, distribute, undistribute, listDistributions goa.Endpoint) *Client {
+func NewClient(create, addVersion, update, list, get, listUnknownActivations, listVersions, archive, distribute, undistribute, listDistributions goa.Endpoint) *Client {
 	return &Client{
-		CreateEndpoint:            create,
-		AddVersionEndpoint:        addVersion,
-		ListEndpoint:              list,
-		GetEndpoint:               get,
-		ListVersionsEndpoint:      listVersions,
-		ArchiveEndpoint:           archive,
-		DistributeEndpoint:        distribute,
-		UndistributeEndpoint:      undistribute,
-		ListDistributionsEndpoint: listDistributions,
+		CreateEndpoint:                 create,
+		AddVersionEndpoint:             addVersion,
+		UpdateEndpoint:                 update,
+		ListEndpoint:                   list,
+		GetEndpoint:                    get,
+		ListUnknownActivationsEndpoint: listUnknownActivations,
+		ListVersionsEndpoint:           listVersions,
+		ArchiveEndpoint:                archive,
+		DistributeEndpoint:             distribute,
+		UndistributeEndpoint:           undistribute,
+		ListDistributionsEndpoint:      listDistributions,
 	}
 }
 
@@ -86,6 +90,28 @@ func (c *Client) AddVersion(ctx context.Context, p *AddVersionPayload) (res *Rec
 	return ires.(*RecordSkillResult), nil
 }
 
+// Update calls the "update" endpoint of the "skills" service.
+// Update may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Update(ctx context.Context, p *UpdatePayload) (res *types.Skill, err error) {
+	var ires any
+	ires, err = c.UpdateEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Skill), nil
+}
+
 // List calls the "list" endpoint of the "skills" service.
 // List may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -128,6 +154,29 @@ func (c *Client) Get(ctx context.Context, p *GetPayload) (res *GetSkillResult, e
 		return
 	}
 	return ires.(*GetSkillResult), nil
+}
+
+// ListUnknownActivations calls the "listUnknownActivations" endpoint of the
+// "skills" service.
+// ListUnknownActivations may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListUnknownActivations(ctx context.Context, p *ListUnknownActivationsPayload) (res *ListUnknownSkillActivationsResult, err error) {
+	var ires any
+	ires, err = c.ListUnknownActivationsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListUnknownSkillActivationsResult), nil
 }
 
 // ListVersions calls the "listVersions" endpoint of the "skills" service.

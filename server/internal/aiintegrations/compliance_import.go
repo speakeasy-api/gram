@@ -27,8 +27,8 @@ const (
 	anthropicComplianceActivityCreated = "claude_chat_created"
 	anthropicComplianceActivityUpdated = "claude_chat_updated"
 
-	anthropicComplianceSourceWeb     = "Claude Chat Web"
-	anthropicComplianceSourceDesktop = "Claude Chat Desktop"
+	anthropicComplianceSourceWeb     = "claude-chat-web"
+	anthropicComplianceSourceDesktop = "claude"
 
 	anthropicCompliancePageLimit          = 1000
 	anthropicComplianceActivityPageLimit  = 100
@@ -240,6 +240,7 @@ func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Con
 			if err := repo.New(s.db).AdvanceUsagePollCursor(ctx, repo.AdvanceUsagePollCursorParams{
 				LastCursorID:          conv.ToPGText(batch.activitiesCursor),
 				AiIntegrationConfigID: cfg.ID,
+				Schedule:              conv.ToPGText(ScheduleAnthropicCompliance),
 			}); err != nil {
 				return oops.E(oops.CodeUnexpected, err, "advance anthropic compliance activities cursor")
 			}

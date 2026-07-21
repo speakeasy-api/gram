@@ -48,6 +48,9 @@ type GetProductFeaturesResponseBody struct {
 	CustomModelKeysEnabled *bool `form:"custom_model_keys_enabled,omitempty" json:"custom_model_keys_enabled,omitempty" xml:"custom_model_keys_enabled,omitempty"`
 	// Whether the Skills page is enabled for the organization
 	SkillsEnabled *bool `form:"skills_enabled,omitempty" json:"skills_enabled,omitempty" xml:"skills_enabled,omitempty"`
+	// Whether skill capture stores activation metadata without requesting manifest
+	// content
+	SkillCaptureMetadataOnly *bool `form:"skill_capture_metadata_only,omitempty" json:"skill_capture_metadata_only,omitempty" xml:"skill_capture_metadata_only,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -452,6 +455,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		HooksFailOpenEnabled:         *body.HooksFailOpenEnabled,
 		CustomModelKeysEnabled:       *body.CustomModelKeysEnabled,
 		SkillsEnabled:                *body.SkillsEnabled,
+		SkillCaptureMetadataOnly:     *body.SkillCaptureMetadataOnly,
 		DeviceAgent:                  *body.DeviceAgent,
 	}
 
@@ -793,6 +797,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.SkillsEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("skills_enabled", "body"))
+	}
+	if body.SkillCaptureMetadataOnly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_capture_metadata_only", "body"))
 	}
 	if body.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))

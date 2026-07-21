@@ -69,6 +69,7 @@ func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.
 		// department_name and job_title are allowlisted predefined
 		// attributes; custom_thing and manager_email must be filtered out.
 		Attributes:        []byte(`{"department_name":"Engineering","job_title":"Platform Engineer","custom_thing":"not-stamped","manager_email":"boss@example.com"}`),
+		RestoreDeleted:    true,
 		WorkosCreatedAt:   conv.ToPGTimestamptz(seedTime),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(seedTime),
 		WorkosLastEventID: conv.ToPGText("event_directory_user_" + suffix),
@@ -219,6 +220,7 @@ func TestUserInfoResolver_HydratesAndCachesUntilExpiry(t *testing.T) {
 		WorkosDirectoryUserID: "directory_user_" + suffix,
 		Email:                 conv.ToPGText(suffix + "@hydrate.example.com"),
 		Attributes:            []byte(`{"department_name":"Sales"}`),
+		RestoreDeleted:        true,
 		WorkosCreatedAt:       conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosUpdatedAt:       conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosLastEventID:     conv.ToPGText("event_directory_user_update_" + suffix),
