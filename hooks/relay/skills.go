@@ -565,16 +565,27 @@ func openValidatedSkill(path, root string) (*os.File, bool) {
 	if err != nil || !filepath.IsLocal(rel) {
 		return nil, false
 	}
-	rootDir, err := os.OpenRoot(root)
+	// Skill directories are commonly symlinks (.claude/skills/<name> ->
+	// ../../.agents/skills/<name>) that agents follow when loading the
+	// manifest, so capture must follow them too. Resolving first also pins
+	// down the real file so the no-follow open below cannot be redirected
+	// afterwards. The resolved target must still look like a skill manifest:
+	// a regular file named SKILL.md, not a link to some arbitrary file.
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil || filepath.Base(resolved) != "SKILL.md" {
+		return nil, false
+	}
+	rootDir, err := os.OpenRoot(filepath.Dir(resolved))
 	if err != nil {
 		return nil, false
 	}
-	info, err := rootDir.Stat(rel)
+	name := filepath.Base(resolved)
+	info, err := rootDir.Stat(name)
 	if err != nil || !info.Mode().IsRegular() {
 		_ = rootDir.Close()
 		return nil, false
 	}
-	file, err := rootDir.Open(rel)
+	file, err := rootDir.Open(name)
 	closeRootErr := rootDir.Close()
 	if err != nil || closeRootErr != nil {
 		if file != nil {
