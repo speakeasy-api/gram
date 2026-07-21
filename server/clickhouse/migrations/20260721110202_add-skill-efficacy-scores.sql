@@ -22,6 +22,8 @@ CREATE TABLE `skill_efficacy_scores` (
   `judge_prompt_version` LowCardinality(String) COMMENT 'Judge prompt version.',
   CONSTRAINT `score_valid` CHECK isFinite(score) AND score >= 0 AND score <= 1,
   CONSTRAINT `rationale_valid` CHECK lengthUTF8(rationale) <= 200,
+  CONSTRAINT `est_turns_saved_valid` CHECK isNull(est_turns_saved) OR (isFinite(est_turns_saved) AND est_turns_saved >= 0),
+  CONSTRAINT `est_minutes_saved_valid` CHECK isNull(est_minutes_saved) OR (isFinite(est_minutes_saved) AND est_minutes_saved >= 0),
   CONSTRAINT `surface_valid` CHECK surface IN ('dev', 'assistant'),
   CONSTRAINT `roi_confidence_valid` CHECK isNull(roi_confidence) OR roi_confidence IN ('low', 'med', 'high'),
   CONSTRAINT `flags_valid` CHECK arrayAll(flag -> flag IN ('ignored', 'misapplied', 'partially_followed', 'harmful'), flags)
