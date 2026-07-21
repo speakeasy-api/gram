@@ -11,7 +11,11 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useChatDeleteMutation } from "@gram/client/react-query/chatDelete.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
@@ -456,6 +460,10 @@ export function CostsExplorer(): JSX.Element {
         ],
         enabled: projectReady && !axisResolving,
         throwOnError: false,
+        // Re-pivoting or drilling changes the query key; keep the previous
+        // slice's rows on screen while the new cut loads, so the page updates
+        // in place instead of flashing every widget back to a skeleton.
+        placeholderData: keepPreviousData,
         queryFn: () =>
           unwrapAsync(
             telemetryQuery(client, {
@@ -495,6 +503,7 @@ export function CostsExplorer(): JSX.Element {
     ],
     enabled: projectReady && !axisResolving,
     throwOnError: false,
+    placeholderData: keepPreviousData,
     queryFn: () =>
       unwrapAsync(
         telemetryQuery(client, {
@@ -577,6 +586,7 @@ export function CostsExplorer(): JSX.Element {
     ],
     enabled: projectReady && showSessionsWidget,
     throwOnError: false,
+    placeholderData: keepPreviousData,
     queryFn: () =>
       unwrapAsync(
         telemetryListSessions(client, {
@@ -751,6 +761,7 @@ export function CostsExplorer(): JSX.Element {
     ],
     enabled: projectReady && !axisResolving && !!mixDimA,
     throwOnError: false,
+    placeholderData: keepPreviousData,
     queryFn: () =>
       unwrapAsync(
         telemetryQuery(client, {
@@ -775,6 +786,7 @@ export function CostsExplorer(): JSX.Element {
     ],
     enabled: projectReady && !axisResolving && !!mixDimB,
     throwOnError: false,
+    placeholderData: keepPreviousData,
     queryFn: () =>
       unwrapAsync(
         telemetryQuery(client, {
