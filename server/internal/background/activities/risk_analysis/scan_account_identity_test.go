@@ -128,7 +128,7 @@ func seedChatMessage(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.
 
 func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool) *risk_analysis.AnalyzeBatch {
 	t.Helper()
-	return risk_analysis.NewAnalyzeBatch(
+	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -148,6 +148,8 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool) *risk_anal
 		mustCELEngine(t),
 		nil,
 	)
+	require.NoError(t, err)
+	return ab
 }
 
 func runAccountIdentityBatch(t *testing.T, ab *risk_analysis.AnalyzeBatch, td testData, policyID uuid.UUID, policyVersion int64, messageIDs []uuid.UUID, messageTypes ...string) {
