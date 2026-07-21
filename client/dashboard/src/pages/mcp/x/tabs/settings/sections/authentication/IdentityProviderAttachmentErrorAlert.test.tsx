@@ -1,7 +1,14 @@
 import { ProxyRegistrationError } from "@/lib/proxyRegisterUpstreamClient";
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
+
+const scrollIntoView = vi.fn();
+
+beforeEach(() => {
+  scrollIntoView.mockReset();
+  HTMLElement.prototype.scrollIntoView = scrollIntoView;
+});
 
 afterEach(cleanup);
 
@@ -50,5 +57,18 @@ describe("IdentityProviderAttachmentErrorAlert", () => {
     expect(
       screen.getByText("No additional error details were provided."),
     ).toBeDefined();
+  });
+
+  it("scrolls the alert into view when an error appears", () => {
+    render(
+      <IdentityProviderAttachmentErrorAlert
+        error={new ProxyRegistrationError(400, "Registration rejected.")}
+      />,
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "nearest",
+    });
   });
 });

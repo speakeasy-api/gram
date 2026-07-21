@@ -1,6 +1,7 @@
 import { Type } from "@/components/ui/type";
 import { ProxyRegistrationError } from "@/lib/proxyRegisterUpstreamClient";
 import { Alert, Stack } from "@speakeasy-api/moonshine";
+import { useEffect, useRef } from "react";
 
 type ErrorContent = {
   title: string;
@@ -36,13 +37,26 @@ export function IdentityProviderAttachmentErrorAlert({
 }: {
   error: unknown;
 }): JSX.Element | null {
+  const alertRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!error) {
+      return;
+    }
+
+    alertRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, [error]);
+
   const content = errorContent(error);
   if (!content) {
     return null;
   }
 
   return (
-    <Alert variant="error" dismissible={false}>
+    <Alert ref={alertRef} variant="error" dismissible={false}>
       <Stack gap={1}>
         <Type className="font-medium">{content.title}</Type>
         <Type small>{content.message}</Type>
