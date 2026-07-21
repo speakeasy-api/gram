@@ -17,12 +17,10 @@ import (
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	tsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -110,37 +108,6 @@ func (f *fixture) createPolicy(t *testing.T, name string, enabled bool, sources 
 	})
 	require.NoError(t, err)
 	return id
-}
-
-func (f *fixture) createRemoteMCPServer(t *testing.T, slug string) uuid.UUID {
-	t.Helper()
-	id, err := uuid.NewV7()
-	require.NoError(t, err)
-	server, err := remotemcprepo.New(f.conn).CreateServer(t.Context(), remotemcprepo.CreateServerParams{
-		ID:            id,
-		ProjectID:     f.projectID,
-		Name:          pgtype.Text{String: slug, Valid: true},
-		Slug:          pgtype.Text{String: slug, Valid: true},
-		TransportType: "streamable_http",
-		Url:           "https://example.test/" + slug,
-	})
-	require.NoError(t, err)
-	return server.ID
-}
-
-func (f *fixture) createTunneledMCPServer(t *testing.T, name string) uuid.UUID {
-	t.Helper()
-	id, err := uuid.NewV7()
-	require.NoError(t, err)
-	server, err := tunneledmcprepo.New(f.conn).CreateServer(t.Context(), tunneledmcprepo.CreateServerParams{
-		ID:        id,
-		ProjectID: f.projectID,
-		Name:      name,
-		KeyHash:   "hash-" + uuid.NewString(),
-		KeyPrefix: "tnl_" + uuid.NewString()[:8],
-	})
-	require.NoError(t, err)
-	return server.ID
 }
 
 func (f *fixture) createToolset(t *testing.T, slug string) uuid.UUID {

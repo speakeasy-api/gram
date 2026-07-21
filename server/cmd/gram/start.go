@@ -775,7 +775,6 @@ func newStartCommand() *cli.Command {
 				meterProvider,
 				guardianPolicy,
 				authzEngine,
-				shadowMCPClient,
 				posthogClient,
 				telemLogger,
 				billingRepo,
