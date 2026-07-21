@@ -91,7 +91,7 @@ func (s *Sink) Run(ctx context.Context) error {
 		// Only a real write advances the durable resume cursor. In dry-run the
 		// flush is a no-op, so exposing a cursor would let an operator resume the
 		// real migration from a checkpoint that was never written.
-		if !s.dryRun {
+		if !s.dryRun && s.conn != nil {
 			s.lastCommitted = buf[len(buf)-1].ID
 		}
 		log.Printf("sink: flushed batch=%d total=%d committed=%s", len(buf), s.inserted, s.lastCommitted)
