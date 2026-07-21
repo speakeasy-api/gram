@@ -241,8 +241,10 @@ describe("ShadowMCP", () => {
         "Shadow MCP inventory for project-1 with policy blocking",
       ),
     ).toBeTruthy();
+    // Only enabled blocking policies are eligible for allow rules; the flag
+    // policy must not be offered in the inventory actions.
     expect(
-      screen.getByText("Shadow MCP policies: flag-policy,block-policy-1"),
+      screen.getByText("Shadow MCP policies: block-policy-1"),
     ).toBeTruthy();
     expect(screen.getByText("Roles: Admin")).toBeTruthy();
     expect(screen.getByText("Members: Admin User")).toBeTruthy();
