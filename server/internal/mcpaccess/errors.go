@@ -30,5 +30,5 @@ func permissionDenied(err error, message string) error {
 		return err
 	}
 
-	return oops.E(oops.CodeForbidden, err, message)
+	return oops.E(oops.CodeForbidden, err, "%s", message)
 }
