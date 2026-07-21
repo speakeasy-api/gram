@@ -106,10 +106,6 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
         windowEnd: new Date("2026-07-16T00:00:00Z"),
       },
       sightingTimeline: [],
-=======
-      latestVersion: testState.version,
-      assistantCount: testState.assistantCount,
->>>>>>> origin/main
     },
   }),
   invalidateAllSkill: testState.invalidateSkill,
