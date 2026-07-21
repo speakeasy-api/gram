@@ -110,10 +110,10 @@ function ToolbarClusters({ children }: { children: ReactNode }): JSX.Element {
       )}
       {right.length > 0 && (
         // The cluster wraps right-aligned rather than clipping when it grows
-        // wider than the bar. Only kicks in where a shrink-0 cluster would
-        // have overflowed the rounded shell — single-line layouts are
-        // unaffected.
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+        // wider than the bar; ml-auto keeps it anchored to the right edge
+        // even when the row's flex-wrap drops the whole cluster onto its own
+        // line below the left cluster. Single-line layouts are unaffected.
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
           {right.map((node, index) => (
             <Fragment key={index}>{node}</Fragment>
           ))}

@@ -79,11 +79,19 @@ function TumTokenBreakdown({
 
   // The selected dimension's rows. "" rows are real observed traffic that
   // lacks the attribute — charted as "(unset)", same as the details table.
+  // The server's top-N remainder row (always last, labeled "Other" with
+  // " (other)" suffixes when a real value collides — see the server's
+  // uniqueOtherGroupLabel) is flagged as the rollup so the chart pins it to
+  // the neutral color by identity, not by label.
   const groups = useMemo<GroupSeries[]>(() => {
     const rows = data?.breakdowns.find((b) => b.key === dimension)?.rows ?? [];
-    return rows.map((r) => ({
+    return rows.map((r, i) => ({
       label: breakdownValueLabel(dimension, r.value, projectNames),
       series: r.series,
+      rollup:
+        i === rows.length - 1 && /^Other( \(other\))*$/.test(r.value)
+          ? true
+          : undefined,
     }));
   }, [data, dimension, projectNames]);
 

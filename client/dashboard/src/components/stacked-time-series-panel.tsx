@@ -18,7 +18,6 @@ import { cn } from "@/lib/utils";
 import {
   CHART_COLORS,
   OTHER_COLOR,
-  OTHER_STACK_LABEL,
   type TimeSeriesStack,
 } from "./stacked-time-series";
 
@@ -115,15 +114,15 @@ function rolledUpStacks(
     .filter((s) => [...s.byBucket.values()].some((v) => v > 0));
 }
 
-// The bar color for a stack: a top-N roll-up stays neutral, everything else
-// walks the palette. The label match is a fallback for callers that don't set
-// the rollup flag (the billing breakdowns, whose server rollup is labeled
-// "Other" with no marker).
+// The bar color for a stack: an explicitly-flagged top-N roll-up stays
+// neutral, everything else walks the palette — a real group that merely
+// DISPLAYS as "Other" keeps its own color, so callers must mark their rollup
+// series (see TimeSeriesStack.rollup).
 function stackColor(
   stack: { label: string; rollup?: boolean },
   index: number,
 ): string {
-  if (stack.rollup || stack.label === OTHER_STACK_LABEL) return OTHER_COLOR;
+  if (stack.rollup) return OTHER_COLOR;
   return CHART_COLORS[index % CHART_COLORS.length]!;
 }
 
@@ -151,8 +150,8 @@ export function StackedTimeSeriesPanel({
   // series aligns to it by index.
   bucketsMs: number[];
   // The stacked series (already mode-resolved by the caller). All-zero stacks
-  // are dropped; a stack labeled OTHER_STACK_LABEL renders in the neutral
-  // rollup color.
+  // are dropped; a stack flagged `rollup` renders in the neutral remainder
+  // color.
   stacks: TimeSeriesStack[];
   // Caller controls (e.g. a breakdown picker) rendered at the head of the
   // control row, before the granularity toggles.

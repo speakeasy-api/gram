@@ -45,8 +45,9 @@ function formatTokensAxis(value: number): string {
 }
 
 // A daily series from the details response's dimension rows, aligned to the
-// points grid by index.
-export type GroupSeries = { label: string; series: number[] };
+// points grid by index — the same shape the shared panel consumes, so the
+// rows (rollup flag included) pass straight through as stacks.
+export type GroupSeries = TimeSeriesStack;
 
 // The header info copy for the panel.
 const HEADER_HINT =
