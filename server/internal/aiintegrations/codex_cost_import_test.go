@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 )
 
@@ -81,13 +82,14 @@ func TestBuildCodexCostLogParamsRejectsSHAMismatch(t *testing.T) {
 	require.Contains(t, err.Error(), "sha256 mismatch")
 }
 
-func TestCodexCostSourceUpperBoundReturnsZeroWhenNoLogs(t *testing.T) {
+func TestCodexCostSourceUpperBoundReturnsStartWhenNoLogs(t *testing.T) {
 	t.Parallel()
 
 	cfg := codexCostConfig()
 	cfg.PollWatermarkAt = time.Time{}
 	cfg.PollCheckpoint = timewindowpoller.CompletedCheckpoint(time.Time{})
 	endTime := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	start := endTime.Add(-InitialUsagePollLookback)
 	client := &stubCodexComplianceClient{
 		listPages: []*codexapi.LogsPage{
 			{Data: nil, HasMore: false, LastEndTime: time.Time{}},
@@ -107,9 +109,59 @@ func TestCodexCostSourceUpperBoundReturnsZeroWhenNoLogs(t *testing.T) {
 	upperBound, err := source.UpperBound(t.Context(), endTime)
 
 	require.NoError(t, err)
-	require.True(t, upperBound.IsZero())
+	require.Equal(t, start, upperBound)
 	require.Len(t, client.listParams, 1)
-	require.Equal(t, endTime.Add(-InitialUsagePollLookback), client.listParams[0].After)
+	require.Equal(t, start, client.listParams[0].After)
+}
+
+func TestCodexCostPollerDoesNotAdvanceWatermarkWhenNoLogs(t *testing.T) {
+	t.Parallel()
+
+	cfg := codexCostConfig()
+	cfg.PollWatermarkAt = time.Time{}
+	cfg.PollCheckpoint = timewindowpoller.CompletedCheckpoint(time.Time{})
+	endTime := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	client := &stubCodexComplianceClient{
+		listPages: []*codexapi.LogsPage{
+			{Data: nil, HasMore: false, LastEndTime: time.Time{}},
+		},
+		listParams: nil,
+		downloads:  nil,
+	}
+	source := &codexCostSource{
+		client:      client,
+		cfg:         cfg,
+		principalID: "org-openai",
+		pageLimit:   codexCompliancePageLimit,
+		processPage: func(context.Context, []telemetry.LogParams) error {
+			return fmt.Errorf("process page should not be called")
+		},
+		progress: &CodexCostSyncProgress{},
+	}
+	store := &captureWatermarkStore{checkpoints: nil}
+	runner := &timewindowpoller.Poller[[]codexapi.LogFile]{
+		Store:    store,
+		Schedule: ScheduleCodexCompliance,
+		State: timewindowpoller.SyncState{
+			SyncID:      cfg.SyncID,
+			WatermarkAt: cfg.PollWatermarkAt,
+			Checkpoint:  cfg.PollCheckpoint,
+		},
+		Source:  source,
+		EndTime: endTime,
+		Heartbeat: func(context.Context, int) {
+		},
+		InitialLookback: InitialUsagePollLookback,
+		MaxWindow:       0,
+		Granularity:     0,
+		ResumeOffset:    0,
+	}
+
+	err := runner.Do(t.Context())
+
+	require.NoError(t, err)
+	require.Empty(t, store.checkpoints)
+	require.Len(t, client.listParams, 1)
 }
 
 func TestCodexCostSourceFetchPageStopsAtWindowEnd(t *testing.T) {
@@ -190,4 +242,13 @@ func (c *stubCodexComplianceClient) DownloadLog(_ context.Context, _ string, log
 		return nil, fmt.Errorf("unexpected codex download log call for %s", logID)
 	}
 	return body, nil
+}
+
+type captureWatermarkStore struct {
+	checkpoints []timewindowpoller.PollCheckpoint
+}
+
+func (s *captureWatermarkStore) AdvanceWatermark(_ context.Context, _ uuid.UUID, checkpoint timewindowpoller.PollCheckpoint) error {
+	s.checkpoints = append(s.checkpoints, checkpoint)
+	return nil
 }

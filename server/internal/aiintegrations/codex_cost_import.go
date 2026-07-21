@@ -139,6 +139,9 @@ func (src *codexCostSource) UpperBound(ctx context.Context, endTime time.Time) (
 			watermark = page.LastEndTime
 		}
 		if !page.HasMore {
+			if watermark.IsZero() {
+				return after, nil
+			}
 			return watermark, nil
 		}
 		if page.LastEndTime.IsZero() {

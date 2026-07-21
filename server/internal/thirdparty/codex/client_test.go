@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -98,6 +99,21 @@ func TestDownloadLogReturnsBody(t *testing.T) {
 	require.JSONEq(t, `{"type":"COSTS"}`, string(body))
 }
 
+func TestDownloadLogRejectsOversizedBody(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.CopyN(w, zeroReader{}, maxLogFileSize+1)
+	}))
+	t.Cleanup(server.Close)
+
+	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithAPIKey("codex-key"))
+	_, err := client.DownloadLog(t.Context(), "org-123", "eclf_123")
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeds")
+}
+
 func TestListLogsReturnsHTTPError(t *testing.T) {
 	t.Parallel()
 
@@ -115,6 +131,13 @@ func TestListLogsReturnsHTTPError(t *testing.T) {
 	require.Equal(t, "401 Unauthorized", httpErr.Status)
 	require.Contains(t, httpErr.Body, "unauthorized")
 	require.Contains(t, err.Error(), "unauthorized")
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
 }
 
 func testGuardianPolicy(t *testing.T) *guardian.Policy {

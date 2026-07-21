@@ -17,6 +17,7 @@ import (
 
 const (
 	defaultBaseURL      = "https://api.chatgpt.com/v1/compliance"
+	maxLogFileSize      = 15 * 1024 * 1024
 	maxHTTPErrorMessage = 1000
 )
 
@@ -134,9 +135,12 @@ func (c *Client) DownloadLog(ctx context.Context, principalID, logID string) ([]
 		return nil, newHTTPError(res)
 	}
 
-	body, err := io.ReadAll(res.Body)
+	body, err := io.ReadAll(io.LimitReader(res.Body, maxLogFileSize+1))
 	if err != nil {
 		return nil, fmt.Errorf("read codex compliance log: %w", err)
+	}
+	if len(body) > maxLogFileSize {
+		return nil, fmt.Errorf("codex compliance log %s exceeds %d byte limit", logID, maxLogFileSize)
 	}
 	return body, nil
 }
@@ -202,7 +206,7 @@ func (e *HTTPError) Error() string {
 }
 
 func newHTTPError(res *http.Response) *HTTPError {
-	body, _ := io.ReadAll(res.Body)
+	body, _ := io.ReadAll(io.LimitReader(res.Body, maxHTTPErrorMessage+1))
 	message := strings.TrimSpace(string(body))
 	if len(message) > maxHTTPErrorMessage {
 		message = message[:maxHTTPErrorMessage]
