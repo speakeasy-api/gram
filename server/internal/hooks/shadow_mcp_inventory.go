@@ -9,41 +9,56 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
+// upsertShadowMCPInventoryURLs records the session's external MCP servers in
+// the shadow-MCP inventory. The upsert is pure telemetry — nothing in the hook
+// response depends on it — so the whole unit (custom-domain lookup,
+// canonicalization, ClickHouse write) runs detached from the request:
+// synchronous ClickHouse writes here held hook responses for multiple seconds
+// (DNO-521/DNO-606). WithoutCancel keeps the write alive after the hook
+// response is sent.
 func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, orgID string, projectID string, sessionID string, entries []MCPServerEntry) {
 	if s.telemetryLogger == nil || projectID == "" || len(entries) == 0 {
 		return
 	}
 
 	seenAt := time.Now()
-	inventoryURLs := make([]telemetry.ShadowMCPInventoryURL, 0, len(entries))
-	for _, entry := range entries {
-		if entry.URL == "" {
-			continue
-		}
-		if s.isGramHostedMCPURLForOrg(ctx, entry.URL, orgID) {
-			continue
-		}
-		invURL, ok := shadowmcp.CanonicalizeInventoryURL(entry.URL)
-		if !ok {
-			continue
-		}
-		inventoryURLs = append(inventoryURLs, telemetry.ShadowMCPInventoryURL{
-			GramProjectID: projectID,
-			ServerURL:     invURL,
-			ServerName:    entry.Name,
-			SeenAt:        seenAt,
-		})
-	}
-	if len(inventoryURLs) == 0 {
-		return
-	}
+	asyncCtx := context.WithoutCancel(ctx)
+	go func() {
+		// One custom-domain lookup covers every entry — the per-entry
+		// isGramHostedMCPURLForOrg variant would re-query custom_domains for
+		// each external URL in the inventory.
+		trustedHosts := s.gramHostedMCPTrustedHostsForOrg(asyncCtx, orgID)
 
-	if err := s.telemetryLogger.UpsertShadowMCPInventoryURLs(ctx, inventoryURLs); err != nil {
-		s.logger.WarnContext(ctx, "shadow MCP inventory URL upsert failed",
-			attr.SlogEvent("shadow_mcp_inventory_url_upsert_failed"),
-			attr.SlogError(err),
-			attr.SlogProjectID(projectID),
-			attr.SlogGenAIConversationID(sessionID),
-		)
-	}
+		inventoryURLs := make([]telemetry.ShadowMCPInventoryURL, 0, len(entries))
+		for _, entry := range entries {
+			if entry.URL == "" {
+				continue
+			}
+			if isGramHostedMCPURL(entry.URL, trustedHosts...) {
+				continue
+			}
+			invURL, ok := shadowmcp.CanonicalizeInventoryURL(entry.URL)
+			if !ok {
+				continue
+			}
+			inventoryURLs = append(inventoryURLs, telemetry.ShadowMCPInventoryURL{
+				GramProjectID: projectID,
+				ServerURL:     invURL,
+				ServerName:    entry.Name,
+				SeenAt:        seenAt,
+			})
+		}
+		if len(inventoryURLs) == 0 {
+			return
+		}
+
+		if err := s.telemetryLogger.UpsertShadowMCPInventoryURLs(asyncCtx, inventoryURLs); err != nil {
+			s.logger.WarnContext(asyncCtx, "shadow MCP inventory URL upsert failed",
+				attr.SlogEvent("shadow_mcp_inventory_url_upsert_failed"),
+				attr.SlogError(err),
+				attr.SlogProjectID(projectID),
+				attr.SlogGenAIConversationID(sessionID),
+			)
+		}
+	}()
 }
