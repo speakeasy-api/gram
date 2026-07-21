@@ -526,6 +526,9 @@ CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_pending_idx
 ON skill_efficacy_evaluations (project_id, observed_at DESC, id DESC)
 WHERE state = 'pending';
 
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_organization_id_idx
+ON skill_efficacy_evaluations (organization_id);
+
 CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_org_spend_idx
 ON skill_efficacy_evaluations (organization_id, reserved_on)
 WHERE state IN ('reserved', 'scored');

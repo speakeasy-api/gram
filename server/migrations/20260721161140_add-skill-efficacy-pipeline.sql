@@ -31,6 +31,8 @@ CREATE TABLE "skill_efficacy_evaluations" (
 );
 -- Create index "skill_efficacy_evaluations_org_spend_idx" to table: "skill_efficacy_evaluations"
 CREATE INDEX "skill_efficacy_evaluations_org_spend_idx" ON "skill_efficacy_evaluations" ("organization_id", "reserved_on") WHERE (state = ANY (ARRAY['reserved'::text, 'scored'::text]));
+-- Create index "skill_efficacy_evaluations_organization_id_idx" to table: "skill_efficacy_evaluations"
+CREATE INDEX "skill_efficacy_evaluations_organization_id_idx" ON "skill_efficacy_evaluations" ("organization_id");
 -- Create index "skill_efficacy_evaluations_pending_idx" to table: "skill_efficacy_evaluations"
 CREATE INDEX "skill_efficacy_evaluations_pending_idx" ON "skill_efficacy_evaluations" ("project_id", "observed_at" DESC, "id" DESC) WHERE (state = 'pending'::text);
 -- Create index "skill_efficacy_evaluations_scoring_unit_key" to table: "skill_efficacy_evaluations"
