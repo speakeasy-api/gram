@@ -35,7 +35,12 @@ export function ShadowMCPInventoryServerCell({
           </Badge>
         )}
       </div>
-      <Type muted small className="truncate text-xs">
+      <Type
+        muted
+        small
+        className="truncate text-xs"
+        title={server.canonicalServerUrl}
+      >
         {server.canonicalServerUrl}
       </Type>
     </div>

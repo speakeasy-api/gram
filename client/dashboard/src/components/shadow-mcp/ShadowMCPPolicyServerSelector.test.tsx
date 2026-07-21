@@ -235,6 +235,17 @@ describe("ShadowMCPPolicyServerSelector", () => {
     expect(url.className).toContain("font-mono");
   });
 
+  it("keeps complete server URLs accessible in the selector", () => {
+    const longServerURL =
+      "https://server.example.com/mcp/a/deliberately/long/path/that/must/truncate";
+    render(<ControlledSelector servers={[inventoryServer(longServerURL)]} />);
+
+    const dialog = openSelector();
+    const url = within(dialog).getByText(longServerURL);
+    expect(url.getAttribute("title")).toBe(longServerURL);
+    expect(url.className).toContain("truncate");
+  });
+
   it("shows add, remove, and no-change actions while editing", () => {
     const notionServer = inventoryServer("https://notion.example.com/mcp", {
       serverName: "Notion MCP",
@@ -586,6 +597,9 @@ describe("ShadowMCPPolicyServerSelector", () => {
   });
 
   it("clears a nonempty search before Escape closes the selector", async () => {
+    const onWindowKeyDown = vi.fn((_event: KeyboardEvent): void => {});
+    window.addEventListener("keydown", onWindowKeyDown);
+
     render(<ControlledSelector />);
     const dialog = openSelector();
     const search = within(dialog).getByRole("searchbox", {
@@ -599,7 +613,13 @@ describe("ShadowMCPPolicyServerSelector", () => {
       ).toBeNull(),
     );
 
-    fireEvent.keyDown(search, { key: "Escape" });
+    try {
+      fireEvent.keyDown(search, { key: "Escape" });
+
+      expect(onWindowKeyDown).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("keydown", onWindowKeyDown);
+    }
 
     expect((search as HTMLInputElement).value).toBe("");
     expect(

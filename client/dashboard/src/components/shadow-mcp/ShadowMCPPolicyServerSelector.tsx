@@ -454,6 +454,7 @@ export function ShadowMCPPolicyServerSelector({
           onEscapeKeyDown={(event) => {
             if (search) {
               event.preventDefault();
+              event.stopPropagation();
               setSearch("");
             }
           }}
