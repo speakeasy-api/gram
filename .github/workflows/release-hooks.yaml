@@ -1,0 +1,195 @@
+name: Release Hooks Binary
+
+# The speakeasy-hooks binary releases on merge rather than through changesets:
+# it is a Go binary the server pins, not a published package, and routing it
+# through the changesets release PR meant a feature could sit unreleased behind
+# a queue it was fighting for. Merging a hooks change publishes the release,
+# and the follow-up pin lands as its own reviewed pull request.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "hooks/**"
+      - ".goreleaser.hooks.yaml"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump to apply to the latest hooks@ tag"
+        type: choice
+        options: ["patch", "minor"]
+        default: patch
+
+permissions: {}
+
+# Two hooks merges in quick succession would otherwise race on resolving the
+# next version from the same latest tag.
+concurrency:
+  group: release-hooks
+
+jobs:
+  release:
+    name: Release Speakeasy Hooks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to push tags
+      id-token: write # for cosign keyless signing
+      pull-requests: read # to read the merged PR's labels
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: "go.mod"
+          # Reference: https://github.com/actions/setup-go/issues/495
+          cache: false
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Generate GitHub App Token for Gram Bot
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.GRAM_BOT_APP_ID }}
+          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          owner: speakeasy-api
+          repositories: gram,homebrew-tap
+      - name: Resolve the next version
+        id: version
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          DISPATCH_BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          latest=$(git tag -l 'hooks@*' | sed 's/^hooks@//' | sort -V | tail -1)
+          latest=${latest:-0.0.0}
+          IFS=. read -r major minor patch <<< "$latest"
+
+          # A merged PR labelled hooks-minor gets a minor bump; everything else
+          # is a patch. Manual dispatches take the bump from their input.
+          bump=${DISPATCH_BUMP:-}
+          if [ -z "$bump" ]; then
+            bump=patch
+            labels=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+              --jq '.[].labels[].name' 2>/dev/null || true)
+            if printf '%s\n' "$labels" | grep -qx 'hooks-minor'; then
+              bump=minor
+            fi
+          fi
+
+          case "$bump" in
+            minor) minor=$((minor + 1)); patch=0 ;;
+            *) patch=$((patch + 1)) ;;
+          esac
+          version="${major}.${minor}.${patch}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing hooks@$version ($bump bump from $latest)"
+      - name: Create release tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git tag "hooks@${VERSION}"
+          git push origin "hooks@${VERSION}"
+      - name: goreleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser-pro
+          version: "~> v2.17"
+          args: release --clean --config .goreleaser.hooks.yaml
+        env:
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          GORELEASER_KEY: ${{secrets.GORELEASER_PRO_LICENSE_KEY}}
+      - name: Upload checksums
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: hooks-checksums
+          path: dist/checksums.txt
+          if-no-files-found: error
+
+  pin:
+    # The server only serves the versions it pins, so a release nobody pins is a
+    # release nobody installs. Branch protection forbids pushing the pin to main
+    # directly, so this opens it as a pull request instead of leaving it as a
+    # follow-up someone has to remember.
+    name: Open the pin pull request
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate GitHub App Token for Gram Bot
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.GRAM_BOT_APP_ID }}
+          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          owner: speakeasy-api
+          repositories: gram
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # The job pushes the pin branch, so the persisted credential has to
+          # be the bot's — the workflow token is read-only here, and pushes
+          # made with it would not trigger the pin PR's own checks anyway.
+          token: ${{ steps.bot-token.outputs.token }}
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: "go.mod"
+          cache: false
+      - name: Download checksums
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: hooks-checksums
+          path: dist
+      - name: Regenerate the pins
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: go run ./server/cmd/pin-hooks-release --version "$VERSION" --checksums dist/checksums.txt
+        working-directory: ${{ github.workspace }}
+      - name: Open the pull request
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          branch="hooks-pin/${VERSION}"
+          git config user.name "gram-bot"
+          git config user.email "gram-bot@users.noreply.github.com"
+          git switch -c "$branch"
+
+          cat > ".changeset/hooks-pin-${VERSION//./-}.md" <<EOF
+          ---
+          "server": patch
+          ---
+
+          Serve the hooks@${VERSION} binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+          EOF
+
+          # generate.go carries the hooksGeneratorVersion bump the tool wrote;
+          # without it the plugin never republishes and the pin is inert.
+          git add \
+            server/internal/plugins/hooks_release_pins.go \
+            server/internal/plugins/generate.go \
+            ".changeset/hooks-pin-${VERSION//./-}.md"
+          git commit -m "chore(hooks): serve the ${VERSION} hooks binary"
+          # Force so a rerun of this workflow for the same version replaces its
+          # own earlier branch instead of failing.
+          git push --force origin "$branch"
+
+          if gh pr list --head "$branch" --state open --json number --jq '.[].number' | grep -q .; then
+            echo "Pin pull request for $branch already open; branch updated."
+            exit 0
+          fi
+          gh pr create \
+            --title "chore(hooks): serve the ${VERSION} hooks binary" \
+            --body "Generated by the hooks release workflow after publishing \`hooks@${VERSION}\`.
+
+          The server proxies only the versions it pins and republishes the hooks plugin only when the generator version changes, so until this merges and deploys, every installation keeps downloading the previously pinned binary.
+
+          Regenerated by \`server/cmd/pin-hooks-release\` from the release's own \`checksums.txt\`. The outgoing version stays in the retired set: bootstrap scripts already on user machines keep requesting it until their repo republishes." \
+            --head "$branch" \
+            --base main
