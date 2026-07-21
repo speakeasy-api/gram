@@ -90,7 +90,9 @@ export function SourcesEmptyState({
                       <Plus className="h-4 w-4" />
                     </Button.LeftIcon>
                     <Button.Text>Add Source</Button.Text>
-                    <ChevronDown className="ml-1 h-4 w-4" />
+                    <Button.RightIcon>
+                      <ChevronDown className="h-4 w-4" />
+                    </Button.RightIcon>
                   </Button>
                 </DropdownMenuTrigger>
                 {!disabled && (

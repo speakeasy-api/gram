@@ -115,16 +115,12 @@ export function RemoveMcpSourceDialogContent({
           disabled={!inputMatches || isPending}
           onClick={() => void handleConfirm()}
         >
-          {isPending ? (
-            <>
-              <Button.LeftIcon>
-                <Loader2 className="size-4 animate-spin" />
-              </Button.LeftIcon>
-              <Button.Text>Deleting</Button.Text>
-            </>
-          ) : (
-            <Button.Text>Delete</Button.Text>
+          {isPending && (
+            <Button.LeftIcon>
+              <Loader2 className="size-4 animate-spin" />
+            </Button.LeftIcon>
           )}
+          <Button.Text>{isPending ? "Deleting" : "Delete"}</Button.Text>
         </Button>
       </Dialog.Footer>
     </>

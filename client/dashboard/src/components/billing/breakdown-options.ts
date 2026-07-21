@@ -1,3 +1,4 @@
+import { unsetLabel } from "@/components/observe/account-display-utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import {
   BadgeCheck,
@@ -6,6 +7,7 @@ import {
   Cloud,
   Cpu,
   FolderKanban,
+  Laptop,
   Layers,
   type LucideIcon,
   Network,
@@ -108,6 +110,9 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
     heading: "People",
     options: [
       { value: Dimension.Email, label: "User", icon: UserRound },
+      // The machine the Go hooks report (gram.hook.hostname) — the identity
+      // the User breakdown falls back to for sessions with no email.
+      { value: Dimension.Hostname, label: "Device", icon: Laptop },
       { value: Dimension.Role, label: "Role", icon: Shield },
     ],
   },
@@ -133,14 +138,15 @@ export function breakdownLabel(value: string): string {
 }
 
 // Display label for one breakdown row value: "" is observed traffic that
-// lacks the attribute, and project_id values are UUIDs mapped to project
-// names (a deleted project falls back to its raw id).
+// lacks the attribute ("(unset)", or "Team-wide API Usage" on the user
+// dimension — see unsetLabel), and project_id values are UUIDs mapped to
+// project names (a deleted project falls back to its raw id).
 export function breakdownValueLabel(
   dimension: string,
   value: string,
   projectNames: Map<string, string>,
 ): string {
-  if (value === "") return "(unset)";
+  if (value === "") return unsetLabel(dimension as Dimension);
   if (dimension === Dimension.ProjectId) {
     return projectNames.get(value) ?? value;
   }

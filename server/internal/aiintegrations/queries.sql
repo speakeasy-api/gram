@@ -63,14 +63,21 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- The config-only unique index was replaced by (config_id, schedule) in the
+-- sync-schedule expand migration, so this insert guards with NOT EXISTS
+-- instead of ON CONFLICT on the dropped index. The schedule-aware upsert that
+-- follows in the feature change replaces this query entirely.
 -- name: EnsureSync :one
 WITH inserted AS (
   INSERT INTO ai_integration_syncs (
     ai_integration_config_id
-  ) VALUES (
-    @ai_integration_config_id
   )
-  ON CONFLICT (ai_integration_config_id) DO NOTHING
+  SELECT @ai_integration_config_id
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM ai_integration_syncs
+    WHERE ai_integration_config_id = @ai_integration_config_id
+  )
   RETURNING *
 )
 SELECT *

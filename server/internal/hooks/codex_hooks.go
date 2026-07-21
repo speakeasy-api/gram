@@ -269,7 +269,10 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 
 	if payload.HookEventName == "SessionStart" {
 		s.captureCodexMCPListSnapshot(ctx, payload, metadata.GramOrgID, metadata.ProjectID)
-		if metadata.SessionID != "" && metadata.UserEmail != "" {
+		// Hostname counts as cacheable identity alongside the email: an
+		// identity-less session carries nothing else, and later events may
+		// omit the hostname the fallback attribution needs.
+		if metadata.SessionID != "" && (metadata.UserEmail != "" || metadata.Hostname != "") {
 			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
 				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 					attr.SlogError(err),
@@ -347,6 +350,7 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
+		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -360,6 +364,9 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		if err == nil && cached.ServiceName == "Codex" && cached.GramOrgID == orgID && cached.ProjectID == projectID {
 			if metadata.UserEmail == "" {
 				metadata.UserEmail = cached.UserEmail
+			}
+			if metadata.Hostname == "" {
+				metadata.Hostname = cached.Hostname
 			}
 		}
 	}
