@@ -68,6 +68,7 @@ import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
+import { PluginInstallButton } from "./PluginInstallButton";
 import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
 import { PluginSkillsSection } from "./PluginSkillsSection";
 import { PluginAssignmentsList } from "./PluginAssignmentsList";
@@ -555,13 +556,7 @@ export default function PluginDetail(): JSX.Element | null {
                 onOpenChange={setIsDownloadMenuOpen}
               >
                 <DropdownMenuTrigger asChild>
-                  <Button variant="primary">
-                    <Button.Text>Install</Button.Text>
-                    <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
-                    <Button.RightIcon>
-                      <Icon name="chevron-down" className="h-4 w-4" />
-                    </Button.RightIcon>
-                  </Button>
+                  <PluginInstallButton />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem

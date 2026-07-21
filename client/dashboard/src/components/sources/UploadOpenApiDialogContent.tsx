@@ -78,8 +78,12 @@ export function UploadOpenApiDialogContent({
           onClick={() => void deploySpecUpdate()}
           disabled={!file || isDeploying || !documentSlug}
         >
-          {isDeploying && <Spinner />}
-          {isDeploying ? "Deploying..." : "Deploy"}
+          {isDeploying && (
+            <Button.LeftIcon>
+              <Spinner />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>{isDeploying ? "Deploying..." : "Deploy"}</Button.Text>
         </Button>
       </Dialog.Footer>
     </>

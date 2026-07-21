@@ -151,16 +151,14 @@ export function MCPToolFilteringSection({
             disabled={isSaving || groupsQuery.isLoading}
             onClick={() => createGroup.mutate({})}
           >
-            {createGroup.isPending ? (
-              <>
-                <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
-                </Button.LeftIcon>
-                <Button.Text>Enabling</Button.Text>
-              </>
-            ) : (
-              <Button.Text>Enable</Button.Text>
+            {createGroup.isPending && (
+              <Button.LeftIcon>
+                <Loader2 className="size-4 animate-spin" />
+              </Button.LeftIcon>
             )}
+            <Button.Text>
+              {createGroup.isPending ? "Enabling" : "Enable"}
+            </Button.Text>
           </Button>
         </RequireScope>
       ) : (

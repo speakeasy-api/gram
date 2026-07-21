@@ -25,12 +25,12 @@ import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
 import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, XIcon } from "lucide-react";
+import { Loader2, Plus, SaveIcon, Trash2, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidation";
 import { SettingsInlineEmptyState } from "../SettingsInlineEmptyState";
-import { RowSaveButtonContent, SettingsSection } from "../SettingsSection";
+import { SettingsSection } from "../SettingsSection";
 
 const ADDRESS_INPUT_GROUP_CLASSNAME = "rounded-md";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
@@ -326,8 +326,15 @@ function AddressRow({
             variant="primary"
             disabled={!dirty || !!slugError || update.isPending}
             onClick={handleSave}
+            aria-label={update.isPending ? "Saving address" : "Save address"}
           >
-            <RowSaveButtonContent pending={update.isPending} />
+            <Button.Icon>
+              {update.isPending ? (
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              ) : (
+                <SaveIcon aria-hidden="true" className="size-4" />
+              )}
+            </Button.Icon>
           </Button>
           <Button
             variant="destructive-secondary"
@@ -393,16 +400,14 @@ function RemoveLastAddressDialog({
             disabled={isLoading}
             onClick={onConfirm}
           >
-            {isLoading ? (
-              <>
-                <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
-                </Button.LeftIcon>
-                <Button.Text>Removing</Button.Text>
-              </>
-            ) : (
-              <Button.Text>Remove address</Button.Text>
+            {isLoading && (
+              <Button.LeftIcon>
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              </Button.LeftIcon>
             )}
+            <Button.Text>
+              {isLoading ? "Removing" : "Remove address"}
+            </Button.Text>
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
@@ -476,8 +481,15 @@ function NewPlatformAddressRow({
           variant="primary"
           disabled={!suffix.trim() || !!slugError || submitting}
           onClick={() => void handleCreate()}
+          aria-label={submitting ? "Adding address" : "Add address"}
         >
-          <RowSaveButtonContent pending={submitting} />
+          <Button.Icon>
+            {submitting ? (
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+            ) : (
+              <SaveIcon aria-hidden="true" className="size-4" />
+            )}
+          </Button.Icon>
         </Button>
         <Button
           size="md"
@@ -565,8 +577,15 @@ function NewCustomAddressRow({
           variant="primary"
           disabled={!slug.trim() || !domainId || !!slugError || submitting}
           onClick={() => void handleCreate()}
+          aria-label={submitting ? "Adding address" : "Add address"}
         >
-          <RowSaveButtonContent pending={submitting} />
+          <Button.Icon>
+            {submitting ? (
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+            ) : (
+              <SaveIcon aria-hidden="true" className="size-4" />
+            )}
+          </Button.Icon>
         </Button>
         <Button
           size="md"

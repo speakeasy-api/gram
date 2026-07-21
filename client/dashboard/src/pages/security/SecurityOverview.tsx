@@ -25,6 +25,7 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
+import { riskRuleKey } from "./riskRuleKey";
 import { getRuleTitleFallback } from "./risk-utils";
 import {
   CategoryScale,
@@ -254,7 +255,7 @@ function SecurityOverviewContent() {
           : "";
       const href = r.ruleId ? `${riskEventsHref}${search}` : undefined;
       return {
-        key: r.ruleId || "__none",
+        key: riskRuleKey(r.source, r.ruleId),
         label,
         value: Number(r.findings),
         href,
