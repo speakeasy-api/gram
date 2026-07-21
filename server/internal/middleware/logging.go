@@ -43,6 +43,22 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return n, nil
 }
 
+// logSafeURL renders a request URL for logs and observability context with
+// secret-bearing query parameters redacted. Several public capability-URL
+// endpoints carry a live credential in a "token" query parameter (e.g.
+// skills.getShared, assets.serveChatAttachmentSigned, chatSessions.revoke);
+// logging it verbatim would leak reusable secrets into application logs.
+func logSafeURL(u *url.URL) string {
+	q := u.Query()
+	if _, ok := q["token"]; !ok {
+		return u.String()
+	}
+	q.Set("token", "REDACTED")
+	safe := *u
+	safe.RawQuery = q.Encode()
+	return safe.String()
+}
+
 func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
 	logger = logger.With(attr.SlogComponent("http_logging_middleware"))
 
@@ -69,9 +85,11 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				referrerHost = u.Host
 			}
 
+			safeURL := logSafeURL(r.URL)
+
 			requestContext := &contextvalues.RequestContext{
 				ReqID:       requestID,
-				ReqURL:      r.URL.String(),
+				ReqURL:      safeURL,
 				Host:        r.Host,
 				Method:      r.Method,
 				Referer:     conv.TruncateString(referrer, 400),
@@ -84,7 +102,7 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			r = r.WithContext(ctx)
 			attrs := []any{
 				attr.SlogHTTPRequestMethod(r.Method),
-				attr.SlogURLOriginal(r.URL.String()),
+				attr.SlogURLOriginal(safeURL),
 				attr.SlogHostName(r.Host),
 			}
 			if requestContext.ReqID != "" {

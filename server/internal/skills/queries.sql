@@ -495,6 +495,7 @@ WHERE project_id = @project_id
 -- name: GetSkillDetails :one
 SELECT
   sqlc.embed(s),
+  l.token AS share_token,
   COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
   COALESCE(state.version_count, 0)::bigint AS version_count,
   EXISTS (
@@ -525,6 +526,9 @@ LEFT JOIN LATERAL (
   ORDER BY sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) state ON TRUE
+LEFT JOIN skill_share_links l
+  ON l.skill_id = s.id
+  AND l.revoked_at IS NULL
 WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL;
@@ -554,6 +558,7 @@ WHERE s.project_id = @project_id
 -- name: ListSkills :many
 SELECT
   sqlc.embed(s),
+  l.token AS share_token,
   COALESCE(latest.id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
   COALESCE(latest.version_count, 0)::bigint AS version_count,
   EXISTS (
@@ -570,6 +575,9 @@ LEFT JOIN LATERAL (
   ORDER BY sv.created_at DESC, sv.id DESC
   LIMIT 1
 ) latest ON TRUE
+LEFT JOIN skill_share_links l
+  ON l.skill_id = s.id
+  AND l.revoked_at IS NULL
 WHERE s.project_id = @project_id
   AND s.archived_at IS NULL
   AND (
@@ -1686,3 +1694,64 @@ SELECT
 FROM pending_projects
 ORDER BY sequence
 LIMIT @page_limit;
+-- name: InsertSkillShareLink :one
+-- ON CONFLICT DO NOTHING turns the astronomically unlikely token collision
+-- into a no-rows result the caller can retry without aborting its transaction.
+INSERT INTO skill_share_links (
+  project_id,
+  skill_id,
+  token,
+  created_by_user_id
+)
+SELECT
+  s.project_id,
+  s.id,
+  @token,
+  @created_by_user_id
+FROM skills s
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+ON CONFLICT (token) DO NOTHING
+RETURNING *;
+
+-- name: GetActiveSkillShareLink :one
+SELECT *
+FROM skill_share_links
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND revoked_at IS NULL;
+
+-- name: RevokeSkillShareLink :one
+UPDATE skill_share_links
+SET revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND revoked_at IS NULL
+RETURNING *;
+
+-- name: GetSharedSkillByToken :one
+-- Public read for the unauthenticated share-link endpoint. The join pins the
+-- share link to its owning project's skill and the lateral picks the latest
+-- version by creation order.
+SELECT
+  s.name,
+  s.display_name,
+  s.summary,
+  latest.content,
+  latest.created_at AS version_created_at
+FROM skill_share_links l
+JOIN skills s
+  ON s.project_id = l.project_id
+  AND s.id = l.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.content, sv.created_at
+  FROM skill_versions sv
+  WHERE sv.skill_id = l.skill_id
+  ORDER BY sv.created_at DESC, sv.id DESC
+  LIMIT 1
+) latest ON TRUE
+WHERE l.token = @token
+  AND l.revoked_at IS NULL;

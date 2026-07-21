@@ -57,6 +57,10 @@ export type Skill = {
    */
   seenCount: number;
   /**
+   * The active public share token, absent when the skill is not shared.
+   */
+  shareToken?: string | undefined;
+  /**
    * How the skill entered the registry.
    */
   sourceKind: string;
@@ -95,6 +99,7 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
     name: z.string(),
     project_id: z.string(),
     seen_count: z.int(),
+    share_token: z.optional(z.string()),
     source_kind: z.string(),
     summary: z.optional(z.string()),
     updated_at: z.pipe(
@@ -113,6 +118,7 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
       "latest_version_id": "latestVersionId",
       "project_id": "projectId",
       "seen_count": "seenCount",
+      "share_token": "shareToken",
       "source_kind": "sourceKind",
       "updated_at": "updatedAt",
       "version_count": "versionCount",

@@ -36,6 +36,8 @@ type Skill struct {
 	LastSeenAt *string
 	// The number of reconciled activations observed for this skill.
 	SeenCount int64
+	// The active public share token, absent when the skill is not shared.
+	ShareToken *string
 	// When the skill was created.
 	CreatedAt string
 	// When the skill was last updated.

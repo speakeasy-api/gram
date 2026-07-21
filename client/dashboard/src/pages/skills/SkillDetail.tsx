@@ -42,6 +42,7 @@ import {
 import { stripSkillFrontmatter } from "./skill-manifest";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import { SkillPluginBanner } from "./SkillPluginBanner";
+import { SkillSharingSection } from "./SkillSharingSection";
 import { SkillValidationErrors } from "./SkillValidationErrors";
 import { selectDiffVersions } from "./version-selection";
 
@@ -333,6 +334,8 @@ function SkillDetailSections({
           />
         </SettingsSection>
       )}
+
+      <SkillSharingSection skill={skill} />
 
       <DangerSettingsSection id={SKILL_DANGER_SECTION_ID}>
         <DangerSettingsSection.Header>
