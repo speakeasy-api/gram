@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	defaultBaseURL = "https://api.chatgpt.com/v1/compliance"
+	defaultBaseURL      = "https://api.chatgpt.com/v1/compliance"
+	maxHTTPErrorMessage = 1000
 )
 
 type Client struct {
@@ -99,7 +100,7 @@ func (c *Client) ListLogs(ctx context.Context, params ListLogsParams) (*LogsPage
 		q.Set("event_type", params.EventType)
 	}
 	if !params.After.IsZero() {
-		q.Set("after", params.After.UTC().Format(time.RFC3339Nano))
+		q.Set("after", formatComplianceTimestamp(params.After))
 	}
 	endpoint.RawQuery = q.Encode()
 
@@ -130,7 +131,7 @@ func (c *Client) DownloadLog(ctx context.Context, principalID, logID string) ([]
 	}
 	defer o11y.NoLogDefer(func() error { return res.Body.Close() })
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		return nil, &HTTPError{StatusCode: res.StatusCode, Status: res.Status}
+		return nil, newHTTPError(res)
 	}
 
 	body, err := io.ReadAll(res.Body)
@@ -153,7 +154,7 @@ func (c *Client) doJSON(ctx context.Context, endpoint *url.URL, out any) error {
 	}
 	defer o11y.NoLogDefer(func() error { return res.Body.Close() })
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		return &HTTPError{StatusCode: res.StatusCode, Status: res.Status}
+		return newHTTPError(res)
 	}
 	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
 		return fmt.Errorf("decode codex compliance response: %w", err)
@@ -183,11 +184,32 @@ func (c *Client) setHeaders(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 }
 
+func formatComplianceTimestamp(t time.Time) string {
+	return t.UTC().Truncate(time.Second).Format(time.RFC3339)
+}
+
 type HTTPError struct {
 	StatusCode int
 	Status     string
+	Body       string
 }
 
 func (e *HTTPError) Error() string {
+	if e.Body != "" {
+		return fmt.Sprintf("codex compliance API returned %s: %s", e.Status, e.Body)
+	}
 	return fmt.Sprintf("codex compliance API returned %s", e.Status)
+}
+
+func newHTTPError(res *http.Response) *HTTPError {
+	body, _ := io.ReadAll(res.Body)
+	message := strings.TrimSpace(string(body))
+	if len(message) > maxHTTPErrorMessage {
+		message = message[:maxHTTPErrorMessage]
+	}
+	return &HTTPError{
+		StatusCode: res.StatusCode,
+		Status:     res.Status,
+		Body:       message,
+	}
 }

@@ -168,17 +168,17 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
         {
           title: "Create a Compliance API key",
           description:
-            "Create an OpenAI API key with access to compliance logs for the organization or workspace whose Codex spend Speakeasy should import.",
+            "Create an OpenAI API key with access to compliance logs for the organization whose Codex spend Speakeasy should import.",
         },
         {
-          title: "Copy your OpenAI organization or workspace ID",
+          title: "Copy your OpenAI organization ID",
           description:
-            "Use the OpenAI organization ID when it starts with org-. If your compliance logs are scoped to a ChatGPT workspace instead, copy that workspace ID.",
+            "Copy the OpenAI organization ID for the organization whose Codex cost logs Speakeasy should import. It should start with org-.",
         },
         {
           title: "Paste both values into Speakeasy",
           description:
-            "Copy the Compliance API key and OpenAI organization or workspace ID, then paste both below. The platform stores the key securely and starts importing Codex cost logs.",
+            "Copy the Compliance API key and OpenAI organization ID, then paste both below. The platform stores the key securely and starts importing Codex cost logs.",
           showsForm: true,
         },
       ],
@@ -187,14 +187,13 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
     apiKeyLabel: "OpenAI Compliance API key",
     apiKeyPlaceholder: "Paste your OpenAI Compliance API key",
     requiresOrganizationId: true,
-    organizationIdLabel: "OpenAI organization or workspace ID",
-    organizationIdPlaceholder: "org-... or workspace ID",
+    organizationIdLabel: "OpenAI organization ID",
+    organizationIdPlaceholder: "org-...",
     helpText: (
       <>
         Codex cost import uses OpenAI Compliance Logs Platform{" "}
-        <code className="text-foreground">COSTS</code> files. Use an{" "}
-        <code className="text-foreground">org-*</code> ID for API
-        organizations; otherwise use the ChatGPT workspace ID.
+        <code className="text-foreground">COSTS</code> files for an OpenAI API
+        organization. Use an <code className="text-foreground">org-*</code> ID.
       </>
     ),
   },

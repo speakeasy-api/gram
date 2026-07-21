@@ -51,7 +51,7 @@ func TestListLogsSendsAuthAndFilters(t *testing.T) {
 	page, err := client.ListLogs(t.Context(), ListLogsParams{
 		PrincipalID: "org-123",
 		EventType:   "COSTS",
-		After:       time.Date(2026, 7, 16, 0, 0, 0, 0, time.UTC),
+		After:       time.Date(2026, 7, 16, 0, 0, 0, 123456789, time.UTC),
 		Limit:       100,
 	})
 	require.NoError(t, err)
@@ -102,7 +102,7 @@ func TestListLogsReturnsHTTPError(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 	}))
 	t.Cleanup(server.Close)
 
@@ -113,6 +113,8 @@ func TestListLogsReturnsHTTPError(t *testing.T) {
 	require.ErrorAs(t, err, &httpErr)
 	require.Equal(t, http.StatusUnauthorized, httpErr.StatusCode)
 	require.Equal(t, "401 Unauthorized", httpErr.Status)
+	require.Contains(t, httpErr.Body, "unauthorized")
+	require.Contains(t, err.Error(), "unauthorized")
 }
 
 func testGuardianPolicy(t *testing.T) *guardian.Policy {

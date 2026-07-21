@@ -230,6 +230,9 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	if providerRequiresExternalOrganizationID(provider) && externalOrganizationID == nil {
 		return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id is required for %s", provider)
 	}
+	if provider == ProviderCodexCompliance && externalOrganizationID != nil && !strings.HasPrefix(*externalOrganizationID, "org-") {
+		return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id must be an OpenAI organization ID starting with org- for %s", provider)
+	}
 
 	q := repo.New(dbtx)
 	projectID, err := q.GetFirstProjectByOrganization(ctx, orgID)
@@ -629,6 +632,10 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 	var errStr string
 	if cause != nil {
 		errStr = cause.Error()
+		var shareable *oops.ShareableError
+		if errors.As(cause, &shareable) {
+			errStr = shareable.String()
+		}
 	}
 
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
