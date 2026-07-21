@@ -17,7 +17,17 @@ const QUOTED_VALUE = /^(["'])(.*)\1(?:\s*#.*)?$/;
  * variable forms. Comments and blank lines are ignored; malformed lines are
  * reported so callers do not silently drop pasted content.
  */
-export function parseDotEnv(contents: string): DotEnvParseResult {
+export function parseDotEnvPaste(contents: string): DotEnvParseResult | null {
+  const parsed = parseDotEnv(contents);
+  if (parsed.entries.length > 0) return parsed;
+
+  const looksLikeDotEnv = /[\r\n=]/.test(contents);
+  return parsed.invalidLineNumbers.length > 0 && looksLikeDotEnv
+    ? parsed
+    : null;
+}
+
+function parseDotEnv(contents: string): DotEnvParseResult {
   const entries: DotEnvEntry[] = [];
   const invalidLineNumbers: number[] = [];
 

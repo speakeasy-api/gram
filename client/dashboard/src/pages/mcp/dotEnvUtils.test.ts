@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseDotEnv } from "./dotEnvUtils";
+import { parseDotEnvPaste } from "./dotEnvUtils";
 
-describe("parseDotEnv", () => {
+describe("parseDotEnvPaste", () => {
   it("parses dotenv assignments while ignoring comments and blank lines", () => {
     expect(
-      parseDotEnv(`
+      parseDotEnvPaste(`
 # API credentials
 API_KEY=secret-value
 BASE_URL = https://example.test/path?a=b
@@ -23,7 +23,7 @@ export EMPTY_VALUE=
 
   it("handles quoted values and inline comments", () => {
     expect(
-      parseDotEnv(`
+      parseDotEnvPaste(`
 HASH_VALUE="value # kept"
 SINGLE_QUOTED='also # kept'
 COMMENTED=value # removed
@@ -42,17 +42,21 @@ MULTILINE="first\\nsecond"
 
   it("reports malformed lines without discarding valid assignments", () => {
     expect(
-      parseDotEnv('VALID=value\nnot an assignment\nUNCLOSED="value'),
+      parseDotEnvPaste('VALID=value\nnot an assignment\nUNCLOSED="value'),
     ).toEqual({
       entries: [{ key: "VALID", value: "value" }],
       invalidLineNumbers: [2, 3],
     });
   });
 
-  it("does not mistake a plain key for dotenv content", () => {
-    expect(parseDotEnv("API_KEY")).toEqual({
+  it("reports malformed-only dotenv content", () => {
+    expect(parseDotEnvPaste('not an assignment\nUNCLOSED="value')).toEqual({
       entries: [],
-      invalidLineNumbers: [1],
+      invalidLineNumbers: [1, 2],
     });
+  });
+
+  it("does not mistake a plain key for dotenv content", () => {
+    expect(parseDotEnvPaste("API_KEY")).toBeNull();
   });
 });

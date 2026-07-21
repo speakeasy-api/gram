@@ -16,7 +16,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Button } from "@speakeasy-api/moonshine";
 import { AlertCircle, ChevronDown, Plus, X } from "lucide-react";
 import { type ClipboardEvent, useCallback, useState } from "react";
-import { parseDotEnv } from "./dotEnvUtils";
+import { parseDotEnvPaste } from "./dotEnvUtils";
 import { EnvVarState } from "./environmentVariableUtils";
 
 interface Environment {
@@ -123,20 +123,22 @@ export function AddVariableSheet({
     index: number,
     event: ClipboardEvent<HTMLInputElement>,
   ) => {
-    const parsed = parseDotEnv(event.clipboardData.getData("text"));
-    if (parsed.entries.length === 0) return;
+    const parsed = parseDotEnvPaste(event.clipboardData.getData("text"));
+    if (!parsed) return;
 
     event.preventDefault();
-    const importedEntries = parsed.entries.map(({ key, value }) => ({
-      key: key.toUpperCase(),
-      value,
-      isSecret: true,
-    }));
-    setEntries((prev) => [
-      ...prev.slice(0, index),
-      ...importedEntries,
-      ...prev.slice(index + 1),
-    ]);
+    if (parsed.entries.length > 0) {
+      const importedEntries = parsed.entries.map(({ key, value }) => ({
+        key: key.toUpperCase(),
+        value,
+        isSecret: true,
+      }));
+      setEntries((prev) => [
+        ...prev.slice(0, index),
+        ...importedEntries,
+        ...prev.slice(index + 1),
+      ]);
+    }
 
     if (parsed.invalidLineNumbers.length > 0) {
       const lineLabel =
