@@ -17,6 +17,20 @@ import (
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 )
 
+func TestComplianceSourceFromUserAgentDesktop(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "claude", complianceSourceFromUserAgent("Claude/1.2.3"))
+	require.Equal(t, "claude", complianceSourceFromUserAgent("Electron/39.0.0"))
+}
+
+func TestComplianceSourceFromUserAgentWeb(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "claude-chat-web", complianceSourceFromUserAgent("Mozilla/5.0"))
+	require.Equal(t, "claude-chat-web", complianceSourceFromUserAgent(""))
+}
+
 func complianceUserActivity(id, chatID string) anthropicapi.Activity {
 	return anthropicapi.Activity{
 		ID:               id,

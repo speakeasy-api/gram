@@ -19,13 +19,13 @@ import { CostTable } from "./CostTable";
 import { downloadCsv, slugify, toCsv } from "./csv";
 import {
   type Crumb,
+  displayName,
   entityBadgeVariant,
   friendlyName,
   isAttributionDim,
   LABELS,
   type Measures,
   pluralLabel,
-  unsetLabel,
 } from "./taxonomy";
 
 // ── Formatting helpers ──────────────────────────────────────────────────────
@@ -35,10 +35,6 @@ function formatCost(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-}
-
-function displayValue(dim: Dimension, groupValue: string): string {
-  return groupValue === "" ? unsetLabel(dim) : groupValue;
 }
 
 // ── CSV export ──────────────────────────────────────────────────────────────
@@ -66,7 +62,7 @@ function buildCostCsv(
     const cost = r.measures.totalCost ?? 0;
     const chats = r.measures.totalChats ?? 0;
     return [
-      displayValue(groupBy, r.groupValue),
+      displayName(groupBy, r.groupValue),
       cost.toFixed(2),
       total > 0 ? ((cost / total) * 100).toFixed(1) : "0.0",
       chats > 0 ? (cost / chats).toFixed(2) : "0.00",
@@ -307,7 +303,7 @@ export function EntityProfile({
   const parentDim = path[path.length - 2]?.dim;
   const backLabel =
     parentValue !== null && parentDim !== undefined
-      ? displayValue(parentDim, parentValue)
+      ? displayName(parentDim, parentValue)
       : projectName || "All costs";
 
   // Whichever table is on screen owns the export: the dimension rows by default,

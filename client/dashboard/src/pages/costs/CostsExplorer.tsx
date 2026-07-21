@@ -801,7 +801,10 @@ export function CostsExplorer(): JSX.Element {
     const toRows = (t: QueryRow[], dim: Dimension) =>
       t
         .filter((r) => r.groupValue !== "" || dim === Dimension.Email)
-        .map((r) => ({ label: r.groupValue, cost: r.measures.totalCost ?? 0 }));
+        .map((r) => ({
+          label: displayName(dim, r.groupValue),
+          cost: r.measures.totalCost ?? 0,
+        }));
     const cardTitle = (dim: Dimension) =>
       dim === Dimension.Email
         ? "Top spenders"

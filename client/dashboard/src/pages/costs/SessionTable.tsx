@@ -14,6 +14,7 @@ import {
 } from "./gridTable";
 import { EstimatedCostIndicator } from "@/components/estimated-cost";
 import { costMeasureLabel } from "@/components/estimated-cost-utils";
+import { formatPlatform } from "@/lib/formatPlatform";
 
 const PAGE_SIZE = 10;
 
@@ -154,7 +155,9 @@ const SESSION_COLUMNS: SessionColumn[] = [
     track: "minmax(max-content,1fr)",
     render: (s) => (
       <div className="flex min-w-0 items-center">
-        <span className="truncate">{displayOrDash(s.hookSource)}</span>
+        <span className="truncate">
+          {s.hookSource ? formatPlatform(s.hookSource) : "—"}
+        </span>
       </div>
     ),
   },
