@@ -112,7 +112,7 @@ func (p *PollCursorUsageMetrics) Do(ctx context.Context, configID string) (err e
 		return oops.E(oops.CodeUnexpected, err, "fetch cursor usage window")
 	}
 
-	if err := p.integrations.RecordUsagePollSuccess(ctx, id, aiintegrations.ProviderCursor, endTime, cfg.LastCursor); err != nil {
+	if err := p.integrations.RecordUsagePollSuccess(ctx, cfg.SyncID, aiintegrations.ProviderCursor, endTime, cfg.LastCursor); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record usage poll success")
 	}
 

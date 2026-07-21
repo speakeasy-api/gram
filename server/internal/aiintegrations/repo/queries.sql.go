@@ -994,17 +994,24 @@ SET poll_watermark_at = $1,
     consecutive_failures = 0,
     last_cursor_id = NULL,
     updated_at = clock_timestamp()
-WHERE id = $3
+WHERE ai_integration_config_id = $3
+  AND schedule = $4
 `
 
 type ResetUsagePollStateParams struct {
-	PollWatermarkAt pgtype.Timestamptz
-	NextPollAfter   pgtype.Timestamptz
-	SyncID          uuid.UUID
+	PollWatermarkAt       pgtype.Timestamptz
+	NextPollAfter         pgtype.Timestamptz
+	AiIntegrationConfigID uuid.UUID
+	Schedule              pgtype.Text
 }
 
 func (q *Queries) ResetUsagePollState(ctx context.Context, arg ResetUsagePollStateParams) error {
-	_, err := q.db.Exec(ctx, resetUsagePollState, arg.PollWatermarkAt, arg.NextPollAfter, arg.SyncID)
+	_, err := q.db.Exec(ctx, resetUsagePollState,
+		arg.PollWatermarkAt,
+		arg.NextPollAfter,
+		arg.AiIntegrationConfigID,
+		arg.Schedule,
+	)
 	return err
 }
 

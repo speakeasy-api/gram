@@ -169,7 +169,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 			}
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic compliance data")
 		}
-		if err := p.integrations.RecordUsagePollSuccess(ctx, cfg.ID, schedule, endTime, nextCursor); err != nil {
+		if err := p.integrations.RecordUsagePollSuccess(ctx, cfg.SyncID, schedule, endTime, nextCursor); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "record anthropic compliance schedule success")
 		}
 	case aiintegrations.ScheduleAnthropicAnalyticsUsage:

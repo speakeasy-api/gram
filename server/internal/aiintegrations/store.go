@@ -552,13 +552,12 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID, sche
 	return cfg, nil
 }
 
-func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, provider string, t time.Time, lastCursor string) error {
+func (s *Store) RecordUsagePollSuccess(ctx context.Context, syncID uuid.UUID, schedule string, t time.Time, lastCursor string) error {
 	if err := s.repo.RecordUsagePollSuccess(ctx, repo.RecordUsagePollSuccessParams{
-		AiIntegrationConfigID: configID,
-		Schedule:              conv.ToPGText(provider),
-		PollWatermarkAt:       conv.ToPGTimestamptz(t),
-		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(provider))),
-		LastCursorID:          conv.ToPGTextEmpty(lastCursor),
+		SyncID:          syncID,
+		PollWatermarkAt: conv.ToPGTimestamptz(t),
+		NextPollAfter:   conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
+		LastCursorID:    conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll success")
 	}
