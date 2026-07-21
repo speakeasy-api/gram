@@ -9,7 +9,14 @@ import {
 } from "chart.js";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Bar } from "react-chartjs-2";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleButton } from "@/components/ui/toggle-button";
@@ -218,13 +225,16 @@ export function StackedTimeSeriesPanel({
     };
   }, [bucketsMs, stacks, granularity, cumulative]);
 
+  // The resolved hover spotlight, computed outside the chart memo so legend
+  // TOGGLES (hiddenLabels churn) don't rebuild the data object while nothing
+  // is hovered. Focusing a hidden series resolves to no focus — otherwise
+  // hiding an item while hovering it would leave every visible series dimmed.
+  const focus =
+    focusLabel !== null && !hiddenLabels.has(focusLabel) ? focusLabel : null;
+
   // The cheap pass: map base colors through the hover spotlight.
-  const chart = useMemo(() => {
-    // Focusing a hidden series resolves to no focus — otherwise hiding an
-    // item while hovering it would leave every visible series dimmed.
-    const focus =
-      focusLabel !== null && !hiddenLabels.has(focusLabel) ? focusLabel : null;
-    return {
+  const chart = useMemo(
+    () => ({
       data: {
         labels: rolled.labels,
         datasets: rolled.datasets.map(({ base, ...d }) => ({
@@ -234,20 +244,22 @@ export function StackedTimeSeriesPanel({
         })),
       },
       buckets: rolled.buckets,
-    };
-  }, [rolled, focusLabel, hiddenLabels]);
+    }),
+    [rolled, focus],
+  );
 
   const hasData = rolled.datasets.length > 0;
 
   // Sync legend toggles into the chart instance (visibility is imperative
-  // Chart.js state, not part of the data props). Keyed on the dataset LABELS,
-  // not the chart object: visibility is index-based on the instance, so it
+  // Chart.js state, not part of the data props). Keyed on the label CONTENT,
+  // not the array identity: visibility is index-based on the instance, so it
   // only needs re-asserting when the set of series changes or a toggle flips
-  // — value-only data changes and hover recolors are handled by the Bar
-  // component's own update.
+  // — value-only data changes (granularity, cumulative) and hover recolors
+  // are handled by the Bar component's own update.
+  const datasetLabelsKey = rolled.datasets.map((d) => d.label).join("\u0000");
   const datasetLabels = useMemo(
-    () => rolled.datasets.map((d) => d.label),
-    [rolled],
+    () => (datasetLabelsKey === "" ? [] : datasetLabelsKey.split("\u0000")),
+    [datasetLabelsKey],
   );
   useEffect(() => {
     const instance = chartRef.current;
@@ -258,20 +270,35 @@ export function StackedTimeSeriesPanel({
     instance.update();
   }, [datasetLabels, hiddenLabels]);
 
+  // Narrow the page to the buckets [fromIndex, toIndex] — the shared tail of
+  // the click and drag drills. Re-buckets daily so a week/month bar expands
+  // into its days instead of one lone bar. Stable identity: it sits in the
+  // chartOptions memo's deps.
+  const buckets = chart.buckets;
+  const drillToBuckets = useCallback(
+    (fromIndex: number, toIndex: number): void => {
+      if (!onSelectRange) return;
+      const start = buckets[fromIndex];
+      if (start === undefined) return;
+      const end = bucketEndMs(buckets[toIndex] ?? start, granularity);
+      setGranularity("day");
+      onSelectRange(new Date(start), new Date(end));
+    },
+    [buckets, granularity, onSelectRange],
+  );
+
   // Selects the buckets covered by [x1, x2] (container pixels) as a date
-  // range, re-bucketing daily. Pixel positions map to axis indexes through
-  // the Chart.js category scale.
+  // range. Pixel positions map to axis indexes through the Chart.js category
+  // scale.
   const selectPixelRange = (x1: number, x2: number): void => {
     const scale = chartRef.current?.scales["x"];
-    if (!onSelectRange || !scale || chart.buckets.length === 0) return;
+    if (!scale || chart.buckets.length === 0) return;
     const clampIndex = (v: number | undefined): number =>
       Math.min(chart.buckets.length - 1, Math.max(0, Math.round(v ?? 0)));
-    const from = clampIndex(scale.getValueForPixel(Math.min(x1, x2)));
-    const to = clampIndex(scale.getValueForPixel(Math.max(x1, x2)));
-    const startMs = chart.buckets[from]!;
-    const endMs = bucketEndMs(chart.buckets[to]!, granularity);
-    setGranularity("day");
-    onSelectRange(new Date(startMs), new Date(endMs));
+    drillToBuckets(
+      clampIndex(scale.getValueForPixel(Math.min(x1, x2))),
+      clampIndex(scale.getValueForPixel(Math.max(x1, x2))),
+    );
   };
 
   // Dragging horizontally across the chart selects the covered buckets (a
@@ -336,13 +363,9 @@ export function StackedTimeSeriesPanel({
       // zoomed view re-buckets daily so a week/month bar expands into its
       // days instead of one lone bar.
       onClick: (_event, elements) => {
-        if (!onSelectRange || didDragRef.current) return;
+        if (didDragRef.current) return;
         const index = elements[0]?.index;
-        const start = index === undefined ? undefined : chart.buckets[index];
-        if (start === undefined) return;
-        const end = bucketEndMs(start, granularity);
-        setGranularity("day");
-        onSelectRange(new Date(start), new Date(end));
+        if (index !== undefined) drillToBuckets(index, index);
       },
       onHover: (event, elements) => {
         const target = event.native?.target;
@@ -379,14 +402,7 @@ export function StackedTimeSeriesPanel({
         },
       },
     };
-  }, [
-    isDark,
-    chart.buckets,
-    granularity,
-    onSelectRange,
-    formatValue,
-    formatAxisValue,
-  ]);
+  }, [isDark, drillToBuckets, onSelectRange, formatValue, formatAxisValue]);
 
   return (
     <div className="border-border rounded-lg border p-4">

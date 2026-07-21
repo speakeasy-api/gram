@@ -19,8 +19,9 @@ export const CHART_COLORS = [
 ];
 export const OTHER_COLOR = "#94a3b8"; // slate — the top-N remainder rollup
 
-// The label of a top-N remainder rollup series. Stacks with this label render
-// in the neutral OTHER_COLOR instead of walking the palette.
+// The base label of a top-N remainder rollup series (a collision with a real
+// group appends suffixes). The label is display-only: neutral OTHER_COLOR
+// rendering is driven by TimeSeriesStack.rollup, never by this string.
 export const OTHER_STACK_LABEL = "Other";
 
 // One stacked series: a daily value series aligned by index to the panel's

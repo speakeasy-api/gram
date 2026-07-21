@@ -853,7 +853,9 @@ export function CostsExplorer(): JSX.Element {
     // Keyed to the FETCHED axis: the rows are only user rows once they land.
     if (dataGroupBy === Dimension.Email) {
       const userRows = (data?.table ?? [])
-        .filter((r) => r.groupValue !== "Other")
+        .filter(
+          (r) => r.groupValue !== "Other" && r.groupValue !== serverRollupValue,
+        )
         .slice(0, 5);
       out.push({
         kind: "mix",
@@ -897,7 +899,7 @@ export function CostsExplorer(): JSX.Element {
         title: "Cost per session",
         value:
           perSession(stats.cost) !== null
-            ? `$${perSession(stats.cost)!.toFixed(2)}`
+            ? formatCost(perSession(stats.cost)!)
             : "—",
         caption,
         loading,
@@ -936,6 +938,7 @@ export function CostsExplorer(): JSX.Element {
     mixLoadingA,
     mixLoadingB,
     dataGroupBy,
+    serverRollupValue,
     availableDims,
     stats,
     data,
@@ -951,8 +954,11 @@ export function CostsExplorer(): JSX.Element {
     rowValues?: Record<string, string[]>,
   ) => {
     // "" (the "(unset)" bucket) is drillable — it filters to the entities
-    // missing this attribute. Only "Other" (the synthetic top-N rollup) isn't.
-    if (value === "Other") return;
+    // missing this attribute. Synthetic top-N rollups aren't: the main
+    // table's remainder is matched by identity (serverRollupValue covers the
+    // suffixed label a collision produces); the literal covers the mix
+    // cards' own smaller-topN rollup rows.
+    if (value === "Other" || value === serverRollupValue) return;
     // Never re-add a dimension already in the path — that produces nonsensical
     // chains (e.g. the same user/agent twice). The pivot list already hides
     // filtered dims; this guards the mix-card + fallback-chain paths too.
@@ -1113,9 +1119,11 @@ export function CostsExplorer(): JSX.Element {
 
   // The root Skill breakdown is scoped to agent-less spend (skill-only branch of
   // the Subagent → Skill tree). Rather than relabel the axis "Skill (only)",
-  // surface the caveat as an info tooltip beside the breakdown select.
+  // surface the caveat as an info tooltip beside the breakdown select. Keyed
+  // to the FETCHED axis like the heading it decorates, so the caveat never
+  // describes a cut the rows aren't showing yet.
   const skillOnlyBranch =
-    groupBy === Dimension.SkillName &&
+    dataGroupBy === Dimension.SkillName &&
     !path.some((c) => c.dim === Dimension.AgentName);
   const axisHint =
     skillOnlyBranch && !sessionsMode

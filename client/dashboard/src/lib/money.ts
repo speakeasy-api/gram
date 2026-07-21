@@ -1,7 +1,8 @@
-// The one place money is formatted for display. Every costs surface (chart,
-// tables, widgets, CSV-adjacent captions) imports from here so a change to
-// how spend renders — cents policy, currency, grouping — lands everywhere at
-// once instead of drifting across per-file copies.
+// The money formatters for the costs surfaces (chart, tables, widgets,
+// captions) — one definition so a change to how spend renders (cents policy,
+// currency, grouping) lands across those pages at once instead of drifting
+// per file. Not yet universal: a few older surfaces (e.g. InsightsAgents)
+// keep bespoke adaptive-precision formatters with different semantics.
 
 // Browser-default locale, matching formatCost's toLocaleString(undefined) —
 // the two must agree or the same page mixes locale conventions between the

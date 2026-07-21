@@ -10,7 +10,11 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { CHART_COLORS, OTHER_COLOR } from "@/components/stacked-time-series";
 import { type BillingPeriod, bucketDateKey } from "./billing-cycles";
-import { breakdownLabel, breakdownValueLabel } from "./breakdown-options";
+import {
+  breakdownLabel,
+  breakdownValueLabel,
+  isServerRollupRow,
+} from "./breakdown-options";
 import { tumDetailsQuery } from "./tum-queries";
 
 // Vercel-style usage details for the selected billing cycle: one row per
@@ -78,9 +82,12 @@ const TOKEN_TYPE_ROWS: MeasureRowSpec[] = [
 ];
 
 // Row color for a dimension value — same palette walk as the chart's stacks,
-// so a value's dot matches its chart series color.
-function valueColor(value: string, index: number): string {
-  if (value === "Other") return OTHER_COLOR;
+// so a value's dot matches its chart series color. The neutral remainder dot
+// uses the SAME rollup identity test as the chart (isServerRollupRow), never
+// a label match — a real value that happens to read "Other" keeps its
+// palette color in both places.
+function valueColor(rollup: boolean, index: number): string {
+  if (rollup) return OTHER_COLOR;
   return CHART_COLORS[index % CHART_COLORS.length]!;
 }
 
@@ -100,8 +107,12 @@ function dimensionGroups(
     const rows = byKey.get(key);
     if (!rows) continue;
     // "" rows are real observed traffic that lacks the attribute — shown as
-    // "(unset)". Zero-token rows are noise.
-    const visible = rows.filter((r) => r.totalTokens > 0);
+    // "(unset)". Zero-token rows are noise. Rollup identity is resolved on
+    // the UNfiltered rows (it is positional: the server appends its remainder
+    // last), before the zero-row filter can shift indexes.
+    const visible = rows
+      .map((row, i) => ({ row, rollup: isServerRollupRow(rows, i) }))
+      .filter(({ row }) => row.totalTokens > 0);
     if (visible.length === 0) continue;
     groups.push({
       heading: breakdownLabel(key),
@@ -112,9 +123,9 @@ function dimensionGroups(
         key === Dimension.Role
           ? "Users can hold multiple roles; rows overlap and can sum to more than the total token usage for the selected time period."
           : undefined,
-      rows: visible.map((r, i) => ({
+      rows: visible.map(({ row: r, rollup }, i) => ({
         label: breakdownValueLabel(key, r.value, projectNames),
-        color: valueColor(r.value, i),
+        color: valueColor(rollup, i),
         series: r.series,
         total: r.totalTokens,
       })),

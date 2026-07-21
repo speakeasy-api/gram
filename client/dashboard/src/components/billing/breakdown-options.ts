@@ -1,4 +1,5 @@
 import { unsetLabel } from "@/components/observe/account-display-utils";
+import { OTHER_STACK_LABEL } from "@/components/stacked-time-series";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import {
   BadgeCheck,
@@ -101,6 +102,26 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
     ],
   },
 ];
+
+// The server's TUM breakdown remainder row: QueryTumDetails keeps the top
+// SERVER_BREAKDOWN_TOP_N values and appends ONE synthetic rollup row last,
+// only when the dimension had more values than that — so a genuine remainder
+// always means exactly TOP_N + 1 rows. Its label is OTHER_STACK_LABEL with
+// " (other)" appended per collision with a real value. Both the chart's
+// rollup flag and the details table's neutral dot key off this one test so
+// they can never disagree.
+const SERVER_BREAKDOWN_TOP_N = 6;
+const SERVER_ROLLUP_LABEL = new RegExp(`^${OTHER_STACK_LABEL}( \\(other\\))*$`);
+export function isServerRollupRow(
+  rows: { value: string }[],
+  index: number,
+): boolean {
+  return (
+    rows.length === SERVER_BREAKDOWN_TOP_N + 1 &&
+    index === rows.length - 1 &&
+    SERVER_ROLLUP_LABEL.test(rows[index]!.value)
+  );
+}
 
 export function stackModeFor(breakdown: string): StackMode {
   switch (breakdown) {

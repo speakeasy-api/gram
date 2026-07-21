@@ -115,9 +115,16 @@ function entityPalette(name: string): { mesh: string } {
 
 // ── Small presentational pieces ─────────────────────────────────────────────
 
-// The control bar's bordered action buttons (Export CSV, Reset) share one look.
-const BAR_BUTTON_CLASS =
-  "text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border bg-transparent px-3 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-40";
+// The page's bordered ghost buttons share one core look; the control-bar
+// actions (Export CSV, Reset) and the nav buttons (Home, Back) compose their
+// size/spacing on top of it.
+const GHOST_BUTTON_CLASS =
+  "text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center rounded-md border bg-transparent text-sm transition-colors";
+const BAR_BUTTON_CLASS = cn(
+  GHOST_BUTTON_CLASS,
+  "h-10 shrink-0 gap-1.5 px-3 font-medium disabled:pointer-events-none disabled:opacity-40",
+);
+const NAV_BUTTON_CLASS = cn(GHOST_BUTTON_CLASS, "gap-1 py-1.5 pr-3 pl-2.5");
 
 // A headline metric in the profile header (Cost / Sessions / …), echoing the
 // big Followers/Following/Likes numbers in the reference design.
@@ -445,7 +452,7 @@ export function EntityProfile({
               type="button"
               onClick={onHome}
               tabIndex={entity ? 0 : -1}
-              className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
+              className={NAV_BUTTON_CLASS}
             >
               <Home className="size-3.5 shrink-0" />
               <span>Cost Overview</span>
@@ -455,7 +462,7 @@ export function EntityProfile({
             type="button"
             onClick={onBack}
             tabIndex={entity ? 0 : -1}
-            className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
+            className={NAV_BUTTON_CLASS}
           >
             <ChevronLeft className="size-3.5 shrink-0" />
             <span className="max-w-[220px] truncate">
