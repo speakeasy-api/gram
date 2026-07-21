@@ -15,7 +15,7 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChevronLeft, Download, Home, Info, RotateCcw } from "lucide-react";
 import { CostMeasureLabel } from "@/components/estimated-cost";
 import { BreakdownBar } from "./BreakdownBar";
@@ -307,6 +307,29 @@ export function EntityProfile({
   );
   const palette = entityPalette(title);
 
+  // The control bar pins to the top of the scrollport once scrolled past. A
+  // 1px sentinel above the sticky wrapper drives the pinned styling (full-
+  // width blur band + hairline): the wrapper is stuck exactly while the
+  // sentinel is scrolled out of the container. Observed against the actual
+  // scroll ancestor — the app shell scrolls an inner container, so the
+  // viewport default would fire ~a header-height too late.
+  const [pinned, setPinned] = useState(false);
+  const pinSentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sentinel = pinSentinelRef.current;
+    if (!sentinel) return;
+    let root: HTMLElement | null = sentinel.parentElement;
+    while (root && !/auto|scroll/.test(getComputedStyle(root).overflowY)) {
+      root = root.parentElement;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => setPinned(entry ? !entry.isIntersecting : false),
+      { root, threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
   const caption = breakdownCaption({
     axisValue,
     groupBy,
@@ -507,46 +530,60 @@ export function EntityProfile({
         </div>
       </div>
 
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-2 pb-24">
-        {/* The unified control bar sits under the headline numbers: search,
-            the axis track, table actions, and the page-scope dataset + range
-            controls. The axis re-cuts every visualization below it, and the
-            dataset/range scope every number on the page. */}
-        <BreakdownBar
-          axisValue={axisValue}
-          axisOptions={axisOptions}
-          onAxisChange={onAxisChange}
-          searchValue={searchValue}
-          onSearchChange={onSearchChange}
-          searchPlaceholder={searchPlaceholder}
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={csvExport.run}
-                disabled={csvExport.rowCount === 0}
-                className={BAR_BUTTON_CLASS}
-              >
-                <Download className="size-3.5 shrink-0" />
-                Export CSV
-              </button>
-              <button
-                type="button"
-                onClick={onReset}
-                className={BAR_BUTTON_CLASS}
-              >
-                <RotateCcw className="size-3.5 shrink-0" />
-                Reset
-              </button>
-            </div>
-          }
-          trailing={
-            <>
-              {datasetControl}
-              {rangePicker}
-            </>
-          }
-        />
+      {/* The unified control bar sits under the headline numbers: search, the
+          axis track, table actions, and the page-scope dataset + range
+          controls. The axis re-cuts every visualization below it, and the
+          dataset/range scope every number on the page — so once scrolled past,
+          the bar pins to the top of the scrollport (the sentinel above drives
+          the pinned styling: a full-width blur band with a hairline). */}
+      <div ref={pinSentinelRef} aria-hidden="true" className="h-px w-full" />
+      <div
+        className={cn(
+          "sticky top-0 z-20 w-full transition-shadow duration-200",
+          pinned &&
+            "border-border bg-background/85 border-b shadow-sm backdrop-blur-md",
+        )}
+      >
+        <div className="mx-auto w-full max-w-7xl px-8 py-2">
+          <BreakdownBar
+            axisValue={axisValue}
+            axisOptions={axisOptions}
+            onAxisChange={onAxisChange}
+            searchValue={searchValue}
+            onSearchChange={onSearchChange}
+            searchPlaceholder={searchPlaceholder}
+            actions={
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={csvExport.run}
+                  disabled={csvExport.rowCount === 0}
+                  className={BAR_BUTTON_CLASS}
+                >
+                  <Download className="size-3.5 shrink-0" />
+                  Export CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={onReset}
+                  className={BAR_BUTTON_CLASS}
+                >
+                  <RotateCcw className="size-3.5 shrink-0" />
+                  Reset
+                </button>
+              </div>
+            }
+            trailing={
+              <>
+                {datasetControl}
+                {rangePicker}
+              </>
+            }
+          />
+        </div>
+      </div>
+
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-4 pb-24">
         {widgets}
         {/* The breakdown is its own section under the summary widgets, so it
             opens on a rule rather than floating off the last widget. The
