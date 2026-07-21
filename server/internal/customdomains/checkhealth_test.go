@@ -33,6 +33,7 @@ func TestCheckHealth_StartsWorkflowForOrganizationDomain(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, domain.ID.String(), result.ID)
 	require.Equal(t, 1, ti.temporal.healthCheckCalls)
+	require.Equal(t, authCtx.ActiveOrganizationID, ti.temporal.lastOrganization)
 	require.Equal(t, domain.ID, ti.temporal.lastHealthCheckID)
 }
 

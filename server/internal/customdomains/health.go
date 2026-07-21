@@ -40,7 +40,7 @@ type HealthObservation struct {
 
 func ReconcileHealthState(current HealthState, observation HealthObservation, checkedAt time.Time) HealthState {
 	checkedAt = checkedAt.UTC()
-	if current.CheckedAt != nil && current.CheckedAt.Equal(checkedAt) {
+	if current.CheckedAt != nil && !checkedAt.After(*current.CheckedAt) {
 		return current
 	}
 

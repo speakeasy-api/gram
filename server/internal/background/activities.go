@@ -315,12 +315,12 @@ func (a *Activities) CustomDomainIngress(ctx context.Context, input activities.C
 	return a.customDomainIngress.Do(ctx, input)
 }
 
-func (a *Activities) ListCustomDomainsForHealthCheck(ctx context.Context, input activities.ListCustomDomainsForHealthCheckArgs) ([]uuid.UUID, error) {
-	ids, err := a.customDomainHealth.List(ctx, input)
+func (a *Activities) ListCustomDomainsForHealthCheck(ctx context.Context, input activities.ListCustomDomainsForHealthCheckArgs) ([]activities.CustomDomainHealthCheckTarget, error) {
+	targets, err := a.customDomainHealth.List(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("list custom domains for health check: %w", err)
 	}
-	return ids, nil
+	return targets, nil
 }
 
 func (a *Activities) CheckCustomDomainHealth(ctx context.Context, input activities.CheckCustomDomainHealthArgs) error {

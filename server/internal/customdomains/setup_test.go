@@ -39,6 +39,7 @@ type stubTemporalClient struct {
 	updateCalls       int
 	healthCheckCalls  int
 	lastDomain        string
+	lastOrganization  string
 	lastHealthCheckID uuid.UUID
 }
 
@@ -64,8 +65,9 @@ func (s *stubTemporalClient) ExecuteCustomDomainUpdate(ctx context.Context, orgI
 	return stubTemporalRun{}, nil
 }
 
-func (s *stubTemporalClient) ExecuteCustomDomainHealthCheck(ctx context.Context, customDomainID uuid.UUID) (client.WorkflowRun, error) {
+func (s *stubTemporalClient) ExecuteCustomDomainHealthCheck(ctx context.Context, organizationID string, customDomainID uuid.UUID) (client.WorkflowRun, error) {
 	s.healthCheckCalls++
+	s.lastOrganization = organizationID
 	s.lastHealthCheckID = customDomainID
 	return stubTemporalRun{}, nil
 }
