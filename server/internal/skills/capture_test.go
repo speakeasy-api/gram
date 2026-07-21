@@ -171,7 +171,7 @@ func TestCapturedVersionDoesNotOutrankManualDistribution(t *testing.T) {
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "capture-priority-plugin")
 
 	distribution, err := ti.service.Distribute(ctx, &gen.DistributePayload{
-		ID: manual.Skill.ID, PluginID: plugin.ID.String(), PinnedVersionID: nil,
+		ID: manual.Skill.ID, PluginID: new(plugin.ID.String()), PinnedVersionID: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
@@ -189,7 +189,7 @@ func TestPurelyCapturedSkillRemainsDistributable(t *testing.T) {
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "capture-only-plugin")
 
 	distribution, err := ti.service.Distribute(ctx, &gen.DistributePayload{
-		ID: captured.SkillID.String(), PluginID: plugin.ID.String(), PinnedVersionID: nil,
+		ID: captured.SkillID.String(), PluginID: new(plugin.ID.String()), PinnedVersionID: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
