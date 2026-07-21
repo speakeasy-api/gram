@@ -30,9 +30,9 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
 
   async sendMessages({
     messages,
-  }: {
-    messages: UIMessage[];
-  }): Promise<ReadableStream<UIMessageChunk>> {
+  }: Parameters<ChatTransport<UIMessage>["sendMessages"]>[0]): Promise<
+    ReadableStream<UIMessageChunk>
+  > {
     // Get tools and system prompt dynamically per request
     const { tools, systemPrompt } = await this.config.getTools(messages);
 
@@ -56,7 +56,9 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     return toUIMessageStream({ stream: result.stream, tools });
   }
 
-  reconnectToStream(): Promise<ReadableStream<UIMessageChunk> | null> {
+  reconnectToStream(
+    _options: Parameters<ChatTransport<UIMessage>["reconnectToStream"]>[0],
+  ): Promise<ReadableStream<UIMessageChunk> | null> {
     // Custom transport does not support stream reconnection — return null
     // to signal that there is no active stream to resume.
     return Promise.resolve(null);
