@@ -2,6 +2,7 @@ package risk_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -25,6 +26,51 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+// testPepperVersion / testPepperKey are the raw keyring material backing the
+// Fingerprinter the writer uses in these tests. Expected fingerprints are
+// recomputed from this same material via the wantHMAC / wantTenantedHMAC
+// helpers in fingerprint_test.go (same package).
+const testPepperVersion = "v1"
+
+var testPepperKey = []byte("finding-test-pepper-key-material")
+
+// wantGlobalFingerprint mirrors the writer's global fingerprint encoding:
+// base64url(HMAC-SHA256(pepper, match)).
+func wantGlobalFingerprint(match string) string {
+	return base64.RawURLEncoding.EncodeToString(wantHMAC(testPepperKey, []byte(match)))
+}
+
+// wantTenantFingerprint mirrors the tenant-scoped fingerprint: base64url of an
+// HMAC keyed by the per-tenant key derived from the pepper via HKDF.
+func wantTenantFingerprint(t *testing.T, tenantID, match string) string {
+	t.Helper()
+	return base64.RawURLEncoding.EncodeToString(wantTenantedHMAC(t, testPepperKey, tenantID, []byte(match)))
+}
+
+// finding builds a Finding with every field populated except the dead-letter
+// reason, so the happy path (fingerprints computed) is exercised by default.
+// Tests selectively clear or override fields to probe edge cases.
+func finding() *riskv1.Finding {
+	return riskv1.Finding_builder{
+		Id:                new("finding-1"),
+		RequestId:         new("req-1"),
+		ChatMessageId:     new("chat-1"),
+		ProjectId:         new("proj-1"),
+		OrganizationId:    new("org-1"),
+		RiskPolicyId:      new("policy-1"),
+		RiskPolicyVersion: new(int64(7)),
+		CreatedAt:         new("2026-06-27T12:30:00Z"),
+		RuleId:            new("rule-1"),
+		Description:       new("a secret leaked"),
+		Match:             new("hunter2"),
+		StartPos:          new(int32(3)),
+		EndPos:            new(int32(10)),
+		Tags:              []string{"pii", "secret"},
+		Source:            new("input"),
+		Confidence:        new(0.95),
+	}.Build()
+}
 
 // fakeCHInserter captures the rows the writer built so tests can inspect the
 // ClickHouse payload. err lets tests exercise the shadow-mode error path.

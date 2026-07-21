@@ -551,16 +551,15 @@ export function HeadersSection({
                   disabled={saveDisabled}
                   onClick={() => void handleSave()}
                 >
-                  {saving ? (
-                    <>
-                      <Button.LeftIcon>
-                        <Loader2 className="size-4 animate-spin" />
-                      </Button.LeftIcon>
-                      <Button.Text>Saving</Button.Text>
-                    </>
-                  ) : (
-                    <Button.Text>Save</Button.Text>
+                  {saving && (
+                    <Button.LeftIcon>
+                      <Loader2
+                        aria-hidden="true"
+                        className="size-4 animate-spin"
+                      />
+                    </Button.LeftIcon>
                   )}
+                  <Button.Text>{saving ? "Saving" : "Save"}</Button.Text>
                 </Button>
               </RequireScope>
             </Stack>

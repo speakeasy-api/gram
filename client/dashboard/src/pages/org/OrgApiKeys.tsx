@@ -261,16 +261,19 @@ function OrgApiKeysInner() {
               <div className="bg-muted flex items-center space-x-2 rounded-md p-3">
                 <code className="flex-1 break-all">{newlyCreatedKey.key}</code>
                 <Button
+                  aria-label={isCopied ? "API key copied" : "Copy API key"}
                   variant="tertiary"
                   size="sm"
                   onClick={() => void handleCopyToken()}
                   className="shrink-0"
                 >
-                  {isCopied ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
+                  <Button.Icon>
+                    {isCopied ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button.Icon>
                 </Button>
               </div>
               <div className="flex justify-end">

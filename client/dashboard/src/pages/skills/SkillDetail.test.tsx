@@ -21,6 +21,7 @@ const testState = vi.hoisted(() => ({
   fetchNextPage: vi.fn(),
   isFetchNextPageError: false,
   versionError: null as Error | null,
+  assistantCount: 3,
   versions: [] as Array<Record<string, unknown>>,
   version: {
     id: "version_latest",
@@ -84,6 +85,7 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
         updatedAt: new Date("2026-07-16T00:00:00Z"),
       },
       latestVersion: testState.version,
+      assistantCount: testState.assistantCount,
     },
   }),
   invalidateAllSkill: testState.invalidateSkill,
@@ -184,11 +186,27 @@ beforeEach(() => {
   testState.isFetchNextPageError = false;
   testState.versionError = null;
   testState.versions = [testState.version];
+  testState.assistantCount = 3;
 });
 
 afterEach(cleanup);
 
 describe("SkillDetail", () => {
+  it("shows how many assistants use the skill", () => {
+    render(<SkillDetail />);
+    expect(screen.getByText(/Used by/).textContent).toContain(
+      "Used by 3 assistants",
+    );
+  });
+
+  it("uses singular copy for one assistant", () => {
+    testState.assistantCount = 1;
+    render(<SkillDetail />);
+    expect(screen.getByText(/Used by/).textContent).toContain(
+      "Used by 1 assistant.",
+    );
+  });
+
   it("project-scopes every write affordance", () => {
     render(<SkillDetail />);
     const gates = screen.getAllByTestId("write-gate");

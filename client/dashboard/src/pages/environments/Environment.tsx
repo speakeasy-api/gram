@@ -452,8 +452,10 @@ function EnvironmentPageInner() {
                   {canWrite && (
                     <div className="mt-4 flex flex-col items-center gap-2">
                       <Button onClick={() => setVariableDialog({ open: true })}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        ADD YOUR FIRST VARIABLE
+                        <Button.LeftIcon>
+                          <Plus className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>ADD YOUR FIRST VARIABLE</Button.Text>
                       </Button>
                       <Button
                         variant="secondary"
