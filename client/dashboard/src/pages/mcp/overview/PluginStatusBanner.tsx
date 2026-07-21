@@ -199,7 +199,7 @@ export function PluginStatusBanner({
       });
       await Promise.all([
         invalidateAllPlugins(queryClient),
-        invalidateAllPublishStatus(queryClient),
+        invalidateAllPublishStatus(queryClient, { refetchType: "all" }),
       ]);
       toast.success(describeSaveResult(toAdd.length, toRemove.length), {
         description: (

@@ -184,13 +184,13 @@ export default function PluginDetail(): JSX.Element | null {
   const invalidateAll = async () => {
     await invalidateAllPlugin(queryClient);
     await invalidateAllPlugins(queryClient);
-    await invalidateAllPublishStatus(queryClient);
+    await invalidateAllPublishStatus(queryClient, { refetchType: "all" });
   };
 
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
       setIsPublishDialogOpen(false);
-      void invalidateAllPublishStatus(queryClient);
+      void invalidateAllPublishStatus(queryClient, { refetchType: "all" });
       toast.success("Plugins published to GitHub", {
         description: data.repoUrl,
         action: {

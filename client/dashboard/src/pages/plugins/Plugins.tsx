@@ -119,7 +119,7 @@ export default function Plugins(): JSX.Element {
     onSuccess: (data) => {
       setIsPublishDialogOpen(false);
       setIsManageCollaboratorsOpen(false);
-      void invalidateAllPublishStatus(queryClient);
+      void invalidateAllPublishStatus(queryClient, { refetchType: "all" });
       toast.success("Plugins published to GitHub", {
         description: data.repoUrl,
         action: {
@@ -205,7 +205,7 @@ export default function Plugins(): JSX.Element {
       onSuccess: async (data) => {
         await Promise.all([
           invalidateAllMarketplaceSettings(queryClient),
-          invalidateAllPublishStatus(queryClient),
+          invalidateAllPublishStatus(queryClient, { refetchType: "all" }),
         ]);
         setMarketplaceNameInput(data.settings.marketplaceName ?? "");
         if (data.hooksUpdateDeferred) {
