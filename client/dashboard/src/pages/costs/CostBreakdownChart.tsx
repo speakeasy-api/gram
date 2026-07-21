@@ -63,9 +63,27 @@ export function CostBreakdownChart({
     const series = (data?.timeseries ?? []).filter(
       (s) => !(isAttributionDim(groupBy) && s.groupValue === ""),
     );
-    const all = series.map((s) => ({
-      label: displayName(groupBy, s.groupValue),
-      series: s.points.map((p) => p.measures.totalCost ?? 0),
+    // Distinct raw values can share one display name (e.g. two hook_source
+    // spellings of the same agent). The panel keys series, legend toggles, and
+    // colors by label, so same-label series merge into one stack — users
+    // can't tell them apart anyway, and duplicate labels would make one
+    // legend toggle hide both. Insertion order keeps the cost ranking.
+    const byLabel = new Map<string, number[]>();
+    for (const s of series) {
+      const label = displayName(groupBy, s.groupValue);
+      const values = s.points.map((p) => p.measures.totalCost ?? 0);
+      const merged = byLabel.get(label);
+      if (merged) {
+        values.forEach((v, i) => {
+          merged[i] = (merged[i] ?? 0) + v;
+        });
+      } else {
+        byLabel.set(label, values);
+      }
+    }
+    const all = [...byLabel.entries()].map(([label, values]) => ({
+      label,
+      series: values,
     }));
     // The series arrive ranked by cost (the table's sort), so keeping a
     // prefix keeps the biggest spenders. Skip the rollup when it would hold

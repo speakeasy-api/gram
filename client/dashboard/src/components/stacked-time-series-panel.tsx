@@ -179,6 +179,11 @@ export function StackedTimeSeriesPanel({
   // Set when a drag just completed so the ensuing Chart.js click event (fired
   // on the same mouseup) doesn't ALSO drill into the release bar.
   const didDragRef = useRef(false);
+  // Teardown for an in-flight drag's window listeners. Normally run on
+  // mouseup; also run on unmount so a drag interrupted by navigation doesn't
+  // leave listeners firing into a dead component.
+  const dragTeardownRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragTeardownRef.current?.(), []);
 
   const chart = useMemo(() => {
     const rolled = rolledUpStacks(bucketsMs, stacks, granularity);
@@ -266,14 +271,19 @@ export function StackedTimeSeriesPanel({
       setDragX({ start: startX, current: clampX(ev.clientX) });
     };
     const onUp = (ev: MouseEvent): void => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      teardown();
       setDragX(null);
       const endX = clampX(ev.clientX);
       if (Math.abs(endX - startX) < DRAG_THRESHOLD_PX) return; // plain click
       didDragRef.current = true;
       selectPixelRange(startX, endX);
     };
+    const teardown = (): void => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      dragTeardownRef.current = null;
+    };
+    dragTeardownRef.current = teardown;
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   };
