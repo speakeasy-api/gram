@@ -11,7 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-const hooksBinaryVersion = "0.1.1"
+const hooksBinaryVersion = "0.3.0"
 
 type hooksBinaryTarget struct {
 	URL    string `json:"url"`
@@ -38,6 +38,19 @@ func hooksReleaseTargets(version string, sha256s map[string]string) map[string]h
 // sandbox) often cannot reach GitHub while the Gram domain is already
 // allowlisted for ingest.
 var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, map[string]string{
+	"darwin-amd64":  "c740eb39906e6a85f51f9774598e2b7d2e3a8acc89b78e04d615b86a9a35868f",
+	"darwin-arm64":  "049da3779681c2b5894dff02c4fd2726d1131d751e09d24f44651d24ab55811a",
+	"linux-amd64":   "0d1720c37f3feb6cb193d93ffb7ed393bfe3e9ac1ac1a66b9c841e9c7ee4d4e6",
+	"linux-arm64":   "2328b36e84034690008f289a46385c1c2ca78eebe4f09fed352a5f459918cf3c",
+	"windows-amd64": "218e38648129236425b172529bd3dbbfa7f74124fc09f3b3a001bc0a5752587f",
+	"windows-arm64": "bb5998a6489e0d8dc738530f7885058a98bda349df2f589e151887f7e79d3b60",
+})
+
+// hooksBinaryTargets0_1_1 keeps the previously pinned release fetchable. Hook
+// installations that have not regenerated their bootstrap script still request
+// this version's path, and their cold installs fail if the server stops
+// serving it.
+var hooksBinaryTargets0_1_1 = hooksReleaseTargets("0.1.1", map[string]string{
 	"darwin-amd64":  "ff5fda9b48e9ff33a789bf92563f1f93822e17411e9de36584198eaa704cb5c0",
 	"darwin-arm64":  "a61c5cc2721f1637262c91a710299941b0cd1316882c7338916c1349b56cccc5",
 	"linux-amd64":   "4127504a2d01d3e07dc4f6852e8e1551f404a98bf14f60a766d8dae110d361d3",
