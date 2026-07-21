@@ -48675,10 +48675,10 @@ components:
           format: date-time
         health_issue:
           type: string
-          description: The reason the domain was last observed as unhealthy
+          description: 'The reason the domain was last observed as unhealthy. One of: dns_not_found, dns_target_mismatch, resource_missing, certificate_missing, certificate_not_ready, certificate_expired, certificate_invalid, check_failed.'
         health_status:
           type: string
-          description: The latest observed domain health status
+          description: 'The latest observed domain health status. One of: unknown, healthy, unhealthy.'
         id:
           type: string
           description: The ID of the custom domain

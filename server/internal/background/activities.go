@@ -330,6 +330,13 @@ func (a *Activities) CheckCustomDomainHealth(ctx context.Context, input activiti
 	return nil
 }
 
+func (a *Activities) FindOrphanCustomDomainResources(ctx context.Context) error {
+	if err := a.customDomainHealth.FindOrphanResources(ctx); err != nil {
+		return fmt.Errorf("find orphan custom domain resources: %w", err)
+	}
+	return nil
+}
+
 func (a *Activities) CollectPlatformUsageMetrics(ctx context.Context) ([]activities.PlatformUsageMetrics, error) {
 	return a.collectPlatformUsageMetrics.Do(ctx)
 }

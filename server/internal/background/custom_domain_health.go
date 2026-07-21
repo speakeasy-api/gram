@@ -55,7 +55,7 @@ func CustomDomainHealthCheckWorkflow(ctx workflow.Context, params CustomDomainHe
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
+			MaximumAttempts:    activities.CustomDomainHealthCheckMaxAttempts,
 			InitialInterval:    5 * time.Second,
 			BackoffCoefficient: 2,
 			MaximumInterval:    30 * time.Second,
@@ -66,7 +66,9 @@ func CustomDomainHealthCheckWorkflow(ctx workflow.Context, params CustomDomainHe
 	if err := workflow.ExecuteActivity(ctx, a.CheckCustomDomainHealth, activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: params.CustomDomainID,
 		OrganizationID: params.OrganizationID,
-		CheckedAt:      workflow.Now(ctx).UTC(),
+		// timestamptz keeps microseconds only; truncate so activity retries
+		// compare equal to the persisted checked-at value.
+		CheckedAt: workflow.Now(ctx).UTC().Truncate(time.Microsecond),
 	}).Get(ctx, nil); err != nil {
 		return fmt.Errorf("check custom domain health: %w", err)
 	}
@@ -116,6 +118,11 @@ func CustomDomainHealthSweepWorkflow(ctx workflow.Context, params CustomDomainHe
 		}
 
 		if len(targets) < int(customDomainHealthPageSize) {
+			// Final page: reconcile gram-managed Kubernetes resources against the
+			// custom_domains table so orphans fail the sweep run loudly.
+			if err := workflow.ExecuteActivity(ctx, a.FindOrphanCustomDomainResources).Get(ctx, nil); err != nil {
+				return fmt.Errorf("find orphan custom domain resources: %w", err)
+			}
 			return nil
 		}
 		afterID = targets[len(targets)-1].ID

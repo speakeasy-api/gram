@@ -34,11 +34,11 @@ export type CustomDomain = {
    */
   healthCheckedAt?: Date | undefined;
   /**
-   * The reason the domain was last observed as unhealthy
+   * The reason the domain was last observed as unhealthy. One of: dns_not_found, dns_target_mismatch, resource_missing, certificate_missing, certificate_not_ready, certificate_expired, certificate_invalid, check_failed.
    */
   healthIssue?: string | undefined;
   /**
-   * The latest observed domain health status
+   * The latest observed domain health status. One of: unknown, healthy, unhealthy.
    */
   healthStatus?: string | undefined;
   /**

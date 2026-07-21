@@ -89,7 +89,7 @@ const healthIssueMessages: Record<string, string> = {
   dns_not_found:
     "We couldn't find DNS records for this domain. Check that the record still exists with your DNS provider.",
   dns_target_mismatch:
-    "This domain no longer points to Gram. Update its DNS record to the value shown when you registered the domain.",
+    "This domain's DNS does not resolve to Gram's endpoint. If the domain sits behind a proxy or CDN, traffic may still work; otherwise update its DNS record to the value shown when you registered the domain.",
   resource_missing:
     "The routing configuration for this domain is missing. Run the check again to confirm the problem persists.",
   certificate_missing:

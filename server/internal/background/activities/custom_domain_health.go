@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -20,8 +22,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 )
 
+// CustomDomainHealthCheckMaxAttempts bounds temporal retries of the health
+// check activity and is referenced by its workflow retry policy.
+const CustomDomainHealthCheckMaxAttempts = 3
+
 type CustomDomainInfrastructureChecker interface {
 	CheckCustomDomainInfrastructure(ctx context.Context, check k8s.CustomDomainInfrastructureCheck) (k8s.CustomDomainInfrastructureHealth, error)
+	ListManagedCustomDomainResources(ctx context.Context) ([]k8s.ManagedCustomDomainResource, error)
 }
 
 type CustomDomainHealth struct {
@@ -81,6 +88,11 @@ func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsFor
 }
 
 func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHealthArgs) error {
+	if c.expectedTarget == "" {
+		c.logger.WarnContext(ctx, "skipping custom domain health check: expected target CNAME not configured")
+		return nil
+	}
+
 	repository := customdomainsrepo.New(c.db)
 	domain, err := repository.GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
 		ID:             args.CustomDomainID,
@@ -93,7 +105,6 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		return fmt.Errorf("get custom domain for health check: %w", err)
 	}
 
-	current := customDomainHealthState(domain)
 	preserveCertificateExpiry := false
 
 	observation := customdomains.HealthObservation{
@@ -104,15 +115,16 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 	routingIssue, routingErr := checkCustomDomainRouting(ctx, c.resolver, domain.Domain, c.expectedTarget)
 	switch {
 	case routingErr != nil:
+		if !isFinalHealthCheckAttempt(ctx) {
+			return fmt.Errorf("check custom domain routing: %w", routingErr)
+		}
 		c.logger.WarnContext(ctx, "custom domain routing health check failed", attr.SlogURLDomain(domain.Domain), attr.SlogError(routingErr))
 		observation.Status = customdomains.HealthStatusUnhealthy
 		observation.Issue = customdomains.HealthIssueCheckFailed
-		observation.CertificateExpiresAt = current.CertificateExpiresAt
 		preserveCertificateExpiry = true
 	case routingIssue != "":
 		observation.Status = customdomains.HealthStatusUnhealthy
 		observation.Issue = routingIssue
-		observation.CertificateExpiresAt = current.CertificateExpiresAt
 		preserveCertificateExpiry = true
 	default:
 		infrastructureHealth, infrastructureErr := c.infrastructure.CheckCustomDomainInfrastructure(ctx, k8s.CustomDomainInfrastructureCheck{
@@ -122,10 +134,12 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 			ProvisionerKind: k8s.ProvisionerKind(domain.ProvisionerKind),
 		})
 		if infrastructureErr != nil {
+			if !isFinalHealthCheckAttempt(ctx) {
+				return fmt.Errorf("check custom domain infrastructure: %w", infrastructureErr)
+			}
 			c.logger.WarnContext(ctx, "custom domain infrastructure health check failed", attr.SlogURLDomain(domain.Domain), attr.SlogError(infrastructureErr))
 			observation.Status = customdomains.HealthStatusUnhealthy
 			observation.Issue = customdomains.HealthIssueCheckFailed
-			observation.CertificateExpiresAt = current.CertificateExpiresAt
 			preserveCertificateExpiry = true
 		} else {
 			observation.CertificateExpiresAt = infrastructureHealth.CertificateExpiresAt
@@ -171,6 +185,53 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		return fmt.Errorf("save custom domain health: %w", err)
 	}
 	return nil
+}
+
+// FindOrphanResources flags Kubernetes resources labeled as gram-managed that
+// no longer map to a live custom domain row. It returns an error when orphans
+// exist so the sweep workflow fails visibly; nothing is deleted automatically.
+func (c *CustomDomainHealth) FindOrphanResources(ctx context.Context) error {
+	resources, err := c.infrastructure.ListManagedCustomDomainResources(ctx)
+	if err != nil {
+		return fmt.Errorf("list managed custom domain resources: %w", err)
+	}
+	if len(resources) == 0 {
+		return nil
+	}
+
+	activeDomains, err := customdomainsrepo.New(c.db).ListActiveCustomDomainNames(ctx)
+	if err != nil {
+		return fmt.Errorf("list active custom domains: %w", err)
+	}
+	active := make(map[string]struct{}, len(activeDomains))
+	for _, domain := range activeDomains {
+		active[domain] = struct{}{}
+	}
+
+	var orphans []string
+	for _, resource := range resources {
+		if _, ok := active[resource.Domain]; ok {
+			continue
+		}
+		c.logger.ErrorContext(ctx, "orphaned custom domain resource: labeled as gram-managed but no live custom domain row",
+			attr.SlogURLDomain(resource.Domain),
+			attr.SlogResourceName(fmt.Sprintf("%s/%s", resource.Kind, resource.Name)),
+		)
+		orphans = append(orphans, fmt.Sprintf("%s/%s (domain %q)", resource.Kind, resource.Name, resource.Domain))
+	}
+	if len(orphans) > 0 {
+		return fmt.Errorf("found %d orphaned custom domain resources: %s", len(orphans), strings.Join(orphans, ", "))
+	}
+	return nil
+}
+
+// isFinalHealthCheckAttempt: transient probe errors bubble up so temporal
+// retries; check_failed is only persisted once retries are exhausted.
+func isFinalHealthCheckAttempt(ctx context.Context) bool {
+	if !activity.IsActivity(ctx) {
+		return true
+	}
+	return activity.GetInfo(ctx).Attempt >= CustomDomainHealthCheckMaxAttempts
 }
 
 func customDomainHealthState(domain customdomainsrepo.CustomDomain) customdomains.HealthState {

@@ -55,6 +55,11 @@ WHERE activated IS TRUE
 ORDER BY id
 LIMIT @page_limit;
 
+-- name: ListActiveCustomDomainNames :many
+SELECT domain
+FROM custom_domains
+WHERE deleted IS FALSE;
+
 -- name: GetCustomDomainByIDAndOrganizationForHealthUpdate :one
 SELECT *
 FROM custom_domains
