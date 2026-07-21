@@ -67,13 +67,16 @@ export function SkillSharingSection({ skill }: { skill: Skill }): JSX.Element {
       await share.mutateAsync({
         request: { shareSkillRequestBody: { skillId: skill.id } },
       });
-      await invalidateSkillQueries(queryClient);
       toast.success("Public link enabled");
     } catch (shareError) {
       let message = "Unable to enable public sharing.";
       if (shareError instanceof Error) message = shareError.message;
       setError(message);
       toast.error("Unable to enable public sharing");
+    } finally {
+      // Refetch even on failure: the share may have succeeded server-side
+      // (e.g. a lost response), leaving the cached state out of date.
+      await invalidateSkillQueries(queryClient);
     }
   };
 
@@ -83,7 +86,6 @@ export function SkillSharingSection({ skill }: { skill: Skill }): JSX.Element {
       await unshare.mutateAsync({
         request: { unshareSkillRequestBody: { skillId: skill.id } },
       });
-      await invalidateSkillQueries(queryClient);
       setConfirmAction(null);
       toast.success("Public link turned off");
     } catch (unshareError) {
@@ -91,6 +93,11 @@ export function SkillSharingSection({ skill }: { skill: Skill }): JSX.Element {
       if (unshareError instanceof Error) message = unshareError.message;
       setError(message);
       toast.error("Unable to turn off public sharing");
+    } finally {
+      // Refetch even on failure: the unshare may have succeeded server-side
+      // (e.g. a lost response), leaving the displayed link pointing at a
+      // revoked URL.
+      await invalidateSkillQueries(queryClient);
     }
   };
 

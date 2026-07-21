@@ -73,6 +73,15 @@ function SharedSkillBody({ token }: { token: string | undefined }) {
 function SharedSkillDocument({ skill }: { skill: SharedSkill2 }): JSX.Element {
   const body = stripSkillFrontmatter(skill.content);
 
+  const copyMarkdown = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(skill.content);
+      toast.success("Markdown copied");
+    } catch {
+      toast.error("Unable to copy markdown");
+    }
+  };
+
   return (
     <article className="space-y-8">
       <header className="space-y-3">
@@ -89,10 +98,7 @@ function SharedSkillDocument({ skill }: { skill: SharedSkill2 }): JSX.Element {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => {
-              void navigator.clipboard.writeText(skill.content);
-              toast.success("Markdown copied");
-            }}
+            onClick={() => void copyMarkdown()}
           >
             Copy markdown
           </Button>

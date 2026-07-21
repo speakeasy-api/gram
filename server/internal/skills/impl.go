@@ -1323,6 +1323,9 @@ func (s *Service) Unshare(ctx context.Context, payload *gen.UnsharePayload) erro
 	if err != nil {
 		return err
 	}
+	if authCtx.UserID == "" {
+		return oops.E(oops.CodeUnauthorized, nil, "unsharing a skill requires a user identity")
+	}
 
 	skillID, err := uuid.Parse(payload.SkillID)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -44,18 +45,35 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 }
 
 // logSafeURL renders a request URL for logs and observability context with
-// secret-bearing query parameters redacted. Several public capability-URL
-// endpoints carry a live credential in a "token" query parameter (e.g.
-// skills.getShared, assets.serveChatAttachmentSigned, chatSessions.revoke);
-// logging it verbatim would leak reusable secrets into application logs.
+// secret-bearing parts redacted. Several public capability-URL endpoints
+// carry a live credential in a "token" query parameter (e.g. skills.getShared,
+// assets.serveChatAttachmentSigned, chatSessions.revoke), and the public SPA
+// page /shared/skills/<token> carries one as a path segment; logging either
+// verbatim would leak reusable secrets into application logs.
 func logSafeURL(u *url.URL) string {
-	q := u.Query()
-	if _, ok := q["token"]; !ok {
+	safe := *u
+	changed := false
+
+	if rest, ok := strings.CutPrefix(safe.Path, "/shared/skills/"); ok && rest != "" {
+		if i := strings.IndexByte(rest, '/'); i >= 0 {
+			rest = "REDACTED" + rest[i:]
+		} else {
+			rest = "REDACTED"
+		}
+		safe.Path = "/shared/skills/" + rest
+		safe.RawPath = ""
+		changed = true
+	}
+
+	if q := safe.Query(); q.Has("token") {
+		q.Set("token", "REDACTED")
+		safe.RawQuery = q.Encode()
+		changed = true
+	}
+
+	if !changed {
 		return u.String()
 	}
-	q.Set("token", "REDACTED")
-	safe := *u
-	safe.RawQuery = q.Encode()
 	return safe.String()
 }
 

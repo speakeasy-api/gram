@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -207,6 +208,23 @@ func TestSkillArchiveRevokesShareLink(t *testing.T) {
 	revokeFinal, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillShareLinkRevoke)
 	require.NoError(t, err)
 	require.Equal(t, revokeAfter, revokeFinal)
+}
+
+func TestSkillShareRequiresUserIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "keyed-share-skill", "Shared by an API key.")
+
+	// Simulate a key-based caller: full grants but no user identity.
+	keyAuth := *ti.authContext
+	keyAuth.UserID = ""
+	keyCtx := contextvalues.SetAuthContext(ctx, &keyAuth)
+
+	_, err := ti.service.Share(keyCtx, &gen.SharePayload{SkillID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	err = ti.service.Unshare(keyCtx, &gen.UnsharePayload{SkillID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
 
 func TestSkillShareRBACDenied(t *testing.T) {
