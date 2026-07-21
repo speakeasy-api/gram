@@ -255,8 +255,10 @@ function SkillDetailSections({
           <SettingsSection.Header>
             <SettingsSection.Title>Plugin distributions</SettingsSection.Title>
             <SettingsSection.Description>
-              The plugins carrying this skill. Distributed skills ship inside
-              the plugin package and reach everyone who installs the plugin.
+              Used by {skillQueryData.assistantCount}{" "}
+              {skillQueryData.assistantCount === 1 ? "assistant" : "assistants"}
+              . The plugins carrying this skill ship it inside the plugin
+              package for everyone who installs it.
             </SettingsSection.Description>
           </SettingsSection.Header>
           <SkillDistributionsSection skillId={skillId} />

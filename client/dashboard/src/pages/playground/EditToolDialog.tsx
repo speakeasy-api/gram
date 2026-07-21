@@ -363,9 +363,11 @@ export function EditToolDialog({
               onClick={() => void handleSave()}
               disabled={!hasChanges || saving}
             >
-              {saving ? "Saving..." : "Save"}
+              <Button.Text>{saving ? "Saving..." : "Save"}</Button.Text>
               {hasChanges && !saving && (
-                <span className="ml-2 text-xs opacity-60">⌘⏎</span>
+                <Button.RightIcon>
+                  <span className="text-xs opacity-60">⌘⏎</span>
+                </Button.RightIcon>
               )}
             </Button>
           </div>

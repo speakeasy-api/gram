@@ -4,7 +4,7 @@ import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { Button } from "@speakeasy-api/moonshine";
 import { Loader2, SaveIcon } from "lucide-react";
-import { createContext, use } from "react";
+import { createContext, type ComponentProps, use } from "react";
 
 type SettingsSectionTone = "default" | "danger";
 type SettingsSectionContextValue = {
@@ -180,48 +180,24 @@ export const DangerSettingsSection = Object.assign(
   settingsSectionSlots,
 );
 
-export function FooterSaveButtonContent({
-  pending,
-}: {
+type FooterSaveButtonProps = Omit<ComponentProps<typeof Button>, "children"> & {
   pending: boolean;
-}): JSX.Element {
-  if (pending) {
-    return (
-      <>
-        <Button.LeftIcon>
-          <Loader2 className="size-4 animate-spin" />
-        </Button.LeftIcon>
-        <Button.Text>Saving</Button.Text>
-      </>
-    );
-  }
+};
 
-  return (
-    <>
-      <Button.LeftIcon>
-        <SaveIcon className="size-4" />
-      </Button.LeftIcon>
-      <Button.Text>Save</Button.Text>
-    </>
-  );
-}
-
-export function RowSaveButtonContent({
+export function FooterSaveButton({
   pending,
-}: {
-  pending: boolean;
-}): JSX.Element {
-  if (pending) {
-    return (
-      <Button.LeftIcon>
-        <Loader2 className="size-4 animate-spin" />
-      </Button.LeftIcon>
-    );
-  }
-
+  ...buttonProps
+}: FooterSaveButtonProps): JSX.Element {
   return (
-    <Button.LeftIcon>
-      <SaveIcon className="size-4" />
-    </Button.LeftIcon>
+    <Button variant="primary" size="md" {...buttonProps}>
+      <Button.LeftIcon>
+        {pending ? (
+          <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+        ) : (
+          <SaveIcon aria-hidden="true" className="size-4" />
+        )}
+      </Button.LeftIcon>
+      <Button.Text>{pending ? "Saving" : "Save"}</Button.Text>
+    </Button>
   );
 }

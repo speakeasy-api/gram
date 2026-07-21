@@ -32,7 +32,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
   Stack,
 } from "@speakeasy-api/moonshine";
 import { Activity } from "lucide-react";
@@ -46,6 +45,7 @@ import {
   UninitializedMarketplaceCard,
 } from "./MarketplaceCard";
 import { PluginCard } from "./PluginCard";
+import { PluginInstallButton } from "./PluginInstallButton";
 import {
   matchesPluginFilters,
   PLUGINS_FILTERS,
@@ -591,13 +591,7 @@ function ObservabilityPluginCard({
           onOpenChange={onDownloadMenuOpenChange}
         >
           <DropdownMenuTrigger asChild>
-            <Button variant="primary" size="sm">
-              <Button.Text>Install</Button.Text>
-              <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
-              <Button.RightIcon>
-                <Icon name="chevron-down" className="h-4 w-4" />
-              </Button.RightIcon>
-            </Button>
+            <PluginInstallButton size="sm" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem

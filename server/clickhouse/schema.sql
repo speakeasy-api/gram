@@ -521,7 +521,15 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     -- target column; column defaults are not applied. Production runbook:
     -- clickhouse/local/backfill/20260713000000_backfill-attribute-metrics-summaries.sql
     generation UInt8,
-    is_active UInt8 DEFAULT 1
+    is_active UInt8 DEFAULT 1,
+
+    -- Device hostname (gram.hook.hostname): reported by the Go hooks on every
+    -- event and propagated onto Claude OTEL rows via the session cache. A
+    -- sort-key DIMENSION appended after generation (MODIFY ORDER BY can only
+    -- append), declared last in the table to match the MV's positional SELECT.
+    -- Lets the user breakdown fall back to the device when a session carries
+    -- no email (company-credential sessions emit no user identity).
+    hook_hostname String
 ) ENGINE = AggregatingMergeTree
 -- Primary key stays the original 12 dimensions; account_type, provider,
 -- billing_mode, attribution dimensions, and generation are appended to ORDER BY
@@ -531,7 +539,7 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
 -- primary key includes the appended dims, and atlas would see drift it can't
 -- reconcile — "modifying primary key is not supported").
 PRIMARY KEY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
-ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation)
+ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, generation, hook_hostname)
 -- Retained beyond the standard 90-day telemetry window (matching
 -- chat_token_summaries) so the costs page can break down token usage across
 -- the same lookback that TUM billing reports cover.
@@ -540,13 +548,16 @@ SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribute_metrics_summaries AS
--- Provenance-first ingestion: only rows from the three agent surfaces are
--- admitted. Claude data comes exclusively from the Claude OTEL log stream
--- (api_request rows for usage, tool_result rows for tool calls); Codex and
--- Cursor come from their usage-metrics rows plus completed tool-call hook
--- rows. Everything else — Gram-hosted chat completions, claude-code:usage
--- metric rows (which duplicate api_request usage), Claude hook rows, MCP hook
--- rows — is excluded so cost attribution never mixes sources.
+-- Provenance-first ingestion: only rows from the observed agent surfaces are
+-- admitted. Claude Code data comes exclusively from the Claude OTEL log
+-- stream (api_request rows for usage, tool_result rows for tool calls);
+-- Codex and Cursor come from their usage-metrics rows plus completed
+-- tool-call hook rows; Claude Chat (web/desktop) usage and cost arrive as
+-- claude_chat:usage / claude_chat:cost rows polled from the Admin Analytics
+-- API. Everything else —
+-- Gram-hosted chat completions, claude-code:usage metric rows (which
+-- duplicate api_request usage), Claude hook rows, MCP hook rows — is
+-- excluded so cost attribution never mixes sources.
 -- Keep the predicates in sync with the session* constants in
 -- server/internal/telemetry/repo/sessions.go, which apply the same
 -- classification to raw telemetry_logs.
@@ -576,7 +587,12 @@ WITH
         is_claude_otel_row
         AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
     ) AS is_claude_tool_result,
-    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage')) AS is_agent_usage_row,
+    -- claude_chat:usage rows carry Claude Chat (web/desktop) per-user token
+    -- usage and claude_chat:cost rows the matching spend, both polled from the
+    -- Anthropic Admin Analytics API — sessionless usage, like Cursor's Admin
+    -- API rows. Deliberately NOT claude-code:usage, which stays excluded as a
+    -- duplicate of the OTEL api_request stream.
+    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
     -- Codex/Cursor have no OTEL log stream; their tool calls arrive as hook
     -- rows, one PostToolUse/PostToolUseFailure row per completed call. The
     -- hook.event guard is required: every call also emits a PreToolUse row
@@ -670,12 +686,17 @@ SELECT
     -- column list, so the SELECT must produce every target column or ingestion
     -- fails with a column-count mismatch. Constants need no GROUP BY entry.
     toUInt8(2) AS generation,
-    toUInt8(1) AS is_active
+    toUInt8(1) AS is_active,
+
+    -- Device hostname: on hook rows directly and on Claude OTEL rows via
+    -- session-cache propagation. Declared last to match the table column
+    -- order (positional insert).
+    toString(attributes.gram.hook.hostname) AS hook_hostname
 FROM telemetry_logs
--- Admit only the three agent surfaces: Claude OTEL api_request/tool_result
--- rows, Codex/Cursor usage rows, and Codex/Cursor completed tool-call hook
--- rows. Tool rows carry no token/cost fields, so they only contribute to the
--- tool-call counts.
+-- Admit only the observed agent surfaces: Claude OTEL api_request/tool_result
+-- rows, Codex/Cursor/Claude-Chat usage and cost rows, and Codex/Cursor
+-- completed tool-call hook rows. Tool rows carry no token/cost fields, so
+-- they only contribute to the tool-call counts.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
   AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
 GROUP BY
@@ -698,7 +719,8 @@ GROUP BY
     skill_name,
     agent_name,
     mcp_server_name,
-    mcp_tool_name;
+    mcp_tool_name,
+    hook_hostname;
 
 CREATE TABLE IF NOT EXISTS chat_token_summaries (
     -- Key columns

@@ -223,20 +223,31 @@ func attributeDimensionValuesExpr(groupBy string) string {
 		var collected string
 		switch dim.kind {
 		case attributeDimArray:
-			// Flatten the per-row arrays and dedup across the group.
-			collected = "groupUniqArrayArray(" + capStr + ")(" + dim.column + ")"
+			// Flatten the per-row arrays and dedup across the group. An empty
+			// array contributes no elements, so the "(unset)" bucket the group-by
+			// path renders for it (empty → [''], see attributeGroupValueExpr) is
+			// re-added explicitly when any row in the group carries one —
+			// otherwise the collected list under-reports the groups a breakdown
+			// by this dimension would produce.
+			collected = "arrayDistinct(arrayConcat(groupUniqArrayArray(" + capStr + ")(" + dim.column + "), if(countIf(empty(" + dim.column + ")) > 0, [''], [])))"
 		case attributeDimProject:
 			collected = "groupUniqArray(" + capStr + ")(toString(" + dim.column + "))"
 		case attributeDimScalar:
 			collected = "groupUniqArray(" + capStr + ")(" + dim.column + ")"
 		}
-		// Drop empty strings so absent attributes don't surface as a blank value.
-		// billing_mode is the exception: '' marks an unclassified contributor, and
-		// the cost view must see it so a scope mixing metered and unclassified
-		// spend is never presented as confidently metered (DNO-384).
-		valExpr := "arrayFilter(x -> x != '', " + collected + ")"
-		if k == "billing_mode" {
-			valExpr = collected
+		// '' is kept by default: for org/account dimensions an empty value is
+		// the real, drillable "(unset)" bucket the breakdown table renders, and
+		// consumers must be able to count it — billing_mode so a scope mixing
+		// metered and unclassified spend is never presented as confidently
+		// metered (DNO-384), and every groupable dimension so the cost
+		// explorer's axis pruning sees the same group count the table would
+		// show (DNO-425). Dimensions flagged emptyIsNotApplicable (the Claude
+		// attribution cuts and query_source) are the exception: there '' just
+		// marks rows the attribute doesn't apply to (a turn with no skill/MCP
+		// call), so it is dropped rather than surfacing as a blank value.
+		valExpr := collected
+		if dim.emptyIsNotApplicable {
+			valExpr = "arrayFilter(x -> x != '', " + collected + ")"
 		}
 		parts = append(parts, "'"+k+"', "+valExpr)
 	}

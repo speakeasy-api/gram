@@ -301,6 +301,14 @@ func stampAccountAttribution(attrs map[attr.Key]any, meta SessionMetadata) {
 	if meta.DeviceID != "" {
 		attrs[attr.DeviceIDKey] = meta.DeviceID
 	}
+	// The device hostname the hooks reported for this session. The row's own
+	// report wins: hook rows carry the attribute from their payload already,
+	// so only fill it for rows without one (the Claude OTEL stream).
+	if meta.Hostname != "" {
+		if _, ok := attrs[attr.HookHostnameKey]; !ok {
+			attrs[attr.HookHostnameKey] = meta.Hostname
+		}
+	}
 	// The account's own email, distinct from user.email (the authenticated
 	// actor). Sourced only from ObservedUserEmail — never UserEmail, which on
 	// merged canonical metadata holds the actor.

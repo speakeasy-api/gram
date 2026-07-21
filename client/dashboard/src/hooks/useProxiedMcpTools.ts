@@ -7,7 +7,7 @@ import { z } from "zod";
  * `tools/list` response). All fields are advisory and may be absent; malformed
  * hint values are dropped (`.catch`) rather than failing the whole decode.
  */
-const remoteMcpToolAnnotationsSchema = z.object({
+const proxiedMcpToolAnnotationsSchema = z.object({
   /** Human-friendly display name for the tool. */
   title: z.string().optional(),
   readOnlyHint: z.boolean().optional().catch(undefined),
@@ -17,36 +17,36 @@ const remoteMcpToolAnnotationsSchema = z.object({
 });
 
 /** A single tool from the `tools/list` response (extra fields are ignored). */
-const remoteMcpToolSchema = z.object({
+const proxiedMcpToolSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   // Raw JSON Schema for the tool's input; kept opaque and parsed lazily in the
   // UI when rendering parameters.
   inputSchema: z.unknown().optional(),
-  annotations: remoteMcpToolAnnotationsSchema.optional(),
+  annotations: proxiedMcpToolAnnotationsSchema.optional(),
 });
 
 /** The decoded shape of an MCP `tools/list` result. */
 const listToolsResultSchema = z.object({
-  tools: z.array(remoteMcpToolSchema),
+  tools: z.array(proxiedMcpToolSchema),
 });
 
-export type RemoteMcpToolAnnotations = z.infer<
-  typeof remoteMcpToolAnnotationsSchema
+export type ProxiedMcpToolAnnotations = z.infer<
+  typeof proxiedMcpToolAnnotationsSchema
 >;
 
 /** The slice of an MCP tool we surface for the dashboard listing. */
-export interface RemoteMcpTool {
+export interface ProxiedMcpTool {
   description?: string;
   inputSchema?: unknown;
-  annotations?: RemoteMcpToolAnnotations;
+  annotations?: ProxiedMcpToolAnnotations;
 }
 
 /** A record of tools keyed by tool name, mirroring the `tools/list` response. */
-type RemoteMcpToolSet = Record<string, RemoteMcpTool>;
+type ProxiedMcpToolSet = Record<string, ProxiedMcpTool>;
 
-export interface UseRemoteMcpToolsResult {
-  tools: RemoteMcpToolSet | undefined;
+export interface UseProxiedMcpToolsResult {
+  tools: ProxiedMcpToolSet | undefined;
   isLoading: boolean;
   isError: boolean;
   /**
@@ -59,7 +59,7 @@ export interface UseRemoteMcpToolsResult {
   refetch: () => void;
 }
 
-export interface UseRemoteMcpToolsOptions {
+export interface UseProxiedMcpToolsOptions {
   /**
    * Extra request headers for the MCP connection — e.g. the user-session JWT
    * (`Authorization: Bearer …`) the runtime gateway uses to resolve the
@@ -82,16 +82,16 @@ export interface UseRemoteMcpToolsOptions {
 }
 
 /**
- * Connects to a Gram-proxied remote MCP endpoint and lists its tools.
+ * Connects to a Gram-proxied MCP endpoint and lists its tools.
  *
  * Issuer-gated servers need a user-session JWT passed via `options.headers`
- * (minted by useRemoteMcpUserSessionToken); without it they surface as
+ * (minted by useUserSessionToken); without it they surface as
  * `needsAuth`.
  */
-export function useRemoteMcpTools(
+export function useProxiedMcpTools(
   mcpUrl: string | undefined,
-  options?: UseRemoteMcpToolsOptions,
-): UseRemoteMcpToolsResult {
+  options?: UseProxiedMcpToolsOptions,
+): UseProxiedMcpToolsResult {
   const { headers, enabled = true, throwOnError } = options ?? {};
 
   // Key on the header values so the query refetches once the JWT arrives or
@@ -102,14 +102,14 @@ export function useRemoteMcpTools(
         .sort()
     : [];
 
-  const query: UseQueryResult<RemoteMcpToolSet, Error> = useQuery({
-    queryKey: ["remoteMcpTools", mcpUrl, headersKey],
+  const query: UseQueryResult<ProxiedMcpToolSet, Error> = useQuery({
+    queryKey: ["proxiedMcpTools", mcpUrl, headersKey],
     queryFn: async () => {
       // `enabled` guards against an undefined URL, but narrow for the type.
       if (!mcpUrl) throw new Error("No MCP URL configured");
 
       const client = await createMCPClient({
-        name: "gram-dashboard-remote-mcp-client",
+        name: "gram-dashboard-proxied-mcp-client",
         transport: {
           type: "http",
           url: mcpUrl,
@@ -136,7 +136,7 @@ export function useRemoteMcpTools(
         ).listTools();
         const { tools } = listToolsResultSchema.parse(raw);
 
-        const toolSet: RemoteMcpToolSet = {};
+        const toolSet: ProxiedMcpToolSet = {};
         for (const tool of tools) {
           toolSet[tool.name] = {
             description: tool.description,
