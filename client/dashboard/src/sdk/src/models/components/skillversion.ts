@@ -33,6 +33,10 @@ export type SkillVersion = {
    */
   createdByUserId: string;
   /**
+   * The source version this version was derived from.
+   */
+  derivedFromVersionId?: string | undefined;
+  /**
    * The optional description from this manifest version.
    */
   description?: string | undefined;
@@ -89,6 +93,7 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
         z.transform(v => new Date(v)),
       ),
       created_by_user_id: z.string(),
+      derived_from_version_id: z.optional(z.string()),
       description: z.optional(z.string()),
       first_seen_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -110,6 +115,7 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
         "canonical_sha256": "canonicalSha256",
         "created_at": "createdAt",
         "created_by_user_id": "createdByUserId",
+        "derived_from_version_id": "derivedFromVersionId",
         "first_seen_at": "firstSeenAt",
         "last_seen_at": "lastSeenAt",
         "raw_sha256": "rawSha256",

@@ -291,6 +291,26 @@ ON CONFLICT (skill_id, canonical_sha256)
 DO NOTHING
 RETURNING *;
 
+-- name: CreateSkillVersionLineage :exec
+INSERT INTO skill_version_lineages (
+  skill_version_id,
+  skill_id,
+  derived_from_version_id
+)
+SELECT sv.id, sv.skill_id, @derived_from_version_id
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND sv.id = @skill_version_id;
+
+-- name: GetProjectSkillVersion :one
+SELECT sv.*
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND sv.id = @skill_version_id;
+
 -- name: GetSkillVersionByHash :one
 SELECT sv.*
 FROM skill_versions sv
@@ -351,9 +371,18 @@ FROM skill_raw_hashes
 WHERE project_id = @project_id
   AND raw_sha256 = @raw_sha256;
 
--- name: UpdateSkill :one
+-- name: TouchSkill :one
 UPDATE skills
-SET display_name = @display_name,
+SET updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = @id
+  AND archived_at IS NULL
+RETURNING *;
+
+-- name: UpdateSkillDetails :one
+UPDATE skills
+SET name = @name,
+    display_name = @display_name,
     summary = sqlc.narg(summary)::text,
     updated_at = clock_timestamp()
 WHERE project_id = @project_id
@@ -457,11 +486,15 @@ LIMIT @page_limit;
 -- name: ListSkillVersions :many
 SELECT
   sqlc.embed(sv),
+  svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
   COALESCE(sightings.seen_count, 0)::bigint AS seen_count
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN skill_version_lineages svl
+  ON svl.skill_id = sv.skill_id
+  AND svl.skill_version_id = sv.id
 LEFT JOIN LATERAL (
   SELECT
     MIN(so.seen_at)::timestamptz AS first_seen_at,
@@ -490,11 +523,15 @@ LIMIT @page_limit;
 -- name: GetSkillVersionDetails :one
 SELECT
   sqlc.embed(sv),
+  svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
   COALESCE(sightings.seen_count, 0)::bigint AS seen_count
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN skill_version_lineages svl
+  ON svl.skill_id = sv.skill_id
+  AND svl.skill_version_id = sv.id
 LEFT JOIN LATERAL (
   SELECT
     MIN(so.seen_at)::timestamptz AS first_seen_at,

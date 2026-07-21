@@ -558,6 +558,37 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 	return i, err
 }
 
+const createSkillVersionLineage = `-- name: CreateSkillVersionLineage :exec
+INSERT INTO skill_version_lineages (
+  skill_version_id,
+  skill_id,
+  derived_from_version_id
+)
+SELECT sv.id, sv.skill_id, $1
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $2
+  AND s.id = $3
+  AND sv.id = $4
+`
+
+type CreateSkillVersionLineageParams struct {
+	DerivedFromVersionID uuid.UUID
+	ProjectID            uuid.UUID
+	SkillID              uuid.UUID
+	SkillVersionID       uuid.UUID
+}
+
+func (q *Queries) CreateSkillVersionLineage(ctx context.Context, arg CreateSkillVersionLineageParams) error {
+	_, err := q.db.Exec(ctx, createSkillVersionLineage,
+		arg.DerivedFromVersionID,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.SkillVersionID,
+	)
+	return err
+}
+
 const deleteSkillVersionOrigin = `-- name: DeleteSkillVersionOrigin :exec
 DELETE FROM skill_version_origins
 WHERE project_id = $1
@@ -751,6 +782,38 @@ func (q *Queries) GetPluginForDistribution(ctx context.Context, arg GetPluginFor
 	row := q.db.QueryRow(ctx, getPluginForDistribution, arg.PluginID, arg.ProjectID)
 	var i GetPluginForDistributionRow
 	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
+const getProjectSkillVersion = `-- name: GetProjectSkillVersion :one
+SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND sv.id = $2
+`
+
+type GetProjectSkillVersionParams struct {
+	ProjectID      uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+func (q *Queries) GetProjectSkillVersion(ctx context.Context, arg GetProjectSkillVersionParams) (SkillVersion, error) {
+	row := q.db.QueryRow(ctx, getProjectSkillVersion, arg.ProjectID, arg.SkillVersionID)
+	var i SkillVersion
+	err := row.Scan(
+		&i.ID,
+		&i.SkillID,
+		&i.Content,
+		&i.CanonicalSha256,
+		&i.RawSha256,
+		&i.Description,
+		&i.Metadata,
+		&i.SpecValid,
+		&i.ValidationErrors,
+		&i.CreatedAt,
+		&i.CreatedByUserID,
+	)
 	return i, err
 }
 
@@ -1083,11 +1146,15 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 const getSkillVersionDetails = `-- name: GetSkillVersionDetails :one
 SELECT
   sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id,
+  svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
   COALESCE(sightings.seen_count, 0)::bigint AS seen_count
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN skill_version_lineages svl
+  ON svl.skill_id = sv.skill_id
+  AND svl.skill_version_id = sv.id
 LEFT JOIN LATERAL (
   SELECT
     MIN(so.seen_at)::timestamptz AS first_seen_at,
@@ -1113,10 +1180,11 @@ type GetSkillVersionDetailsParams struct {
 }
 
 type GetSkillVersionDetailsRow struct {
-	SkillVersion SkillVersion
-	FirstSeenAt  pgtype.Timestamptz
-	LastSeenAt   pgtype.Timestamptz
-	SeenCount    int64
+	SkillVersion         SkillVersion
+	DerivedFromVersionID uuid.NullUUID
+	FirstSeenAt          pgtype.Timestamptz
+	LastSeenAt           pgtype.Timestamptz
+	SeenCount            int64
 }
 
 func (q *Queries) GetSkillVersionDetails(ctx context.Context, arg GetSkillVersionDetailsParams) (GetSkillVersionDetailsRow, error) {
@@ -1134,6 +1202,7 @@ func (q *Queries) GetSkillVersionDetails(ctx context.Context, arg GetSkillVersio
 		&i.SkillVersion.ValidationErrors,
 		&i.SkillVersion.CreatedAt,
 		&i.SkillVersion.CreatedByUserID,
+		&i.DerivedFromVersionID,
 		&i.FirstSeenAt,
 		&i.LastSeenAt,
 		&i.SeenCount,
@@ -1535,11 +1604,15 @@ func (q *Queries) ListSkillSightingTimeline(ctx context.Context, arg ListSkillSi
 const listSkillVersions = `-- name: ListSkillVersions :many
 SELECT
   sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id,
+  svl.derived_from_version_id,
   sightings.first_seen_at,
   sightings.last_seen_at,
   COALESCE(sightings.seen_count, 0)::bigint AS seen_count
 FROM skill_versions sv
 JOIN skills s ON s.id = sv.skill_id
+LEFT JOIN skill_version_lineages svl
+  ON svl.skill_id = sv.skill_id
+  AND svl.skill_version_id = sv.id
 LEFT JOIN LATERAL (
   SELECT
     MIN(so.seen_at)::timestamptz AS first_seen_at,
@@ -1575,10 +1648,11 @@ type ListSkillVersionsParams struct {
 }
 
 type ListSkillVersionsRow struct {
-	SkillVersion SkillVersion
-	FirstSeenAt  pgtype.Timestamptz
-	LastSeenAt   pgtype.Timestamptz
-	SeenCount    int64
+	SkillVersion         SkillVersion
+	DerivedFromVersionID uuid.NullUUID
+	FirstSeenAt          pgtype.Timestamptz
+	LastSeenAt           pgtype.Timestamptz
+	SeenCount            int64
 }
 
 func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsParams) ([]ListSkillVersionsRow, error) {
@@ -1608,6 +1682,7 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 			&i.SkillVersion.ValidationErrors,
 			&i.SkillVersion.CreatedAt,
 			&i.SkillVersion.CreatedByUserID,
+			&i.DerivedFromVersionID,
 			&i.FirstSeenAt,
 			&i.LastSeenAt,
 			&i.SeenCount,
@@ -2041,26 +2116,64 @@ func (q *Queries) StoreSkillRawHashAlias(ctx context.Context, arg StoreSkillRawH
 	return matches, err
 }
 
-const updateSkill = `-- name: UpdateSkill :one
+const touchSkill = `-- name: TouchSkill :one
 UPDATE skills
-SET display_name = $1,
-    summary = $2::text,
-    updated_at = clock_timestamp()
-WHERE project_id = $3
-  AND id = $4
+SET updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = $2
   AND archived_at IS NULL
 RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
-type UpdateSkillParams struct {
+type TouchSkillParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) TouchSkill(ctx context.Context, arg TouchSkillParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, touchSkill, arg.ProjectID, arg.ID)
+	var i Skill
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Summary,
+		&i.SourceKind,
+		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateSkillDetails = `-- name: UpdateSkillDetails :one
+UPDATE skills
+SET name = $1,
+    display_name = $2,
+    summary = $3::text,
+    updated_at = clock_timestamp()
+WHERE project_id = $4
+  AND id = $5
+  AND archived_at IS NULL
+RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+`
+
+type UpdateSkillDetailsParams struct {
+	Name        string
 	DisplayName string
 	Summary     pgtype.Text
 	ProjectID   uuid.UUID
 	ID          uuid.UUID
 }
 
-func (q *Queries) UpdateSkill(ctx context.Context, arg UpdateSkillParams) (Skill, error) {
-	row := q.db.QueryRow(ctx, updateSkill,
+func (q *Queries) UpdateSkillDetails(ctx context.Context, arg UpdateSkillDetailsParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, updateSkillDetails,
+		arg.Name,
 		arg.DisplayName,
 		arg.Summary,
 		arg.ProjectID,

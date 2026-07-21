@@ -354,6 +354,7 @@ trackedFiles:
   src/funcs/skillsListUnknownActivations.ts: {}
   src/funcs/skillsListVersions.ts: {}
   src/funcs/skillsUndistribute.ts: {}
+  src/funcs/skillsUpdate.ts: {}
   src/funcs/telemetryCaptureEvent.ts: {}
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts: {}
   src/funcs/telemetryGetHooksSummary.ts: {}
@@ -1049,6 +1050,7 @@ trackedFiles:
   src/models/components/updateserverheaderform.ts: {}
   src/models/components/updateshadowmcpaccessruleform.ts: {}
   src/models/components/updateshadowmcpinventoryservernameform.ts: {}
+  src/models/components/updateskillrequestbody.ts: {}
   src/models/components/updatetoolsetrequestbody.ts: {}
   src/models/components/updatetriggerinstanceform.ts: {}
   src/models/components/updatetunneledmcpserverform.ts: {}
@@ -1477,6 +1479,7 @@ trackedFiles:
   src/models/operations/updaterole.ts: {}
   src/models/operations/updateshadowmcpaccessrule.ts: {}
   src/models/operations/updateshadowmcpinventoryservername.ts: {}
+  src/models/operations/updateskill.ts: {}
   src/models/operations/updatetemplate.ts: {}
   src/models/operations/updatetoolset.ts: {}
   src/models/operations/updatetriggerinstance.ts: {}
@@ -2055,6 +2058,7 @@ trackedFiles:
   src/react-query/updateRole.ts: {}
   src/react-query/updateShadowMCPAccessRule.ts: {}
   src/react-query/updateShadowMCPInventoryServerName.ts: {}
+  src/react-query/updateSkill.ts: {}
   src/react-query/updateTemplate.ts: {}
   src/react-query/updateToolset.ts: {}
   src/react-query/updateTrigger.ts: {}
@@ -6420,6 +6424,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  updateSkill:
+    speakeasy-default-update-skill:
+      requestBody:
+        application/json: {"display_name": "Kennedy24", "id": "5ad39359-acba-4ff3-904b-3242f20370ba", "name": "<value>"}
+      responses:
+        "200":
+          application/json: {"classification": "<value>", "created_at": "2024-01-07T01:45:50.347Z", "display_name": "Norma83", "id": "773db674-64d7-4196-9645-07f32d236cfa", "name": "<value>", "project_id": "fbbefcde-8905-4f51-80f3-ee6b3bb662e6", "seen_count": 574354, "source_kind": "<value>", "updated_at": "2025-09-30T20:45:41.117Z", "version_count": 628989}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   updateSlackApp:
     speakeasy-default-update-slack-app:
       requestBody:

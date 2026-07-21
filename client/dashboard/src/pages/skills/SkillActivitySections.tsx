@@ -90,10 +90,21 @@ export function SkillActivitySections({
                 "Multiple plugin distribution targets are configured, so drift is indeterminate."}
             </Type>
           </SettingsSection.Body>
-          {skill.lastSeenAt && (
+          {(skill.firstSeenAt || skill.lastSeenAt) && (
             <SettingsSection.Footer>
               <SettingsSection.FooterHint>
-                Last activated <HumanizeDateTime date={skill.lastSeenAt} />
+                {skill.firstSeenAt && (
+                  <>
+                    First activated{" "}
+                    <HumanizeDateTime date={skill.firstSeenAt} />
+                  </>
+                )}
+                {skill.firstSeenAt && skill.lastSeenAt && " · "}
+                {skill.lastSeenAt && (
+                  <>
+                    Last activated <HumanizeDateTime date={skill.lastSeenAt} />
+                  </>
+                )}
               </SettingsSection.FooterHint>
             </SettingsSection.Footer>
           )}

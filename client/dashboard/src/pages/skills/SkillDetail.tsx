@@ -28,6 +28,7 @@ import {
   ArchiveSkillDialog,
   type ArchiveSkillTarget,
 } from "./ArchiveSkillDialog";
+import { EditSkillDetailsDialog } from "./EditSkillDetailsDialog";
 import { SkillDistributionsSection } from "./SkillDistributionsSection";
 import {
   SKILL_ADOPTION_SECTION_ID,
@@ -153,6 +154,7 @@ function SkillDetailSections({
   const routes = useRoutes();
   const navigate = useNavigate();
   const [editOpen, setEditOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<ArchiveSkillTarget | null>(
     null,
   );
@@ -169,6 +171,51 @@ function SkillDetailSections({
   return (
     <>
       {latestVersion && <SkillPluginBanner skillId={skillId} />}
+
+      <SettingsSection>
+        <SettingsSection.Header>
+          <SettingsSection.Title>Skill details</SettingsSection.Title>
+          <SettingsSection.Description>
+            Registry identity and presentation metadata.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        <SettingsSection.Panel>
+          <SettingsSection.Body>
+            <dl className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <dt className="text-muted-foreground text-xs">
+                  Canonical name
+                </dt>
+                <dd className="mt-1 font-mono text-sm">{skill.name}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-xs">Display name</dt>
+                <dd className="mt-1 text-sm">{skill.displayName}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-xs">Summary</dt>
+                <dd className="mt-1 text-sm">{skill.summary || "None"}</dd>
+              </div>
+            </dl>
+          </SettingsSection.Body>
+          <SettingsSection.Footer>
+            <SettingsSection.FooterHint>
+              Renaming keeps activation attribution on this skill.
+            </SettingsSection.FooterHint>
+            <SettingsSection.FooterActions>
+              <RequireScope
+                scope="skill:write"
+                resourceId={project.id}
+                level="component"
+              >
+                <Button size="sm" onClick={() => setDetailsOpen(true)}>
+                  Edit details
+                </Button>
+              </RequireScope>
+            </SettingsSection.FooterActions>
+          </SettingsSection.Footer>
+        </SettingsSection.Panel>
+      </SettingsSection>
 
       <SkillActivitySections data={skillQueryData} />
 
@@ -212,7 +259,7 @@ function SkillDetailSections({
                   level="component"
                 >
                   <Button size="sm" onClick={() => setEditOpen(true)}>
-                    Edit skill
+                    Edit SKILL.md
                   </Button>
                 </RequireScope>
               </SettingsSection.FooterActions>
@@ -321,9 +368,16 @@ function SkillDetailSections({
           open={editOpen}
           onOpenChange={setEditOpen}
           skillId={skill.id}
+          derivedFromVersionId={latestVersion.id}
           initialContent={latestVersion.content}
         />
       )}
+      <EditSkillDetailsDialog
+        key={detailsOpen ? "details-open" : "details-closed"}
+        skill={skill}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+      />
       <ArchiveSkillDialog
         skill={archiveTarget}
         onClose={() => setArchiveTarget(null)}
@@ -504,6 +558,11 @@ function versionColumns({
           </span>
           {version.id === latestVersionId && (
             <Badge variant="information">Latest</Badge>
+          )}
+          {version.derivedFromVersionId && (
+            <Badge variant="neutral" title={version.derivedFromVersionId}>
+              Derived
+            </Badge>
           )}
         </div>
       ),

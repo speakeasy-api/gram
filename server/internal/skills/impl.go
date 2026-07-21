@@ -9,9 +9,12 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -37,7 +40,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const maxSkillsRequestBodyBytes = 512 * 1024
+const (
+	maxSkillsRequestBodyBytes = 512 * 1024
+	maxSkillDisplayNameRunes  = 256
+	maxSkillSummaryRunes      = 1024
+)
 
 type Service struct {
 	tracer   trace.Tracer
@@ -203,6 +210,27 @@ func buildSkillDistributionAuditSnapshot(distribution repo.SkillDistribution, re
 	}
 }
 
+func resolveDerivedFromVersion(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, value *string) (uuid.NullUUID, uuid.NullUUID, error) {
+	if value == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	versionID, err := uuid.Parse(*value)
+	if err != nil {
+		return uuid.NullUUID{}, uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid derived-from version id")
+	}
+	version, err := queries.GetProjectSkillVersion(ctx, repo.GetProjectSkillVersionParams{
+		ProjectID:      projectID,
+		SkillVersionID: versionID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.NullUUID{}, uuid.NullUUID{}, oops.E(oops.CodeNotFound, err, "derived-from version not found")
+		}
+		return uuid.NullUUID{}, uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "resolve derived-from version")
+	}
+	return uuid.NullUUID{UUID: versionID, Valid: true}, uuid.NullUUID{UUID: version.SkillID, Valid: true}, nil
+}
+
 type distributionTarget struct {
 	channel     string
 	pluginID    uuid.NullUUID
@@ -244,6 +272,7 @@ func (s *Service) recordVersion(
 	parsed parsedSkillManifest,
 	createdSkill bool,
 	createAudit bool,
+	derivedFromVersionID uuid.NullUUID,
 ) (*gen.RecordSkillResult, error) {
 	metadataJSON, err := json.Marshal(parsed.Metadata)
 	if err != nil {
@@ -304,7 +333,7 @@ func (s *Service) recordVersion(
 		if getErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, getErr, "load existing skill version details").LogError(ctx, logger)
 		}
-		matchedView, viewErr := mv.BuildSkillVersionView(matchedDetails.SkillVersion, manifestFrontmatter(matchedDetails.SkillVersion.Content), mv.SkillVersionSightingStats{
+		matchedView, viewErr := mv.BuildSkillVersionView(matchedDetails.SkillVersion, matchedDetails.DerivedFromVersionID, manifestFrontmatter(matchedDetails.SkillVersion.Content), mv.SkillVersionSightingStats{
 			FirstSeenAt: matchedDetails.FirstSeenAt, LastSeenAt: matchedDetails.LastSeenAt, SeenCount: matchedDetails.SeenCount,
 		})
 		if viewErr != nil {
@@ -321,12 +350,20 @@ func (s *Service) recordVersion(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create skill version").LogError(ctx, logger)
 	}
+	if derivedFromVersionID.Valid {
+		if err := queries.CreateSkillVersionLineage(ctx, repo.CreateSkillVersionLineageParams{
+			ProjectID:            *authCtx.ProjectID,
+			SkillID:              skill.ID,
+			SkillVersionID:       version.ID,
+			DerivedFromVersionID: derivedFromVersionID.UUID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "create skill version lineage").LogError(ctx, logger)
+		}
+	}
 
-	updated, err := queries.UpdateSkill(ctx, repo.UpdateSkillParams{
-		DisplayName: parsed.DisplayName,
-		Summary:     conv.PtrToPGText(parsed.Description),
-		ProjectID:   *authCtx.ProjectID,
-		ID:          skill.ID,
+	updated, err := queries.TouchSkill(ctx, repo.TouchSkillParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        skill.ID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update skill after adding version").LogError(ctx, logger)
@@ -337,7 +374,7 @@ func (s *Service) recordVersion(
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
 	}
 	afterView := mv.BuildSkillView(updated, latestID, count)
-	versionView, err := mv.BuildSkillVersionView(version, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
+	versionView, err := mv.BuildSkillVersionView(version, derivedFromVersionID, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
 		FirstSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		LastSeenAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		SeenCount:   0,
@@ -453,7 +490,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		}
 	}
 
-	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, createdSkill, createAudit)
+	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, createdSkill, createAudit, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	if err != nil {
 		return nil, err
 	}
@@ -485,6 +522,10 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
+	derivedFromVersionID, parentSkillID, err := resolveDerivedFromVersion(ctx, queries, *authCtx.ProjectID, payload.DerivedFromVersionID)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := queries.LockSkillName(ctx, repo.LockSkillNameParams{
 		ProjectID: *authCtx.ProjectID,
@@ -503,11 +544,14 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "get skill for version update").LogError(ctx, logger)
 	}
-	if skill.Name != parsed.Name {
+	if parentSkillID.Valid && parentSkillID.UUID != skill.ID {
+		return nil, oops.E(oops.CodeInvalid, nil, "derived-from version must belong to the skill")
+	}
+	if skill.Name != parsed.Name && !parentSkillID.Valid {
 		return nil, oops.E(oops.CodeInvalid, nil, "manifest name does not match the skill")
 	}
 
-	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false)
+	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false, derivedFromVersionID)
 	if err != nil {
 		return nil, err
 	}
@@ -516,6 +560,88 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	}
 
 	return result, nil
+}
+
+func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*types.Skill, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	if err != nil {
+		return nil, err
+	}
+	skillID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid skill id")
+	}
+	name, err := normalizeSkillName(strings.TrimSpace(payload.Name))
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid skill name")
+	}
+	displayName := strings.TrimSpace(payload.DisplayName)
+	if displayName == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill display name is required")
+	}
+	if utf8.RuneCountInString(displayName) > maxSkillDisplayNameRunes {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill display name must be at most 256 Unicode code points")
+	}
+	var summary *string
+	if payload.Summary != nil {
+		summary = conv.PtrEmpty(strings.TrimSpace(*payload.Summary))
+		if summary != nil && utf8.RuneCountInString(*summary) > maxSkillSummaryRunes {
+			return nil, oops.E(oops.CodeBadRequest, nil, "skill summary must be at most 1024 Unicode code points")
+		}
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin update skill transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+	skill, err := queries.GetSkillForUpdate(ctx, repo.GetSkillForUpdateParams{ProjectID: *authCtx.ProjectID, ID: skillID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "skill not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get skill for update").LogError(ctx, logger)
+	}
+	latestVersionID, versionCount, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load skill state before update").LogError(ctx, logger)
+	}
+
+	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{
+		Name:        name,
+		DisplayName: displayName,
+		Summary:     conv.PtrToPGText(summary),
+		ProjectID:   *authCtx.ProjectID,
+		ID:          skill.ID,
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "an active skill already uses this name")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "update skill").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogSkillUpdate(ctx, dbtx, audit.LogSkillUpdateEvent{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:    authCtx.Email,
+		ActorSlug:           nil,
+		SkillURN:            urn.NewSkill(updated.ID),
+		SkillName:           updated.Name,
+		SkillDisplayName:    updated.DisplayName,
+		SkillSnapshotBefore: buildSkillAuditSnapshot(skill, latestVersionID, versionCount),
+		SkillSnapshotAfter:  buildSkillAuditSnapshot(updated, latestVersionID, versionCount),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log skill update").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit update skill transaction").LogError(ctx, logger)
+	}
+
+	return mv.BuildSkillView(updated, latestVersionID, versionCount), nil
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {
@@ -588,7 +714,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 		if latestErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, latestErr, "get latest skill version details").LogError(ctx, logger)
 		}
-		latestView, latestErr = mv.BuildSkillVersionView(latest.SkillVersion, manifestFrontmatter(latest.SkillVersion.Content), mv.SkillVersionSightingStats{
+		latestView, latestErr = mv.BuildSkillVersionView(latest.SkillVersion, latest.DerivedFromVersionID, manifestFrontmatter(latest.SkillVersion.Content), mv.SkillVersionSightingStats{
 			FirstSeenAt: latest.FirstSeenAt, LastSeenAt: latest.LastSeenAt, SeenCount: latest.SeenCount,
 		})
 		if latestErr != nil {

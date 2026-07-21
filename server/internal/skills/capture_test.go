@@ -95,6 +95,31 @@ func TestCaptureSkillContent_DedupesManualWithoutOriginAndPreservesPresentation(
 	require.Equal(t, "Manual summary.", skill.Summary.String)
 }
 
+func TestCaptureSkillContent_ReusesRenamedSkillByRawHash(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	content := capturedManifest("local-name", "Captured summary.", "body")
+	captured, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+
+	updated, err := ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: captured.SkillID.String(), Name: "curated-name", DisplayName: "Curated name",
+		Summary: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	replayed, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+	require.Equal(t, captured.SkillID, replayed.SkillID)
+	require.Equal(t, captured.SkillVersionID, replayed.SkillVersionID)
+	require.False(t, replayed.CreatedSkill)
+	require.False(t, replayed.CreatedVersion)
+	stored, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: captured.SkillID})
+	require.NoError(t, err)
+	require.Equal(t, updated.Name, stored.Name)
+	require.Equal(t, updated.DisplayName, stored.DisplayName)
+}
+
 func TestCaptureSkillContent_ManualReuseRemovesCapturedOrigin(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

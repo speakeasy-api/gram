@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	skills "github.com/speakeasy-api/gram/server/gen/skills"
 	goa "goa.design/goa/v3/pkg"
@@ -63,9 +64,12 @@ func BuildAddVersionPayload(skillsAddVersionBody string, skillsAddVersionSession
 	{
 		err = json.Unmarshal([]byte(skillsAddVersionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.DerivedFromVersionID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.derived_from_version_id", *body.DerivedFromVersionID, goa.FormatUUID))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -89,8 +93,66 @@ func BuildAddVersionPayload(skillsAddVersionBody string, skillsAddVersionSession
 		}
 	}
 	v := &skills.AddVersionPayload{
-		ID:      body.ID,
-		Content: body.Content,
+		ID:                   body.ID,
+		Content:              body.Content,
+		DerivedFromVersionID: body.DerivedFromVersionID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdatePayload builds the payload for the skills update endpoint from
+// CLI flags.
+func BuildUpdatePayload(skillsUpdateBody string, skillsUpdateSessionToken string, skillsUpdateApikeyToken string, skillsUpdateProjectSlugInput string) (*skills.UpdatePayload, error) {
+	var err error
+	var body UpdateRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsUpdateBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"summary\": \"aaa\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.Name) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 64, false))
+		}
+		if utf8.RuneCountInString(body.DisplayName) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.display_name", body.DisplayName, utf8.RuneCountInString(body.DisplayName), 256, false))
+		}
+		if body.Summary != nil {
+			if utf8.RuneCountInString(*body.Summary) > 1024 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.summary", *body.Summary, utf8.RuneCountInString(*body.Summary), 1024, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if skillsUpdateSessionToken != "" {
+			sessionToken = &skillsUpdateSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsUpdateApikeyToken != "" {
+			apikeyToken = &skillsUpdateApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsUpdateProjectSlugInput != "" {
+			projectSlugInput = &skillsUpdateProjectSlugInput
+		}
+	}
+	v := &skills.UpdatePayload{
+		ID:          body.ID,
+		Name:        body.Name,
+		DisplayName: body.DisplayName,
+		Summary:     body.Summary,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

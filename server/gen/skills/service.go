@@ -26,6 +26,9 @@ type Service interface {
 	// implementation requires the skills product feature and skill write scope,
 	// and returns the existing canonical version as a no-op when appropriate.
 	AddVersion(context.Context, *AddVersionPayload) (res *RecordSkillResult, err error)
+	// Rename an active skill or update its display name and summary. The
+	// implementation requires the skills product feature and skill write scope.
+	Update(context.Context, *UpdatePayload) (res *types.Skill, err error)
 	// List active skills in the project. The implementation requires the skills
 	// product feature and skill read scope.
 	List(context.Context, *ListPayload) (res *ListSkillsResult, err error)
@@ -73,7 +76,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"create", "addVersion", "list", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "listDistributions"}
+var MethodNames = [11]string{"create", "addVersion", "update", "list", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "listDistributions"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -82,10 +85,12 @@ type AddVersionPayload struct {
 	ID string
 	// The complete uploaded SKILL.md content. Handlers enforce a maximum size of
 	// 65,536 UTF-8 bytes.
-	Content          string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	Content string
+	// The optional source version this new version was derived from.
+	DerivedFromVersionID *string
+	SessionToken         *string
+	ApikeyToken          *string
+	ProjectSlugInput     *string
 }
 
 // ArchivePayload is the payload type of the skills service archive method.
@@ -322,6 +327,21 @@ type UnknownSkillActivation struct {
 	SeenAt string
 	// Why exact version attribution failed.
 	Reason string
+}
+
+// UpdatePayload is the payload type of the skills service update method.
+type UpdatePayload struct {
+	// The skill ID.
+	ID string
+	// The canonical skill name.
+	Name string
+	// The user-facing skill name.
+	DisplayName string
+	// The optional skill summary.
+	Summary          *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
