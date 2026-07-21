@@ -47,8 +47,10 @@ export interface ProxiedMcpConnection {
  */
 export function useProxiedMcpConnection(
   mcpServerId: string | undefined,
-  isIssuerGated: boolean,
+  userSessionIssuerId: string | undefined,
 ): ProxiedMcpConnection {
+  const isIssuerGated = !!userSessionIssuerId;
+
   const { data: endpointsData, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId: mcpServerId ?? "" }, undefined, {
       enabled: !!mcpServerId,
@@ -70,7 +72,7 @@ export function useProxiedMcpConnection(
 
   const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
     target: { kind: "mcpServer", id: mcpServerId },
-    isIssuerGated,
+    userSessionIssuerId,
   });
 
   const headers = useMemo(

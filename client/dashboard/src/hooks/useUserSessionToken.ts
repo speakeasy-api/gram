@@ -38,12 +38,18 @@ function mintRequestBody(
  * minted token is what the dashboard's MCP clients send as
  * `Authorization: Bearer` on the target's MCP surface, so the runtime gateway
  * resolves the dashboard user's stored upstream credentials through the same
- * path a real MCP client would after an OAuth dance — for remote MCP servers
+ * path a real MCP client would after an OAuth dance — for proxied MCP servers
  * it matches what /x/mcp/{slug}/token would emit.
  *
- * Only issuer-gated targets get a token; the mint RPC 400s for the rest, so we
- * gate on `isIssuerGated` and leave `accessToken` undefined otherwise, letting
+ * Only issuer-gated targets get a token; the mint RPC 400s for the rest, so a
+ * target with no `userSessionIssuerId` leaves `accessToken` undefined and lets
  * the connection proceed unauthenticated.
+ *
+ * The issuer id is part of the query key, not just the gate: the minted JWT's
+ * audience binds to the issuer, so relinking a target to a different issuer has
+ * to invalidate the cached token. Keying on the target alone would keep serving
+ * a JWT bound to the old issuer for the full 45-minute staleTime, and the
+ * gateway would reject its audience until the entry expired.
  *
  * Consumers sharing a target share the query key, so React Query dedupes the
  * mint across them — e.g. the playground's auth panel and chat surface issue a
@@ -51,20 +57,28 @@ function mintRequestBody(
  */
 export function useUserSessionToken({
   target,
-  isIssuerGated,
+  userSessionIssuerId,
 }: {
   target: UserSessionTokenTarget;
-  isIssuerGated: boolean;
+  userSessionIssuerId: string | undefined;
 }): UseUserSessionTokenResult {
   const session = useSession();
   const project = useProject();
   const mintMutation = useMintUserSessionMutation();
 
   const { kind, id } = target;
+  const isIssuerGated = !!userSessionIssuerId;
   const enabled = !!id && isIssuerGated;
 
   const query = useQuery({
-    queryKey: ["userSessionToken", kind, project.id, id, session.user.id],
+    queryKey: [
+      "userSessionToken",
+      kind,
+      project.id,
+      id,
+      userSessionIssuerId,
+      session.user.id,
+    ],
     queryFn: async () => {
       if (!id) return null;
       const result = await mintMutation.mutateAsync({
@@ -93,6 +107,6 @@ export function useUserSessionToken({
     // (stale or otherwise) that would get attached to an unauthenticated
     // connection.
     accessToken: enabled ? query.data?.accessToken : undefined,
-    isLoading: enabled && query.isLoading && query.fetchStatus !== "idle",
+    isLoading: enabled && query.isLoading,
   };
 }

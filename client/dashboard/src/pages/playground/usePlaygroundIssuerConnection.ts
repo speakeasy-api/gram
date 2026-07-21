@@ -39,11 +39,11 @@ export interface PlaygroundIssuerConnection {
 export function usePlaygroundIssuerConnection(
   toolset: Toolset | undefined,
 ): PlaygroundIssuerConnection {
-  const isIssuerGated = !!toolset?.userSessionIssuerSlug;
+  const isIssuerGated = !!toolset?.userSessionIssuerId;
 
   const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
     target: { kind: "toolset", id: toolset?.id },
-    isIssuerGated,
+    userSessionIssuerId: toolset?.userSessionIssuerId,
   });
 
   const mcpUrl = useInternalMcpUrl(toolset);
