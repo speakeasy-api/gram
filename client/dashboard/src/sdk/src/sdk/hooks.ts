@@ -8,6 +8,7 @@ import { hooksHooksNumberCursor } from "../funcs/hooksHooksNumberCursor.js";
 import { hooksHooksNumberLogs } from "../funcs/hooksHooksNumberLogs.js";
 import { hooksHooksNumberMetrics } from "../funcs/hooksHooksNumberMetrics.js";
 import { hooksIngest } from "../funcs/hooksIngest.js";
+import { hooksUploadSkillContent } from "../funcs/hooksUploadSkillContent.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ClaudeHookResult } from "../models/components/claudehookresult.js";
 import { CodexHookResult } from "../models/components/codexhookresult.js";
@@ -31,6 +32,10 @@ import {
   HooksNumberMetricsSecurity,
 } from "../models/operations/hooksnumbermetrics.js";
 import { IngestHookEventRequest } from "../models/operations/ingesthookevent.js";
+import {
+  UploadSkillContentRequest,
+  UploadSkillContentSecurity,
+} from "../models/operations/uploadskillcontent.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Hooks extends ClientSDK {
@@ -137,6 +142,25 @@ export class Hooks extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksHooksNumberMetrics(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * uploadSkillContent hooks
+   *
+   * @remarks
+   * Uploads skill manifest content requested by the unified hook ingest endpoint.
+   */
+  async uploadSkillContent(
+    request: UploadSkillContentRequest,
+    security?: UploadSkillContentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(hooksUploadSkillContent(
       this,
       request,
       security,

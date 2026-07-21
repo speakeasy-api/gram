@@ -259,11 +259,16 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 			return components.TypeSkillActivated
 		}
 	}
-	// Codex skill activations are inferred from ordinary tool payloads, so the
-	// event keeps its true type: only pre-tool events count (completions must
-	// not re-report, permission previews may be denied).
+	// Codex and Cursor skill activations are inferred from ordinary tool
+	// payloads, so the event keeps its true type: only pre-tool events count
+	// (completions must not re-report, permission previews may be denied).
 	if base.Provider == agenthooks.ProviderCodex && base.Kind == agenthooks.KindToolPre {
 		if name := codexToolSkillName(tool); name != "" {
+			data.Skill = &components.HookSkillData{Name: name, Source: nil}
+		}
+	}
+	if base.Provider == agenthooks.ProviderCursor && base.Kind == agenthooks.KindToolPre {
+		if name := cursorToolSkillName(tool, base.Session.CWD, base.Session.WorkspaceRoots); name != "" {
 			data.Skill = &components.HookSkillData{Name: name, Source: nil}
 		}
 	}

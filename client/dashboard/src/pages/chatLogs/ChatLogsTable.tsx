@@ -4,6 +4,7 @@ import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { chatOwnerLabel } from "@/lib/chat-owner";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useSession } from "@/contexts/Auth";
@@ -261,7 +262,7 @@ export function ChatLogsTable({
                       {source && (
                         <span className="flex items-center gap-1.5">
                           <HookSourceIcon source={source} className="size-4" />
-                          {source}
+                          {formatPlatform(source)}
                         </span>
                       )}
                       <span className="flex items-center gap-1.5">

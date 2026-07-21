@@ -171,7 +171,9 @@ export function ShadowMCPInventoryActionMenu({
           size="xs"
           variant="tertiary"
         >
-          <Icon name="ellipsis" />
+          <Button.Icon>
+            <Icon name="ellipsis" />
+          </Button.Icon>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

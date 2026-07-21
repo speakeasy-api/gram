@@ -100,6 +100,7 @@ type Activities struct {
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
 	markMessagesAnalyzed            *risk_analysis.MarkMessagesAnalyzed
 	reconcileExclusion              *risk_exclusion.Reconcile
+	skillObservationReconciler      *activities.SkillObservationReconciler
 	cleanRiskPolicyResults          *risk_policy.Cleanup
 	admitAssistantThreads           *activities.AdmitAssistantThreads
 	processAssistantThread          *activities.ProcessAssistantThread
@@ -168,6 +169,30 @@ func NewActivities(
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
 ) *Activities {
+	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
+		logger,
+		tracerProvider,
+		meterProvider,
+		db,
+		piiScanner,
+		piScanner,
+		shadowMCPClient,
+		telemetryRepo,
+		ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate,
+		features,
+		publishers.PresidioAnalysis,
+		publishers.GitleaksAnalysis,
+		publishers.PromptInjectionAnalysis,
+		publishers.PromptPolicyAnalysis,
+		publishers.CustomRulesAnalysis,
+		customRuleScanner,
+		celEng,
+		builtinPresets,
+	)
+	if err != nil {
+		panic(fmt.Errorf("new analyze batch: %w", err))
+	}
+
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -203,9 +228,10 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate, features, publishers.PresidioAnalysis, publishers.GitleaksAnalysis, publishers.PromptInjectionAnalysis, publishers.PromptPolicyAnalysis, publishers.CustomRulesAnalysis, customRuleScanner, celEng, builtinPresets),
+		analyzeBatch:                    analyzeBatch,
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
+		skillObservationReconciler:      activities.NewSkillObservationReconciler(db),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
@@ -302,8 +328,8 @@ func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input acti
 	return candidates, nil
 }
 
-func (a *Activities) PollAIData(ctx context.Context, configID string) error {
-	return a.pollAIData.Do(ctx, configID)
+func (a *Activities) PollAIData(ctx context.Context, input string) error {
+	return a.pollAIData.Do(ctx, input)
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {
@@ -431,6 +457,22 @@ func (a *Activities) ReconcileExclusion(ctx context.Context, input risk_exclusio
 		return fmt.Errorf("reconcile exclusion: %w", err)
 	}
 	return nil
+}
+
+func (a *Activities) ReconcileSkillObservations(ctx context.Context, input activities.ReconcileSkillObservationsParams) (*activities.ReconcileSkillObservationsResult, error) {
+	result, err := a.skillObservationReconciler.Reconcile(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("reconcile skill observations: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) ListProjectsWithPendingSkillObservations(ctx context.Context, input activities.ListPendingSkillObservationProjectsParams) ([]uuid.UUID, error) {
+	projects, err := a.skillObservationReconciler.ListProjects(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list projects with pending skill observations: %w", err)
+	}
+	return projects, nil
 }
 
 func (a *Activities) CleanRiskPolicyResults(ctx context.Context, input risk_policy.CleanArgs) error {

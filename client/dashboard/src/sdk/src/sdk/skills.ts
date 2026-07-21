@@ -9,11 +9,14 @@ import { skillsDistribute } from "../funcs/skillsDistribute.js";
 import { skillsGet } from "../funcs/skillsGet.js";
 import { skillsList } from "../funcs/skillsList.js";
 import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
+import { skillsListUnknownActivations } from "../funcs/skillsListUnknownActivations.js";
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
 import { skillsUndistribute } from "../funcs/skillsUndistribute.js";
+import { skillsUpdate } from "../funcs/skillsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetSkillResult } from "../models/components/getskillresult.js";
 import { RecordSkillResult } from "../models/components/recordskillresult.js";
+import { Skill } from "../models/components/skill.js";
 import { SkillDistribution } from "../models/components/skilldistribution.js";
 import {
   AddSkillVersionRequest,
@@ -51,9 +54,18 @@ import {
   ListSkillVersionsSecurity,
 } from "../models/operations/listskillversions.js";
 import {
+  ListUnknownSkillActivationsRequest,
+  ListUnknownSkillActivationsResponse,
+  ListUnknownSkillActivationsSecurity,
+} from "../models/operations/listunknownskillactivations.js";
+import {
   UndistributeSkillRequest,
   UndistributeSkillSecurity,
 } from "../models/operations/undistributeskill.js";
+import {
+  UpdateSkillRequest,
+  UpdateSkillSecurity,
+} from "../models/operations/updateskill.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -192,6 +204,27 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * listUnknownActivations skills
+   *
+   * @remarks
+   * List terminal skill activations that could not be attributed to a skill version.
+   */
+  async listUnknownActivations(
+    request?: ListUnknownSkillActivationsRequest | undefined,
+    security?: ListUnknownSkillActivationsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<
+    PageIterator<ListUnknownSkillActivationsResponse, { cursor: string }>
+  > {
+    return unwrapResultIterator(skillsListUnknownActivations(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listVersions skills
    *
    * @remarks
@@ -222,6 +255,25 @@ export class Skills extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(skillsUndistribute(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * update skills
+   *
+   * @remarks
+   * Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.
+   */
+  async update(
+    request: UpdateSkillRequest,
+    security?: UpdateSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Skill> {
+    return unwrapAsync(skillsUpdate(
       this,
       request,
       security,

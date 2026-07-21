@@ -7,11 +7,15 @@ This package owns organization-level AI provider configuration and usage sync st
 AI integrations are split across two Postgres tables:
 
 - `ai_integration_configs` stores provider configuration: organization, provider, encrypted API key, enabled flag, soft-delete metadata, and the telemetry project used for usage rows.
-- `ai_integration_syncs` stores usage polling state: the completed inclusive query cursor (`poll_watermark_at`), scheduler cursor (`next_poll_after`), and final failure metadata.
+- `ai_integration_syncs` stores sync scheduling state: the completed inclusive query cursor (`poll_watermark_at`), scheduler cursor (`next_poll_after`), and final failure metadata.
+
+A config can run several independent sync pipelines, so `ai_integration_syncs` rows are unique per `(ai_integration_config_id, schedule)`. The `schedule` column names the pipeline with provider-style values: one schedule per provider shares the provider's name (`cursor`, `anthropic_compliance`) and backs config-level reads, and the other pipelines get their own names (`anthropic_analytics_usage` and `anthropic_analytics_cost` for the Admin Analytics reports, each tracking its own endpoint's finalization watermark and failure state). All schedules are peers. The `kind` column records how the schedule checkpoints progress: `cursor` rows resume from `last_cursor_id`, `time` rows resume from `poll_watermark_at`. New time-kind rows start with the epoch watermark — the never-synced sentinel that has the time-window poller begin with its initial lookback — while cursor-kind rows start at now. Upserting a config eagerly creates every schedule its provider runs, and candidate listing lazily creates any schedule an active config is missing (see Important Invariants). During the expand-contract transition the columns are nullable: pre-schedule rows carry `NULL` until a worker or upsert adopts them, and config-level reads treat a `NULL` schedule as the provider-named schedule until then.
+
+Time-kind schedules share one runner: the generic poller in `time_window_poller.go` walks the range from the schedule's watermark to the source's upper bound in windows, bulk-writes each fetched page's telemetry rows, and advances the watermark only after every page in a window is durable. Providers implement the small `source` interface: an upper-bound probe, a page fetch, and `RetryAfter` translation for provider rate-limit errors. The Cursor usage poller and both Anthropic Admin Analytics reports run on it.
 
 Configuration and sync state are separate because provider credentials are user-managed settings, while polling metadata is operational state owned by background workers.
 
-Cursor setup is organization-level. Today each integration attaches to the organization's first-created project automatically. New or replaced API keys start with a one-hour-old query cursor and `next_poll_after = now()` so they are due immediately.
+Cursor setup is organization-level. Today each integration attaches to the organization's first-created project automatically. A new config's time-kind schedules start at the epoch watermark, so the first poll covers the initial lookback (24 hours); replacing a key resets the provider-named schedule's watermark to one lookback ago. Either way `next_poll_after` is in the past, so the config is due immediately.
 
 Replacing an API key creates a new config generation: the old active `ai_integration_configs` row is soft-deleted, and a new active row is inserted with its own sync row. Settings-only updates, such as toggling `enabled` without supplying a new key, update the active row in place. Imported telemetry is not deleted when keys are replaced or integrations are deleted; each imported row carries `gram.ai_integration.config_id` so historical usage can be traced back to the config generation that imported it.
 
@@ -88,7 +92,7 @@ New enabled config generations also start a best-effort immediate child workflow
 
 The coordinator runs every five minutes, while each config is due when `next_poll_after <= runTime`. It starts a bounded batch of child workflows, waits for that batch to complete, then fetches the next due `LIMIT` batch. The stable workflow ID prevents another poll for the same provider/org from starting if a previous child workflow is still open.
 
-Candidate listing is read-only. `ListUsagePollCandidates` returns enabled, non-deleted configs with API keys whose next hourly poll is due, ordered by `(next_poll_after, organization_id, provider)`, limited to the coordinator's child concurrency. Candidate rows include only the config ID, organization ID, and provider; `SyncAIIntegrationUsage` loads and decrypts the full config by ID. The coordinator does not use offset or keyset pagination because each started batch completes and moves out of the due window before the next fetch.
+Candidate listing asserts schedules before it reads. `ListUsagePollCandidates` first ensures every active config (enabled, not deleted, holding an API key) has a sync row for each schedule its provider runs, creating missing ones due immediately; sync rows written before the schedule columns existed are adopted as their provider-named schedule in the same transaction. This is forward-looking only — rows belonging to disabled or deleted configs are never labeled or extended. It then returns the due `(config, schedule)` pairs ordered by `(next_poll_after, organization_id, schedule)`, limited to the coordinator's child concurrency. Candidate rows include only the config ID, organization ID, organization slug, provider, schedule, and kind; `SyncAIIntegrationUsage` loads and decrypts the full config by ID. The coordinator does not use offset or keyset pagination because each started batch completes and moves out of the due window before the next fetch.
 
 Polling concurrency is primarily enforced by the coordinator's bounded child batch size. `SyncAIIntegrationUsage` is still routed to the dedicated AI integration usage task queue, whose worker sets `MaxConcurrentActivityExecutionSize` as an additional guardrail.
 
@@ -110,7 +114,7 @@ When adding a provider:
 
 1. Add the provider constant and validation.
 2. Reuse `ai_integration_configs` for credentials and enablement.
-3. Reuse `ai_integration_syncs` for query cursors, scheduler state, and failure metadata.
+3. Reuse `ai_integration_syncs` for query cursors, scheduler state, and failure metadata. Declare the provider's schedules in `syncSchedulesFor` so upserts start every pipeline the provider runs.
 4. Add provider-specific polling inside the activity layer.
 5. Emit telemetry with the shared `gen_ai.usage.*` attributes where possible.
 6. Store provider-specific fields under a provider namespace, such as `cursor.*`.

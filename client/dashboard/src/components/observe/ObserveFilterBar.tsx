@@ -10,6 +10,7 @@ import {
 import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { Page } from "@/components/page-layout";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import type {
   MultiSelectGroup,
@@ -213,12 +214,12 @@ export function ObserveFilterBar({
     }));
   }, [serverOptionGroups, serverOptions, serverNameMappings?.rawToDisplay]);
 
-  // The raw hook_source value (e.g. "claude-code") is shown verbatim — matching
-  // the table row — and paired with its brand icon.
+  // Keep the raw hook_source as the filter value while presenting the same
+  // normalized product-surface label used by charts and tables.
   const sourceOptionsWithIcons = useMemo(
     () =>
       sourceOptions.map((source) => ({
-        label: source,
+        label: formatPlatform(source),
         value: source,
         icon: ({ className: iconClassName }: { className?: string }) => (
           <HookSourceIcon source={source} className={iconClassName} />

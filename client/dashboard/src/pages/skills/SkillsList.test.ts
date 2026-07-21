@@ -16,6 +16,7 @@ function skill(overrides: Partial<Skill>): Skill {
     createdAt: new Date("2026-07-16T00:00:00Z"),
     updatedAt: new Date("2026-07-16T00:00:00Z"),
     ...overrides,
+    seenCount: overrides.seenCount ?? 0,
   };
 }
 
@@ -27,8 +28,8 @@ describe("SkillsList filtering", () => {
       name: "incident-response",
       displayName: "Incident Response",
       summary: "Handle incidents",
-      sourceKind: "imported",
-      classification: "verified",
+      sourceKind: "captured",
+      classification: "built_in",
     }),
   ];
 
@@ -46,11 +47,11 @@ describe("SkillsList filtering", () => {
 
   it("combines source and classification filters", () => {
     expect(
-      filterSkills(skills, "", ["imported"], ["verified"]).map(
+      filterSkills(skills, "", ["captured"], ["built_in"]).map(
         (item) => item.id,
       ),
     ).toEqual(["b"]);
-    expect(filterSkills(skills, "", ["manual"], ["verified"])).toEqual([]);
+    expect(filterSkills(skills, "", ["manual"], ["built_in"])).toEqual([]);
   });
 
   it("never labels loaded pages as the project-wide total", () => {

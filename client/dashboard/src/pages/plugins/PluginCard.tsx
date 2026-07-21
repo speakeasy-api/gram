@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
+import { PluginInstallButton } from "./PluginInstallButton";
 
 export function PluginCard({
   plugin,
@@ -200,13 +201,7 @@ export function PluginCard({
                   onOpenChange={setIsDownloadMenuOpen}
                 >
                   <DropdownMenuTrigger asChild>
-                    <Button variant="primary" size="sm">
-                      <Button.Text>Install</Button.Text>
-                      <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
-                      <Button.RightIcon>
-                        <Icon name="chevron-down" className="h-4 w-4" />
-                      </Button.RightIcon>
-                    </Button>
+                    <PluginInstallButton size="sm" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     {installActions.map((action) => (

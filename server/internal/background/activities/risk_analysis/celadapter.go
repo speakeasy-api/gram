@@ -82,9 +82,11 @@ func ScanCELRules(eng *celenv.Engine, view MessageView, rules []CompiledCELRule)
 
 // CompiledScope is a policy's compiled scope predicates.
 type CompiledScope struct {
-	eng     *celenv.Engine
-	include cel.Program
-	exempt  cel.Program
+	eng        *celenv.Engine
+	include    cel.Program
+	exempt     cel.Program
+	includeCEL string
+	exemptCEL  string
 }
 
 // CompileScope compiles a policy's scope predicates.
@@ -93,23 +95,25 @@ func CompileScope(eng *celenv.Engine, includeCEL, exemptCEL string) (CompiledSco
 	s.eng = eng
 	includeCEL = strings.TrimSpace(includeCEL)
 	exemptCEL = strings.TrimSpace(exemptCEL)
+	s.includeCEL = includeCEL
+	s.exemptCEL = exemptCEL
 	if eng == nil {
 		if includeCEL != "" || exemptCEL != "" {
-			return CompiledScope{}, fmt.Errorf("cel engine unavailable")
+			return CompiledScope{eng: nil, include: nil, exempt: nil, includeCEL: "", exemptCEL: ""}, fmt.Errorf("cel engine unavailable")
 		}
 		return s, nil
 	}
 	if expr := includeCEL; expr != "" {
 		prg, err := eng.Compile(expr)
 		if err != nil {
-			return CompiledScope{}, fmt.Errorf("compile scope_include %q: %w", expr, err)
+			return CompiledScope{eng: nil, include: nil, exempt: nil, includeCEL: "", exemptCEL: ""}, fmt.Errorf("compile scope_include %q: %w", expr, err)
 		}
 		s.include = prg
 	}
 	if expr := exemptCEL; expr != "" {
 		prg, err := eng.Compile(expr)
 		if err != nil {
-			return CompiledScope{}, fmt.Errorf("compile scope_exempt %q: %w", expr, err)
+			return CompiledScope{eng: nil, include: nil, exempt: nil, includeCEL: "", exemptCEL: ""}, fmt.Errorf("compile scope_exempt %q: %w", expr, err)
 		}
 		s.exempt = prg
 	}

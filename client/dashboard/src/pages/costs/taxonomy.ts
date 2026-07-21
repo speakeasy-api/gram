@@ -3,6 +3,7 @@ import {
   providerLabel,
   unsetLabel,
 } from "@/components/observe/account-display-utils";
+import { formatPlatform } from "@/lib/formatPlatform";
 
 export { unsetLabel };
 
@@ -376,6 +377,33 @@ export function nextAvailableDimension(
   return next;
 }
 
+// The first axis at or below `start` (following the drill chain) that can
+// split a slice into more than one group. `countOf` reports the slice's
+// distinct group count for a dimension — including its "(unset)" bucket, which
+// the server surfaces in dimension_values for every groupable dim — or
+// undefined when unknown (fail open: accept the axis rather than skip on a
+// guess). Attribution dims are never skipped: '' is "not applicable" there,
+// their axes live in their own datasets, and pivotOptions prunes them.
+// Returns `start` itself when nothing below can split — the one-row terminal
+// view is then the honest rendering. Dimensions the drill path already pins
+// need no explicit exclusion: pinned dims count exactly one group.
+export function firstSplittableDimension(
+  start: Dimension,
+  available: Set<Dimension> | undefined,
+  countOf: (dim: Dimension) => number | undefined,
+): Dimension {
+  if (isAttributionDim(start) || (countOf(start) ?? 2) > 1) return start;
+  let next = nextAvailableDimension(start, available);
+  while (
+    next !== null &&
+    !isAttributionDim(next) &&
+    (countOf(next) ?? 2) <= 1
+  ) {
+    next = nextAvailableDimension(next, available);
+  }
+  return next ?? start;
+}
+
 // The breakdown axis a node defaults to: the next chain step below the deepest
 // filter, or — at the org root — the first dimension in pivot order that has
 // data (so a customer whose IDP omits the default chain still lands on a
@@ -417,6 +445,7 @@ export function datasetDefaultGroupBy(
 export function displayName(dim: Dimension, value: string): string {
   if (value === "") return unsetLabel(dim);
   if (dim === Dimension.Provider) return providerLabel(value);
+  if (dim === Dimension.HookSource) return formatPlatform(value);
   if (dim === Dimension.AccountType) {
     return value.charAt(0).toUpperCase() + value.slice(1);
   }

@@ -77,6 +77,9 @@ type GetProductFeaturesResult struct {
 	CustomModelKeysEnabled bool
 	// Whether the Skills page is enabled for the organization
 	SkillsEnabled bool
+	// Whether skill capture stores activation metadata without requesting manifest
+	// content
+	SkillCaptureMetadataOnly bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.

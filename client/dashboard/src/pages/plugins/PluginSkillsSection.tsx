@@ -3,8 +3,11 @@ import { ErrorAlert } from "@/components/ui/alert";
 import { Button as UiButton } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { DotCard } from "@/components/ui/dot-card";
+import { DotRow } from "@/components/ui/dot-row";
+import { DotTable } from "@/components/ui/dot-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import type { ViewMode } from "@/components/ui/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
@@ -32,11 +35,14 @@ import { SectionEmptyState } from "./SectionEmptyState";
 export function PluginSkillsSection({
   pluginId,
   searchQuery,
+  viewMode,
   onMutated,
 }: {
   pluginId: string;
   /** Page-level search query; narrows the listed skill distributions. */
   searchQuery: string;
+  /** Page-level entry layout shared with the server section. */
+  viewMode: ViewMode;
   /** Invoked after a successful change, e.g. to offer a marketplace publish. */
   onMutated: (message: string) => void;
 }): JSX.Element {
@@ -84,7 +90,10 @@ export function PluginSkillsSection({
     const distributedSkillIds = new Set(distributions.map((d) => d.skillId));
     return (
       skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
-    ).filter((skill) => !distributedSkillIds.has(skill.id));
+    ).filter(
+      (skill) =>
+        skill.latestVersionId != null && !distributedSkillIds.has(skill.id),
+    );
   }, [distributions, skillsQuery.data?.pages]);
 
   const distribute = useDistributeSkillMutation();
@@ -154,6 +163,26 @@ export function PluginSkillsSection({
     );
   } else if (filteredDistributions.length === 0) {
     listContent = <SectionEmptyState title="No skills match your search" />;
+  } else if (viewMode === "table") {
+    listContent = (
+      <DotTable
+        headers={[
+          { label: "Name" },
+          { label: "Identifier" },
+          { label: "Version" },
+          { label: "", className: "text-right" },
+        ]}
+      >
+        {filteredDistributions.map((distribution) => (
+          <PluginSkillTableRow
+            key={distribution.id}
+            distribution={distribution}
+            isRemoving={undistribute.isPending}
+            onRemove={() => handleRemoveSkill(distribution)}
+          />
+        ))}
+      </DotTable>
+    );
   } else {
     listContent = (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -309,19 +338,7 @@ function PluginSkillCard({
             {distribution.skillDisplayName}
           </Link>
         </Type>
-        {distribution.pinnedVersionId ? (
-          <Badge
-            variant="neutral"
-            className="text-xs"
-            title={distribution.pinnedVersionId}
-          >
-            Pinned
-          </Badge>
-        ) : (
-          <Badge variant="information" className="text-xs">
-            Latest
-          </Badge>
-        )}
+        <SkillVersionBadge distribution={distribution} />
       </div>
       <Type small muted className="truncate font-mono">
         {distribution.skillName}
@@ -351,5 +368,95 @@ function PluginSkillCard({
         </RequireScope>
       </div>
     </DotCard>
+  );
+}
+
+function PluginSkillTableRow({
+  distribution,
+  isRemoving,
+  onRemove,
+}: {
+  distribution: SkillDistribution;
+  isRemoving: boolean;
+  onRemove: () => void;
+}): JSX.Element {
+  const project = useProject();
+  const routes = useRoutes();
+  const href = routes.skills.detail.href(distribution.skillId);
+
+  return (
+    <DotRow
+      icon={<Sparkles className="text-muted-foreground h-5 w-5" />}
+      href={href}
+      ariaLabel={`View skill ${distribution.skillDisplayName}`}
+    >
+      <td className="px-3 py-3">
+        <Type
+          variant="subheading"
+          as="div"
+          className="group-hover:text-primary truncate text-sm transition-colors"
+          title={distribution.skillDisplayName}
+        >
+          {distribution.skillDisplayName}
+        </Type>
+      </td>
+      <td className="px-3 py-3">
+        <Type small muted className="truncate font-mono">
+          {distribution.skillName}
+        </Type>
+      </td>
+      <td className="px-3 py-3">
+        <SkillVersionBadge distribution={distribution} />
+      </td>
+      <td className="px-3 py-3">
+        <RequireScope
+          scope="skill:write"
+          resourceId={project.id}
+          level="component"
+        >
+          <div
+            className="relative z-20 flex items-center justify-end"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <UiButton
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              tooltip="Remove skill"
+              aria-label={`Remove skill ${distribution.skillDisplayName}`}
+              className="hover:text-destructive"
+              disabled={isRemoving}
+              onClick={onRemove}
+            >
+              <Trash2 className="h-4 w-4" />
+            </UiButton>
+          </div>
+        </RequireScope>
+      </td>
+    </DotRow>
+  );
+}
+
+function SkillVersionBadge({
+  distribution,
+}: {
+  distribution: SkillDistribution;
+}): JSX.Element {
+  if (distribution.pinnedVersionId) {
+    return (
+      <Badge
+        variant="neutral"
+        className="text-xs"
+        title={distribution.pinnedVersionId}
+      >
+        Pinned
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="information" className="text-xs">
+      Latest
+    </Badge>
   );
 }

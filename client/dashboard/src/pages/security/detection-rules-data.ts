@@ -7,6 +7,7 @@ import {
 import { useRiskUpdateCustomDetectionRuleMutation } from "@gram/client/react-query/riskUpdateCustomDetectionRule.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
+import celExamples from "./cel-examples.json";
 import { DETECTION_RULES, type RuleCategory } from "./policy-data";
 
 /** Severity levels assigned to a detection rule. Drives how findings show
@@ -313,25 +314,11 @@ export function validateCustomRuleId(
   return null;
 }
 
-/** Example detection CEL snippets offered beneath the rule editor field. */
-export const DETECTION_CEL_EXAMPLES: { label: string; expr: string }[] = [
-  {
-    label: "Secret in content",
-    expr: 'content.matchRegex("sk-[A-Za-z0-9]{32}")',
-  },
-  {
-    label: "Password in prompt",
-    expr: 'prompt.matchText("password")',
-  },
-  {
-    label: "Destructive shell",
-    expr: 'tool_calls.exists(t, t.function.matchRegex("bash") && t.args.get("command").matchRegex("rm -rf"))',
-  },
-  {
-    label: "Tool error output",
-    expr: 'tool_result.matchText("error")',
-  },
-];
+/** Example detection CEL snippets offered beneath the rule editor field.
+ *  Lives in cel-examples.json so the celenv Go test compile-checks every
+ *  snippet against the real engine. */
+export const DETECTION_CEL_EXAMPLES: { label: string; expr: string }[] =
+  celExamples.detection;
 
 /** List-row summary of a rule's matcher: its effective CEL expression. The
  *  allow/deny polarity is not a rule property — it is configured per policy. */
