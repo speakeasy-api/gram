@@ -85,7 +85,7 @@ export interface UseProxiedMcpToolsOptions {
  * Connects to a Gram-proxied MCP endpoint and lists its tools.
  *
  * Issuer-gated servers need a user-session JWT passed via `options.headers`
- * (minted by useProxiedMcpUserSessionToken); without it they surface as
+ * (minted by useUserSessionToken); without it they surface as
  * `needsAuth`.
  */
 export function useProxiedMcpTools(

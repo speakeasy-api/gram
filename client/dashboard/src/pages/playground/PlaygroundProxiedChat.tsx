@@ -7,7 +7,7 @@ import { useProxiedMcpConnection } from "./useProxiedMcpConnection";
 
 interface PlaygroundProxiedChatProps {
   mcpServerId: string;
-  isIssuerGated: boolean;
+  userSessionIssuerId: string | undefined;
   environmentSlug: string | null;
   model: string;
   additionalActions?: React.ReactNode;
@@ -21,7 +21,7 @@ interface PlaygroundProxiedChatProps {
  */
 export function PlaygroundProxiedChat({
   mcpServerId,
-  isIssuerGated,
+  userSessionIssuerId,
   environmentSlug,
   model,
   additionalActions,
@@ -37,7 +37,7 @@ export function PlaygroundProxiedChat({
     connectionReady,
     needsExplicitConnect,
     requestConnect,
-  } = useProxiedMcpConnection(mcpServerId, isIssuerGated);
+  } = useProxiedMcpConnection(mcpServerId, userSessionIssuerId);
 
   // When the user comes back from the connect tab, re-attempt the connection so
   // a freshly linked session surfaces without a manual refresh.

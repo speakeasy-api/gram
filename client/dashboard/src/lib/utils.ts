@@ -61,22 +61,30 @@ export function mcpConnectionUrl(
 }
 
 // firstPartyConnectUrl derives the runtime first-party connect entry point
-// (`/x/mcp/<slug>/connect/first-party`) for a display MCP URL. It's always built
-// on the Gram server origin (getServerURL), never the display URL's origin: a
-// custom-domain endpoint's display URL is `https://<customer-domain>/mcp/<slug>`,
-// but the connect page is a Gram auth surface — the IDP callback, routes, and
-// any session live on the Gram origin, not the customer's MCP domain. Opened as
-// a top-level new tab; the IDP flow is state-based so no dev proxy is needed.
+// (`/<runtimePath>/<slug>/connect/first-party`) for a display MCP URL. It's
+// always built on the Gram server origin (getServerURL), never the display
+// URL's origin: a custom-domain endpoint's display URL is
+// `https://<customer-domain>/mcp/<slug>`, but the connect page is a Gram auth
+// surface — the IDP callback, routes, and any session live on the Gram origin,
+// not the customer's MCP domain. Opened as a top-level new tab; the IDP flow is
+// state-based so no dev proxy is needed.
+//
+// `runtimePath` selects the surface the connect route is mounted on: the
+// experimental remote-MCP surface (`x/mcp`, the default) or the toolset surface
+// (`mcp`, used by the playground). Both display URLs are `/mcp/<slug>`, so the
+// surface can't be inferred from the URL and must be passed explicitly.
 // Returns undefined when the slug can't be derived.
 export function firstPartyConnectUrl(
   displayUrl: string | undefined,
+  options?: { runtimePath?: "mcp" | "x/mcp" },
 ): string | undefined {
   if (!displayUrl) return undefined;
+  const runtimePath = options?.runtimePath ?? "x/mcp";
   try {
     const slug = new URL(displayUrl).pathname.split("/").filter(Boolean).pop();
     if (!slug) return undefined;
     const url = new URL(getServerURL());
-    url.pathname = `/x/mcp/${slug}/connect/first-party`;
+    url.pathname = `/${runtimePath}/${slug}/connect/first-party`;
     return url.toString();
   } catch {
     return undefined;

@@ -17,6 +17,7 @@ type attributeDimension struct {
 	column                 string
 	kind                   attributeDimensionKind
 	coLocateSessionFilters bool
+	emptyIsNotApplicable   bool
 }
 
 type telemetryDimension struct {
@@ -24,6 +25,14 @@ type telemetryDimension struct {
 	rawExpr                string
 	kind                   attributeDimensionKind
 	coLocateSessionFilters bool
+	// emptyIsNotApplicable marks dimensions where an empty value means the
+	// attribute does not apply to the row at all (e.g. a turn that ran no
+	// skill), rather than an unclassified/unset population worth surfacing.
+	// dimension_values drops '' for these; for every other dimension '' is the
+	// real, drillable "(unset)" bucket the breakdown table renders, and
+	// consumers (the cost explorer's axis pruning) must be able to count it
+	// (DNO-384, DNO-425).
+	emptyIsNotApplicable bool
 }
 
 // telemetryDimensionRegistry is the single allowlist for public telemetry
@@ -36,30 +45,35 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                "toString(attributes.user.attributes.department_name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"job_title": {
 		aggregateColumn:        "job_title",
 		rawExpr:                "toString(attributes.user.attributes.job_title)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"employee_type": {
 		aggregateColumn:        "employee_type",
 		rawExpr:                "toString(attributes.user.attributes.employee_type)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"division_name": {
 		aggregateColumn:        "division_name",
 		rawExpr:                "toString(attributes.user.attributes.division_name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"cost_center_name": {
 		aggregateColumn:        "cost_center_name",
 		rawExpr:                "toString(attributes.user.attributes.cost_center_name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"email": {
 		// The user breakdown falls back to the device hostname when a session
@@ -74,6 +88,7 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                "if(user_email != '', user_email, toString(attributes.gram.hook.hostname))",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"hostname": {
 		// The device hostname the Go hooks report on every event
@@ -84,6 +99,7 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                "toString(attributes.gram.hook.hostname)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"model": {
 		aggregateColumn: "model",
@@ -94,12 +110,14 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                sessionModelExpr,
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"hook_source": {
 		aggregateColumn:        "hook_source",
 		rawExpr:                "hook_source",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"account_type": {
 		// AI account classification: 'team' | 'personal' | '' (unclassified).
@@ -109,6 +127,7 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                "account_type",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"provider": {
 		// AI provider for the account: 'anthropic' | 'openai' | 'cursor' | ''.
@@ -118,6 +137,7 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                "provider",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"billing_mode": {
 		// How the account is billed: 'metered' (pay-per-token; cost is real spend)
@@ -129,54 +149,63 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		rawExpr:                "billing_mode",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"query_source": {
 		aggregateColumn:        "query_source",
 		rawExpr:                "toString(attributes.query_source)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: true,
+		emptyIsNotApplicable:   true,
 	},
 	"skill_name": {
 		aggregateColumn:        "skill_name",
 		rawExpr:                "toString(attributes.skill.name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: true,
+		emptyIsNotApplicable:   true,
 	},
 	"agent_name": {
 		aggregateColumn:        "agent_name",
 		rawExpr:                "toString(attributes.agent.name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: true,
+		emptyIsNotApplicable:   true,
 	},
 	"mcp_server_name": {
 		aggregateColumn:        "mcp_server_name",
 		rawExpr:                "toString(attributes.mcp_server.name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: true,
+		emptyIsNotApplicable:   true,
 	},
 	"mcp_tool_name": {
 		aggregateColumn:        "mcp_tool_name",
 		rawExpr:                "toString(attributes.mcp_tool.name)",
 		kind:                   attributeDimScalar,
 		coLocateSessionFilters: true,
+		emptyIsNotApplicable:   true,
 	},
 	"role": {
 		aggregateColumn:        "roles",
 		rawExpr:                "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))",
 		kind:                   attributeDimArray,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"group": {
 		aggregateColumn:        "groups",
 		rawExpr:                "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))",
 		kind:                   attributeDimArray,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 	"project_id": {
 		aggregateColumn:        "gram_project_id",
 		rawExpr:                "gram_project_id",
 		kind:                   attributeDimProject,
 		coLocateSessionFilters: false,
+		emptyIsNotApplicable:   false,
 	},
 }
 
@@ -187,6 +216,7 @@ func buildDimensionRegistry(columnFor func(telemetryDimension) string) map[strin
 			column:                 columnFor(dim),
 			kind:                   dim.kind,
 			coLocateSessionFilters: dim.coLocateSessionFilters,
+			emptyIsNotApplicable:   dim.emptyIsNotApplicable,
 		}
 	}
 	return out

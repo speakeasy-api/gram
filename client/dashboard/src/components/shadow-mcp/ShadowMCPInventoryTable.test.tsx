@@ -114,6 +114,7 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       </button>
     ),
     {
+      Icon: ({ children }: { children: ReactNode }) => <span>{children}</span>,
       LeftIcon: ({ children }: { children: ReactNode }) => (
         <span>{children}</span>
       ),

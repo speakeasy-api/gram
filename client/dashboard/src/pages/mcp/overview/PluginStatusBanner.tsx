@@ -222,6 +222,10 @@ export function PluginStatusBanner({
     }
   };
 
+  let saveButtonText = "Publish";
+  if (isPublished) saveButtonText = "Update";
+  if (isSaving) saveButtonText = "Publishing";
+
   return (
     <div className="border border-border/70 relative overflow-hidden rounded-xl shadow-sm">
       <div
@@ -317,15 +321,12 @@ export function PluginStatusBanner({
                   disabled={!hasChanges || isSaving}
                   onClick={() => void handleSave()}
                 >
-                  {isSaving ? (
-                    <>
-                      <Spinner /> Publishing
-                    </>
-                  ) : isPublished ? (
-                    "Update"
-                  ) : (
-                    "Publish"
+                  {isSaving && (
+                    <Button.LeftIcon>
+                      <Spinner />
+                    </Button.LeftIcon>
                   )}
+                  <Button.Text>{saveButtonText}</Button.Text>
                 </Button>
               </div>
             )}
