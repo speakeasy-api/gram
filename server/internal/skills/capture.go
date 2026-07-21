@@ -47,6 +47,9 @@ func CaptureSkillContent(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	queries := repo.New(tx)
+	if err := queries.LockSkillObservationReconciliation(ctx, projectID); err != nil {
+		return nil, fmt.Errorf("lock skill observation reconciliation: %w", err)
+	}
 	if err := queries.LockSkillName(ctx, repo.LockSkillNameParams{ProjectID: projectID, Name: parsed.Name}); err != nil {
 		return nil, fmt.Errorf("lock captured skill name: %w", err)
 	}
@@ -98,6 +101,12 @@ func CaptureSkillContent(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 	}
 	if !matches {
 		return nil, ErrCaptureHashConflict
+	}
+	if _, err := queries.BackfillSkillObservationsForCapturedVersion(ctx, repo.BackfillSkillObservationsForCapturedVersionParams{
+		ProjectID: projectID, RawSha256: parsed.RawSHA256, CanonicalSha256: parsed.CanonicalSHA256,
+		SkillID: skill.ID, SkillVersionID: version.ID,
+	}); err != nil {
+		return nil, fmt.Errorf("backfill captured skill observations: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit captured skill transaction: %w", err)

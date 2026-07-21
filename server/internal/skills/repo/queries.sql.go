@@ -48,6 +48,56 @@ func (q *Queries) ArchiveSkill(ctx context.Context, arg ArchiveSkillParams) (Ski
 	return i, err
 }
 
+const backfillSkillObservationsForCapturedVersion = `-- name: BackfillSkillObservationsForCapturedVersion :execrows
+UPDATE skill_observations so
+SET skill_id = $1::uuid,
+    skill_version_id = $2::uuid,
+    reconciled_at = CASE WHEN so.reconcile_error_code IS NULL THEN so.reconciled_at ELSE NULL END,
+    reconcile_error_code = NULL
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE so.project_id = $3
+  AND so.raw_sha256 = $4::text
+  AND so.skill_version_id IS NULL
+  AND (so.skill_id IS NULL OR so.skill_id = $1::uuid)
+  AND s.project_id = so.project_id
+  AND s.id = $1::uuid
+  AND sv.skill_id = s.id
+  AND sv.id = $2::uuid
+  AND sv.canonical_sha256 = $5
+  AND NOT EXISTS (
+    SELECT 1
+    FROM skill_versions conflicting_version
+    JOIN skills conflicting_skill ON conflicting_skill.id = conflicting_version.skill_id
+    WHERE conflicting_skill.project_id = so.project_id
+      AND conflicting_skill.archived_at IS NULL
+      AND conflicting_version.canonical_sha256 = $5
+      AND conflicting_version.id <> $2::uuid
+  )
+`
+
+type BackfillSkillObservationsForCapturedVersionParams struct {
+	SkillID         uuid.UUID
+	SkillVersionID  uuid.UUID
+	ProjectID       uuid.UUID
+	RawSha256       string
+	CanonicalSha256 string
+}
+
+func (q *Queries) BackfillSkillObservationsForCapturedVersion(ctx context.Context, arg BackfillSkillObservationsForCapturedVersionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, backfillSkillObservationsForCapturedVersion,
+		arg.SkillID,
+		arg.SkillVersionID,
+		arg.ProjectID,
+		arg.RawSha256,
+		arg.CanonicalSha256,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimPendingSkillObservations = `-- name: ClaimPendingSkillObservations :many
 SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, reconcile_error_code, created_at
 FROM skill_observations
@@ -107,10 +157,11 @@ const completeSkillObservations = `-- name: CompleteSkillObservations :one
 WITH completed AS (
   UPDATE skill_observations so
   SET skill_id = $2,
+      skill_version_id = $3::uuid,
       reconciled_at = clock_timestamp(),
       reconcile_error_code = NULL
   WHERE so.project_id = $1
-    AND so.id = ANY($3::uuid[])
+    AND so.id = ANY($4::uuid[])
     AND so.reconciled_at IS NULL
   RETURNING so.seen_at, so.source, so.source_level, so.raw_sha256
 ), completed_hashes AS (
@@ -188,7 +239,6 @@ SET first_seen_at = CASE
 FROM evidence
 WHERE s.project_id = $1
   AND s.id = $2
-  AND s.archived_at IS NULL
   AND evidence.seen_count > 0
 RETURNING evidence.seen_count
 `
@@ -196,11 +246,17 @@ RETURNING evidence.seen_count
 type CompleteSkillObservationsParams struct {
 	ProjectID      uuid.UUID
 	SkillID        uuid.UUID
+	SkillVersionID uuid.NullUUID
 	ObservationIds []uuid.UUID
 }
 
 func (q *Queries) CompleteSkillObservations(ctx context.Context, arg CompleteSkillObservationsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, completeSkillObservations, arg.ProjectID, arg.SkillID, arg.ObservationIds)
+	row := q.db.QueryRow(ctx, completeSkillObservations,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.SkillVersionID,
+		arg.ObservationIds,
+	)
 	var seen_count int64
 	err := row.Scan(&seen_count)
 	return seen_count, err
@@ -524,7 +580,8 @@ const failSkillObservationReconciliations = `-- name: FailSkillObservationReconc
 UPDATE skill_observations
 SET reconciled_at = clock_timestamp(),
     reconcile_error_code = $1,
-    skill_id = NULL
+    skill_id = NULL,
+    skill_version_id = NULL
 WHERE project_id = $2
   AND id = ANY($3::uuid[])
   AND reconciled_at IS NULL
@@ -1384,6 +1441,15 @@ func (q *Queries) LockSkillName(ctx context.Context, arg LockSkillNameParams) er
 	return err
 }
 
+const lockSkillObservationReconciliation = `-- name: LockSkillObservationReconciliation :exec
+SELECT pg_advisory_xact_lock(hashtextextended('skill-observations:' || ($1::uuid)::text, 0))
+`
+
+func (q *Queries) LockSkillObservationReconciliation(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockSkillObservationReconciliation, projectID)
+	return err
+}
+
 const promoteObservedSkillToManual = `-- name: PromoteObservedSkillToManual :one
 UPDATE skills
 SET source_kind = 'manual',
@@ -1420,6 +1486,56 @@ func (q *Queries) PromoteObservedSkillToManual(ctx context.Context, arg PromoteO
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const resolveSkillObservationVersions = `-- name: ResolveSkillObservationVersions :many
+SELECT srh.raw_sha256, candidate.skill_id, candidate.skill_version_id
+FROM skill_raw_hashes srh
+JOIN LATERAL (
+  SELECT sv.skill_id, sv.id AS skill_version_id
+  FROM skills s
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = srh.canonical_sha256
+  WHERE s.project_id = srh.project_id
+    AND s.archived_at IS NULL
+  ORDER BY sv.skill_id, sv.id
+  LIMIT 2
+) candidate ON TRUE
+WHERE srh.project_id = $1
+  AND srh.raw_sha256 = ANY($2::text[])
+ORDER BY srh.raw_sha256, candidate.skill_id, candidate.skill_version_id
+`
+
+type ResolveSkillObservationVersionsParams struct {
+	ProjectID  uuid.UUID
+	RawSha256s []string
+}
+
+type ResolveSkillObservationVersionsRow struct {
+	RawSha256      string
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+func (q *Queries) ResolveSkillObservationVersions(ctx context.Context, arg ResolveSkillObservationVersionsParams) ([]ResolveSkillObservationVersionsRow, error) {
+	rows, err := q.db.Query(ctx, resolveSkillObservationVersions, arg.ProjectID, arg.RawSha256s)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolveSkillObservationVersionsRow
+	for rows.Next() {
+		var i ResolveSkillObservationVersionsRow
+		if err := rows.Scan(&i.RawSha256, &i.SkillID, &i.SkillVersionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const revokeActiveSkillDistribution = `-- name: RevokeActiveSkillDistribution :one

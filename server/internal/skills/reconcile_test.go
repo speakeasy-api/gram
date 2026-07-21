@@ -2,10 +2,12 @@ package skills_test
 
 import (
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -113,6 +115,157 @@ func TestReconcileSkillObservations_RoutesToManualSkill(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "manual", skill.SourceKind)
 	require.Equal(t, "custom", skill.Classification)
+	require.Equal(t, int64(1), skill.SeenCount)
+	observations, err := hooksrepo.New(ti.conn).ListSkillObservations(ctx, ti.projectID)
+	require.NoError(t, err)
+	require.True(t, observations[0].SkillID.Valid)
+	require.False(t, observations[0].SkillVersionID.Valid)
+}
+
+func TestReconcileSkillObservations_RawHashResolvesExactHistoricalVersionBeforeName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	oldContent := capturedManifest("hash-first", "Old.", "old body")
+	oldVersion, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, oldContent)
+	require.NoError(t, err)
+	newVersion, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, capturedManifest("hash-first", "New.", "new body"))
+	require.NoError(t, err)
+	require.NotEqual(t, oldVersion.SkillVersionID, newVersion.SkillVersionID)
+	insertSkillObservation(t, ti, "renamed-copy", "", "project", contentSHA256(oldContent), time.Now().UTC())
+
+	result, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Processed)
+	observations, err := hooksrepo.New(ti.conn).ListSkillObservations(ctx, ti.projectID)
+	require.NoError(t, err)
+	require.Equal(t, oldVersion.SkillID, observations[0].SkillID.UUID)
+	require.Equal(t, oldVersion.SkillVersionID, observations[0].SkillVersionID.UUID)
+	_, err = ti.repo.GetSkillByNameForUpdate(ctx, repo.GetSkillByNameForUpdateParams{ProjectID: ti.projectID, Name: "renamed-copy"})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestReconcileSkillObservations_DelayedContentBackfillsExactVersion(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	content := capturedManifest("delayed-content", "Delayed.", "body")
+	insertSkillObservation(t, ti, "delayed-content", "", "project", contentSHA256(content), time.Now().UTC())
+
+	result, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Processed)
+	observations, err := hooksrepo.New(ti.conn).ListSkillObservations(ctx, ti.projectID)
+	require.NoError(t, err)
+	require.False(t, observations[0].SkillID.Valid)
+	require.False(t, observations[0].SkillVersionID.Valid)
+	require.Equal(t, "unresolved_hash", observations[0].ReconcileErrorCode.String)
+
+	captured, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+	observations, err = hooksrepo.New(ti.conn).ListSkillObservations(ctx, ti.projectID)
+	require.NoError(t, err)
+	require.Equal(t, captured.SkillID, observations[0].SkillID.UUID)
+	require.Equal(t, captured.SkillVersionID, observations[0].SkillVersionID.UUID)
+	require.False(t, observations[0].ReconciledAt.Valid)
+	require.False(t, observations[0].ReconcileErrorCode.Valid)
+
+	result, err = skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Processed)
+	skill, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: captured.SkillID})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), skill.SeenCount)
+}
+
+func TestReconcileSkillObservations_AmbiguousHashRemainsUnknown(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	const canonicalHash = "canonical"
+	rawHash := strings.Repeat("a", 64)
+	var firstSkillID, firstVersionID uuid.UUID
+	for _, name := range []string{"first-ambiguous", "second-ambiguous"} {
+		skill, err := ti.repo.CreateSkill(ctx, repo.CreateSkillParams{
+			ProjectID: ti.projectID, Name: name, DisplayName: name, Summary: pgtype.Text{},
+		})
+		require.NoError(t, err)
+		version, err := ti.repo.CreateSkillVersion(ctx, repo.CreateSkillVersionParams{
+			SkillID: skill.ID, Content: name, CanonicalSha256: canonicalHash, RawSha256: rawHash,
+			Description: pgtype.Text{}, Metadata: []byte(`{}`), SpecValid: true,
+			ValidationErrors: []byte(`[]`), CreatedByUserID: "test", ProjectID: ti.projectID,
+		})
+		require.NoError(t, err)
+		if firstSkillID == uuid.Nil {
+			firstSkillID, firstVersionID = skill.ID, version.ID
+		}
+	}
+	matches, err := ti.repo.StoreSkillRawHashAlias(ctx, repo.StoreSkillRawHashAliasParams{
+		ProjectID: ti.projectID, SkillID: firstSkillID, SkillVersionID: firstVersionID,
+		RawSha256: rawHash, CanonicalSha256: canonicalHash,
+	})
+	require.NoError(t, err)
+	require.True(t, matches)
+	insertSkillObservation(t, ti, "first-ambiguous", "", "project", rawHash, time.Now().UTC())
+
+	result, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Processed)
+	observations, err := hooksrepo.New(ti.conn).ListSkillObservations(ctx, ti.projectID)
+	require.NoError(t, err)
+	require.False(t, observations[0].SkillID.Valid)
+	require.False(t, observations[0].SkillVersionID.Valid)
+	require.Equal(t, "ambiguous_hash", observations[0].ReconcileErrorCode.String)
+	count, err := ti.repo.BackfillSkillObservationsForCapturedVersion(ctx, repo.BackfillSkillObservationsForCapturedVersionParams{
+		ProjectID: ti.projectID, SkillID: firstSkillID, SkillVersionID: firstVersionID,
+		RawSha256: rawHash, CanonicalSha256: canonicalHash,
+	})
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestReconcileSkillObservations_ArchivedVersionDoesNotMakeActiveVersionAmbiguous(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	content := capturedManifest("reused-name", "Reused.", "body")
+	archived, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+	_, err = ti.repo.ArchiveSkill(ctx, repo.ArchiveSkillParams{ProjectID: ti.projectID, ID: archived.SkillID})
+	require.NoError(t, err)
+	active, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+	require.NotEqual(t, archived.SkillID, active.SkillID)
+	insertSkillObservation(t, ti, "reused-name", "", "project", contentSHA256(content), time.Now().UTC())
+
+	result, err := skills.ReconcileSkillObservations(ctx, ti.conn, ti.projectID, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Processed)
+	observations, err := hooksrepo.New(ti.conn).ListSkillObservations(ctx, ti.projectID)
+	require.NoError(t, err)
+	require.Equal(t, active.SkillID, observations[0].SkillID.UUID)
+	require.Equal(t, active.SkillVersionID, observations[0].SkillVersionID.UUID)
+}
+
+func TestCaptureSkillContent_BackfillsLegacyAttributionWithoutRecounting(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	content := capturedManifest("legacy-attribution", "Legacy.", "body")
+	captured, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+	insertSkillObservation(t, ti, "legacy-attribution", "", "project", contentSHA256(content), time.Now().UTC())
+	observations, err := hooksrepo.New(ti.conn).ListSkillObservations(ctx, ti.projectID)
+	require.NoError(t, err)
+	_, err = ti.repo.CompleteSkillObservations(ctx, repo.CompleteSkillObservationsParams{
+		ProjectID: ti.projectID, SkillID: captured.SkillID,
+		SkillVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ObservationIds: []uuid.UUID{observations[0].ID},
+	})
+	require.NoError(t, err)
+
+	_, err = skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, content)
+	require.NoError(t, err)
+	observations, err = hooksrepo.New(ti.conn).ListSkillObservations(ctx, ti.projectID)
+	require.NoError(t, err)
+	require.Equal(t, captured.SkillVersionID, observations[0].SkillVersionID.UUID)
+	require.True(t, observations[0].ReconciledAt.Valid)
+	skill, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: captured.SkillID})
+	require.NoError(t, err)
 	require.Equal(t, int64(1), skill.SeenCount)
 }
 

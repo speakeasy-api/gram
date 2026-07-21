@@ -164,6 +164,17 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 	}
 
 	rawSHA256 := normalizeRawSHA256(conv.PtrValOr(skill.RawSha256, ""))
+	var capture *skillCaptureSignal
+	if rawSHA256 != "" {
+		known, err := s.repo.RememberKnownSkillRawHash(ctx, repo.RememberKnownSkillRawHashParams{
+			ProjectID: *authCtx.ProjectID,
+			RawSha256: rawSHA256,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("resolve known skill raw hash: %w", err)
+		}
+		capture = &skillCaptureSignal{rawSHA256: rawSHA256, known: known}
+	}
 	if err := s.repo.InsertSkillObservation(ctx, repo.InsertSkillObservationParams{
 		ProjectID:      *authCtx.ProjectID,
 		IdempotencyKey: conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, ""))),
@@ -181,18 +192,7 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 	}); err != nil {
 		return nil, fmt.Errorf("insert skill observation: %w", err)
 	}
-	if rawSHA256 == "" {
-		return nil, nil
-	}
-
-	known, err := s.repo.RememberKnownSkillRawHash(ctx, repo.RememberKnownSkillRawHashParams{
-		ProjectID: *authCtx.ProjectID,
-		RawSha256: rawSHA256,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("resolve known skill raw hash: %w", err)
-	}
-	return &skillCaptureSignal{rawSHA256: rawSHA256, known: known}, nil
+	return capture, nil
 }
 
 func normalizeRawSHA256(value string) string {
