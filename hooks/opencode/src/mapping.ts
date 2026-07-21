@@ -23,8 +23,12 @@ export type IngestBody = {
     adapter_version: string;
     raw_event_name: string;
     user_email?: string;
+    // Machine hostname. Drives the "origin" (device) tier of the employee
+    // data-flow graph (gram.hook.hostname on the server).
+    hostname?: string;
   };
-  session: { id: string; cwd?: string };
+  // model rides here so ingest stamps gen_ai.response.model (Model Usage widget).
+  session: { id: string; cwd?: string; model?: string };
   event: { type: CanonicalEventType; occurred_at: string };
   data?: {
     prompt?: { text: string };
@@ -36,8 +40,41 @@ export type IngestBody = {
       error?: unknown;
       permission_type?: string;
     };
+    // Structured MCP server identity for an MCP tool call. Lets the ingest
+    // pipeline (canonicalMCPData in server/internal/hooks) classify the call as
+    // an MCP server and resolve gram-hosted vs shadow by URL — the same path
+    // Claude Code / Codex / Cursor use — instead of inferring from the name.
+    mcp?: McpBlock;
+    // Token/cost usage for an assistant turn. Feeds the token totals, cost, and
+    // token time-series widgets (gen_ai.usage.* on the server).
+    usage?: UsageBlock;
     message?: { text: string; role: string };
   };
+};
+
+// Wire shape of the ingest payload's data.usage block (HookUsageData in the Goa
+// design). All fields optional; omitted when opencode doesn't report them.
+export type UsageBlock = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_tokens?: number;
+  cache_write_tokens?: number;
+  cost?: number;
+};
+
+// Identity of a configured MCP server, resolved from opencode's config.mcp.
+// Remote servers carry a url; local (stdio) servers carry a command.
+export interface McpServer {
+  url?: string;
+  command?: string;
+}
+
+// Wire shape of the ingest payload's data.mcp block (HookMCPData in the Goa
+// design). server_name is always set; url/command are set per transport.
+export type McpBlock = {
+  server_name: string;
+  url?: string;
+  command?: string;
 };
 
 export interface Ctx {
@@ -45,41 +82,51 @@ export interface Ctx {
   fallbackSession: string;
   adapterVersion: string;
   userEmail?: string;
-  // Configured MCP server names (keys of client.mcp.status()), used to
-  // normalize opencode MCP tool-call names into Gram's canonical form.
-  // Undefined/empty disables normalization (fail-open).
-  mcpServers?: readonly string[];
+  // Machine hostname (os.hostname()), attached to every event's source.
+  hostname?: string;
+  // Configured MCP servers keyed by name (from opencode config.mcp), used to
+  // normalize MCP tool-call names into Gram's canonical form and to attach the
+  // server identity block. Undefined/empty disables both (fail-open).
+  mcpServers?: ReadonlyMap<string, McpServer>;
 }
 
-// opencode names an MCP tool call "<server>_<tool>" (single underscore, e.g.
-// "context7_query-docs"). Gram's shadow-MCP scanner and all MCP attribution
-// only recognize Claude Code's "mcp__<server>__<tool>" form
-// (toolref.IsMCPToolName in server/internal/toolref), so an un-normalized name
-// is treated as a native tool and skipped by shadow-MCP detection. Rewrite
-// opencode MCP calls into that form; native tools whose prefix matches no
-// configured server are returned unchanged.
-export function toGramToolName(
+// resolveMcpTool matches an opencode tool name against the configured MCP
+// servers. opencode names an MCP tool call "<server>_<tool>" (single
+// underscore, e.g. "context7_query-docs"); Gram's shadow-MCP scanner and MCP
+// attribution key off Claude Code's "mcp__<server>__<tool>" form plus a
+// structured data.mcp block (toolref / canonicalMCPData on the server). Returns
+// the canonical name and that block, or null for native tools (prefix matches
+// no configured server). Longest matching prefix wins so a server name
+// containing "_" (e.g. "my_server") isn't mis-split on the first underscore.
+export function resolveMcpTool(
   rawName: string,
-  mcpServers: readonly string[] | undefined,
-): string {
-  if (!mcpServers || mcpServers.length === 0) return rawName;
-  // Longest matching server prefix wins so a server name containing "_"
-  // (e.g. "my_server") isn't mis-split on the first underscore.
+  mcpServers: ReadonlyMap<string, McpServer> | undefined,
+): { name: string; mcp: McpBlock } | null {
+  if (!mcpServers || mcpServers.size === 0) return null;
   let best = "";
-  for (const server of mcpServers) {
+  for (const server of mcpServers.keys()) {
     if (rawName.startsWith(`${server}_`) && server.length > best.length) {
       best = server;
     }
   }
-  if (best === "") return rawName;
+  if (best === "") return null;
   const fn = rawName.slice(best.length + 1);
-  return fn ? `mcp__${best}__${fn}` : rawName;
+  if (!fn) return null;
+  const meta = mcpServers.get(best) ?? {};
+  return {
+    name: `mcp__${best}__${fn}`,
+    mcp: {
+      server_name: best,
+      ...(meta.url ? { url: meta.url } : {}),
+      ...(meta.command ? { command: meta.command } : {}),
+    },
+  };
 }
 
 function base(
   type: CanonicalEventType,
   rawEventName: string,
-  session: { id?: string; cwd?: string },
+  session: { id?: string; cwd?: string; model?: string },
   data: IngestBody["data"],
   ctx: Ctx,
 ): IngestBody {
@@ -91,10 +138,12 @@ function base(
       adapter_version: ctx.adapterVersion,
       raw_event_name: rawEventName,
       ...(ctx.userEmail ? { user_email: ctx.userEmail } : {}),
+      ...(ctx.hostname ? { hostname: ctx.hostname } : {}),
     },
     session: {
       id: session.id || ctx.fallbackSession,
       cwd: session.cwd ?? ctx.directory,
+      ...(session.model ? { model: session.model } : {}),
     },
     event: { type, occurred_at: new Date().toISOString() },
     data,
@@ -127,6 +176,7 @@ export function toolRequested(
   args: unknown,
   ctx: Ctx,
 ): IngestBody {
+  const mcp = resolveMcpTool(input.tool, ctx.mcpServers);
   return base(
     "tool.requested",
     "tool.execute.before",
@@ -134,9 +184,10 @@ export function toolRequested(
     {
       tool_call: {
         id: input.callID,
-        name: toGramToolName(input.tool, ctx.mcpServers),
+        name: mcp?.name ?? input.tool,
         input: args,
       },
+      ...(mcp ? { mcp: mcp.mcp } : {}),
     },
     ctx,
   );
@@ -147,6 +198,7 @@ export function toolCompleted(
   output: { output?: unknown } | undefined,
   ctx: Ctx,
 ): IngestBody {
+  const mcp = resolveMcpTool(input.tool, ctx.mcpServers);
   return base(
     "tool.completed",
     "tool.execute.after",
@@ -154,10 +206,11 @@ export function toolCompleted(
     {
       tool_call: {
         id: input.callID,
-        name: toGramToolName(input.tool, ctx.mcpServers),
+        name: mcp?.name ?? input.tool,
         input: input.args,
         output: output?.output,
       },
+      ...(mcp ? { mcp: mcp.mcp } : {}),
     },
     ctx,
   );
@@ -175,6 +228,7 @@ export function toolFailed(
   },
   ctx: Ctx,
 ): IngestBody {
+  const mcp = resolveMcpTool(part.tool, ctx.mcpServers);
   return base(
     "tool.failed",
     "tool.execute.error",
@@ -182,10 +236,11 @@ export function toolFailed(
     {
       tool_call: {
         id: part.callID,
-        name: toGramToolName(part.tool, ctx.mcpServers),
+        name: mcp?.name ?? part.tool,
         input: part.state.input,
         error: part.state.error,
       },
+      ...(mcp ? { mcp: mcp.mcp } : {}),
     },
     ctx,
   );
@@ -206,17 +261,51 @@ export function promptSubmitted(
 }
 
 export function assistantResponded(
-  message: { sessionID: string },
+  message: {
+    sessionID: string;
+    modelID?: string;
+    cost?: number;
+    tokens?: {
+      input?: number;
+      output?: number;
+      cache?: { read?: number; write?: number };
+    };
+  },
   text: string,
   ctx: Ctx,
 ): IngestBody {
+  const usage = usageFromMessage(message);
   return base(
     "assistant.responded",
     "message.completed",
-    { id: message.sessionID },
-    { message: { text, role: "assistant" } },
+    { id: message.sessionID, model: message.modelID },
+    {
+      message: { text, role: "assistant" },
+      ...(usage ? { usage } : {}),
+    },
     ctx,
   );
+}
+
+// usageFromMessage maps opencode's assistant-message token/cost fields onto the
+// ingest data.usage block, dropping fields opencode didn't report. Returns
+// undefined when nothing usable is present so the block is omitted entirely.
+function usageFromMessage(message: {
+  cost?: number;
+  tokens?: {
+    input?: number;
+    output?: number;
+    cache?: { read?: number; write?: number };
+  };
+}): UsageBlock | undefined {
+  const t = message.tokens;
+  const usage: UsageBlock = {};
+  if (t?.input != null) usage.input_tokens = t.input;
+  if (t?.output != null) usage.output_tokens = t.output;
+  if (t?.cache?.read != null) usage.cache_read_tokens = t.cache.read;
+  if (t?.cache?.write != null) usage.cache_write_tokens = t.cache.write;
+  if (message.cost != null) usage.cost = message.cost;
+  return Object.keys(usage).length > 0 ? usage : undefined;
 }
 
 // Mapped as a tool.requested event with permission_type set, matching how

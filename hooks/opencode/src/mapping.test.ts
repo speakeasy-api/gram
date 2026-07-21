@@ -3,13 +3,14 @@ import {
   assistantResponded,
   permissionAsked,
   promptSubmitted,
+  resolveMcpTool,
   sessionEnded,
   sessionStarted,
-  toGramToolName,
   toolCompleted,
   toolFailed,
   toolRequested,
   type Ctx,
+  type McpServer,
 } from "./mapping.js";
 
 const ctx: Ctx = {
@@ -102,6 +103,44 @@ describe("mapping", () => {
     expect(body.data?.message).toEqual({ text: "hi there", role: "assistant" });
   });
 
+  it("assistantResponded carries model and token/cost usage", () => {
+    const body = assistantResponded(
+      {
+        sessionID: "s1",
+        modelID: "claude-opus-4-8",
+        cost: 0.0123,
+        tokens: { input: 100, output: 50, cache: { read: 10, write: 5 } },
+      },
+      "hi there",
+      ctx,
+    );
+    expect(body.session.model).toBe("claude-opus-4-8");
+    expect(body.data?.usage).toEqual({
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_tokens: 10,
+      cache_write_tokens: 5,
+      cost: 0.0123,
+    });
+  });
+
+  it("assistantResponded omits usage/model when the message reports none", () => {
+    const body = assistantResponded({ sessionID: "s1" }, "hi there", ctx);
+    expect(body.session.model).toBeUndefined();
+    expect(body.data?.usage).toBeUndefined();
+  });
+
+  it("attaches source.hostname from ctx", () => {
+    const withHost: Ctx = { ...ctx, hostname: "dev-box.local" };
+    const body = sessionStarted({ id: "s1" }, withHost);
+    expect(body.source.hostname).toBe("dev-box.local");
+  });
+
+  it("omits source.hostname when absent from ctx", () => {
+    const body = sessionStarted({ id: "s1" }, ctx);
+    expect(body.source.hostname).toBeUndefined();
+  });
+
   it("permissionAsked -> tool.requested / permission.asked with permission_type", () => {
     const body = permissionAsked(
       { id: "p1", sessionID: "s1", type: "bash", callID: "c1" },
@@ -132,45 +171,80 @@ describe("mapping", () => {
     expect(body.session.id).toBe(ctx.fallbackSession);
   });
 
-  it("normalizes MCP tool-call names to the canonical mcp__ form", () => {
-    const mcpCtx: Ctx = { ...ctx, mcpServers: ["context7", "github"] };
+  it("normalizes MCP tool-call names and attaches the server identity", () => {
+    const mcpCtx: Ctx = {
+      ...ctx,
+      mcpServers: new Map<string, McpServer>([
+        ["context7", { url: "https://mcp.context7.com/mcp" }],
+        ["github", {}],
+      ]),
+    };
     const body = toolRequested(
       { tool: "context7_query-docs", sessionID: "s1", callID: "c1" },
       {},
       mcpCtx,
     );
     expect(body.data?.tool_call?.name).toBe("mcp__context7__query-docs");
+    expect(body.data?.mcp).toEqual({
+      server_name: "context7",
+      url: "https://mcp.context7.com/mcp",
+    });
+  });
+
+  it("omits the mcp block for native tools", () => {
+    const mcpCtx: Ctx = {
+      ...ctx,
+      mcpServers: new Map<string, McpServer>([["context7", {}]]),
+    };
+    const body = toolRequested(
+      { tool: "bash", sessionID: "s1", callID: "c1" },
+      { cmd: "ls" },
+      mcpCtx,
+    );
+    expect(body.data?.tool_call?.name).toBe("bash");
+    expect(body.data?.mcp).toBeUndefined();
   });
 });
 
-describe("toGramToolName", () => {
-  const servers = ["context7", "my_server"];
+describe("resolveMcpTool", () => {
+  const servers = new Map<string, McpServer>([
+    ["context7", { url: "https://mcp.context7.com/mcp" }],
+    ["my_server", { command: "node server.js" }],
+  ]);
 
-  it("rewrites <server>_<tool> into mcp__<server>__<tool>", () => {
-    expect(toGramToolName("context7_query-docs", servers)).toBe(
-      "mcp__context7__query-docs",
-    );
+  it("rewrites <server>_<tool> and carries the server url", () => {
+    expect(resolveMcpTool("context7_query-docs", servers)).toEqual({
+      name: "mcp__context7__query-docs",
+      mcp: { server_name: "context7", url: "https://mcp.context7.com/mcp" },
+    });
+  });
+
+  it("carries the command for local (stdio) servers", () => {
+    expect(resolveMcpTool("my_server_run", servers)).toEqual({
+      name: "mcp__my_server__run",
+      mcp: { server_name: "my_server", command: "node server.js" },
+    });
   });
 
   it("prefers the longest matching server prefix (server names with _)", () => {
     // "my_server" must win over a hypothetical "my" so the tool isn't
     // mis-split on the first underscore.
-    expect(toGramToolName("my_server_run", ["my", "my_server"])).toBe(
+    const withShort = new Map<string, McpServer>([
+      ["my", {}],
+      ["my_server", {}],
+    ]);
+    expect(resolveMcpTool("my_server_run", withShort)?.name).toBe(
       "mcp__my_server__run",
     );
   });
 
-  it("leaves native tools (no matching server) unchanged", () => {
-    expect(toGramToolName("bash", servers)).toBe("bash");
-    expect(toGramToolName("edit", servers)).toBe("edit");
+  it("returns null for native tools (no matching server)", () => {
+    expect(resolveMcpTool("bash", servers)).toBeNull();
+    expect(resolveMcpTool("edit", servers)).toBeNull();
   });
 
-  it("is a no-op when no MCP servers are configured", () => {
-    expect(toGramToolName("context7_query-docs", [])).toBe(
-      "context7_query-docs",
-    );
-    expect(toGramToolName("context7_query-docs", undefined)).toBe(
-      "context7_query-docs",
-    );
+  it("returns null when no MCP servers are configured", () => {
+    expect(resolveMcpTool("context7_query-docs", new Map())).toBeNull();
+    expect(resolveMcpTool("context7_query-docs", undefined)).toBeNull();
   });
 });
