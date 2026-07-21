@@ -354,8 +354,10 @@ const mcpGeneratorVersion = "9"
 // MCP-only publish leaves the existing hooks subtree untouched. Bump it for ANY
 // change to hooks generation, including behaviour a fingerprint couldn't observe.
 //
-// The Plugin Generate Check CI workflow requires the relevant one of these two
-// constants to change whenever generate.go does.
+// Releases bump it automatically: server/cmd/pin-hooks-release rewrites this
+// line when it pins a new binary, because new checksums always change the
+// rendered bootstrap script. Any other change to hooks generation needs a
+// manual bump, which the Plugin Generate Check CI workflow enforces.
 const hooksGeneratorVersion = "17"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when

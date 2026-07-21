@@ -35,9 +35,19 @@ const HooksReleaseRoutePrefix = "/hooks/releases/"
 // prior versions here: bootstrap scripts already installed on user machines
 // and published repos that have not regenerated yet keep requesting the old
 // version's path, and dropping it bricks their cold installs.
-var hooksArtifactIndex = map[string]map[string]hooksBinaryTarget{
-	hooksBinaryVersion: hooksBinaryTargets,
-	"0.1.1":            hooksBinaryTargets0_1_1,
+var hooksArtifactIndex = buildHooksArtifactIndex()
+
+func buildHooksArtifactIndex() map[string]map[string]hooksBinaryTarget {
+	index := map[string]map[string]hooksBinaryTarget{
+		hooksBinaryVersion: hooksBinaryTargets,
+	}
+	for version, sha256s := range hooksRetiredSHA256s {
+		if _, ok := index[version]; ok {
+			continue
+		}
+		index[version] = hooksReleaseTargets(version, sha256s)
+	}
+	return index
 }
 
 // Release archives are ~15MB; anything past this limit means the upstream
