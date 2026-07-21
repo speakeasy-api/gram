@@ -18,7 +18,15 @@ const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 const HOSTED_SERVER_PREFIX = "hosted:";
 const SHADOW_SERVER_PREFIX = "shadow:";
 
-export const TOOL_USAGE_DEFAULT_TYPES: ObserveTypeFilterValue[] = [];
+// Local tools are excluded by default: they dominate event volume and drown
+// out the MCP server and skill usage these pages are meant to surface. Users
+// can opt back in via the type filter.
+export const TOOL_USAGE_DEFAULT_TYPES: ObserveTypeFilterValue[] = [
+  "hosted_mcp_server",
+  "tunneled_mcp_server",
+  "shadow_mcp_server",
+  "skill",
+];
 export const TOOL_USAGE_VALID_TYPES: ObserveTypeFilterValue[] = [
   "hosted_mcp_server",
   "tunneled_mcp_server",
@@ -104,6 +112,15 @@ export function selectedHookSources(activeFilters: FilterChip[]): string[] {
     .filter((f) => f.path === HOOK_SOURCE_FILTER_PATH)
     .flatMap((f) => f.filters)
     .filter(Boolean);
+}
+
+export function isDefaultToolUsageTypeSelection(
+  selectedTypes: ObserveTypeFilterValue[],
+): boolean {
+  return (
+    selectedTypes.length === TOOL_USAGE_DEFAULT_TYPES.length &&
+    TOOL_USAGE_DEFAULT_TYPES.every((type) => selectedTypes.includes(type))
+  );
 }
 
 export function toTargetTypes(

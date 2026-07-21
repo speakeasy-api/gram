@@ -261,6 +261,11 @@ interface ToolbarFiltersProps {
   onRemoveCustomFilter?: (id: string) => void;
   /** Page-supplied arbitrary-attribute builder, rendered inside the sheet. */
   customBuilder?: ReactNode;
+  /**
+   * Page-supplied chips rendered after the filter chips, before the "More
+   * filters" trigger — for informational badges that belong in the chip row.
+   */
+  extraChips?: ReactNode;
   projectSlug?: string;
 }
 
@@ -275,6 +280,7 @@ function ToolbarFilters({
   onEditCustomFilter,
   onRemoveCustomFilter,
   customBuilder,
+  extraChips,
   projectSlug,
 }: ToolbarFiltersProps): JSX.Element {
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -326,6 +332,8 @@ function ToolbarFilters({
           onRemove={onRemoveCustomFilter ?? (() => {})}
         />
       ))}
+
+      {extraChips}
 
       <Button
         variant="outline"
