@@ -356,7 +356,7 @@ const mcpGeneratorVersion = "9"
 //
 // The Plugin Generate Check CI workflow requires the relevant one of these two
 // constants to change whenever generate.go does.
-const hooksGeneratorVersion = "16"
+const hooksGeneratorVersion = "17"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
