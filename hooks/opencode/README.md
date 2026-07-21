@@ -46,15 +46,28 @@ payloads in plaintext.
   dead network never blocks the coding session.
 - **Idempotency**: each event gets its own `idempotency_key`, reused across
   its own retries via the `Idempotency-Key` header.
-- **MCP tool-name normalization**: opencode names an MCP tool call
+- **MCP identity resolution**: opencode names an MCP tool call
   `<server>_<tool>` (e.g. `context7_query-docs`), but Gram's shadow-MCP scanner
-  and MCP attribution only recognize the `mcp__<server>__<tool>` convention
-  (`toolref.IsMCPToolName`). On the first tool call the plugin fetches the
-  configured MCP server list (`client.mcp.status()`) and rewrites matching
-  tool-call names into that form; native tools (`bash`, `edit`, …) are left
-  untouched. Without
-  this, opencode MCP calls are treated as native tools and skip shadow-MCP
-  detection entirely.
+  and MCP attribution recognize the `mcp__<server>__<tool>` convention
+  (`toolref.IsMCPToolName`) plus a structured `data.mcp` block
+  (`canonicalMCPData`). On the first tool call the plugin reads the configured
+  MCP servers from `client.config.get()` (`config.mcp`) and, for each MCP tool
+  call, rewrites the name into that form _and_ attaches the server's identity —
+  `server_name` plus `url` (remote servers) or `command` (local/stdio servers).
+  Native tools (`bash`, `edit`, …) are left untouched with no `mcp` block.
+  Sending the URL lets the server resolve gram-hosted vs shadow the same way it
+  does for Claude Code / Codex / Cursor, rather than treating every opencode MCP
+  call as shadow. Without this, opencode MCP calls are misclassified as native
+  (local) tools and skip shadow-MCP detection entirely.
+- **Model, token, and cost attribution**: on each completed assistant turn
+  (`message.updated`) the plugin forwards the model id (`session.model`) and the
+  turn's token/cost usage (`data.usage`: input/output/cache tokens + cost) from
+  opencode's assistant message. These feed the model-usage, token-total, cost,
+  and token time-series widgets on the server (`gen_ai.response.model` /
+  `gen_ai.usage.*`).
+- **Device attribution**: every event carries the machine `hostname`
+  (`source.hostname`), which drives the "origin" (device) tier of the employee
+  data-flow graph.
 
 ## Event coverage
 

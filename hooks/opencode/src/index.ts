@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import type { Plugin } from "@opencode-ai/plugin";
 import {
   assistantResponded,
@@ -9,6 +10,7 @@ import {
   toolFailed,
   toolRequested,
   type Ctx,
+  type McpServer,
 } from "./mapping.js";
 import { send } from "./send.js";
 
@@ -20,22 +22,24 @@ export const GramObservability: Plugin = async ({ directory, client }) => {
     fallbackSession: crypto.randomUUID(),
     adapterVersion: PLUGIN_VERSION,
     userEmail: process.env.GRAM_USER_EMAIL,
-    mcpServers: [],
+    // Best-effort; empty string (unusual) just omits the origin tier.
+    hostname: hostname() || undefined,
+    mcpServers: new Map(),
   };
 
-  // Resolve the MCP server list lazily on the first tool event, not at
-  // bootstrap: client.mcp.status() hits opencode's own server API, which isn't
+  // Resolve the MCP server config lazily on the first tool event, not at
+  // bootstrap: client.config.get() hits opencode's own server API, which isn't
   // serving yet during plugin init, so a bootstrap fetch fails fast and would
-  // cache an empty list for the whole session. By the first tool call the
-  // server is up. Memoized so it runs once; fire-and-forget so it never blocks
-  // tool execution. The very first tool call may still see an empty list (load
-  // in flight) and pass names through un-normalized — fail-open, exactly the
+  // cache an empty map for the whole session. By the first tool call the server
+  // is up. Memoized so it runs once; fire-and-forget so it never blocks tool
+  // execution. The very first tool call may still see an empty map (load in
+  // flight) and pass names through un-normalized — fail-open, exactly the
   // pre-normalization behavior.
   let mcpLoad: Promise<void> | undefined;
   const ensureMcpServers = (): void => {
     if (mcpLoad) return;
-    mcpLoad = loadMcpServerNames(client, directory).then((names) => {
-      ctx.mcpServers = names;
+    mcpLoad = loadMcpServers(client, directory).then((servers) => {
+      ctx.mcpServers = servers;
     });
   };
 
@@ -141,20 +145,32 @@ function textFromParts(
     .join("\n");
 }
 
-// The keys of the MCP status map are the configured server names (e.g.
-// "context7"), which is what tool names are prefixed with. Fail-open: any
-// error yields an empty list, so tool names pass through un-normalized —
-// exactly the behavior before normalization existed.
-async function loadMcpServerNames(
+// opencode's config.mcp maps each configured server name (e.g. "context7") —
+// which is what tool names are prefixed with — to its transport config: remote
+// servers carry a url, local (stdio) servers carry a command array. Both feed
+// the ingest payload's data.mcp block so the server can resolve gram-hosted vs
+// shadow. Fail-open: any error yields an empty map, so tool names pass through
+// un-normalized — exactly the behavior before normalization existed.
+async function loadMcpServers(
   client: Parameters<Plugin>[0]["client"],
   directory: string,
-): Promise<readonly string[]> {
+): Promise<ReadonlyMap<string, McpServer>> {
+  const servers = new Map<string, McpServer>();
   try {
-    const res = await client.mcp.status({ query: { directory } });
-    return Object.keys(res.data ?? {});
+    const res = await client.config.get({ query: { directory } });
+    for (const [name, cfg] of Object.entries(res.data?.mcp ?? {})) {
+      if (cfg.type === "remote") {
+        servers.set(name, { url: cfg.url });
+      } else if (cfg.type === "local") {
+        servers.set(name, { command: cfg.command.join(" ") });
+      } else {
+        servers.set(name, {});
+      }
+    }
   } catch {
-    return [];
+    return new Map();
   }
+  return servers;
 }
 
 export default GramObservability;
