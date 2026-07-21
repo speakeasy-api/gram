@@ -768,6 +768,8 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 func newTelemetryLogger(
 	ctx context.Context,
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	cacheImpl cache.Cache,
 	chDB clickhouse.Conn,
@@ -784,7 +786,7 @@ func newTelemetryLogger(
 
 	users := telemetry.NewUserInfoResolver(logger, db, cacheImpl)
 
-	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled, users), shutdown
+	return telemetry.NewLogger(shutdownCtx, logger, tracerProvider, meterProvider, chDB, logsEnabled, toolIOLogsEnabled, users), shutdown
 }
 
 func newTriggersApp(
