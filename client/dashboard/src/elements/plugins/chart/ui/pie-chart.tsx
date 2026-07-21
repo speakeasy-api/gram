@@ -5,7 +5,6 @@ import { FC } from "react";
 import {
   PieChart as RechartsPieChart,
   Pie,
-  Cell,
   Tooltip,
   Legend,
   ResponsiveContainer,
@@ -55,11 +54,11 @@ export const PieChart: FC<PieChartProps> = ({
   showLegend = true,
   className,
 }) => {
-  // Transform data to use 'name' for Recharts
-  const chartData = data.map((d) => ({
+  // Transform data to use 'name' for Recharts; Pie reads per-slice fill from data
+  const chartData = data.map((d, index) => ({
     name: d.label,
     value: d.value,
-    color: d.color,
+    fill: d.color || COLORS[index % COLORS.length],
   }));
 
   return (
@@ -122,14 +121,7 @@ export const PieChart: FC<PieChartProps> = ({
               }
               labelLine={showLabels}
               isAnimationActive={false}
-            >
-              {chartData.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={entry.color || COLORS[index % COLORS.length]}
-                />
-              ))}
-            </Pie>
+            />
             <Tooltip content={CustomTooltip} />
             {showLegend && (
               <Legend
