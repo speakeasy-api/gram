@@ -457,13 +457,23 @@ export function PlatformInstrumentationSheet({
                 [MARKETPLACE_NAME_PLACEHOLDER, marketplaceName],
                 [DEVICE_AGENT_URL_PLACEHOLDER, deviceAgentUrl],
               ];
-              const applySubstitutions = (input: string): string => {
+              const applySubstitutions = (
+                input: string,
+                subs: Array<[string, string]> = substitutions,
+              ): string => {
                 let out = input;
-                for (const [marker, value] of substitutions) {
+                for (const [marker, value] of subs) {
                   out = out.split(marker).join(value);
                 }
                 return out;
               };
+              // The API key is a live secret and must never be interpolated
+              // into a URL — an href leaks it via the address bar, Referer
+              // header, browser history, and server logs. helpLink URLs use a
+              // secret-free subset of the substitutions.
+              const urlSubstitutions = substitutions.filter(
+                ([marker]) => marker !== API_KEY_PLACEHOLDER,
+              );
               let displayCode = step.code;
               if (displayCode) {
                 displayCode = applySubstitutions(displayCode);
@@ -519,7 +529,7 @@ export function PlatformInstrumentationSheet({
                         <p className="text-muted-foreground text-sm leading-relaxed">
                           {before}
                           <Link
-                            href={applySubstitutions(url)}
+                            href={applySubstitutions(url, urlSubstitutions)}
                             target="_blank"
                             rel="noopener noreferrer"
                             size="sm"
