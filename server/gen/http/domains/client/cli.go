@@ -98,6 +98,21 @@ func BuildUpdateDomainPayload(domainsUpdateDomainBody string, domainsUpdateDomai
 	return v, nil
 }
 
+// BuildCheckHealthPayload builds the payload for the domains checkHealth
+// endpoint from CLI flags.
+func BuildCheckHealthPayload(domainsCheckHealthSessionToken string) (*domains.CheckHealthPayload, error) {
+	var sessionToken *string
+	{
+		if domainsCheckHealthSessionToken != "" {
+			sessionToken = &domainsCheckHealthSessionToken
+		}
+	}
+	v := &domains.CheckHealthPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildDeleteDomainPayload builds the payload for the domains deleteDomain
 // endpoint from CLI flags.
 func BuildDeleteDomainPayload(domainsDeleteDomainSessionToken string) (*domains.DeleteDomainPayload, error) {

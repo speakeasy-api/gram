@@ -305,6 +305,62 @@ func TestVerifyCustomDomain_CNAMEFailsButARecordExists(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestVerifyCustomDomain_CanonicalNameIsDomainAndARecordMatches(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-flattened-record"
+	const domain = "flattened-record.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+
+	ti.resolver = dns.NewMockResolver(dns.MockResolverConfig{
+		LookupCNAMEFunc: func(context.Context, string) (string, error) { return domain + ".", nil },
+		LookupHostFunc:  func(context.Context, string) ([]string, error) { return []string{"1.2.3.4"}, nil },
+		LookupTXTFunc: func(context.Context, string) ([]string, error) {
+			return []string{fmt.Sprintf("gram-domain-verify=%s,%s", domain, orgID)}, nil
+		},
+	})
+
+	activity := newActivity(t, ti)
+	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:     orgID,
+		Domain:    domain,
+		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	})
+
+	require.NoError(t, err)
+}
+
+func TestVerifyCustomDomain_CNAMEFailsAndARecordPointsElsewhere(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-a-record-mismatch"
+	const domain = "a-record-mismatch.example.com"
+	ctx, ti := newTestInstance(t, orgID, domain)
+
+	ti.resolver = dns.NewMockResolver(dns.MockResolverConfig{
+		LookupCNAMEFunc: func(context.Context, string) (string, error) { return "", fmt.Errorf("no CNAME") },
+		LookupHostFunc: func(_ context.Context, host string) ([]string, error) {
+			if host == domain {
+				return []string{"1.2.3.4"}, nil
+			}
+			return []string{"5.6.7.8"}, nil
+		},
+		LookupTXTFunc: func(context.Context, string) ([]string, error) {
+			return []string{fmt.Sprintf("gram-domain-verify=%s,%s", domain, orgID)}, nil
+		},
+	})
+
+	activity := newActivity(t, ti)
+	err := activity.Do(ctx, activities.VerifyCustomDomainArgs{
+		OrgID:     orgID,
+		Domain:    domain,
+		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not pointing to")
+}
+
 func TestVerifyCustomDomain_SpecialTestDomainAllowed(t *testing.T) {
 	t.Parallel()
 

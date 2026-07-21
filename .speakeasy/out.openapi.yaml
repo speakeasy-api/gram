@@ -10653,6 +10653,88 @@ paths:
       x-speakeasy-name-override: redeployDeployment
       x-speakeasy-react-hook:
         name: RedeployDeployment
+  /rpc/domain.checkHealth:
+    post:
+      description: Check the routing and certificate health of the organization's custom domain
+      operationId: checkDomainHealth
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomDomain'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: checkHealth domains
+      tags:
+        - domains
+      x-speakeasy-name-override: checkHealth
+      x-speakeasy-react-hook:
+        name: CheckDomainHealth
   /rpc/domain.delete:
     delete:
       description: Delete a custom domain
@@ -48572,6 +48654,14 @@ components:
         activated:
           type: boolean
           description: Whether the domain is activated in ingress
+        certificate_expires_at:
+          type: string
+          description: When the currently observed TLS certificate expires.
+          format: date-time
+        consecutive_failures:
+          type: integer
+          description: The number of consecutive failed health checks
+          format: int32
         created_at:
           type: string
           description: When the custom domain was created.
@@ -48579,6 +48669,16 @@ components:
         domain:
           type: string
           description: The custom domain name
+        health_checked_at:
+          type: string
+          description: When the domain health was last checked.
+          format: date-time
+        health_issue:
+          type: string
+          description: The reason the domain was last observed as unhealthy
+        health_status:
+          type: string
+          description: The latest observed domain health status
         id:
           type: string
           description: The ID of the custom domain
@@ -48593,6 +48693,10 @@ components:
         organization_id:
           type: string
           description: The ID of the organization this domain belongs to
+        unhealthy_since:
+          type: string
+          description: When the current unhealthy period began.
+          format: date-time
         updated_at:
           type: string
           description: When the custom domain was last updated.

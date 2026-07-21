@@ -198,6 +198,41 @@ func (q *Queries) GetCustomDomainByIDAndOrganization(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getCustomDomainByIDForHealthUpdate = `-- name: GetCustomDomainByIDForHealthUpdate :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+FROM custom_domains
+WHERE id = $1
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+func (q *Queries) GetCustomDomainByIDForHealthUpdate(ctx context.Context, id uuid.UUID) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainByIDForHealthUpdate, id)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getCustomDomainByOrganization = `-- name: GetCustomDomainByOrganization :one
 SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
@@ -233,6 +268,41 @@ func (q *Queries) GetCustomDomainByOrganization(ctx context.Context, organizatio
 	return i, err
 }
 
+const listActivatedCustomDomainsForHealthCheck = `-- name: ListActivatedCustomDomainsForHealthCheck :many
+SELECT id
+FROM custom_domains
+WHERE activated IS TRUE
+  AND deleted IS FALSE
+  AND id > $1
+ORDER BY id
+LIMIT $2
+`
+
+type ListActivatedCustomDomainsForHealthCheckParams struct {
+	AfterID   uuid.UUID
+	PageLimit int32
+}
+
+func (q *Queries) ListActivatedCustomDomainsForHealthCheck(ctx context.Context, arg ListActivatedCustomDomainsForHealthCheckParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listActivatedCustomDomainsForHealthCheck, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateCustomDomain = `-- name: UpdateCustomDomain :one
 UPDATE custom_domains
 SET
@@ -263,6 +333,66 @@ func (q *Queries) UpdateCustomDomain(ctx context.Context, arg UpdateCustomDomain
 		arg.IngressName,
 		arg.CertSecretName,
 		arg.ProvisionerKind,
+		arg.ID,
+	)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateCustomDomainHealth = `-- name: UpdateCustomDomainHealth :one
+UPDATE custom_domains
+SET
+    health_status = $1,
+    health_issue = $2,
+    health_checked_at = $3,
+    unhealthy_since = $4,
+    certificate_expires_at = $5,
+    consecutive_failures = $6,
+    updated_at = clock_timestamp()
+WHERE id = $7
+  AND deleted IS FALSE
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateCustomDomainHealthParams struct {
+	HealthStatus         pgtype.Text
+	HealthIssue          pgtype.Text
+	CheckedAt            pgtype.Timestamptz
+	UnhealthySince       pgtype.Timestamptz
+	CertificateExpiresAt pgtype.Timestamptz
+	ConsecutiveFailures  pgtype.Int4
+	ID                   uuid.UUID
+}
+
+func (q *Queries) UpdateCustomDomainHealth(ctx context.Context, arg UpdateCustomDomainHealthParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, updateCustomDomainHealth,
+		arg.HealthStatus,
+		arg.HealthIssue,
+		arg.CheckedAt,
+		arg.UnhealthySince,
+		arg.CertificateExpiresAt,
+		arg.ConsecutiveFailures,
 		arg.ID,
 	)
 	var i CustomDomain

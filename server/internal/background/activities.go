@@ -69,6 +69,7 @@ type Activities struct {
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
 	pollAIData                      *activities.PollAIData
 	customDomainIngress             *activities.CustomDomainIngress
+	customDomainHealth              *activities.CustomDomainHealth
 	defaultCustomDomainProvisioner  k8s.ProvisionerKind
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
@@ -201,6 +202,7 @@ func NewActivities(
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
+		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME),
 		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
@@ -311,6 +313,21 @@ func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.Ve
 
 func (a *Activities) CustomDomainIngress(ctx context.Context, input activities.CustomDomainIngressArgs) error {
 	return a.customDomainIngress.Do(ctx, input)
+}
+
+func (a *Activities) ListCustomDomainsForHealthCheck(ctx context.Context, input activities.ListCustomDomainsForHealthCheckArgs) ([]uuid.UUID, error) {
+	ids, err := a.customDomainHealth.List(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list custom domains for health check: %w", err)
+	}
+	return ids, nil
+}
+
+func (a *Activities) CheckCustomDomainHealth(ctx context.Context, input activities.CheckCustomDomainHealthArgs) error {
+	if err := a.customDomainHealth.Check(ctx, input); err != nil {
+		return fmt.Errorf("check custom domain health: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) CollectPlatformUsageMetrics(ctx context.Context) ([]activities.PlatformUsageMetrics, error) {

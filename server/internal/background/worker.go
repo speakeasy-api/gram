@@ -340,6 +340,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
+	temporalWorker.RegisterActivity(activities.ListCustomDomainsForHealthCheck)
+	temporalWorker.RegisterActivity(activities.CheckCustomDomainHealth)
 	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.MaybeSendOpenRouterCreditsAlerts)
@@ -423,6 +425,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainUpdateWorkflow)
+	temporalWorker.RegisterWorkflow(CustomDomainHealthCheckWorkflow)
+	temporalWorker.RegisterWorkflow(CustomDomainHealthSweepWorkflow)
 	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
@@ -538,6 +542,12 @@ func NewTemporalWorker(
 
 	if err := AddSkillEfficacySweepSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add skill efficacy sweep schedule", attr.SlogError(err))
+	}
+
+	if opts.DB != nil && opts.K8sClient != nil && opts.ExpectedTargetCNAME != "" {
+		if err := AddCustomDomainHealthSchedule(context.Background(), env); err != nil {
+			logger.ErrorContext(context.Background(), "failed to add custom domain health schedule", attr.SlogError(err))
+		}
 	}
 
 	if opts.PluginPublisher != nil {

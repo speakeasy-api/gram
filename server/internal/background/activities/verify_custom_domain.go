@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -143,27 +144,18 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		return oops.E(oops.CodeUnauthorized, errors.New("custom domain does not belong to organization"), "custom domain does not belong to organization").LogError(ctx, d.logger)
 	}
 
-	cname, err := d.resolver.LookupCNAME(ctx, domain.Domain)
+	routingIssue, err := checkCustomDomainRouting(ctx, d.resolver, domain.Domain, d.expectedTargetCNAME)
 	if err != nil {
-		d.logger.InfoContext(ctx, "CNAME lookup failed for domain", attr.SlogURLDomain(domain.Domain), attr.SlogError(err))
-		// Provide more info if an A record exists
-		ips, aErr := d.resolver.LookupHost(ctx, domain.Domain)
-		if aErr == nil && len(ips) > 0 {
-			d.logger.InfoContext(ctx, fmt.Sprintf("CNAME not found. Found A record(s): %s", strings.Join(ips, ", ")))
-		} else {
-			var dnsErr *net.DNSError
-			if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
-				d.logger.InfoContext(ctx, "custom domain DNS not found, terminating non-retryable", attr.SlogURLDomain(domain.Domain), attr.SlogError(err))
-				return newDNSNotFoundError(err, domain.Domain)
-			}
-			return oops.E(oops.CodeUnexpected, err, "failed to find custom domain mapping for %s", domain.Domain).LogError(ctx, d.logger)
-		}
-	} else {
-		actualCNAMEFQDN := strings.TrimSuffix(cname, ".") + "."
-
-		if actualCNAMEFQDN != d.expectedTargetCNAME {
-			return oops.E(oops.CodeUnexpected, errors.New("custom domain is not pointing to expected target"), "custom domain %s is not pointing to %s", domain.Domain, d.expectedTargetCNAME).LogError(ctx, d.logger)
-		}
+		return oops.E(oops.CodeUnexpected, err, "failed to find custom domain mapping for %s", domain.Domain).LogError(ctx, d.logger)
+	}
+	switch routingIssue {
+	case "":
+	case customdomains.HealthIssueDNSNotFound:
+		return newDNSNotFoundError(errors.New("custom domain DNS not found"), domain.Domain)
+	case customdomains.HealthIssueDNSTargetMismatch:
+		return oops.E(oops.CodeUnexpected, errors.New("custom domain is not pointing to expected target"), "custom domain %s is not pointing to %s", domain.Domain, d.expectedTargetCNAME).LogError(ctx, d.logger)
+	default:
+		return oops.E(oops.CodeUnexpected, fmt.Errorf("unsupported custom domain routing issue: %s", routingIssue), "failed to verify custom domain routing").LogError(ctx, d.logger)
 	}
 
 	txtName := "_gram." + domain.Domain

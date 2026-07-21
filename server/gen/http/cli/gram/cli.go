@@ -99,7 +99,7 @@ func UsageCommands() []string {
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
-		"domains (get-domain|create-domain|update-domain|delete-domain|list-mcp-endpoints)",
+		"domains (get-domain|create-domain|update-domain|check-health|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|delete-aws-iam-credential|delete-gcp-iam-credential)",
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
@@ -748,6 +748,9 @@ func ParseEndpoint(
 		domainsUpdateDomainFlags            = flag.NewFlagSet("update-domain", flag.ExitOnError)
 		domainsUpdateDomainBodyFlag         = domainsUpdateDomainFlags.String("body", "REQUIRED", "")
 		domainsUpdateDomainSessionTokenFlag = domainsUpdateDomainFlags.String("session-token", "", "")
+
+		domainsCheckHealthFlags            = flag.NewFlagSet("check-health", flag.ExitOnError)
+		domainsCheckHealthSessionTokenFlag = domainsCheckHealthFlags.String("session-token", "", "")
 
 		domainsDeleteDomainFlags            = flag.NewFlagSet("delete-domain", flag.ExitOnError)
 		domainsDeleteDomainSessionTokenFlag = domainsDeleteDomainFlags.String("session-token", "", "")
@@ -2887,6 +2890,7 @@ func ParseEndpoint(
 	domainsGetDomainFlags.Usage = domainsGetDomainUsage
 	domainsCreateDomainFlags.Usage = domainsCreateDomainUsage
 	domainsUpdateDomainFlags.Usage = domainsUpdateDomainUsage
+	domainsCheckHealthFlags.Usage = domainsCheckHealthUsage
 	domainsDeleteDomainFlags.Usage = domainsDeleteDomainUsage
 	domainsListMcpEndpointsFlags.Usage = domainsListMcpEndpointsUsage
 
@@ -3852,6 +3856,9 @@ func ParseEndpoint(
 
 			case "update-domain":
 				epf = domainsUpdateDomainFlags
+
+			case "check-health":
+				epf = domainsCheckHealthFlags
 
 			case "delete-domain":
 				epf = domainsDeleteDomainFlags
@@ -5489,6 +5496,9 @@ func ParseEndpoint(
 			case "update-domain":
 				endpoint = c.UpdateDomain()
 				data, err = domainsc.BuildUpdateDomainPayload(*domainsUpdateDomainBodyFlag, *domainsUpdateDomainSessionTokenFlag)
+			case "check-health":
+				endpoint = c.CheckHealth()
+				data, err = domainsc.BuildCheckHealthPayload(*domainsCheckHealthSessionTokenFlag)
 			case "delete-domain":
 				endpoint = c.DeleteDomain()
 				data, err = domainsc.BuildDeleteDomainPayload(*domainsDeleteDomainSessionTokenFlag)
@@ -9249,6 +9259,7 @@ func domainsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-domain: Get the custom domain for an organization`)
 	fmt.Fprintln(os.Stderr, `    create-domain: Create a custom domain for an organization`)
 	fmt.Fprintln(os.Stderr, `    update-domain: Update the IP allowlist for the organization's custom domain`)
+	fmt.Fprintln(os.Stderr, `    check-health: Check the routing and certificate health of the organization's custom domain`)
 	fmt.Fprintln(os.Stderr, `    delete-domain: Delete a custom domain`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-endpoints: List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.`)
 	fmt.Fprintln(os.Stderr)
@@ -9311,6 +9322,24 @@ func domainsUpdateDomainUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains update-domain --body '{\n      \"ip_allowlist\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+}
+
+func domainsCheckHealthUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] domains check-health", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Check the routing and certificate health of the organization's custom domain`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains check-health --session-token \"abc123\"")
 }
 
 func domainsDeleteDomainUsage() {

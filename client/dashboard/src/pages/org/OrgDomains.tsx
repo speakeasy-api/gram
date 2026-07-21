@@ -23,11 +23,12 @@ import {
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn, getCustomDomainCNAME } from "@/lib/utils";
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
+import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
 import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -35,12 +36,14 @@ import {
   ChevronRight,
   Copy,
   Globe,
+  AlertTriangle,
   Loader2,
   Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
+import { toast } from "sonner";
 
 export default function OrgDomains(): JSX.Element {
   return (
@@ -81,6 +84,32 @@ function validateIPEntry(entry: string): string {
 }
 
 type IPRow = { id: number; value: string; error: string | null };
+
+const healthIssueMessages: Record<string, string> = {
+  dns_not_found:
+    "We couldn't find DNS records for this domain. Check that the record still exists with your DNS provider.",
+  dns_target_mismatch:
+    "This domain no longer points to Gram. Update its DNS record to the value shown when you registered the domain.",
+  resource_missing:
+    "The routing configuration for this domain is missing. Run the check again to confirm the problem persists.",
+  certificate_missing:
+    "The TLS certificate for this domain is missing. Run the check again to confirm the problem persists.",
+  certificate_not_ready:
+    "The TLS certificate for this domain is not ready. Check your DNS configuration, then run the check again.",
+  certificate_expired:
+    "The TLS certificate for this domain has expired. Check your DNS configuration, then run the check again.",
+  certificate_invalid:
+    "The TLS certificate does not match this domain or could not be read. Run the check again to confirm the problem persists.",
+  check_failed:
+    "We couldn't complete the latest health check. Run it again to confirm whether the domain is healthy.",
+};
+
+function customDomainHealthMessage(issue?: string): string {
+  return issue
+    ? (healthIssueMessages[issue] ??
+        "The latest health check found a problem with this domain.")
+    : "The latest health check found a problem with this domain.";
+}
 
 // Inline editor: each allowlist entry is its own editable field. Entries are
 // validated on blur (and on save, by the parent via `onValidityChange`) rather
@@ -284,6 +313,16 @@ function OrgDomainsInner() {
     },
   });
 
+  const checkDomainHealthMutation = useCheckDomainHealthMutation({
+    onSuccess: async () => {
+      await invalidateAllGetDomain(queryClient);
+      toast.success("Custom domain health check completed");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to check custom domain health");
+    },
+  });
+
   // Preview which MCP endpoints will be cascaded by the delete. Only fetched
   // while the confirmation dialog is open and a domain is configured.
   const impactQuery = useCustomDomainMcpEndpoints(undefined, undefined, {
@@ -354,6 +393,10 @@ function OrgDomainsInner() {
                 {domain.isUpdating ? (
                   <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
                     <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                  </SimpleTooltip>
+                ) : domain.healthStatus === "unhealthy" ? (
+                  <SimpleTooltip tooltip="The latest health check found a problem">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
                   </SimpleTooltip>
                 ) : domain.verified ? (
                   <SimpleTooltip tooltip="Domain verified and active">
@@ -430,6 +473,42 @@ function OrgDomainsInner() {
               </Stack>
             </RequireScope>
           </Stack>
+          {domain.healthStatus === "unhealthy" && (
+            <Alert variant="warning" dismissible={false} className="mt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <Type variant="body" className="font-medium">
+                    This custom domain may not be working
+                  </Type>
+                  <Type variant="body" className="text-sm">
+                    {customDomainHealthMessage(domain.healthIssue)}
+                  </Type>
+                  {domain.healthCheckedAt && (
+                    <Type variant="body" className="text-sm opacity-80">
+                      Last checked{" "}
+                      <HumanizeDateTime date={domain.healthCheckedAt} />
+                    </Type>
+                  )}
+                </div>
+                <RequireScope scope="org:admin" level="component">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={checkDomainHealthMutation.isPending}
+                    onClick={() =>
+                      checkDomainHealthMutation.mutate({
+                        security: { sessionHeaderGramSession: "" },
+                      })
+                    }
+                  >
+                    {checkDomainHealthMutation.isPending
+                      ? "Checking..."
+                      : "Check again"}
+                  </Button>
+                </RequireScope>
+              </div>
+            </Alert>
+          )}
         </div>
       ) : (
         !domainIsLoading && (

@@ -137,6 +137,7 @@ trackedFiles:
   src/funcs/deploymentsList.ts: {}
   src/funcs/deploymentsLogs.ts: {}
   src/funcs/deploymentsRedeployDeployment.ts: {}
+  src/funcs/domainsCheckHealth.ts: {}
   src/funcs/domainsDeleteDomain.ts: {}
   src/funcs/domainsGetDomain.ts: {}
   src/funcs/domainsListMcpEndpoints.ts: {}
@@ -1169,6 +1170,7 @@ trackedFiles:
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
   src/models/operations/captureevent.ts: {}
+  src/models/operations/checkdomainhealth.ts: {}
   src/models/operations/checkmcpendpointslugavailability.ts: {}
   src/models/operations/checkmcpslugavailability.ts: {}
   src/models/operations/clearmcpregistrycache.ts: {}
@@ -1637,6 +1639,7 @@ trackedFiles:
   src/react-query/chatSessionsRevoke.ts: {}
   src/react-query/chatSetPinned.ts: {}
   src/react-query/chatSubmitFeedback.ts: {}
+  src/react-query/checkDomainHealth.ts: {}
   src/react-query/checkMCPSlugAvailability.core.ts: {}
   src/react-query/checkMCPSlugAvailability.ts: {}
   src/react-query/checkMcpEndpointSlugAvailability.core.ts: {}
@@ -2464,6 +2467,15 @@ examples:
       responses:
         "200":
           application/json: {"success": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  checkDomainHealth:
+    speakeasy-default-check-domain-health:
+      responses:
+        "200":
+          application/json: {"activated": true, "created_at": "2026-03-12T19:13:37.791Z", "domain": "frivolous-minion.name", "id": "<id>", "ip_allowlist": ["<value 1>", "<value 2>", "<value 3>"], "is_updating": true, "organization_id": "<id>", "updated_at": "2026-08-30T23:39:23.956Z", "verified": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
