@@ -182,7 +182,9 @@ async function start(): Promise<CelEngine> {
       return {
         ok: true,
         matched: r.matched ?? false,
-        spans: r.spans ? (JSON.parse(r.spans) as CelSpan[]) : [],
+        // Go marshals a nil slice as the string "null" (truthy), so parse
+        // first and coalesce.
+        spans: r.spans ? ((JSON.parse(r.spans) as CelSpan[] | null) ?? []) : [],
       };
     },
   };
