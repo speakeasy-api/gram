@@ -56,7 +56,7 @@ func TestCheckCustomDomainInfrastructure(t *testing.T) {
 		t.Parallel()
 
 		expiresAt := time.Now().UTC().Add(30 * 24 * time.Hour)
-		clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, expiresAt, true)
+		clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, time.Now().UTC().Add(-24*time.Hour), expiresAt, true)
 
 		health, err := clients.CheckCustomDomainInfrastructure(t.Context(), CustomDomainInfrastructureCheck{
 			Domain:          domain,
@@ -74,7 +74,7 @@ func TestCheckCustomDomainInfrastructure(t *testing.T) {
 		t.Parallel()
 
 		expiresAt := time.Now().UTC().Add(-time.Hour)
-		clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, expiresAt, true)
+		clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, time.Now().UTC().Add(-24*time.Hour), expiresAt, true)
 
 		health, err := clients.CheckCustomDomainInfrastructure(t.Context(), CustomDomainInfrastructureCheck{
 			Domain:          domain,
@@ -92,7 +92,7 @@ func TestCheckCustomDomainInfrastructure(t *testing.T) {
 		t.Parallel()
 
 		expiresAt := time.Now().UTC().Add(30 * 24 * time.Hour)
-		clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, expiresAt, false)
+		clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, time.Now().UTC().Add(-24*time.Hour), expiresAt, false)
 
 		health, err := clients.CheckCustomDomainInfrastructure(t.Context(), CustomDomainInfrastructureCheck{
 			Domain:          domain,
@@ -106,10 +106,33 @@ func TestCheckCustomDomainInfrastructure(t *testing.T) {
 	})
 }
 
-func newCustomDomainHealthTestClients(t *testing.T, namespace, domain, resourceName, secretName string, expiresAt time.Time, ready bool) *KubernetesClients {
+func TestCheckCustomDomainInfrastructureFutureCertificateIsUnhealthy(t *testing.T) {
+	t.Parallel()
+
+	const (
+		namespace    = "gram-test"
+		domain       = "mcp.example.com"
+		resourceName = "mcp-example-com"
+		secretName   = "mcp-example-com-tls"
+	)
+	now := time.Now().UTC()
+	clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, now.Add(time.Hour), now.Add(30*24*time.Hour), true)
+
+	health, err := clients.CheckCustomDomainInfrastructure(t.Context(), CustomDomainInfrastructureCheck{
+		Domain:          domain,
+		ResourceName:    resourceName,
+		CertSecretName:  secretName,
+		ProvisionerKind: ProvisionerKindIngress,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, CustomDomainInfrastructureIssueCertificateInvalid, health.Issue)
+}
+
+func newCustomDomainHealthTestClients(t *testing.T, namespace, domain, resourceName, secretName string, notBefore, expiresAt time.Time, ready bool) *KubernetesClients {
 	t.Helper()
 
-	certificatePEM := newCertificatePEM(t, domain, expiresAt)
+	certificatePEM := newCertificatePEM(t, domain, notBefore, expiresAt)
 	ingress := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace}}
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: namespace},
@@ -138,7 +161,7 @@ func newCustomDomainHealthTestClients(t *testing.T, namespace, domain, resourceN
 	}
 }
 
-func newCertificatePEM(t *testing.T, domain string, expiresAt time.Time) []byte {
+func newCertificatePEM(t *testing.T, domain string, notBefore, expiresAt time.Time) []byte {
 	t.Helper()
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -147,7 +170,7 @@ func newCertificatePEM(t *testing.T, domain string, expiresAt time.Time) []byte 
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: domain},
 		DNSNames:     []string{domain},
-		NotBefore:    time.Now().Add(-24 * time.Hour),
+		NotBefore:    notBefore,
 		NotAfter:     expiresAt,
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}

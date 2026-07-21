@@ -46,7 +46,7 @@ type TemporalClient interface {
 	ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error)
 	ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, provisionerKind k8s.ProvisionerKind) (client.WorkflowRun, error)
 	ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error)
-	ExecuteCustomDomainHealthCheck(ctx context.Context, customDomainID uuid.UUID) (client.WorkflowRun, error)
+	ExecuteCustomDomainHealthCheck(ctx context.Context, organizationID string, customDomainID uuid.UUID) (client.WorkflowRun, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -219,7 +219,7 @@ func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*
 		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
 	}
 
-	run, err := s.temporalClient.ExecuteCustomDomainHealthCheck(ctx, domain.ID)
+	run, err := s.temporalClient.ExecuteCustomDomainHealthCheck(ctx, authCtx.ActiveOrganizationID, domain.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to start custom domain health check").LogError(ctx, s.logger)
 	}

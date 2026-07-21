@@ -47,7 +47,7 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: ListActivatedCustomDomainsForHealthCheck :many
-SELECT id
+SELECT id, organization_id
 FROM custom_domains
 WHERE activated IS TRUE
   AND deleted IS FALSE
@@ -55,10 +55,11 @@ WHERE activated IS TRUE
 ORDER BY id
 LIMIT @page_limit;
 
--- name: GetCustomDomainByIDForHealthUpdate :one
+-- name: GetCustomDomainByIDAndOrganizationForHealthUpdate :one
 SELECT *
 FROM custom_domains
 WHERE id = @id
+  AND organization_id = @organization_id
   AND deleted IS FALSE
 FOR UPDATE;
 
@@ -73,6 +74,7 @@ SET
     consecutive_failures = @consecutive_failures,
     updated_at = clock_timestamp()
 WHERE id = @id
+  AND organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 

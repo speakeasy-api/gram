@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -36,8 +37,14 @@ type ListCustomDomainsForHealthCheckArgs struct {
 	PageSize int32
 }
 
+type CustomDomainHealthCheckTarget struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
 type CheckCustomDomainHealthArgs struct {
 	CustomDomainID uuid.UUID
+	OrganizationID string
 	CheckedAt      time.Time
 }
 
@@ -55,20 +62,33 @@ func (c *CustomDomainHealth) SetResolver(resolver dns.Resolver) {
 	c.resolver = resolver
 }
 
-func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsForHealthCheckArgs) ([]uuid.UUID, error) {
-	ids, err := customdomainsrepo.New(c.db).ListActivatedCustomDomainsForHealthCheck(ctx, customdomainsrepo.ListActivatedCustomDomainsForHealthCheckParams{
+func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsForHealthCheckArgs) ([]CustomDomainHealthCheckTarget, error) {
+	domains, err := customdomainsrepo.New(c.db).ListActivatedCustomDomainsForHealthCheck(ctx, customdomainsrepo.ListActivatedCustomDomainsForHealthCheckParams{
 		AfterID:   args.AfterID,
 		PageLimit: args.PageSize,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list custom domains for health check: %w", err)
 	}
-	return ids, nil
+	targets := make([]CustomDomainHealthCheckTarget, 0, len(domains))
+	for _, domain := range domains {
+		targets = append(targets, CustomDomainHealthCheckTarget{
+			ID:             domain.ID,
+			OrganizationID: domain.OrganizationID,
+		})
+	}
+	return targets, nil
 }
 
 func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHealthArgs) error {
 	repository := customdomainsrepo.New(c.db)
-	domain, err := repository.GetCustomDomainByID(ctx, args.CustomDomainID)
+	domain, err := repository.GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
+		ID:             args.CustomDomainID,
+		OrganizationID: args.OrganizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("get custom domain for health check: %w", err)
 	}
@@ -118,7 +138,13 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 
 	if err := pgx.BeginFunc(ctx, c.db, func(tx pgx.Tx) error {
 		repository := customdomainsrepo.New(tx)
-		lockedDomain, err := repository.GetCustomDomainByIDForHealthUpdate(ctx, domain.ID)
+		lockedDomain, err := repository.GetCustomDomainByIDAndOrganizationForHealthUpdate(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationForHealthUpdateParams{
+			ID:             domain.ID,
+			OrganizationID: args.OrganizationID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
 		if err != nil {
 			return fmt.Errorf("lock custom domain for health update: %w", err)
 		}
@@ -135,6 +161,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 			CertificateExpiresAt: conv.PtrToPGTimestamptz(next.CertificateExpiresAt),
 			ConsecutiveFailures:  pgtype.Int4{Int32: next.ConsecutiveFailures, Valid: true},
 			ID:                   domain.ID,
+			OrganizationID:       args.OrganizationID,
 		})
 		if err != nil {
 			return fmt.Errorf("update custom domain health: %w", err)

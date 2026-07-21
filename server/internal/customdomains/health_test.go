@@ -88,3 +88,21 @@ func TestReconcileHealthState(t *testing.T) {
 		require.Equal(t, current, state)
 	})
 }
+
+func TestReconcileHealthStateIgnoresOlderObservation(t *testing.T) {
+	t.Parallel()
+
+	checkedAt := time.Date(2026, time.July, 21, 9, 0, 0, 0, time.UTC)
+	current := HealthState{
+		Status:              HealthStatusHealthy,
+		CheckedAt:           &checkedAt,
+		ConsecutiveFailures: 0,
+	}
+
+	state := ReconcileHealthState(current, HealthObservation{
+		Status: HealthStatusUnhealthy,
+		Issue:  HealthIssueDNSNotFound,
+	}, checkedAt.Add(-time.Minute))
+
+	require.Equal(t, current, state)
+}

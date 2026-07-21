@@ -27,6 +27,7 @@ const (
 
 type CustomDomainHealthCheckParams struct {
 	CustomDomainID uuid.UUID
+	OrganizationID string
 }
 
 type CustomDomainHealthSweepParams struct {
@@ -42,12 +43,12 @@ func manualCustomDomainHealthCheckWorkflowID(customDomainID uuid.UUID) string {
 	return fmt.Sprintf("v1:custom-domain-health:manual:%s:%s", customDomainID.String(), uuid.NewString())
 }
 
-func (c *CustomDomainRegistrationClient) ExecuteCustomDomainHealthCheck(ctx context.Context, customDomainID uuid.UUID) (client.WorkflowRun, error) {
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainHealthCheck(ctx context.Context, organizationID string, customDomainID uuid.UUID) (client.WorkflowRun, error) {
 	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                 manualCustomDomainHealthCheckWorkflowID(customDomainID),
 		TaskQueue:          string(c.TemporalEnv.Queue()),
 		WorkflowRunTimeout: 5 * time.Minute,
-	}, CustomDomainHealthCheckWorkflow, CustomDomainHealthCheckParams{CustomDomainID: customDomainID})
+	}, CustomDomainHealthCheckWorkflow, CustomDomainHealthCheckParams{CustomDomainID: customDomainID, OrganizationID: organizationID})
 }
 
 func CustomDomainHealthCheckWorkflow(ctx workflow.Context, params CustomDomainHealthCheckParams) error {
@@ -64,6 +65,7 @@ func CustomDomainHealthCheckWorkflow(ctx workflow.Context, params CustomDomainHe
 	var a *Activities
 	if err := workflow.ExecuteActivity(ctx, a.CheckCustomDomainHealth, activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: params.CustomDomainID,
+		OrganizationID: params.OrganizationID,
 		CheckedAt:      workflow.Now(ctx).UTC(),
 	}).Get(ctx, nil); err != nil {
 		return fmt.Errorf("check custom domain health: %w", err)
@@ -90,32 +92,33 @@ func CustomDomainHealthSweepWorkflow(ctx workflow.Context, params CustomDomainHe
 	var a *Activities
 	logger := workflow.GetLogger(ctx)
 	for range customDomainHealthMaxPages {
-		var domainIDs []uuid.UUID
+		var targets []activities.CustomDomainHealthCheckTarget
 		if err := workflow.ExecuteActivity(ctx, a.ListCustomDomainsForHealthCheck, activities.ListCustomDomainsForHealthCheckArgs{
 			AfterID:  afterID,
 			PageSize: customDomainHealthPageSize,
-		}).Get(ctx, &domainIDs); err != nil {
+		}).Get(ctx, &targets); err != nil {
 			return fmt.Errorf("list custom domains for health check: %w", err)
 		}
 
-		for _, domainID := range domainIDs {
+		for _, target := range targets {
 			childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-				WorkflowID:            scheduledCustomDomainHealthCheckWorkflowID(checkDate, domainID),
+				WorkflowID:            scheduledCustomDomainHealthCheckWorkflowID(checkDate, target.ID),
 				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 				WorkflowRunTimeout:    5 * time.Minute,
 				ParentClosePolicy:     enums.PARENT_CLOSE_POLICY_ABANDON,
 			})
 			if err := workflow.ExecuteChildWorkflow(childCtx, CustomDomainHealthCheckWorkflow, CustomDomainHealthCheckParams{
-				CustomDomainID: domainID,
+				CustomDomainID: target.ID,
+				OrganizationID: target.OrganizationID,
 			}).GetChildWorkflowExecution().Get(childCtx, nil); err != nil {
-				logger.Info("custom domain health check already in flight or failed to start", "custom_domain_id", domainID.String(), "error", err.Error())
+				logger.Info("custom domain health check already in flight or failed to start", "custom_domain_id", target.ID.String(), "error", err.Error())
 			}
 		}
 
-		if len(domainIDs) < int(customDomainHealthPageSize) {
+		if len(targets) < int(customDomainHealthPageSize) {
 			return nil
 		}
-		afterID = domainIDs[len(domainIDs)-1]
+		afterID = targets[len(targets)-1].ID
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
 			return workflow.NewContinueAsNewError(ctx, CustomDomainHealthSweepWorkflow, CustomDomainHealthSweepParams{AfterID: afterID, CheckDate: checkDate})
 		}

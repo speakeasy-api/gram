@@ -85,7 +85,12 @@ func (k *KubernetesClients) CheckCustomDomainInfrastructure(ctx context.Context,
 	}
 	expiresAt := certificate.NotAfter.UTC()
 	health.CertificateExpiresAt = &expiresAt
-	if time.Now().After(expiresAt) {
+	now := time.Now()
+	if now.Before(certificate.NotBefore) {
+		health.Issue = CustomDomainInfrastructureIssueCertificateInvalid
+		return health, nil
+	}
+	if now.After(expiresAt) {
 		health.Issue = CustomDomainInfrastructureIssueCertificateExpired
 		return health, nil
 	}

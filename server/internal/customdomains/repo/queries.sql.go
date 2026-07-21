@@ -198,16 +198,22 @@ func (q *Queries) GetCustomDomainByIDAndOrganization(ctx context.Context, arg Ge
 	return i, err
 }
 
-const getCustomDomainByIDForHealthUpdate = `-- name: GetCustomDomainByIDForHealthUpdate :one
+const getCustomDomainByIDAndOrganizationForHealthUpdate = `-- name: GetCustomDomainByIDAndOrganizationForHealthUpdate :one
 SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE id = $1
+  AND organization_id = $2
   AND deleted IS FALSE
 FOR UPDATE
 `
 
-func (q *Queries) GetCustomDomainByIDForHealthUpdate(ctx context.Context, id uuid.UUID) (CustomDomain, error) {
-	row := q.db.QueryRow(ctx, getCustomDomainByIDForHealthUpdate, id)
+type GetCustomDomainByIDAndOrganizationForHealthUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetCustomDomainByIDAndOrganizationForHealthUpdate(ctx context.Context, arg GetCustomDomainByIDAndOrganizationForHealthUpdateParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainByIDAndOrganizationForHealthUpdate, arg.ID, arg.OrganizationID)
 	var i CustomDomain
 	err := row.Scan(
 		&i.ID,
@@ -269,7 +275,7 @@ func (q *Queries) GetCustomDomainByOrganization(ctx context.Context, organizatio
 }
 
 const listActivatedCustomDomainsForHealthCheck = `-- name: ListActivatedCustomDomainsForHealthCheck :many
-SELECT id
+SELECT id, organization_id
 FROM custom_domains
 WHERE activated IS TRUE
   AND deleted IS FALSE
@@ -283,19 +289,24 @@ type ListActivatedCustomDomainsForHealthCheckParams struct {
 	PageLimit int32
 }
 
-func (q *Queries) ListActivatedCustomDomainsForHealthCheck(ctx context.Context, arg ListActivatedCustomDomainsForHealthCheckParams) ([]uuid.UUID, error) {
+type ListActivatedCustomDomainsForHealthCheckRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ListActivatedCustomDomainsForHealthCheck(ctx context.Context, arg ListActivatedCustomDomainsForHealthCheckParams) ([]ListActivatedCustomDomainsForHealthCheckRow, error) {
 	rows, err := q.db.Query(ctx, listActivatedCustomDomainsForHealthCheck, arg.AfterID, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []uuid.UUID
+	var items []ListActivatedCustomDomainsForHealthCheckRow
 	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
+		var i ListActivatedCustomDomainsForHealthCheckRow
+		if err := rows.Scan(&i.ID, &i.OrganizationID); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -371,6 +382,7 @@ SET
     consecutive_failures = $6,
     updated_at = clock_timestamp()
 WHERE id = $7
+  AND organization_id = $8
   AND deleted IS FALSE
 RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 `
@@ -383,6 +395,7 @@ type UpdateCustomDomainHealthParams struct {
 	CertificateExpiresAt pgtype.Timestamptz
 	ConsecutiveFailures  pgtype.Int4
 	ID                   uuid.UUID
+	OrganizationID       string
 }
 
 func (q *Queries) UpdateCustomDomainHealth(ctx context.Context, arg UpdateCustomDomainHealthParams) (CustomDomain, error) {
@@ -394,6 +407,7 @@ func (q *Queries) UpdateCustomDomainHealth(ctx context.Context, arg UpdateCustom
 		arg.CertificateExpiresAt,
 		arg.ConsecutiveFailures,
 		arg.ID,
+		arg.OrganizationID,
 	)
 	var i CustomDomain
 	err := row.Scan(
