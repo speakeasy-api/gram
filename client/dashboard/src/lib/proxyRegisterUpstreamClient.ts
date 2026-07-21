@@ -15,6 +15,16 @@ export type ProxyRegisterUpstreamClientInput = {
   tokenEndpointAuthMethod?: string;
 };
 
+export class ProxyRegistrationError extends Error {
+  readonly title: string;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ProxyRegistrationError";
+    this.title = `Registration failed (HTTP ${status})`;
+  }
+}
+
 export async function proxyRegisterUpstreamClient(
   authedFetch: AuthedFetch,
   input: ProxyRegisterUpstreamClientInput,
@@ -37,7 +47,10 @@ export async function proxyRegisterUpstreamClient(
   });
 
   if (!response.ok) {
-    throw new Error(await registrationErrorMessage(response));
+    const message =
+      (await registrationErrorMessage(response)) ??
+      "No additional error details were provided.";
+    throw new ProxyRegistrationError(response.status, message);
   }
 
   const result = (await response.json()) as {
@@ -61,15 +74,15 @@ export async function proxyRegisterUpstreamClient(
 // /oauth/proxy-register response. The backend passes an upstream 4xx through as
 // a bad request whose `message` already carries the upstream
 // error/error_description; some responses may instead surface the raw RFC 7591
-// `error_description`/`error`. Fall back to the bare status when the body has
-// nothing useful so a genuine gateway outage still reads sensibly.
-async function registrationErrorMessage(response: Response): Promise<string> {
-  const fallback = `Registration failed (HTTP ${response.status})`;
+// `error_description`/`error`.
+async function registrationErrorMessage(
+  response: Response,
+): Promise<string | null> {
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    return fallback;
+    return null;
   }
   if (body && typeof body === "object") {
     const record = body as Record<string, unknown>;
@@ -78,5 +91,5 @@ async function registrationErrorMessage(response: Response): Promise<string> {
       if (typeof value === "string" && value.trim()) return value;
     }
   }
-  return fallback;
+  return null;
 }

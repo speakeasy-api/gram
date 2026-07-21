@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  ProxyRegistrationError,
   proxyRegisterUpstreamClient,
   type AuthedFetch,
 } from "@/lib/proxyRegisterUpstreamClient";
@@ -44,11 +45,16 @@ describe("proxyRegisterUpstreamClient", () => {
       ),
     );
 
-    await expect(
-      proxyRegisterUpstreamClient(authedFetch, {
-        registrationEndpoint: "https://idp.example/register",
-      }),
-    ).rejects.toThrow(/redirect_uris must be loopback/);
+    const result = proxyRegisterUpstreamClient(authedFetch, {
+      registrationEndpoint: "https://idp.example/register",
+    });
+
+    await expect(result).rejects.toBeInstanceOf(ProxyRegistrationError);
+    await expect(result).rejects.toMatchObject({
+      title: "Registration failed (HTTP 400)",
+      message:
+        "identity provider rejected the client registration: invalid_client_metadata: redirect_uris must be loopback",
+    });
   });
 
   it("falls back to error_description when no message field is present", async () => {
@@ -66,15 +72,18 @@ describe("proxyRegisterUpstreamClient", () => {
     ).rejects.toThrow("scope not supported");
   });
 
-  it("falls back to the bare status when the body has nothing useful", async () => {
+  it("uses a separate fallback body when no details are returned", async () => {
     const authedFetch: AuthedFetch = vi.fn(
       async () => new Response("gateway boom", { status: 502 }),
     );
 
-    await expect(
-      proxyRegisterUpstreamClient(authedFetch, {
-        registrationEndpoint: "https://idp.example/register",
-      }),
-    ).rejects.toThrow("Registration failed (HTTP 502)");
+    const result = proxyRegisterUpstreamClient(authedFetch, {
+      registrationEndpoint: "https://idp.example/register",
+    });
+
+    await expect(result).rejects.toMatchObject({
+      title: "Registration failed (HTTP 502)",
+      message: "No additional error details were provided.",
+    });
   });
 });

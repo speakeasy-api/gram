@@ -21,7 +21,10 @@ import {
   buildUserSessionResourceSlug,
   DEFAULT_USER_SESSION_DURATION_HOURS,
 } from "@/lib/externalMcpUserSessions";
-import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
+import {
+  ProxyRegistrationError,
+  proxyRegisterUpstreamClient,
+} from "@/lib/proxyRegisterUpstreamClient";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
@@ -54,6 +57,29 @@ import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 
 type Mode = "select" | "new";
+
+type SubmitError = {
+  title: string;
+  message: string;
+};
+
+function submissionError(error: unknown): SubmitError | null {
+  if (!error) {
+    return null;
+  }
+
+  if (error instanceof ProxyRegistrationError) {
+    return { title: error.title, message: error.message };
+  }
+
+  return {
+    title: "Failed to attach identity provider",
+    message:
+      error instanceof Error && error.message
+        ? error.message
+        : "An unexpected error occurred. Please try again.",
+  };
+}
 
 export function AttachRemoteIdentityProviderSheet({
   open,
@@ -408,11 +434,7 @@ export function AttachRemoteIdentityProviderSheet({
   });
 
   const submitting = attachMutation.isPending;
-  const submitError = attachMutation.error
-    ? attachMutation.error instanceof Error && attachMutation.error.message
-      ? attachMutation.error.message
-      : "An unexpected error occurred. Please try again."
-    : null;
+  const submitError = submissionError(attachMutation.error);
   const { reset: resetAttachMutation } = attachMutation;
 
   // Reset transient state whenever the sheet is reopened. The target slug
@@ -711,11 +733,14 @@ export function AttachRemoteIdentityProviderSheet({
             </Stack>
           )}
 
-          {submitError && (
+          {submitError ? (
             <Alert variant="error" dismissible={false}>
-              {submitError}
+              <Stack gap={1}>
+                <Type className="font-medium">{submitError.title}</Type>
+                <Type small>{submitError.message}</Type>
+              </Stack>
             </Alert>
-          )}
+          ) : null}
         </div>
 
         <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
