@@ -139,9 +139,9 @@ func TestBuildTelemetryAttributesWithMetadata_HookSourceCoworkFromSessionStart(t
 	assert.Equal(t, agentVariantCowork, attrs[attr.HookSourceKey])
 }
 
-// A claude-code variant (or no cached variant) must not be rewritten to
-// "cowork"; hook_source keeps the ServiceName / "claude" default.
-func TestBuildTelemetryAttributesWithMetadata_HookSourceDefaultsWithoutCoworkVariant(t *testing.T) {
+// A Claude Code inventory is also authoritative when service.name is the
+// ambiguous "claude" value shared with Cowork.
+func TestBuildTelemetryAttributesWithMetadata_HookSourceFromClaudeCodeVariant(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
@@ -154,7 +154,7 @@ func TestBuildTelemetryAttributesWithMetadata_HookSourceDefaultsWithoutCoworkVar
 
 	metadata := &SessionMetadata{
 		SessionID:   sessionID,
-		ServiceName: "claude-code",
+		ServiceName: "claude",
 		GramOrgID:   authCtx.ActiveOrganizationID,
 		ProjectID:   authCtx.ProjectID.String(),
 	}

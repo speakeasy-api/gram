@@ -82,6 +82,22 @@ func (s *Service) sessionAgentVariant(ctx context.Context, sessionID string) str
 	return variant
 }
 
+// claudeSessionSource returns the product surface detected by Gram's
+// SessionStart hook. Cowork and Claude Code run the same binary and may report
+// the same service.name, so the inventory shape cached at SessionStart is more
+// specific than ServiceName. Preserve ServiceName when no variant was observed
+// so older hook installations keep their existing source.
+func (s *Service) claudeSessionSource(ctx context.Context, metadata *SessionMetadata) string {
+	switch s.sessionAgentVariant(ctx, metadata.SessionID) {
+	case agentVariantCowork:
+		return agentVariantCowork
+	case agentVariantClaudeCode:
+		return agentVariantClaudeCode
+	default:
+		return metadata.ServiceName
+	}
+}
+
 // sessionIDToUUID converts a Claude Code session_id string to a UUID.
 // The session_id is expected to already be a valid UUID string.
 // If parsing fails, falls back to generating a deterministic UUIDv5 from the session_id.
@@ -340,7 +356,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		Content:          content,
 		Model:            model,
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText(metadata.ServiceName),
+		Source:           conv.ToPGText(s.claudeSessionSource(ctx, metadata)),
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
@@ -438,7 +454,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Content:          "", // Tool call requests typically have empty content
 		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText(metadata.ServiceName),
+		Source:           conv.ToPGText(s.claudeSessionSource(ctx, metadata)),
 		ToolCalls:        toolCallsJSON,
 		FinishReason:     conv.ToPGText("tool_calls"),
 		PromptTokens:     0,
@@ -490,7 +506,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 		Role:             "tool",
 		Content:          content,
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText(metadata.ServiceName),
+		Source:           conv.ToPGText(s.claudeSessionSource(ctx, metadata)),
 		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolUseID, "")),
 		PromptTokens:     0,
 		CompletionTokens: 0,

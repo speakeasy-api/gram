@@ -179,17 +179,9 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		toolName = *payload.ToolName
 	}
 
-	hookSource := "claude"
-	if metadata.ServiceName != "" {
-		hookSource = metadata.ServiceName
-	}
-	// Cowork runs the same claude-code binary and reports the same OTEL
-	// service.name, so ServiceName can't distinguish it — it lands on the
-	// "claude"/"claude-code" default. SessionStart stamps the agent variant
-	// into the cache, so prefer that when it identifies a cowork session, so
-	// per-tool-call tool logs are labelled "cowork" and stay filterable.
-	if s.sessionAgentVariant(ctx, metadata.SessionID) == agentVariantCowork {
-		hookSource = agentVariantCowork
+	hookSource := s.claudeSessionSource(ctx, metadata)
+	if hookSource == "" {
+		hookSource = "claude"
 	}
 
 	attrs := map[attr.Key]any{

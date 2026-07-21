@@ -20,12 +20,37 @@ func (alwaysEnabledFeatures) IsFeatureEnabled(_ context.Context, _ string, _ pro
 	return true, nil
 }
 
-// TestClaudeHookSource_ConsistentAcrossAllWrites asserts that every
-// chat_messages row produced by a single Claude Code session carries the same
-// Source value, regardless of which hook handler wrote it. This guards
-// against drift between the conversation-event path
-// (UserPromptSubmit/Stop) and the tool-call paths (Pre/PostToolUse).
-func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
+func TestClaudeSessionSource_PreservesAmbiguousSourceWithoutVariant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	metadata := &SessionMetadata{
+		SessionID:           uuid.NewString(),
+		ServiceName:         "claude",
+		UserEmail:           "",
+		UserID:              "",
+		Provider:            "",
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		Hostname:            "",
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		ObservedUserEmail:   "",
+		GramOrgID:           "",
+		ProjectID:           "",
+	}
+
+	require.Equal(t, "claude", ti.service.claudeSessionSource(ctx, metadata))
+}
+
+// TestCoworkHookSource_ConsistentAcrossAllWrites asserts that the product
+// surface detected from SessionStart wins over the ambiguous service.name on
+// every chat_messages write path. The chat list infers a session's source from
+// these rows, so one path falling back to "claude" would mislabel the session.
+func TestCoworkHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
@@ -39,14 +64,16 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 
 	sessionID := uuid.NewString()
 	chatID := sessionIDToUUID(sessionID)
-	const wantSource = "test-agent-source"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+		agentVariantCowork, sessionMCPListTTL))
+	const wantSource = "cowork"
 	const wantUserID = "session-capture-user"
 	const wantUserEmail = "tester@example.com"
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, wantUserID, wantUserEmail)
 
 	metadata := &SessionMetadata{
 		SessionID:     sessionID,
-		ServiceName:   wantSource,
+		ServiceName:   "claude",
 		UserEmail:     wantUserEmail,
 		UserID:        wantUserID,
 		ExternalOrgID: "",
@@ -62,9 +89,8 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 	toolResponse := map[string]any{"ok": true}
 	errorData := map[string]any{"message": "boom"}
 
-	// Each of these is a distinct write path that previously either used
-	// metadata.ServiceName or a hardcoded string. The fix unified them — this
-	// test asserts the unification stays unified.
+	// Each of these is a distinct write path. They must all consult the cached
+	// variant rather than persisting the ambiguous service.name.
 	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
@@ -113,7 +139,7 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 	for _, m := range msgs {
 		assert.True(t, m.Source.Valid, "Source should be set (role=%s)", m.Role)
 		assert.Equal(t, wantSource, m.Source.String,
-			"Source should match metadata.ServiceName for all hook writes (role=%s)", m.Role)
+			"Source should match the detected Cowork variant for all hook writes (role=%s)", m.Role)
 		assert.True(t, m.UserID.Valid, "UserID should be set (role=%s)", m.Role)
 		assert.Equal(t, wantUserID, m.UserID.String,
 			"UserID should match metadata.UserID for all hook writes (role=%s)", m.Role)
