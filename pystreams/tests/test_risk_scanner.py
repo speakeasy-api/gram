@@ -505,6 +505,38 @@ class _WarmupFailExecutor:
         self.shutdowns.append((wait, cancel_futures))
 
 
+class _WarmupSuccessExecutor:
+    """Executor stand-in whose warmup tasks complete immediately."""
+
+    def submit(self, fn, *args):
+        future: Future = Future()
+        future.set_result(1)
+        return future
+
+    def shutdown(self, wait=True, cancel_futures=False):
+        return None
+
+
+async def test_pool_create_constructs_executor_off_event_loop(monkeypatch):
+    event_loop_thread = threading.current_thread()
+    constructor_thread: list[threading.Thread] = []
+
+    def build_executor(**kwargs):
+        constructor_thread.append(threading.current_thread())
+        return _WarmupSuccessExecutor()
+
+    monkeypatch.setattr(
+        "pystreams.risk.scanner.ProcessPoolExecutor",
+        build_executor,
+    )
+
+    scanner = await ProcessPoolScanner.create(max_workers=1)
+    await scanner.aclose()
+
+    assert constructor_thread
+    assert constructor_thread[0] is not event_loop_thread
+
+
 async def test_pool_create_reaps_workers_when_warmup_fails(monkeypatch):
     executor = _WarmupFailExecutor()
     monkeypatch.setattr(

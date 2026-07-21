@@ -291,16 +291,27 @@ class ProcessPoolScanner(_AsyncCloseable):
         for forking mid Objective-C ``+initialize``. Every worker here forks from
         that clean forkserver, never from this process.
         """
-        executor = ProcessPoolExecutor(
-            max_workers=max_workers,
-            mp_context=multiprocessing.get_context("forkserver"),
-            initializer=_worker_init,
-            # <=0 (or None) means "live as long as the pool" — disable recycling.
-            max_tasks_per_child=(
-                max_tasks_per_child
-                if max_tasks_per_child and max_tasks_per_child > 0
-                else None
-            ),
+        # ProcessPoolExecutor lazily imports multiprocessing.synchronize and
+        # opens system resources while it is constructed. Those operations are
+        # blocking I/O, so doing this directly in the coroutine trips aiocop
+        # before warmup can even start. Keep construction non-abandoning: if
+        # create is cancelled, waiting for the constructor to finish lets the
+        # cleanup path below take ownership of the completed executor rather
+        # than leaking a pool that finished constructing in an abandoned thread.
+        executor = await to_thread.run_sync(
+            partial(
+                ProcessPoolExecutor,
+                max_workers=max_workers,
+                mp_context=multiprocessing.get_context("forkserver"),
+                initializer=_worker_init,
+                # <=0 (or None) means "live as long as the pool" — disable
+                # recycling.
+                max_tasks_per_child=(
+                    max_tasks_per_child
+                    if max_tasks_per_child and max_tasks_per_child > 0
+                    else None
+                ),
+            )
         )
         scanner = cls(
             executor,
