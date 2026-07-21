@@ -24,7 +24,7 @@ const (
 	skillObservationScheduleID         = "v1:skill-observation-reconciliation-schedule"
 	skillObservationWorkflowID         = skillObservationScheduleID + "/scheduled"
 	skillObservationInterval           = time.Minute
-	skillObservationRunTimeout         = 35 * time.Minute
+	skillObservationRunTimeout         = 70 * time.Minute
 )
 
 type ReconcileSkillObservationsParams struct {

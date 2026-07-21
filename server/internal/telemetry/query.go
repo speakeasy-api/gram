@@ -162,7 +162,9 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	}
 	useSkillVersions := groupBy == "skill_version"
 	for _, filter := range filters {
-		useSkillVersions = useSkillVersions || filter.Dimension == "skill_version"
+		if filter.Dimension == "skill_version" && len(filter.Values) > 0 {
+			useSkillVersions = true
+		}
 	}
 	if useSkillVersions && timeStart < time.Now().Add(-skillVersionRawRetention).UnixNano() {
 		return nil, oops.E(oops.CodeBadRequest, nil, "skill_version queries are limited to 90 days of raw telemetry history")

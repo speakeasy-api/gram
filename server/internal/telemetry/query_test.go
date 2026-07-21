@@ -350,6 +350,15 @@ func TestQuery_SkillVersionRejectsRangesBeyondRawRetention(t *testing.T) {
 		SortBy:  "total_cost",
 	})
 	require.NoError(t, err, "aggregate dimensions retain their existing historical range behavior")
+	_, err = ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("department_name"),
+		Filters: []*gen.QueryFilter{{Dimension: "skill_version", Values: []string{}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err, "an empty skill_version filter must stay on the aggregate path")
 
 	_, err = ti.service.Query(ctx, &gen.QueryPayload{
 		From:    from,
