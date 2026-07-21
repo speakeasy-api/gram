@@ -67,10 +67,6 @@ func (s *Service) DiscoverRemoteSessionIssuer(ctx context.Context, payload *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	issuerURL := strings.TrimSpace(payload.Issuer)
