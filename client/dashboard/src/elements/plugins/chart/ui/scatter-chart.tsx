@@ -11,8 +11,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   ZAxis,
-  Cell,
+  Symbols,
   TooltipContentProps,
+  ScatterShapeProps,
 } from "recharts";
 
 interface ScatterDataPoint {
@@ -119,11 +120,22 @@ export const ScatterChart: FC<ScatterChartProps> = ({
               <ZAxis type="number" dataKey="size" range={[50, 400]} />
             )}
             <Tooltip content={CustomTooltip} />
-            <Scatter data={data} fill={COLORS[0]} isAnimationActive={false}>
-              {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color || COLORS[0]} />
-              ))}
-            </Scatter>
+            <Scatter
+              data={data}
+              fill={COLORS[0]}
+              isAnimationActive={false}
+              shape={(props: ScatterShapeProps) => {
+                const { payload, ...symbolProps } = props;
+                const entry = payload as ScatterDataPoint | undefined;
+                return (
+                  <Symbols
+                    {...symbolProps}
+                    type="circle"
+                    fill={entry?.color || COLORS[0]}
+                  />
+                );
+              }}
+            />
           </RechartsScatterChart>
         </ResponsiveContainer>
       </div>
