@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react";
 import { CalendarIcon, ChevronDown, Zap } from "lucide-react";
-import { generateObject, LanguageModel } from "ai";
+import { generateText, LanguageModel, Output } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
@@ -267,9 +267,9 @@ export async function parseWithAI(
 
     const model = openRouter.chat(TIME_RANGE_MODEL) as LanguageModel;
 
-    const result = await generateObject({
+    const result = await generateText({
       model,
-      schema: timeRangeSchema,
+      output: Output.object({ schema: timeRangeSchema }),
       prompt: `You are a time range parser for an analytics dashboard. Parse natural language into a PAST time range.
 Current time: ${now.toISOString()}
 
@@ -299,7 +299,7 @@ Examples:
 User input: ${input}`,
     });
 
-    const parsed = result.object;
+    const parsed = result.output;
     // Parse dates as local to avoid timezone shifts
     const from = parseAsLocalDate(parsed.from);
     const to = parseAsLocalDate(parsed.to);

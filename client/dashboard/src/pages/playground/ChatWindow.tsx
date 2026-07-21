@@ -443,7 +443,7 @@ function ChatInner({
     messages: chatMessages,
     status,
     sendMessage,
-    addToolResult,
+    addToolOutput,
     setMessages: setUseChatMessages,
   } = useChat({
     // Include model in the chat ID to force a fresh session when switching models
@@ -476,7 +476,7 @@ function ChatInner({
       try {
         const result = await tool.execute!(toolArgs);
 
-        void addToolResult({
+        void addToolOutput({
           tool: toolName,
           toolCallId,
           output: result,
