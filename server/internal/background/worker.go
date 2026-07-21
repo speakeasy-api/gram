@@ -363,6 +363,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
 	temporalWorker.RegisterActivity(activities.MarkMessagesAnalyzed)
 	temporalWorker.RegisterActivity(activities.ReconcileExclusion)
+	temporalWorker.RegisterActivity(activities.ReconcileSkillObservations)
+	temporalWorker.RegisterActivity(activities.ListProjectsWithPendingSkillObservations)
 	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
@@ -425,6 +427,8 @@ func NewTemporalWorker(
 	// Risk analysis coordinator workflow
 	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
+	temporalWorker.RegisterWorkflow(ReconcileSkillObservationsWorkflow)
+	temporalWorker.RegisterWorkflow(SkillObservationReconciliationSweepWorkflow)
 	temporalWorker.RegisterWorkflow(RiskPolicyCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
@@ -508,6 +512,10 @@ func NewTemporalWorker(
 
 	if err := AddStagedTelemetrySweepSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add staged telemetry sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddSkillObservationReconciliationSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add skill observation reconciliation schedule", attr.SlogError(err))
 	}
 
 	if opts.PluginPublisher != nil {

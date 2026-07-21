@@ -242,6 +242,7 @@ func (s *Service) recordVersion(
 	skill repo.Skill,
 	parsed parsedSkillManifest,
 	createdSkill bool,
+	createAudit bool,
 ) (*gen.RecordSkillResult, error) {
 	metadataJSON, err := json.Marshal(parsed.Metadata)
 	if err != nil {
@@ -255,10 +256,12 @@ func (s *Service) recordVersion(
 	var beforeSnapshot *audit.SkillSnapshot
 	if !createdSkill {
 		latestBeforeID, countBefore, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
-		if err != nil {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
 		}
-		beforeSnapshot = buildSkillAuditSnapshot(skill, latestBeforeID, countBefore)
+		if err == nil {
+			beforeSnapshot = buildSkillAuditSnapshot(skill, latestBeforeID, countBefore)
+		}
 	}
 
 	version, err := queries.CreateSkillVersion(ctx, repo.CreateSkillVersionParams{
@@ -331,7 +334,7 @@ func (s *Service) recordVersion(
 	}
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-	if createdSkill {
+	if createAudit {
 		err = s.audit.LogSkillCreate(ctx, dbtx, audit.LogSkillCreateEvent{
 			OrganizationID:   authCtx.ActiveOrganizationID,
 			ProjectID:        *authCtx.ProjectID,
@@ -399,6 +402,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		Name:      parsed.Name,
 	})
 	createdSkill := false
+	createAudit := false
 	if errors.Is(err, pgx.ErrNoRows) {
 		skill, err = queries.CreateSkill(ctx, repo.CreateSkillParams{
 			ProjectID:   *authCtx.ProjectID,
@@ -413,13 +417,30 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 			})
 		} else if err == nil {
 			createdSkill = true
+			createAudit = true
 		}
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve skill by manifest name").LogError(ctx, logger)
 	}
+	if !createdSkill && skill.SourceKind == "captured" {
+		_, _, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		switch {
+		case errors.Is(stateErr, pgx.ErrNoRows):
+			skill, err = queries.PromoteObservedSkillToManual(ctx, repo.PromoteObservedSkillToManualParams{
+				ProjectID: *authCtx.ProjectID,
+				ID:        skill.ID,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "promote observed skill to manual").LogError(ctx, logger)
+			}
+			createAudit = true
+		case stateErr != nil:
+			return nil, oops.E(oops.CodeUnexpected, stateErr, "load observed skill state").LogError(ctx, logger)
+		}
+	}
 
-	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, createdSkill)
+	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, createdSkill, createAudit)
 	if err != nil {
 		return nil, err
 	}
@@ -473,7 +494,7 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 		return nil, oops.E(oops.CodeInvalid, nil, "manifest name does not match the skill")
 	}
 
-	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false)
+	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false)
 	if err != nil {
 		return nil, err
 	}

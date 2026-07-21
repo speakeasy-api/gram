@@ -25,6 +25,7 @@ INSERT INTO skill_observations (
   , hostname
   , session_id
   , skill_name
+  , source
   , source_level
   , source_path
   , raw_sha256
@@ -38,6 +39,7 @@ INSERT INTO skill_observations (
   , sqlc.narg(hostname)
   , sqlc.narg(session_id)
   , @skill_name
+  , sqlc.narg(source)
   , sqlc.narg(source_level)
   , sqlc.narg(source_path)
   , sqlc.narg(raw_sha256)
