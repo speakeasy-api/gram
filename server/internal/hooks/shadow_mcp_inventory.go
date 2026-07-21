@@ -9,21 +9,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
+// shadowMCPInventoryUpsertTimeout bounds the detached inventory capture. The
+// work is best-effort telemetry, so the bound is not about latency — it stops
+// a saturated Postgres pool (a deadline-less acquire can wait unboundedly) or
+// a hung write from retaining one goroutine per capture.
+const shadowMCPInventoryUpsertTimeout = 10 * time.Second
+
 // upsertShadowMCPInventoryURLs records the session's external MCP servers in
 // the shadow-MCP inventory. The upsert is pure telemetry — nothing in the hook
 // response depends on it — so the whole unit (custom-domain lookup,
 // canonicalization, ClickHouse write) runs detached from the request:
 // synchronous ClickHouse writes here held hook responses for multiple seconds
-// (DNO-521/DNO-606). WithoutCancel keeps the write alive after the hook
-// response is sent.
+// (DNO-521/DNO-606). WithoutCancel keeps the work alive after the hook
+// response is sent; the re-bound timeout keeps it from living forever.
 func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, orgID string, projectID string, sessionID string, entries []MCPServerEntry) {
 	if s.telemetryLogger == nil || projectID == "" || len(entries) == 0 {
 		return
 	}
 
 	seenAt := time.Now()
-	asyncCtx := context.WithoutCancel(ctx)
+	detachedCtx := context.WithoutCancel(ctx)
 	go func() {
+		asyncCtx, cancel := context.WithTimeout(detachedCtx, shadowMCPInventoryUpsertTimeout)
+		defer cancel()
 		// One custom-domain lookup covers every entry — the per-entry
 		// isGramHostedMCPURLForOrg variant would re-query custom_domains for
 		// each external URL in the inventory.
