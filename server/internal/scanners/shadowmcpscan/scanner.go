@@ -71,10 +71,14 @@ type Validator interface {
 	ValidateToolsetCall(ctx context.Context, toolInput any, toolName string, orgID string) (string, bool)
 }
 
-// HostedChecker reports whether a resolved MCP server URL belongs to Gram for
-// the calling organization. *shadowmcp.Client satisfies it.
+// HostedChecker resolves the hosts that count as Gram-hosted for an
+// organization, on top of the built-in ones. *shadowmcp.Client satisfies it.
+//
+// Resolving hosts rather than classifying one URL at a time keeps the
+// organization's custom-domain lookup to a single database round-trip per
+// batch instead of one per scanned call.
 type HostedChecker interface {
-	IsGramHostedMCPURLForOrg(ctx context.Context, rawURL, orgID string) bool
+	TrustedMCPHostsForOrg(ctx context.Context, orgID string) []string
 }
 
 // ProvenanceLookup replays the server identity the hook recorded for a set of
@@ -132,12 +136,21 @@ func NewScanner(logger *slog.Logger, validator Validator, hosted HostedChecker, 
 func (s *Scanner) Scan(ctx context.Context, orgID string, projectID uuid.UUID, messages [][]ToolCall) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
 
-	provenance := s.lookupProvenance(ctx, projectID, messages)
+	ids, oldest := mcpCallIDs(messages)
+	if len(ids) == 0 {
+		return out
+	}
+
+	provenance := s.lookupProvenance(ctx, projectID, ids, oldest)
+	// Resolved once for the whole batch: the custom-domain lookup behind this
+	// is a database round-trip whose result is invariant for the organization,
+	// and a batch can hold hundreds of calls.
+	trustedHosts := s.hosted.TrustedMCPHostsForOrg(ctx, orgID)
 
 	for i, calls := range messages {
 		var findings []scanners.Finding
 		for _, call := range calls {
-			if finding := s.scanCall(ctx, orgID, call, provenance[call.ID]); finding != nil {
+			if finding := s.scanCall(ctx, orgID, call, provenance[call.ID], trustedHosts); finding != nil {
 				findings = append(findings, *finding)
 			}
 		}
@@ -146,10 +159,9 @@ func (s *Scanner) Scan(ctx context.Context, orgID string, projectID uuid.UUID, m
 	return out
 }
 
-// lookupProvenance issues the single batch-wide provenance query. A failure is
-// logged and yields an empty map: every call then falls through to the
-// signature check rather than being decided on absent evidence.
-func (s *Scanner) lookupProvenance(ctx context.Context, projectID uuid.UUID, messages [][]ToolCall) map[string]telemetryrepo.MCPProvenance {
+// mcpCallIDs collects the recorded ids of every MCP-routed call in the batch,
+// plus the oldest recording time among them, which bounds the provenance query.
+func mcpCallIDs(messages [][]ToolCall) ([]string, time.Time) {
 	var ids []string
 	var oldest time.Time
 	for _, calls := range messages {
@@ -163,10 +175,13 @@ func (s *Scanner) lookupProvenance(ctx context.Context, projectID uuid.UUID, mes
 			}
 		}
 	}
-	if len(ids) == 0 {
-		return map[string]telemetryrepo.MCPProvenance{}
-	}
+	return ids, oldest
+}
 
+// lookupProvenance issues the single batch-wide provenance query. A failure is
+// logged and yields an empty map: every call then falls through to the
+// signature check rather than being decided on absent evidence.
+func (s *Scanner) lookupProvenance(ctx context.Context, projectID uuid.UUID, ids []string, oldest time.Time) map[string]telemetryrepo.MCPProvenance {
 	var since time.Time
 	if !oldest.IsZero() {
 		since = oldest.Add(-provenanceLookback)
@@ -185,7 +200,7 @@ func (s *Scanner) lookupProvenance(ctx context.Context, projectID uuid.UUID, mes
 
 // scanCall decides a single tool call, returning nil when the call is clean or
 // is not an MCP call at all.
-func (s *Scanner) scanCall(ctx context.Context, orgID string, call ToolCall, prov telemetryrepo.MCPProvenance) *scanners.Finding {
+func (s *Scanner) scanCall(ctx context.Context, orgID string, call ToolCall, prov telemetryrepo.MCPProvenance, trustedHosts []string) *scanners.Finding {
 	if call.Name == "" || !toolref.IsMCPToolName(call.Name) {
 		return nil
 	}
@@ -194,7 +209,7 @@ func (s *Scanner) scanCall(ctx context.Context, orgID string, call ToolCall, pro
 	match, resolved := resolvedServerIdentity(prov, serverPrefix)
 
 	if resolved {
-		if s.isHostedIdentity(ctx, match, orgID) {
+		if isHostedIdentity(match, trustedHosts) {
 			s.recordResolution(ctx, orgID, senderOf(prov, call), ResolutionHosted)
 			return nil
 		}
@@ -301,30 +316,66 @@ func resolvedServerIdentity(prov telemetryrepo.MCPProvenance, serverPrefix strin
 
 // isHostedIdentity reports whether a resolved server identity points at Gram.
 //
-// The identity is tested directly, then — when it is a stdio launch command —
-// each absolute http(s) argument within it is tested too. Gram's own install
-// snippet for OAuth-backed servers is a stdio entry that fronts a Gram URL
-// (`npx mcp-remote@<version> https://app.getgram.ai/mcp/<slug>`), so treating
-// every stdio server as shadow would flag calls to Gram's own servers whenever
-// a customer installed them the way Gram told them to.
+// The identity is tested directly, then — when it is a stdio launch command
+// that proxies through `mcp-remote` — the URL that invocation targets is
+// tested too. Gram's own install snippet for OAuth-backed servers is exactly
+// that shape (`npx mcp-remote@<version> https://app.getgram.ai/mcp/<slug>`),
+// so treating every stdio server as shadow would flag calls to Gram's own
+// servers whenever a customer installed them the way Gram told them to.
+//
+// Only the proxy's target counts, never any Gram URL appearing somewhere in
+// the command. Accepting an arbitrary argument would let a local shadow server
+// clear the check by carrying an unrelated Gram URL (`npx @evil/mcp --docs
+// https://app.getgram.ai/...`), which is a single flag's worth of evasion.
 //
 // The hosted check is never gated on the identity parsing as a URL: it already
 // returns false for values with no host, and accepts forms (scheme-relative,
 // non-http schemes) that a stricter pre-filter would wrongly reject before the
 // host was ever compared.
-func (s *Scanner) isHostedIdentity(ctx context.Context, identity, orgID string) bool {
-	if s.hosted.IsGramHostedMCPURLForOrg(ctx, identity, orgID) {
+func isHostedIdentity(identity string, trustedHosts []string) bool {
+	if shadowmcp.IsGramHostedMCPURL(identity, trustedHosts...) {
 		return true
 	}
-	for field := range strings.FieldsSeq(identity) {
-		if !strings.HasPrefix(field, "http://") && !strings.HasPrefix(field, "https://") {
+	target, ok := mcpRemoteTarget(identity)
+	if !ok {
+		return false
+	}
+	return shadowmcp.IsGramHostedMCPURL(target, trustedHosts...)
+}
+
+// mcpRemoteTarget returns the URL a stdio `mcp-remote` command proxies to.
+//
+// The target is the first absolute http(s) argument following the mcp-remote
+// package spec; anything before that token is the launcher (`npx`, `-y`), and
+// first-wins means a trailing argument cannot displace the real target. ok is
+// false when the command does not invoke mcp-remote at all, which covers every
+// other stdio server.
+func mcpRemoteTarget(command string) (string, bool) {
+	seenSpec := false
+	for field := range strings.FieldsSeq(command) {
+		if !seenSpec {
+			seenSpec = isMCPRemoteSpec(field)
 			continue
 		}
-		if s.hosted.IsGramHostedMCPURLForOrg(ctx, field, orgID) {
-			return true
+		if strings.HasPrefix(field, "http://") || strings.HasPrefix(field, "https://") {
+			return field, true
 		}
 	}
-	return false
+	return "", false
+}
+
+// isMCPRemoteSpec reports whether an argument is an npm package spec for
+// mcp-remote, tolerating a version suffix (`mcp-remote@0.1.25`) and a scope
+// prefix (`@scope/mcp-remote`).
+func isMCPRemoteSpec(field string) bool {
+	spec := strings.TrimPrefix(field, "@")
+	if i := strings.LastIndex(spec, "@"); i > 0 {
+		spec = spec[:i]
+	}
+	if i := strings.LastIndex(spec, "/"); i >= 0 {
+		spec = spec[i+1:]
+	}
+	return spec == "mcp-remote"
 }
 
 // parseToolInput parses a recorded tool call's raw arguments into a value the

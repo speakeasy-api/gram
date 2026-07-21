@@ -2,9 +2,13 @@ package shadowmcp
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 )
 
@@ -62,29 +66,74 @@ func trustedGramHostedMCPHostMatches(u *url.URL, trustedHost string) bool {
 	return strings.EqualFold(u.Hostname(), trustedHost)
 }
 
+// TrustedMCPHostsForOrg returns the hosts that count as Gram-hosted for an
+// organization on top of the built-in ones: the deployment's own host and the
+// org's verified, activated custom domain.
+//
+// Callers that classify many URLs for one organization should resolve this
+// once and pass it to [IsGramHostedMCPURL], rather than calling
+// [Client.IsGramHostedMCPURLForOrg] per URL — the custom-domain lookup is a
+// database round-trip whose result is invariant for the organization.
+//
+// A lookup failure is logged and yields only the built-in hosts. That is the
+// same answer a genuinely domain-less org gets, so callers must treat a
+// negative as "not known to be Gram-hosted" rather than as proof of a shadow
+// server.
+func (c *Client) TrustedMCPHostsForOrg(ctx context.Context, orgID string) []string {
+	hosts := make([]string, 0, 2)
+	if c.serverURL != nil && c.serverURL.Host != "" {
+		hosts = append(hosts, c.serverURL.Host)
+	}
+	if orgID == "" {
+		return hosts
+	}
+
+	customDomain, err := customdomainsrepo.New(c.db).GetCustomDomainByOrganization(ctx, orgID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return hosts
+	case err != nil:
+		// Distinguished from the no-rows case: a transient database failure
+		// would otherwise be indistinguishable from "this org has no custom
+		// domain" and silently produce shadow findings for calls to the org's
+		// own Gram deployment.
+		c.logger.ErrorContext(ctx, "resolve organization custom domain for Gram-hosted MCP check; treating as no custom domain",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		return hosts
+	}
+	if !customDomain.Verified || !customDomain.Activated {
+		return hosts
+	}
+	return append(hosts, customDomain.Domain)
+}
+
 // IsGramHostedMCPURLForOrg reports whether rawURL is a Gram-managed MCP server
 // for the given organization. It checks the canonical and configured hosts
 // first (no DB hit), then falls back to the org's verified custom domain.
 //
-// This is the single definition of "Gram-hosted" shared by the realtime hook
-// guard and the offline batch scanner, so a call the hook allows can never be
-// flagged by the scanner on host grounds alone.
+// This is the definition of "Gram-hosted" shared by the realtime hook guard
+// and the offline batch scanner, so a call the hook allows is not flagged by
+// the scanner on host grounds alone. Use it for one-off classifications; for
+// many URLs under one organization, see [Client.TrustedMCPHostsForOrg].
 func (c *Client) IsGramHostedMCPURLForOrg(ctx context.Context, rawURL, orgID string) bool {
-	trustedHosts := make([]string, 0, 1)
-	if c.serverURL != nil && c.serverURL.Host != "" {
-		trustedHosts = append(trustedHosts, c.serverURL.Host)
+	if rawURL == "" {
+		return false
 	}
-
-	// Fast path: check built-in/configured hosts before consulting custom domains.
-	if IsGramHostedMCPURL(rawURL, trustedHosts...) {
+	// Fast path: check built-in and configured hosts before the DB round-trip.
+	if IsGramHostedMCPURL(rawURL, c.serverHost()...) {
 		return true
 	}
-	if rawURL == "" || orgID == "" {
+	if orgID == "" {
 		return false
 	}
-	customDomain, err := customdomainsrepo.New(c.db).GetCustomDomainByOrganization(ctx, orgID)
-	if err != nil || !customDomain.Verified || !customDomain.Activated {
-		return false
+	return IsGramHostedMCPURL(rawURL, c.TrustedMCPHostsForOrg(ctx, orgID)...)
+}
+
+func (c *Client) serverHost() []string {
+	if c.serverURL == nil || c.serverURL.Host == "" {
+		return nil
 	}
-	return IsGramHostedMCPURL(rawURL, customDomain.Domain)
+	return []string{c.serverURL.Host}
 }

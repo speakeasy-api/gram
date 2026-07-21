@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/scanners"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -37,14 +36,18 @@ func (f *fakeValidator) ValidateToolsetCall(_ context.Context, _ any, toolName s
 	return "", false
 }
 
-// fakeHosted defers to the real host-matching implementation rather than a
-// substring check, so tests exercise the same URL parsing and exact-host rules
-// production uses — a looser fake would pass a raw stdio command containing a
-// Gram hostname and hide whether the scanner really extracts the URL from it.
-type fakeHosted struct{}
+// fakeHosted resolves no extra trusted hosts, leaving the scanner to match
+// against the real built-in Gram hosts. Host matching itself is the production
+// implementation, so tests exercise the same URL parsing and exact-host rules
+// rather than a looser substring check that would pass a raw stdio command
+// containing a Gram hostname anywhere in it.
+type fakeHosted struct {
+	calls int
+}
 
-func (f *fakeHosted) IsGramHostedMCPURLForOrg(_ context.Context, rawURL, _ string) bool {
-	return shadowmcp.IsGramHostedMCPURL(rawURL)
+func (f *fakeHosted) TrustedMCPHostsForOrg(_ context.Context, _ string) []string {
+	f.calls++
+	return nil
 }
 
 // fakeProvenance returns provenance for the ids it is configured with, or an
@@ -439,10 +442,8 @@ func TestResolvedServerIdentity(t *testing.T) {
 	}
 }
 
-func TestScanner_IsHostedIdentity(t *testing.T) {
+func TestIsHostedIdentity(t *testing.T) {
 	t.Parallel()
-
-	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), noProvenance(), nil)
 
 	cases := []struct {
 		name     string
@@ -457,16 +458,76 @@ func TestScanner_IsHostedIdentity(t *testing.T) {
 		// Gram's own install snippet for OAuth-backed servers is a stdio
 		// entry fronting a Gram URL; it must not read as shadow MCP.
 		{"gram mcp-remote snippet", "npx mcp-remote@0.1.25 https://app.getgram.ai/mcp/team-foo", true},
+		{"mcp-remote with -y launcher flag", "npx -y mcp-remote https://app.getgram.ai/mcp/x", true},
 		{"mcp-remote with headers", "npx mcp-remote https://app.getgram.ai/mcp/x --header Authorization:${TOKEN}", true},
+		{"scoped mcp-remote spec", "npx @speakeasy/mcp-remote@1.2.3 https://app.getgram.ai/mcp/x", true},
 		{"mcp-remote to third party", "npx mcp-remote https://evil.example/mcp", false},
 		// A Gram-shaped path on a foreign host stays shadow: the hosted check
 		// is on the host, never the path.
 		{"gram path on foreign host", "npx mcp-remote https://evil.example/mcp/team-foo", false},
+		// Only the proxy's target counts. A local server carrying an unrelated
+		// Gram URL must not clear the check, or evasion costs one extra flag.
+		{"unrelated gram url argument", "npx @evil/mcp --docs https://app.getgram.ai/docs", false},
+		{"gram url without mcp-remote", "node server.js --ref https://app.getgram.ai/mcp/x", false},
+		// First URL after the spec wins, so a trailing argument cannot
+		// displace the real target.
+		{"trailing gram url does not displace target", "npx mcp-remote https://evil.example/mcp --header X:https://app.getgram.ai", false},
 	}
 
 	for _, tc := range cases {
-		require.Equal(t, tc.want, s.isHostedIdentity(t.Context(), tc.identity, "org-1"), tc.name)
+		require.Equal(t, tc.want, isHostedIdentity(tc.identity, nil), tc.name)
 	}
+}
+
+// A custom domain resolved for the org counts as Gram-hosted.
+func TestIsHostedIdentity_TrustedHosts(t *testing.T) {
+	t.Parallel()
+
+	hosts := []string{"mcp.customer.example"}
+	require.True(t, isHostedIdentity("https://mcp.customer.example/mcp/team", hosts))
+	require.True(t, isHostedIdentity("npx mcp-remote https://mcp.customer.example/mcp/team", hosts))
+	require.False(t, isHostedIdentity("https://other.example/mcp", hosts))
+}
+
+// The organization's custom-domain lookup sits behind this, so it must not be
+// repeated per scanned call.
+func TestScanner_ResolvesTrustedHostsOncePerScan(t *testing.T) {
+	t.Parallel()
+
+	hosted := gramHosted()
+	prov := &fakeProvenance{
+		found: map[string]telemetryrepo.MCPProvenance{
+			"call-0": {Match: "https://evil.example/mcp", ServerURL: "https://evil.example/mcp", HookSource: "claude"},
+			"call-1": {Match: "https://other.example/mcp", ServerURL: "https://other.example/mcp", HookSource: "claude"},
+		},
+		err:       nil,
+		gotIDs:    nil,
+		gotSince:  time.Time{},
+		callCount: 0,
+	}
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, prov, nil)
+
+	s.Scan(t.Context(), "org-1", uuid.New(), [][]ToolCall{
+		{{ID: "call-0", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+		{{ID: "call-1", Name: "mcp__fs__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	})
+
+	require.Equal(t, 1, hosted.calls)
+}
+
+// No MCP calls means neither the provenance query nor the trusted-host lookup
+// should be issued.
+func TestScanner_NoMCPCallsSkipsHostLookup(t *testing.T) {
+	t.Parallel()
+
+	hosted := gramHosted()
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, noProvenance(), nil)
+
+	s.Scan(t.Context(), "org-1", uuid.New(), [][]ToolCall{
+		{{ID: "call-1", Name: "Bash", Arguments: `{}`, CreatedAt: time.Now()}},
+	})
+
+	require.Zero(t, hosted.calls)
 }
 
 // A Gram server installed through Gram's own stdio snippet resolves to a
