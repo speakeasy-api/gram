@@ -57,23 +57,23 @@ environment only (the pepper may also come from a file):
 
 Non-secret flags:
 
-| Flag                   | Env fallback             | Default     | Meaning                                                                              |
-| ---------------------- | ------------------------ | ----------- | ------------------------------------------------------------------------------------ |
-| `-pepper-keyring-file` | —                        | —           | Path to a file holding the pepper keyring (alternative to the env var)               |
-| `-ch-host`             | `CLICKHOUSE_HOST`        | `localhost` | ClickHouse host (IPv4, IPv6, or DNS)                                                 |
-| `-ch-database`         | `CLICKHOUSE_DATABASE`    | `default`   | ClickHouse database                                                                  |
-| `-ch-username`         | `CLICKHOUSE_USERNAME`    | `gram`      | ClickHouse username                                                                  |
-| `-ch-native-port`      | `CLICKHOUSE_NATIVE_PORT` | `9440`      | ClickHouse native protocol port                                                      |
-| `-ch-insecure`         | `CLICKHOUSE_INSECURE`    | `false`     | Skip ClickHouse TLS verification                                                     |
-| `-org`                 | —                        | (all)       | Scope to one `organization_id`                                                       |
-| `-project`             | —                        | (all)       | Scope to one `project_id` (uuid)                                                     |
-| `-policy`              | —                        | (all)       | Scope to one `risk_policy_id` (uuid)                                                 |
-| `-from`                | —                        | (beginning) | Lower time bound, RFC3339 (`created_at >= from`); ignored when `-cursor` is set      |
-| `-to`                  | —                        | (end)       | Upper time bound, RFC3339 (`created_at < to`)                                        |
-| `-cursor`              | —                        | —           | Resume after this `risk_results` id (exclusive); replaces `-from` as the lower bound |
-| `-batch-size`          | —                        | `5000`      | Rows per source page and sink batch                                                  |
-| `-buffer`              | —                        | `5000`      | Channel buffer between pipeline stages                                               |
-| `-dry-run`             | —                        | `true`      | When true, read + transform but do not write (and do not connect to ClickHouse)      |
+| Flag                   | Env fallback             | Default     | Meaning                                                                             |
+| ---------------------- | ------------------------ | ----------- | ----------------------------------------------------------------------------------- |
+| `-pepper-keyring-file` | —                        | —           | Path to a file holding the pepper keyring (alternative to the env var)              |
+| `-ch-host`             | `CLICKHOUSE_HOST`        | `localhost` | ClickHouse host (IPv4, IPv6, or DNS)                                                |
+| `-ch-database`         | `CLICKHOUSE_DATABASE`    | `default`   | ClickHouse database                                                                 |
+| `-ch-username`         | `CLICKHOUSE_USERNAME`    | `gram`      | ClickHouse username                                                                 |
+| `-ch-native-port`      | `CLICKHOUSE_NATIVE_PORT` | `9440`      | ClickHouse native protocol port                                                     |
+| `-ch-insecure`         | `CLICKHOUSE_INSECURE`    | `false`     | Skip ClickHouse TLS verification                                                    |
+| `-org`                 | —                        | (all)       | Scope to one `organization_id`                                                      |
+| `-project`             | —                        | (all)       | Scope to one `project_id` (uuid)                                                    |
+| `-policy`              | —                        | (all)       | Scope to one `risk_policy_id` (uuid)                                                |
+| `-from`                | —                        | (beginning) | Lower time bound, RFC3339 (`created_at >= from`); applies with or without `-cursor` |
+| `-to`                  | —                        | (end)       | Upper time bound, RFC3339 (`created_at < to`)                                       |
+| `-cursor`              | —                        | —           | Resume after this `risk_results` id (exclusive); keyset resume position only        |
+| `-batch-size`          | —                        | `5000`      | Rows per source page and sink batch                                                 |
+| `-buffer`              | —                        | `5000`      | Channel buffer between pipeline stages                                              |
+| `-dry-run`             | —                        | `true`      | When true, read + transform but do not write (and do not connect to ClickHouse)     |
 
 An interrupted run (Ctrl-C / SIGTERM) exits with a **nonzero** status and logs
 the `-cursor` to resume from, so shell automation never mistakes a partial
@@ -139,10 +139,12 @@ will not join.
 - **Resumable, from the committed cursor.** On an applied run the final report's
   `last cursor` is the **sink's** last durably-written id, not the source's read
   position (which runs ahead). Resume an interrupted run by passing that value to
-  `-cursor`; repeat the original `-org`, `-project`, `-policy`, and `-to` filters when resuming because the cursor does not encode query scope; rows that were read but not yet flushed on interruption are re-read,
-  never skipped. `-cursor` replaces `-from` as the lower bound (the committed id
-  already sits past `-from`'s rows), so the `-from` predicate is dropped while
-  resuming to avoid skipping rows between the cursor and `-from`.
+  `-cursor`, and **repeat the original `-org`, `-project`, `-policy`, `-from`, and
+  `-to` filters** — the cursor does not encode query scope. The cursor is only the
+  keyset resume position (`id > cursor`); it does not relax the time window, so
+  `-from`/`-to` still bound the resumed run and keep it from importing
+  out-of-window rows. Rows that were read but not yet flushed on interruption are
+  re-read, never skipped.
 - **Exact time bounds.** `-from`/`-to` filter on `created_at` directly, to full
   precision. The `id` keyset is used only for pagination and resume, never to
   prune the time window: a row's uuidv7 `id` and its `created_at` are minted at

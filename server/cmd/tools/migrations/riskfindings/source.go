@@ -26,7 +26,7 @@ const (
 	CriteriaOrgID     = "org_id"     // string; filters organization_id
 	CriteriaProjectID = "project_id" // uuid.UUID; filters project_id
 	CriteriaPolicyID  = "policy_id"  // uuid.UUID; filters risk_policy_id
-	CriteriaFrom      = "from"       // time.Time; created_at >= from (ignored when a cursor is set)
+	CriteriaFrom      = "from"       // time.Time; created_at >= from (applies with or without a cursor)
 	CriteriaTo        = "to"         // time.Time; created_at < to
 	CriteriaCursor    = "cursor"     // uuid.UUID; resume after this id (exclusive)
 	CriteriaBatchSize = "batch_size" // int; rows per page
@@ -117,20 +117,22 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 		batchSize = DefaultBatchSize
 	}
 
-	// Keyset lower bound / resume point. A -cursor is the sole lower bound when
-	// present: it overrides -from (its committed id already sits after -from's
-	// rows), so the created_at >= from predicate is dropped in that case to avoid
-	// skipping rows that follow the cursor but precede -from.
+	// Keyset lower bound / resume point. The cursor only sets the id resume
+	// position (id > cursor); it does NOT relax the time window. -from/-to still
+	// apply so a resumed scoped run stays inside its window.
 	cursor := uuid.Nil
-	c, hasCursor := criteria[CriteriaCursor].(uuid.UUID)
-	if hasCursor {
+	if c, ok := criteria[CriteriaCursor].(uuid.UUID); ok {
 		cursor = c
 	}
 
-	// Exact time bounds via created_at (nil disables the predicate). -from is not
-	// applied when resuming from a cursor.
+	// Exact time bounds via created_at (nil disables the predicate). These are
+	// independent of the cursor and always apply when set: the cursor decides
+	// where to resume, -from/-to decide window membership. Applying both is safe —
+	// rows flow in id order, so every in-window pending row has id > cursor, and
+	// applying created_at >= from cannot drop it while it does exclude an
+	// out-of-window row that uuidv7/created_at skew placed past the cursor.
 	var fromArg, toArg any
-	if from, ok := criteria[CriteriaFrom].(time.Time); ok && !hasCursor {
+	if from, ok := criteria[CriteriaFrom].(time.Time); ok {
 		fromArg = from
 	}
 	if to, ok := criteria[CriteriaTo].(time.Time); ok {
