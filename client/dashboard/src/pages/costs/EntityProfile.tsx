@@ -6,12 +6,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";
 import type { ReactNode } from "react";
-import { ChevronLeft, Download, Home } from "lucide-react";
+import { ChevronLeft, Download, Home, Info } from "lucide-react";
 import { CostMeasureLabel } from "@/components/estimated-cost";
 import { BreakdownBar } from "./BreakdownBar";
 import { breakdownCaption, breakdownTitle } from "./breakdownCopy";
@@ -209,21 +214,21 @@ export type EntityProfileProps = {
   onViewSessions?: () => void;
   // Per-group daily cost series for the row sparklines.
   seriesByGroup: Map<string, number[]>;
-  // The active dataset (spend slice) and its options, rendered as a selector at
-  // the top-right beside the date picker. `all` is the full project spend; the
+  // The active dataset (spend slice) and its options, rendered in the top
+  // control bar beside the date picker. `all` is the full project spend; the
   // others narrow to a Claude attribution lens (MCP / Subagents / Skills).
   datasetValue: string;
   datasetOptions: { value: string; label: string }[];
   onDatasetChange: (value: string) => void;
-  // The date-range picker control, rendered in the header above the stats.
+  // The date-range picker control, rendered in the top control bar.
   rangePicker: ReactNode;
   // Human date-range label (e.g. "June 15–19") for the CSV export filename.
   rangeLabel: string;
   // The summary widgets row (trend chart, mix, KPIs), rendered above the table.
   widgets: ReactNode;
   // The stacked cost-over-time chart, rendered inside the breakdown section
-  // between the control bar and the table — it stacks by the same axis the
-  // bar controls, so it reads as part of the breakdown.
+  // between the section heading and the table — it stacks by the same axis
+  // the top control bar selects, so it reads as part of the breakdown.
   chart?: ReactNode;
   isLoading: boolean;
   isError: boolean;
@@ -358,87 +363,85 @@ export function EntityProfile({
     />
   );
 
+  // The dataset selector: a grey "Dataset" label box wrapping the select,
+  // rendered in the top control bar's trailing (page-scope) group.
+  const datasetControl = (
+    <div className="border-border bg-muted flex h-10 items-stretch overflow-hidden rounded-md border text-sm">
+      <span className="text-muted-foreground flex items-center pr-2 pl-3 font-medium">
+        Dataset
+      </span>
+      <Select value={datasetValue} onValueChange={onDatasetChange}>
+        <SelectTrigger className="border-border bg-background hover:bg-muted data-[state=open]:bg-muted !h-full w-auto cursor-pointer gap-1.5 rounded-none border-0 border-l py-1 pr-2.5 pl-3 font-medium shadow-none transition-colors">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent align="end">
+          {datasetOptions.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
   return (
-    <div className="flex w-full flex-col">
-      {/* Full-bleed hero: a soft, name-deterministic mesh fading downward so it
-          curves around the avatar, flush to the top of the page body. */}
-      <div className="relative w-full">
+    <div className="relative flex w-full flex-col">
+      {/* Full-bleed hero wash: a soft, name-deterministic mesh fading downward
+          from the very top of the page, behind the control bar and the hero. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-60 overflow-hidden [mask-image:linear-gradient(to_bottom,black_18%,transparent_92%)]"
+      >
         <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-60 overflow-hidden [mask-image:linear-gradient(to_bottom,black_18%,transparent_92%)]"
+          className="absolute inset-0 opacity-80 blur-2xl dark:opacity-45"
+          style={{ background: palette.mesh }}
+        />
+      </div>
+      {/* Top strip: the back controls, shown when drilled into an entity. */}
+      <div className="relative z-10 mx-auto w-full max-w-7xl px-8 pt-5">
+        {/* Cost Home (jump to root) + Back (one level up). Always mounted so
+            they animate in/out across drills — conditional rendering would
+            pop. The EntityProfile instance persists across drills, so the
+            class swap triggers a real transition. */}
+        <div
+          aria-hidden={!entity}
+          className={cn(
+            "flex items-center gap-2 overflow-hidden transition-all duration-200 ease-out",
+            entity
+              ? "mb-3 max-h-10 translate-x-0 opacity-100"
+              : "pointer-events-none max-h-0 -translate-x-1 opacity-0",
+          )}
         >
-          <div
-            className="absolute inset-0 opacity-80 blur-2xl dark:opacity-45"
-            style={{ background: palette.mesh }}
-          />
-        </div>
-        <div className="relative mx-auto w-full max-w-7xl px-8 pt-24 pb-6">
-          {/* Cost Home (jump to root) + Back (one level up). Always mounted so
-              they animate in/out across drills — conditional rendering would
-              pop. The EntityProfile instance persists across drills, so the
-              class swap triggers a real transition. */}
-          <div
-            aria-hidden={!entity}
-            className={cn(
-              "absolute top-5 left-8 flex items-center gap-2 transition-all duration-200 ease-out",
-              entity
-                ? "translate-x-0 opacity-100"
-                : "pointer-events-none -translate-x-1 opacity-0",
-            )}
-          >
-            {/* Only useful below depth 1 — at the root's immediate child,
-                "Back to All costs" already jumps home. */}
-            {parentValue !== null && (
-              <button
-                type="button"
-                onClick={onHome}
-                tabIndex={entity ? 0 : -1}
-                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
-              >
-                <Home className="size-3.5 shrink-0" />
-                <span>Cost Overview</span>
-              </button>
-            )}
+          {/* Only useful below depth 1 — at the root's immediate child,
+              "Back to All costs" already jumps home. */}
+          {parentValue !== null && (
             <button
               type="button"
-              onClick={onBack}
+              onClick={onHome}
               tabIndex={entity ? 0 : -1}
               className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
             >
-              <ChevronLeft className="size-3.5 shrink-0" />
-              <span className="max-w-[220px] truncate">
-                Back to{" "}
-                <span className="text-foreground font-semibold">
-                  {backLabel}
-                </span>
-              </span>
+              <Home className="size-3.5 shrink-0" />
+              <span>Cost Overview</span>
             </button>
-          </div>
-          {/* Dataset selector + date-range picker pinned to the top-right of the
-              header, in line with the back controls on the left. The dataset
-              narrows to a spend slice; the range scopes every number below. */}
-          <div className="absolute top-5 right-8 z-10 flex items-stretch gap-2">
-            {/* Grey "Dataset" label box wrapping the selector; stretches to the
-                same height as the date picker via the row's items-stretch. */}
-            <div className="border-border bg-muted flex items-stretch overflow-hidden rounded-md border text-sm">
-              <span className="text-muted-foreground flex items-center pr-2 pl-3 font-medium">
-                Dataset
-              </span>
-              <Select value={datasetValue} onValueChange={onDatasetChange}>
-                <SelectTrigger className="border-border bg-background hover:bg-muted data-[state=open]:bg-muted !h-full w-auto cursor-pointer gap-1.5 rounded-none border-0 border-l py-1 pr-2.5 pl-3 font-medium shadow-none transition-colors">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {datasetOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {rangePicker}
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={onBack}
+            tabIndex={entity ? 0 : -1}
+            className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
+          >
+            <ChevronLeft className="size-3.5 shrink-0" />
+            <span className="max-w-[220px] truncate">
+              Back to{" "}
+              <span className="text-foreground font-semibold">{backLabel}</span>
+            </span>
+          </button>
+        </div>
+      </div>
+      <div className="relative w-full">
+        <div className="relative mx-auto w-full max-w-7xl px-8 pt-8 pb-6">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4">
               <div className="min-w-0">
@@ -497,32 +500,66 @@ export function EntityProfile({
       </div>
 
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-2 pb-24">
+        {/* The unified control bar sits under the headline numbers: search,
+            the axis track, table actions, and the page-scope dataset + range
+            controls. The axis re-cuts every visualization below it, and the
+            dataset/range scope every number on the page. */}
+        <BreakdownBar
+          axisValue={axisValue}
+          axisOptions={axisOptions}
+          onAxisChange={onAxisChange}
+          searchValue={searchValue}
+          onSearchChange={onSearchChange}
+          searchPlaceholder={searchPlaceholder}
+          actions={
+            <button
+              type="button"
+              onClick={csvExport.run}
+              disabled={csvExport.rowCount === 0}
+              className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border bg-transparent px-3 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-40"
+            >
+              <Download className="size-3.5 shrink-0" />
+              Export CSV
+            </button>
+          }
+          trailing={
+            <>
+              {datasetControl}
+              {rangePicker}
+            </>
+          }
+        />
         {widgets}
         {/* The breakdown is its own section under the summary widgets, so it
-            opens on a rule rather than floating off the last widget. */}
+            opens on a rule rather than floating off the last widget. The
+            heading states the current cut ("Cost by Model") — echoing the lit
+            segment in the top control bar — with the caption saying what the
+            cut is doing in the user's own numbers. */}
         <div className="border-border flex flex-col gap-3 border-t pt-6">
-          <BreakdownBar
-            title={breakdownTitle(axisValue, groupBy)}
-            caption={caption}
-            axisValue={axisValue}
-            axisOptions={axisOptions}
-            axisHint={axisHint}
-            onAxisChange={onAxisChange}
-            searchValue={searchValue}
-            onSearchChange={onSearchChange}
-            searchPlaceholder={searchPlaceholder}
-            actions={
-              <button
-                type="button"
-                onClick={csvExport.run}
-                disabled={csvExport.rowCount === 0}
-                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border bg-transparent px-3 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-40"
-              >
-                <Download className="size-3.5 shrink-0" />
-                Export CSV
-              </button>
-            }
-          />
+          <div className="flex flex-col gap-0.5">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+              {breakdownTitle(axisValue, groupBy)}
+              {/* No general "what is a breakdown" note — defining it in the
+                  abstract read as jargon, and the caption below says it
+                  against the slice actually on screen. The icon is left for
+                  axes that carry a real caveat, so its presence means
+                  something. */}
+              {axisHint && (
+                <Tooltip>
+                  <TooltipTrigger
+                    aria-label={axisHint}
+                    className="text-muted-foreground inline-flex cursor-help"
+                  >
+                    <Info className="size-3.5" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-64">
+                    {axisHint}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </h2>
+            <p className="text-muted-foreground text-xs">{caption}</p>
+          </div>
           {chart}
           {tableOverride ?? dimensionTable}
         </div>

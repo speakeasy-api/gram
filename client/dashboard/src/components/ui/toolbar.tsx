@@ -98,7 +98,10 @@ function ToolbarRoot({
         </div>
       )}
       {right.length > 0 && (
-        <div className="flex shrink-0 items-center gap-2">
+        // The cluster wraps right-aligned rather than clipping when the row
+        // runs out of width (e.g. the costs bar's axis track + dataset + range
+        // at narrower windows).
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           {right.map((node, index) => (
             <Fragment key={index}>{node}</Fragment>
           ))}
