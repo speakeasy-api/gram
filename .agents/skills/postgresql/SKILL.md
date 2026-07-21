@@ -157,10 +157,31 @@ Rules:
 - **Migrations ship in their own PR.** No application/business-logic code, no backfills, no unrelated changes alongside. Shipping migrations with business logic risks outages — the server can query a schema that has not rolled out yet — and makes the PR hard to revert.
 - **Migration files and `atlas.sum` are produced only by the Atlas CLI (`mise db:diff`).** Never hand-edit, rename, or rehash them.
 - **Migration files contain only DDL — never DML.** Backfills and other data manipulation (`INSERT` / `UPDATE` / `DELETE`) do not belong in a migration file. Data migrations live in application code, not migrations.
-- **Follow expand-contract.** Never drop a column or table in the same migration that adds others. If a column is unwanted, mark it nullable with a comment and leave it for a later contract migration; sticking around for a few days is fine.
+- **Follow expand-contract.** Never drop a column or table in the same migration that adds others. If a column is unwanted, mark it nullable with a comment and leave it for a later contract migration; sticking around for a few days is fine. To actually drop it, see **Dropping a column** below.
 - **Never run agents (or any tooling) against dev or prod databases.** Local databases only.
 - **Out-of-order timestamps:** if `mise lint:migrations` (or CI) reports a migration timestamp at or before the latest on `main`, do NOT rename the file. Delete the offending migration on your branch, rebase/merge `main`, then re-run `mise db:diff <name>` so the migration is regenerated on top with a fresh timestamp.
 - **Migration merge conflicts:** never resolve them by hand. Delete your migrations, rebase/merge `main`, then re-run `mise db:diff` so your changes are recreated on top.
+
+### Dropping a column
+
+`schema.sql` feeds both Atlas (generates the migration) and sqlc (expands `SELECT *` into column lists), so editing it does both at once. Old pods keep naming the column against a schema that no longer has it and fail for the whole rollout: `column "x" does not exist (SQLSTATE 42703)`. Removing the Go field usages in an earlier PR does not help — the column leaves the SQL only when it leaves `schema.sql`.
+
+sqlc has no omit-column annotation ([sqlc#162](https://github.com/sqlc-dev/sqlc/issues/162)). Decouple the two with an sqlc-only tombstone file, listed in every `sql:` block whose queries read the table:
+
+```sql
+-- server/database/sqlc-tombstones.sql
+-- Still in the database. Stops generated queries reading it so the DROP can ship later.
+ALTER TABLE example DROP COLUMN legacy_field;
+```
+
+```yaml
+- schema: [schema.sql, sqlc-tombstones.sql]
+```
+
+1. Add the tombstone, `mise run gen:sqlc-server`, ship. Column untouched in the database, so both builds work.
+2. Once rolled out: remove from `schema.sql`, `mise db:diff <name>`, delete the tombstone line in the same PR.
+
+Queries still return the table model struct (sqlc sees `*` as all columns), so only references to the dropped Go field break. Never leave a tombstone behind — it hides a live column from codegen.
 
 ## Writing queries with SQLc
 
