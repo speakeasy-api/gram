@@ -21,10 +21,7 @@ import {
   buildUserSessionResourceSlug,
   DEFAULT_USER_SESSION_DURATION_HOURS,
 } from "@/lib/externalMcpUserSessions";
-import {
-  ProxyRegistrationError,
-  proxyRegisterUpstreamClient,
-} from "@/lib/proxyRegisterUpstreamClient";
+import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
@@ -34,7 +31,7 @@ import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/clie
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -53,33 +50,11 @@ import {
   parseScopes,
   pickPreferredAuthMethod,
 } from "./issuerFormUtils";
+import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 
 type Mode = "select" | "new";
-
-type SubmitError = {
-  title: string;
-  message: string;
-};
-
-function submissionError(error: unknown): SubmitError | null {
-  if (!error) {
-    return null;
-  }
-
-  if (error instanceof ProxyRegistrationError) {
-    return { title: error.title, message: error.message };
-  }
-
-  return {
-    title: "Failed to attach identity provider",
-    message:
-      error instanceof Error && error.message
-        ? error.message
-        : "An unexpected error occurred. Please try again.",
-  };
-}
 
 export function AttachRemoteIdentityProviderSheet({
   open,
@@ -434,7 +409,6 @@ export function AttachRemoteIdentityProviderSheet({
   });
 
   const submitting = attachMutation.isPending;
-  const submitError = submissionError(attachMutation.error);
   const { reset: resetAttachMutation } = attachMutation;
 
   // Reset transient state whenever the sheet is reopened. The target slug
@@ -733,14 +707,7 @@ export function AttachRemoteIdentityProviderSheet({
             </Stack>
           )}
 
-          {submitError ? (
-            <Alert variant="error" dismissible={false}>
-              <Stack gap={1}>
-                <Type className="font-medium">{submitError.title}</Type>
-                <Type small>{submitError.message}</Type>
-              </Stack>
-            </Alert>
-          ) : null}
+          <IdentityProviderAttachmentErrorAlert error={attachMutation.error} />
         </div>
 
         <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
