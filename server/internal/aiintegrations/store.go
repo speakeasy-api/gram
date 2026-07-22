@@ -153,6 +153,13 @@ const (
 	codexComplianceUsagePollInterval     = 5 * time.Minute
 	maxUsagePollErrorMessage             = 4000
 
+	// codexComplianceInitialLookback bounds the first Codex compliance
+	// ingest. Unlike Cursor/Anthropic, a long backfill is cheap here — COSTS
+	// files are hourly per-user aggregates, a handful of small files per day —
+	// and real Codex activity typically predates the key being configured, so
+	// a 24h window would miss most of an org's history.
+	codexComplianceInitialLookback = 30 * 24 * time.Hour
+
 	// anthropicAnalyticsPollInterval is the delay between Admin Analytics API
 	// polls. The analytics export is refreshed roughly every 4 hours, so
 	// polling more often only re-reads the same watermark.
@@ -164,8 +171,20 @@ const (
 
 const (
 	InitialUsagePollLookback          = initialUsagePollLookback
+	CodexComplianceInitialLookback    = codexComplianceInitialLookback
 	AnthropicAnalyticsInitialLookback = anthropicAnalyticsInitialLookback
 )
+
+// initialPollLookbackForProvider returns how far back a provider's first poll
+// reaches: on config creation the poller falls back to it when no watermark is
+// set, and on API key/org changes the watermark is reseeded this far in the
+// past.
+func initialPollLookbackForProvider(provider string) time.Duration {
+	if provider == ProviderCodexCompliance {
+		return codexComplianceInitialLookback
+	}
+	return initialUsagePollLookback
+}
 
 // pollIntervalForSchedule returns the delay between runs of one independent
 // sync schedule. Unknown schedules fall back to the Cursor interval.
