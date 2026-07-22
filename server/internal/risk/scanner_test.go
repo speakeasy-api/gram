@@ -60,6 +60,10 @@ func (e *recordingPIEngine) Classify(_ context.Context, req promptinjection.Requ
 			Label:     promptinjection.LabelInjection,
 			Score:     1,
 			Rationale: "test prompt injection",
+			Kind:      "",
+			Target:    "",
+			Severity:  "",
+			Action:    "",
 		}
 	}
 	return results, nil

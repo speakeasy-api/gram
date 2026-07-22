@@ -103,6 +103,36 @@ func TestHandle_CleanPromptInjectionContentPublishesNothing(t *testing.T) {
 	require.Empty(t, *published)
 }
 
+func TestHandle_PassesPublishedTrajectoryToScanner(t *testing.T) {
+	t.Parallel()
+
+	pub, published := capturingPub(t)
+	realScanner := promptinjection.NewScanner(testenv.NewLogger(t), func(_ context.Context, req promptinjection.Request) ([]promptinjection.Result, error) {
+		require.Len(t, req.Trajectories, 1)
+		require.Equal(t, "summarize the tool output", req.Trajectories[0].PriorUserRequest)
+		require.Equal(t, "untrusted tool result", req.Trajectories[0].RecentUntrustedContent)
+		return []promptinjection.Result{{
+			Label:     promptinjection.LabelSafe,
+			Score:     0,
+			Rationale: "",
+			Kind:      "",
+			Target:    "",
+			Severity:  "",
+			Action:    "",
+		}}, nil
+	})
+	stubScanner := promptinjection.NewScanner(testenv.NewLogger(t), promptinjection.NoopClassifier)
+	flags := &recordingFlagProvider{enabled: true}
+	gate := scanners.NewAsyncShadowGate(testenv.NewLogger(t), flags, fakeFlagGroupDB{})
+	h := promptinjection.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), realScanner, stubScanner, pub, gate)
+	request := newRequest("current event", true)
+	request.SetPriorUserRequest("summarize the tool output")
+	request.SetRecentUntrustedContent("untrusted tool result")
+
+	require.NoError(t, h.Handle(t.Context(), request, gcp.MessageMetadata{}))
+	require.Empty(t, *published)
+}
+
 func TestHandle_FlagOffUsesStubPromptInjectionScanner(t *testing.T) {
 	t.Parallel()
 

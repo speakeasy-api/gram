@@ -16,11 +16,13 @@ import (
 )
 
 type batchMessage struct {
-	ID           uuid.UUID
-	Type         message.Type
-	Content      string
-	RawToolCalls []byte
-	ToolCalls    []recordedToolCall
+	ID                     uuid.UUID
+	Type                   message.Type
+	Content                string
+	RawToolCalls           []byte
+	ToolCalls              []recordedToolCall
+	PriorUserRequest       string
+	RecentUntrustedContent string
 	// UserID is the scanned chat's owner (empty for unattributed sessions),
 	// carried onto judge completions for scanning-volume attribution.
 	UserID string
@@ -67,6 +69,8 @@ func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetM
 			continue
 		}
 		msg.UserID = row.ChatUserID
+		msg.PriorUserRequest = row.PriorUserRequest
+		msg.RecentUntrustedContent = row.RecentUntrustedContent
 		messages = append(messages, msg)
 	}
 	return messages
@@ -84,17 +88,26 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 	}
 
 	msg := batchMessage{
-		ID:           id,
-		Type:         messageType,
-		Content:      content,
-		RawToolCalls: toolCalls,
-		ToolCalls:    []recordedToolCall{},
-		UserID:       "",
+		ID:                     id,
+		Type:                   messageType,
+		Content:                content,
+		RawToolCalls:           toolCalls,
+		ToolCalls:              []recordedToolCall{},
+		PriorUserRequest:       "",
+		RecentUntrustedContent: "",
+		UserID:                 "",
 	}
 	if messageType == message.ToolRequest && len(toolCalls) > 0 {
 		msg.ToolCalls = parseRecordedToolCalls(ctx, logger, toolCalls)
 	}
 	return msg, true
+}
+
+func batchJudgeTrajectory(msg batchMessage) judgemessage.Trajectory {
+	return judgemessage.Trajectory{
+		PriorUserRequest:       msg.PriorUserRequest,
+		RecentUntrustedContent: msg.RecentUntrustedContent,
+	}
 }
 
 func parseRecordedToolCalls(ctx context.Context, logger *slog.Logger, raw []byte) []recordedToolCall {

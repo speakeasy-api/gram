@@ -57,7 +57,10 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		scanner = h.realScanner
 	}
 
-	findings, err := scanner.Scan(ctx, m.GetContent(), m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), promptInjectionJudgeMessage(m))
+	findings, err := scanner.Scan(ctx, m.GetContent(), m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), promptInjectionJudgeMessage(m), judgemessage.Trajectory{
+		PriorUserRequest:       m.GetPriorUserRequest(),
+		RecentUntrustedContent: m.GetRecentUntrustedContent(),
+	})
 	if err != nil {
 		h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, engine, scanners.AsyncScanOutcomeScanError, gateReason)
 		return fmt.Errorf("scan prompt injection: %w", err)

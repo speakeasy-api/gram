@@ -21,9 +21,10 @@ const LabelInjection = "INJECTION"
 const LabelSafe = "SAFE"
 
 type Request struct {
-	Messages  []judgemessage.Message
-	OrgID     string
-	ProjectID string
+	Messages     []judgemessage.Message
+	Trajectories []judgemessage.Trajectory
+	OrgID        string
+	ProjectID    string
 	// UserIDs is parallel to Messages: the scanned chat's owner per message
 	// (empty string = unattributed). Rides on the judge's completion
 	// telemetry so scanning volume attributes to whose traffic was analyzed.
@@ -34,6 +35,10 @@ type Result struct {
 	Label     string
 	Score     float64
 	Rationale string
+	Kind      string
+	Target    string
+	Severity  string
+	Action    string
 }
 
 type Classifier func(ctx context.Context, req Request) ([]Result, error)
@@ -41,7 +46,7 @@ type Classifier func(ctx context.Context, req Request) ([]Result, error)
 func NoopClassifier(_ context.Context, req Request) ([]Result, error) {
 	results := make([]Result, len(req.Messages))
 	for i := range results {
-		results[i] = Result{Label: LabelSafe, Score: 0, Rationale: ""}
+		results[i] = Result{Label: LabelSafe, Score: 0, Rationale: "", Kind: "", Target: "", Severity: "", Action: ""}
 	}
 	return results, nil
 }
@@ -62,12 +67,16 @@ func NewScanner(logger *slog.Logger, classifier Classifier) *Scanner {
 	return &Scanner{classifier: classifier, logger: logger}
 }
 
-func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message) ([]scanners.Finding, error) {
+func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, trajectories ...judgemessage.Trajectory) ([]scanners.Finding, error) {
 	if text == "" && !msg.HasContent() {
 		return nil, nil
 	}
 
-	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
+	trajectory := judgemessage.Trajectory{PriorUserRequest: "", RecentUntrustedContent: ""}
+	if len(trajectories) > 0 {
+		trajectory = trajectories[0]
+	}
+	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, Trajectories: []judgemessage.Trajectory{trajectory}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
 	if err != nil {
 		s.logger.WarnContext(ctx, "pi judge scan failed; dropping prompt injection findings",
 			attr.SlogError(err),
@@ -85,7 +94,7 @@ func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID strin
 	return nil, nil
 }
 
-func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message) ([][]scanners.Finding, error) {
+func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message, trajectorySets ...[]judgemessage.Trajectory) ([][]scanners.Finding, error) {
 	out := make([][]scanners.Finding, len(texts))
 	if len(msgs) != len(texts) {
 		s.logger.WarnContext(ctx, "pi judge batch scan has mismatched message count",
@@ -94,7 +103,11 @@ func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectI
 		return out, nil
 	}
 
-	results, err := s.classifier(ctx, Request{Messages: msgs, OrgID: orgID, ProjectID: projectID, UserIDs: userIDs})
+	var trajectories []judgemessage.Trajectory
+	if len(trajectorySets) > 0 {
+		trajectories = trajectorySets[0]
+	}
+	results, err := s.classifier(ctx, Request{Messages: msgs, Trajectories: trajectories, OrgID: orgID, ProjectID: projectID, UserIDs: userIDs})
 	if err != nil {
 		s.logger.WarnContext(ctx, "pi judge batch scan failed; dropping prompt injection findings",
 			attr.SlogError(err),
@@ -128,13 +141,23 @@ func (s *Scanner) findingFromResult(text string, r Result) *scanners.Finding {
 	if r.Rationale != "" {
 		description = r.Rationale
 	}
+	tags := []string{"llm-judge", "layer-1"}
+	if r.Kind != "" {
+		tags = append(tags,
+			"semantic-consensus",
+			"directive_kind:"+r.Kind,
+			"target:"+r.Target,
+			"severity:"+r.Severity,
+			"action:"+r.Action,
+		)
+	}
 	return &scanners.Finding{
 		RuleID:              ruleID,
 		Description:         description,
 		Match:               text,
 		StartPos:            0,
 		EndPos:              len(text),
-		Tags:                []string{"llm-judge", "layer-1"},
+		Tags:                tags,
 		Source:              Source,
 		Confidence:          r.Score,
 		DeadLetterReason:    "",
