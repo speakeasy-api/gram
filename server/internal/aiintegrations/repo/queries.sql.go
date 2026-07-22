@@ -12,69 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const adoptLegacySyncSchedule = `-- name: AdoptLegacySyncSchedule :exec
-UPDATE ai_integration_syncs s
-SET schedule = $1,
-    kind = $2,
-    updated_at = clock_timestamp()
-WHERE s.ai_integration_config_id = $3
-  AND s.schedule IS NULL
-  AND NOT EXISTS (
-    SELECT 1
-    FROM ai_integration_syncs other
-    WHERE other.ai_integration_config_id = s.ai_integration_config_id
-      AND other.schedule = $1
-  )
-`
-
-type AdoptLegacySyncScheduleParams struct {
-	Schedule              pgtype.Text
-	Kind                  pgtype.Text
-	AiIntegrationConfigID uuid.UUID
-}
-
-// AdoptLegacySyncSchedule labels one config's pre-schedule sync row as the
-// provider-named schedule so schedule-keyed reads and upserts see it. The
-// NOT EXISTS guard keeps the update from tripping the unique index if a
-// labeled provider-named row already exists next to an unlabeled legacy row.
-func (q *Queries) AdoptLegacySyncSchedule(ctx context.Context, arg AdoptLegacySyncScheduleParams) error {
-	_, err := q.db.Exec(ctx, adoptLegacySyncSchedule, arg.Schedule, arg.Kind, arg.AiIntegrationConfigID)
-	return err
-}
-
-const adoptLegacySyncSchedulesForProvider = `-- name: AdoptLegacySyncSchedulesForProvider :exec
-UPDATE ai_integration_syncs s
-SET schedule = c.provider,
-    kind = $1,
-    updated_at = clock_timestamp()
-FROM ai_integration_configs c
-WHERE c.id = s.ai_integration_config_id
-  AND c.provider = $2
-  AND c.enabled IS TRUE
-  AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
-  AND s.schedule IS NULL
-  AND NOT EXISTS (
-    SELECT 1
-    FROM ai_integration_syncs other
-    WHERE other.ai_integration_config_id = s.ai_integration_config_id
-      AND other.schedule = c.provider
-  )
-`
-
-type AdoptLegacySyncSchedulesForProviderParams struct {
-	Kind     pgtype.Text
-	Provider string
-}
-
-// AdoptLegacySyncSchedulesForProvider is the bulk variant run ahead of
-// candidate listing. It only touches active configs: enabled, not deleted,
-// with an API key. Rows of inactive configs are deliberately left alone.
-func (q *Queries) AdoptLegacySyncSchedulesForProvider(ctx context.Context, arg AdoptLegacySyncSchedulesForProviderParams) error {
-	_, err := q.db.Exec(ctx, adoptLegacySyncSchedulesForProvider, arg.Kind, arg.Provider)
-	return err
-}
-
 const advanceUsagePollCursor = `-- name: AdvanceUsagePollCursor :exec
 UPDATE ai_integration_syncs
 SET last_cursor_id = $1,
@@ -86,7 +23,7 @@ WHERE ai_integration_config_id = $2
 type AdvanceUsagePollCursorParams struct {
 	LastCursorID          pgtype.Text
 	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
+	Schedule              string
 }
 
 func (q *Queries) AdvanceUsagePollCursor(ctx context.Context, arg AdvanceUsagePollCursorParams) error {
@@ -163,8 +100,8 @@ ON CONFLICT (ai_integration_config_id, schedule) DO NOTHING
 `
 
 type EnsureProviderSyncSchedulesParams struct {
-	Schedule        pgtype.Text
-	Kind            pgtype.Text
+	Schedule        string
+	Kind            string
 	PollWatermarkAt pgtype.Timestamptz
 	NextPollAfter   pgtype.Timestamptz
 	Provider        string
@@ -215,8 +152,8 @@ LIMIT 1
 
 type EnsureSyncParams struct {
 	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
-	Kind                  pgtype.Text
+	Schedule              string
+	Kind                  string
 	PollWatermarkAt       pgtype.Timestamptz
 	NextPollAfter         pgtype.Timestamptz
 }
@@ -225,8 +162,8 @@ type EnsureSyncRow struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
-	Kind                  pgtype.Text
+	Schedule              string
+	Kind                  string
 	PollWatermarkAt       pgtype.Timestamptz
 	PollCheckpoint        pgtype.Text
 	LastCursorID          pgtype.Text
@@ -284,7 +221,7 @@ SELECT
 FROM ai_integration_configs c
 JOIN ai_integration_syncs s
   ON s.ai_integration_config_id = c.id
- AND (s.schedule = c.provider OR s.schedule IS NULL)
+ AND s.schedule = c.provider
 WHERE c.organization_id = $1
   AND c.provider = $2
   AND c.deleted IS FALSE
@@ -324,12 +261,6 @@ type GetConfigByOrgAndProviderRow struct {
 // One sync schedule per provider shares its name with the config's provider,
 // so config-level reads join on s.schedule = c.provider. The other schedules
 // (e.g. anthropic_analytics) are read by their own queries.
-//
-// schedule/kind are nullable during the expand-contract transition: rows
-// written before the columns existed carry NULL until a worker adopts them
-// (see AdoptLegacySyncSchedulesForProvider). Config-level reads treat a NULL
-// schedule as the provider-named schedule so those rows stay visible until
-// adoption; the fallbacks go away with the contract migration.
 func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigByOrgAndProviderParams) (GetConfigByOrgAndProviderRow, error) {
 	row := q.db.QueryRow(ctx, getConfigByOrgAndProvider, arg.OrganizationID, arg.Provider)
 	var i GetConfigByOrgAndProviderRow
@@ -396,12 +327,11 @@ SELECT
 FROM ai_integration_configs c
 JOIN ai_integration_syncs s
   ON s.ai_integration_config_id = c.id
- AND (s.schedule = c.provider OR s.schedule IS NULL)
+ AND s.schedule = c.provider
 WHERE c.id = $1
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
-ORDER BY s.schedule ASC NULLS LAST
 LIMIT 1
 `
 
@@ -419,8 +349,8 @@ type GetProviderUsagePollConfigByIDRow struct {
 	ID                     uuid.UUID
 	Deleted                bool
 	SyncID                 uuid.UUID
-	Schedule               pgtype.Text
-	Kind                   pgtype.Text
+	Schedule               string
+	Kind                   string
 	PollWatermarkAt        pgtype.Timestamptz
 	PollCheckpoint         pgtype.Text
 	NextPollAfter          pgtype.Timestamptz
@@ -491,7 +421,7 @@ WHERE c.id = $2
 `
 
 type GetUsagePollConfigByIDParams struct {
-	Schedule              pgtype.Text
+	Schedule              string
 	AiIntegrationConfigID uuid.UUID
 }
 
@@ -590,8 +520,8 @@ type GetUsagePollConfigBySyncIDRow struct {
 	ID                     uuid.UUID
 	Deleted                bool
 	SyncID                 uuid.UUID
-	Schedule               pgtype.Text
-	Kind                   pgtype.Text
+	Schedule               string
+	Kind                   string
 	PollWatermarkAt        pgtype.Timestamptz
 	PollCheckpoint         pgtype.Text
 	NextPollAfter          pgtype.Timestamptz
@@ -696,19 +626,6 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiI
 	return i, err
 }
 
-const insertPreScheduleSyncRowForTest = `-- name: InsertPreScheduleSyncRowForTest :exec
-INSERT INTO ai_integration_syncs (ai_integration_config_id, next_poll_after)
-VALUES ($1, clock_timestamp() - interval '1 hour')
-`
-
-// InsertPreScheduleSyncRowForTest simulates a sync row written by code that
-// predates the schedule columns: NULL schedule/kind, already due. Test
-// fixture only.
-func (q *Queries) InsertPreScheduleSyncRowForTest(ctx context.Context, aiIntegrationConfigID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, insertPreScheduleSyncRowForTest, aiIntegrationConfigID)
-	return err
-}
-
 const listEnabledConfigsByProvider = `-- name: ListEnabledConfigsByProvider :many
 SELECT
     c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
@@ -726,7 +643,7 @@ SELECT
 FROM ai_integration_configs c
 JOIN ai_integration_syncs s
   ON s.ai_integration_config_id = c.id
- AND (s.schedule = c.provider OR s.schedule IS NULL)
+ AND s.schedule = c.provider
 WHERE c.provider = $1
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
@@ -813,8 +730,8 @@ ORDER BY schedule
 
 type ListSyncSchedulesRow struct {
 	ID       uuid.UUID
-	Schedule pgtype.Text
-	Kind     pgtype.Text
+	Schedule string
+	Kind     string
 }
 
 func (q *Queries) ListSyncSchedules(ctx context.Context, aiIntegrationConfigID uuid.UUID) ([]ListSyncSchedulesRow, error) {
@@ -866,8 +783,8 @@ type ListUsagePollCandidatesRow struct {
 	OrganizationID   string
 	OrganizationSlug string
 	Provider         string
-	Schedule         pgtype.Text
-	Kind             pgtype.Text
+	Schedule         string
+	Kind             string
 }
 
 func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePollCandidatesParams) ([]ListUsagePollCandidatesRow, error) {
@@ -912,7 +829,7 @@ WHERE ai_integration_config_id = $2
 type RecordPollSuccessKeepWatermarkParams struct {
 	NextPollAfter         pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
+	Schedule              string
 }
 
 // RecordPollSuccessKeepWatermark reschedules a sync and clears failure state
@@ -939,7 +856,7 @@ type RecordUsagePollFailureParams struct {
 	NextPollAfter         pgtype.Timestamptz
 	LastPollError         pgtype.Text
 	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
+	Schedule              string
 }
 
 func (q *Queries) RecordUsagePollFailure(ctx context.Context, arg RecordUsagePollFailureParams) error {
@@ -1002,7 +919,7 @@ type ResetUsagePollStateParams struct {
 	PollWatermarkAt       pgtype.Timestamptz
 	NextPollAfter         pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
+	Schedule              string
 }
 
 func (q *Queries) ResetUsagePollState(ctx context.Context, arg ResetUsagePollStateParams) error {

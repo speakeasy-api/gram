@@ -270,19 +270,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		}
 	}
 
-	// A pre-schedule sync row (schedule IS NULL) must be adopted as the
-	// provider-named schedule before EnsureSync runs: NULLs never conflict
-	// in the (config_id, schedule) unique index, so an unlabeled row would
-	// otherwise gain a duplicate provider-named sibling.
 	providerSched := providerSyncSchedule(provider)
-	if err := q.AdoptLegacySyncSchedule(ctx, repo.AdoptLegacySyncScheduleParams{
-		AiIntegrationConfigID: row.ID,
-		Schedule:              conv.ToPGText(providerSched.schedule),
-		Kind:                  conv.ToPGText(providerSched.kind),
-	}); err != nil {
-		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to adopt ai integration sync row")
-	}
-
 	// Every provider schedule gets its own sync row, due immediately. The
 	// initial watermark depends on the schedule's kind: time-kind schedules
 	// start at epoch, the never-synced sentinel that has the time-window
@@ -296,8 +284,8 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		}
 		r, err := q.EnsureSync(ctx, repo.EnsureSyncParams{
 			AiIntegrationConfigID: row.ID,
-			Schedule:              conv.ToPGText(sched.schedule),
-			Kind:                  conv.ToPGText(sched.kind),
+			Schedule:              sched.schedule,
+			Kind:                  sched.kind,
 			PollWatermarkAt:       conv.ToPGTimestamptz(initialAt),
 			NextPollAfter:         conv.ToPGTimestamptz(initialAt),
 		})
@@ -319,7 +307,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		syncRow.LastCursorID = pgtype.Text{String: "", Valid: false}
 		if err := q.ResetUsagePollState(ctx, repo.ResetUsagePollStateParams{
 			AiIntegrationConfigID: row.ID,
-			Schedule:              conv.ToPGText(provider),
+			Schedule:              provider,
 			PollWatermarkAt:       syncRow.PollWatermarkAt,
 			NextPollAfter:         syncRow.NextPollAfter,
 		}); err != nil {
@@ -400,22 +388,13 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, pollDueBefore time.
 
 	candidates := make([]UsagePollCandidate, 0, len(rows))
 	for _, row := range rows {
-		schedule := row.Schedule.String
-		kind := row.Kind.String
-		if !row.Schedule.Valid {
-			// Active rows were adopted by ensureActiveSyncSchedules above;
-			// this only covers a row inserted concurrently by pre-schedule
-			// code between the ensure step and the listing.
-			fallback := providerSyncSchedule(row.Provider)
-			schedule, kind = fallback.schedule, fallback.kind
-		}
 		candidates = append(candidates, UsagePollCandidate{
 			SyncID:           row.SyncID,
 			OrganizationID:   row.OrganizationID,
 			OrganizationSlug: row.OrganizationSlug,
 			Provider:         row.Provider,
-			Schedule:         schedule,
-			Kind:             kind,
+			Schedule:         row.Schedule,
+			Kind:             row.Kind,
 		})
 	}
 	return candidates, nil
@@ -423,20 +402,12 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, pollDueBefore time.
 
 // ensureActiveSyncSchedules asserts that every active config (enabled, not
 // deleted, holding an API key) has a sync row for each of its provider's
-// schedules, creating missing ones due immediately. Legacy rows written
-// before the schedule columns existed are adopted as their provider-named
-// schedule first. Inactive configs are deliberately never touched; this is a
-// forward-looking process, not a backfill.
+// schedules, creating missing ones due immediately. Inactive configs are
+// deliberately never touched; this is a forward-looking process, not a backfill.
 func (s *Store) ensureActiveSyncSchedules(ctx context.Context) error {
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
 		q := repo.New(tx)
 		for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance} {
-			if err := q.AdoptLegacySyncSchedulesForProvider(ctx, repo.AdoptLegacySyncSchedulesForProviderParams{
-				Provider: provider,
-				Kind:     conv.ToPGText(providerSyncSchedule(provider).kind),
-			}); err != nil {
-				return fmt.Errorf("adopt legacy %s sync rows: %w", provider, err)
-			}
 			for _, sched := range syncSchedulesFor(provider) {
 				// Same initial watermark policy as upsertWithTx: epoch for
 				// time-kind schedules, now for cursor-kind ones.
@@ -446,8 +417,8 @@ func (s *Store) ensureActiveSyncSchedules(ctx context.Context) error {
 				}
 				if err := q.EnsureProviderSyncSchedules(ctx, repo.EnsureProviderSyncSchedulesParams{
 					Provider:        provider,
-					Schedule:        conv.ToPGText(sched.schedule),
-					Kind:            conv.ToPGText(sched.kind),
+					Schedule:        sched.schedule,
+					Kind:            sched.kind,
 					PollWatermarkAt: conv.ToPGTimestamptz(initialAt),
 					NextPollAfter:   conv.ToPGTimestamptz(initialAt),
 				}); err != nil {
@@ -472,8 +443,8 @@ func (s *Store) ListSyncSchedules(ctx context.Context, configID uuid.UUID) ([]Sy
 	for _, row := range rows {
 		schedules = append(schedules, SyncSchedule{
 			ID:       row.ID,
-			Schedule: row.Schedule.String,
-			Kind:     row.Kind.String,
+			Schedule: row.Schedule,
+			Kind:     row.Kind,
 		})
 	}
 	return schedules, nil
@@ -491,18 +462,10 @@ func (s *Store) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UUID
 	if err != nil {
 		return Config{}, "", err
 	}
-	schedule := row.Schedule.String
-	if !row.Schedule.Valid {
-		schedule = providerSyncSchedule(row.Provider).schedule
-	}
-	kind := row.Kind.String
-	if !row.Kind.Valid {
-		kind = providerSyncSchedule(row.Provider).kind
-	}
-	if kind == SyncKindTime {
+	if row.Kind == SyncKindTime {
 		normalizeNeverSyncedTimeCheckpoint(&cfg)
 	}
-	return cfg, schedule, nil
+	return cfg, row.Schedule, nil
 }
 
 func (s *Store) GetProviderUsagePollConfig(ctx context.Context, configID uuid.UUID) (Config, string, error) {
@@ -517,24 +480,16 @@ func (s *Store) GetProviderUsagePollConfig(ctx context.Context, configID uuid.UU
 	if err != nil {
 		return Config{}, "", err
 	}
-	schedule := row.Schedule.String
-	if !row.Schedule.Valid {
-		schedule = providerSyncSchedule(row.Provider).schedule
-	}
-	kind := row.Kind.String
-	if !row.Kind.Valid {
-		kind = providerSyncSchedule(row.Provider).kind
-	}
-	if kind == SyncKindTime {
+	if row.Kind == SyncKindTime {
 		normalizeNeverSyncedTimeCheckpoint(&cfg)
 	}
-	return cfg, schedule, nil
+	return cfg, row.Schedule, nil
 }
 
 func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID, schedule string) (Config, error) {
 	row, err := s.repo.GetUsagePollConfigByID(ctx, repo.GetUsagePollConfigByIDParams{
 		AiIntegrationConfigID: configID,
-		Schedule:              conv.ToPGText(schedule),
+		Schedule:              schedule,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -586,8 +541,8 @@ func (s *Store) EnsureTimeSyncSchedule(ctx context.Context, configID uuid.UUID, 
 	epoch := epochTime()
 	row, err := s.repo.EnsureSync(ctx, repo.EnsureSyncParams{
 		AiIntegrationConfigID: configID,
-		Schedule:              conv.ToPGText(schedule),
-		Kind:                  conv.ToPGText(SyncKindTime),
+		Schedule:              schedule,
+		Kind:                  SyncKindTime,
 		PollWatermarkAt:       conv.ToPGTimestamptz(epoch),
 		NextPollAfter:         conv.ToPGTimestamptz(epoch),
 	})
@@ -607,7 +562,7 @@ func (s *Store) EnsureTimeSyncSchedule(ctx context.Context, configID uuid.UUID, 
 	return SyncScheduleState{
 		SyncID:              row.ID,
 		ConfigID:            row.AiIntegrationConfigID,
-		Schedule:            row.Schedule.String,
+		Schedule:            row.Schedule,
 		WatermarkAt:         checkpoint.Watermark,
 		Checkpoint:          checkpoint,
 		NextPollAfter:       row.NextPollAfter.Time,
@@ -643,7 +598,7 @@ func (s *Store) AdvanceWatermark(ctx context.Context, syncID uuid.UUID, checkpoi
 func (s *Store) RecordSchedulePollSuccess(ctx context.Context, configID uuid.UUID, schedule string, t time.Time) error {
 	if err := s.repo.RecordPollSuccessKeepWatermark(ctx, repo.RecordPollSuccessKeepWatermarkParams{
 		AiIntegrationConfigID: configID,
-		Schedule:              conv.ToPGText(schedule),
+		Schedule:              schedule,
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration sync schedule poll success")
@@ -659,7 +614,7 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
-		Schedule:              conv.ToPGText(schedule),
+		Schedule:              schedule,
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 	}); err != nil {

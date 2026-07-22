@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
-	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestUpsertWithTxCreatesConfigGeneration(t *testing.T) {
@@ -116,12 +116,12 @@ func TestListUsagePollCandidatesReturnsEveryDueSchedule(t *testing.T) {
 		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
 	}, schedules)
 }
-func TestListUsagePollCandidatesAdoptsLegacyRowsAndCreatesSchedules(t *testing.T) {
+func TestListUsagePollCandidatesCreatesMissingSchedules(t *testing.T) {
 	t.Parallel()
 
 	ctx, conn, store, orgID := newStoreTestDB(t)
 
-	configID := insertLegacyConfig(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, true)
+	configID := insertConfigWithProviderScheduleOnly(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, true)
 
 	candidates, err := store.ListUsagePollCandidates(ctx, time.Now().Add(time.Minute), 10)
 	require.NoError(t, err)
@@ -131,66 +131,13 @@ func TestListUsagePollCandidatesAdoptsLegacyRowsAndCreatesSchedules(t *testing.T
 		require.Equal(t, ProviderAnthropicCompliance, candidate.Provider)
 	}
 
-	// The pre-schedule row was adopted as the provider-named schedule (not
-	// duplicated) and the analytics schedules were created alongside it.
+	// The analytics schedules the config was missing were created alongside
+	// the existing provider-named row.
 	require.Equal(t, int64(3), countSyncRows(t, ctx, conn, configID))
 	require.Equal(t, map[string]string{
 		ScheduleAnthropicCompliance:     SyncKindCursor,
 		ScheduleAnthropicAnalyticsUsage: SyncKindTime,
 		ScheduleAnthropicAnalyticsCost:  SyncKindTime,
-	}, listSyncSchedules(t, ctx, conn, configID))
-}
-
-func TestGetUsagePollConfigBySyncIDFallsBackForLegacySyncRow(t *testing.T) {
-	t.Parallel()
-
-	ctx, conn, store, orgID := newStoreTestDB(t)
-
-	configID := insertLegacyConfig(t, ctx, conn, store, orgID, ProviderCursor, true)
-	rows, err := repo.New(conn).ListSyncSchedules(ctx, configID)
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.NoError(t, store.AdvanceWatermark(ctx, rows[0].ID, timewindowpoller.CompletedCheckpoint(epochTime())))
-
-	cfg, schedule, err := store.GetUsagePollConfigBySyncID(ctx, rows[0].ID)
-	require.NoError(t, err)
-
-	require.Equal(t, rows[0].ID, cfg.SyncID)
-	require.Equal(t, ScheduleCursor, schedule)
-	require.True(t, cfg.PollWatermarkAt.IsZero())
-	require.True(t, cfg.PollCheckpoint.Watermark.IsZero())
-}
-
-func TestListUsagePollCandidatesIgnoresInactiveConfigs(t *testing.T) {
-	t.Parallel()
-
-	ctx, conn, store, orgID := newStoreTestDB(t)
-
-	configID := insertLegacyConfig(t, ctx, conn, store, orgID, ProviderCursor, false)
-
-	candidates, err := store.ListUsagePollCandidates(ctx, time.Now().Add(time.Minute), 10)
-	require.NoError(t, err)
-	require.Empty(t, candidates)
-
-	// The disabled config's pre-schedule row is left untouched: no adoption,
-	// no new schedule rows. This process is forward-looking, not a backfill.
-	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, configID))
-	require.Equal(t, map[string]string{"": ""}, listSyncSchedules(t, ctx, conn, configID))
-}
-
-func TestUpsertWithTxAdoptsLegacySyncRow(t *testing.T) {
-	t.Parallel()
-
-	ctx, conn, store, orgID := newStoreTestDB(t)
-
-	configID := insertLegacyConfig(t, ctx, conn, store, orgID, ProviderCursor, true)
-
-	updated := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "", false, true, nil, nil)
-	require.Equal(t, configID, updated.Config.ID)
-
-	require.Equal(t, int64(1), countSyncRows(t, ctx, conn, configID))
-	require.Equal(t, map[string]string{
-		ScheduleCursor: SyncKindTime,
 	}, listSyncSchedules(t, ctx, conn, configID))
 }
 
@@ -243,15 +190,15 @@ func listSyncSchedules(t *testing.T, ctx context.Context, conn *pgxpool.Pool, co
 
 	schedules := map[string]string{}
 	for _, row := range rows {
-		schedules[row.Schedule.String] = row.Kind.String
+		schedules[row.Schedule] = row.Kind
 	}
 	return schedules
 }
 
-// insertLegacyConfig writes a config plus a pre-schedule sync row (NULL
-// schedule/kind), simulating state left behind by code that predates the
-// schedule columns.
-func insertLegacyConfig(t *testing.T, ctx context.Context, conn *pgxpool.Pool, store *Store, orgID string, provider string, enabled bool) uuid.UUID {
+// insertConfigWithProviderScheduleOnly writes a config plus only its
+// provider-named sync row, simulating a config that predates additional
+// provider schedules.
+func insertConfigWithProviderScheduleOnly(t *testing.T, ctx context.Context, conn *pgxpool.Pool, store *Store, orgID string, provider string, enabled bool) uuid.UUID {
 	t.Helper()
 
 	q := repo.New(conn)
@@ -272,7 +219,19 @@ func insertLegacyConfig(t *testing.T, ctx context.Context, conn *pgxpool.Pool, s
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, q.InsertPreScheduleSyncRowForTest(ctx, row.ID))
+	providerSched := providerSyncSchedule(provider)
+	initialAt := time.Now().UTC()
+	if providerSched.kind == SyncKindTime {
+		initialAt = epochTime()
+	}
+	_, err = q.EnsureSync(ctx, repo.EnsureSyncParams{
+		AiIntegrationConfigID: row.ID,
+		Schedule:              providerSched.schedule,
+		Kind:                  providerSched.kind,
+		PollWatermarkAt:       conv.ToPGTimestamptz(initialAt),
+		NextPollAfter:         conv.ToPGTimestamptz(initialAt),
+	})
+	require.NoError(t, err)
 
 	return row.ID
 }
