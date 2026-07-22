@@ -488,7 +488,7 @@ func newStartCommand() *cli.Command {
 			}
 			defer db.Close()
 
-			chDB, shutdown, err := newClickhouseClient(ctx, logger, tracerProvider, meterProvider, c)
+			chDB, shutdown, err := newClickhouseClient(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
