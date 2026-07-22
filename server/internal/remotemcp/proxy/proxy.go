@@ -395,7 +395,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	// the user's MCP runtime sees upstream's actual response instead of
 	// silently misparsing it as an SSE stream.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, jsonrpc.ID{}, nil, nil, nil, nil)
 		responseBytes = n
 		if streamErr != nil {
 			return streamErr
@@ -550,7 +550,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// below is bypassed entirely for SSE responses because the body is
 	// not a single message to hand off — it's a stream of them.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, userReqID, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq)
 		responseBytes = n
 		if streamErr != nil {
 			return streamErr
@@ -803,9 +803,13 @@ func (p *Proxy) forwardRequestWithRetry(ctx context.Context, r *http.Request, bo
 // event is emitted, and an inconsistent mid-stream close would deliver a
 // truncated stream to the client.
 //
-// Events whose data fails to decode as a JSON-RPC message are still
-// relayed verbatim but are skipped for interceptor invocation — the
-// inspection layer operates on protocol-level messages, not raw SSE.
+// Events whose data fails to decode as a JSON-RPC message are skipped for
+// interceptor invocation — the inspection layer operates on protocol-level
+// messages, not raw SSE. They are relayed verbatim, except when the inbound
+// request expected a reply (valid id, 2xx): then the non-JSON-RPC event is
+// suppressed and, if no correlatable JSON-RPC reply arrives before the
+// stream closes, a synthesized JSON-RPC error carrying the originating id is
+// emitted in its place (AIS-286).
 //
 // Per-event size is capped by MaxBufferedBodyBytes; an oversized event
 // trips [ErrBodyTooLarge]. Stream duration is bounded by the request
@@ -816,6 +820,7 @@ func (p *Proxy) relaySSEStream(
 	userReq *http.Request,
 	remoteReq *http.Request,
 	upstreamResp *http.Response,
+	userReqID jsonrpc.ID,
 	toolsCallReq *ToolsCallRequest,
 	toolsListReq *ToolsListRequest,
 	resourcesReadReq *ResourcesReadRequest,
@@ -864,6 +869,24 @@ func (p *Proxy) relaySSEStream(
 		}
 	}
 
+	// userReqExpectsReply is true when the inbound POST carried a request
+	// (valid id) that upstream answered 2xx. Only then can a non-JSON-RPC
+	// SSE data payload be synthesized into a correlatable JSON-RPC error —
+	// a notification (invalid id), a server-initiated GET stream (no
+	// originating id), or a non-2xx status has no reply slot to fill.
+	userReqExpectsReply := userReqID.IsValid() &&
+		upstreamResp.StatusCode >= 200 && upstreamResp.StatusCode < 300
+
+	// Tracked across the stream to drive the post-stream synthesis below
+	// (AIS-286): whether a JSON-RPC reply correlated to the inbound request
+	// id ever arrived, and whether upstream streamed a non-JSON-RPC data
+	// payload in its place (with the first such payload kept for diagnostics).
+	var (
+		sawReplyForUserReq  bool
+		sawNonJSONRPCData   bool
+		firstNonJSONRPCData []byte
+	)
+
 	var total int64
 	parseErr := forEachSSEEvent(upstreamResp.Body, p.MaxBufferedBodyBytes, func(rawEvent []byte, data []byte, nonData []byte) error {
 		// 1. Try to decode the event's payload as a JSON-RPC message.
@@ -874,6 +897,33 @@ func (p *Proxy) relaySSEStream(
 		if len(data) > 0 {
 			if decoded, err := jsonrpc.DecodeMessage(data); err == nil {
 				msg = decoded
+			}
+		}
+
+		// A non-empty data payload that isn't a JSON-RPC message is a
+		// protocol violation. When the inbound request expects a reply,
+		// suppress the event and — if no correlatable reply ever arrives —
+		// synthesize a JSON-RPC error after the stream closes (see below),
+		// mirroring the buffered-JSON path for HTTP 200 non-JSON-RPC bodies
+		// (AIS-267/AIS-286). Relaying it verbatim would hand the client a
+		// payload its JSON-RPC layer can neither parse nor correlate. For
+		// every other case (GET stream, notification, non-2xx) the event is
+		// relayed verbatim, preserving the bare-heartbeat-scalar behavior.
+		if msg == nil && len(data) > 0 && userReqExpectsReply {
+			sawNonJSONRPCData = true
+			if firstNonJSONRPCData == nil {
+				firstNonJSONRPCData = bytes.Clone(data)
+			}
+			return nil
+		}
+
+		// Note whether a JSON-RPC response correlated to the inbound request
+		// id was seen, so a valid reply (even one an interceptor later
+		// substitutes with an error carrying the same id) suppresses the
+		// post-stream synthesis.
+		if msg != nil && userReqID.IsValid() {
+			if resp, ok := msg.(*jsonrpc.Response); ok && jsonrpcIDsEqual(resp.ID, userReqID) {
+				sawReplyForUserReq = true
 			}
 		}
 
@@ -995,6 +1045,40 @@ func (p *Proxy) relaySSEStream(
 	if parseErr != nil {
 		return total, parseErr
 	}
+
+	// The inbound request expected a reply, upstream streamed only
+	// non-JSON-RPC data in its place, and the stream has now closed without
+	// a correlatable JSON-RPC response ever arriving. Synthesize a JSON-RPC
+	// error event carrying the originating id so the client surfaces a clean,
+	// correlatable failure with the upstream body echoed for debugging —
+	// instead of the raw payload it was choking on (AIS-286).
+	if userReqExpectsReply && sawNonJSONRPCData && !sawReplyForUserReq {
+		p.Logger.WarnContext(ctx, "remote mcp server streamed a non-json-rpc sse reply; synthesizing json-rpc error for client",
+			attr.SlogComponent("remotemcp.proxy"),
+			attr.SlogHTTPResponseStatusCode(upstreamResp.StatusCode))
+		payload, marshalErr := marshalErrorResponse(userReqID, &RejectError{
+			Code:    RejectCodeInternalError,
+			Message: "remote MCP server returned a non-JSON-RPC response",
+			Data:    nonJSONRPCUpstreamData(upstreamResp, firstNonJSONRPCData),
+		})
+		if marshalErr != nil {
+			// A marshal failure here is soft: the stream is already relayed,
+			// so log and return cleanly rather than surfacing a late 5xx.
+			p.Logger.WarnContext(ctx, "failed to marshal synthesized sse json-rpc error; client will not receive a correlatable reply",
+				attr.SlogError(marshalErr),
+				attr.SlogComponent("remotemcp.proxy"))
+			return total, nil
+		}
+		event := formatSSEDataEvent(payload)
+		if _, writeErr := w.Write(event); writeErr != nil {
+			return total, fmt.Errorf("write synthesized sse event: %w", writeErr)
+		}
+		total += int64(len(event))
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+
 	return total, nil
 }
 
