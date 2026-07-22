@@ -31980,6 +31980,190 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskSaveEvalReview
                 type: mutation
+    /rpc/skillEfficacy.getSettings:
+        get:
+            description: Get effective organization-wide skill efficacy sampling settings.
+            operationId: getSkillEfficacySettings
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillEfficacySettings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: getSettings skillEfficacy
+            tags:
+                - skillEfficacy
+            x-speakeasy-name-override: getSettings
+            x-speakeasy-react-hook:
+                name: SkillEfficacySettings
+    /rpc/skillEfficacy.upsertSettings:
+        post:
+            description: Create or replace organization-wide skill efficacy sampling settings.
+            operationId: upsertSkillEfficacySettings
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertSettingsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillEfficacySettings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: upsertSettings skillEfficacy
+            tags:
+                - skillEfficacy
+            x-speakeasy-name-override: upsertSettings
+            x-speakeasy-react-hook:
+                name: UpsertSkillEfficacySettings
     /rpc/skills.addVersion:
         post:
             description: Record an uploaded SKILL.md as a version of an existing skill. The implementation requires the skills product feature and skill write scope, and returns the existing canonical version as a no-op when appropriate.
@@ -56462,6 +56646,44 @@ components:
                 - on_target_machines
                 - drifted_machines
                 - indeterminate_machines
+        SkillEfficacySettings:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether skill efficacy scoring is enabled.
+                is_default:
+                    type: boolean
+                    description: Whether these values are platform defaults rather than stored organization settings.
+                new_version_burst:
+                    type: integer
+                    description: Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                org_daily_cap:
+                    type: integer
+                    description: Maximum evaluations reserved across the organization each UTC day.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                organization_id:
+                    type: string
+                    description: Organization these settings apply to.
+                per_skill_daily_cap:
+                    type: integer
+                    description: Maximum evaluations reserved per skill each UTC day.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+            description: Per-organization sampling settings for skill efficacy scoring.
+            required:
+                - organization_id
+                - enabled
+                - per_skill_daily_cap
+                - org_daily_cap
+                - new_version_burst
+                - is_default
         SkillSightingTimelinePoint:
             type: object
             properties:
@@ -60160,6 +60382,35 @@ components:
             required:
                 - raw_server_name
                 - display_name
+        UpsertSettingsRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether skill efficacy scoring is enabled.
+                new_version_burst:
+                    type: integer
+                    description: Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                org_daily_cap:
+                    type: integer
+                    description: Maximum evaluations reserved across the organization each UTC day.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                per_skill_daily_cap:
+                    type: integer
+                    description: Maximum evaluations reserved per skill each UTC day.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+            required:
+                - enabled
+                - per_skill_daily_cap
+                - org_daily_cap
+                - new_version_burst
         UsageTiers:
             type: object
             properties:
@@ -60738,6 +60989,8 @@ tags:
       description: Dashboard API for interacting with resources.
     - name: risk
       description: Manage risk analysis policies and view scan results.
+    - name: skillEfficacy
+      description: Manage organization-wide skill efficacy sampling settings.
     - name: skills
       description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
     - name: telemetry

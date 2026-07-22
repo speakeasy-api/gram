@@ -46,6 +46,7 @@ var All = []outbox.EventRegistration{
 	RiskResultV1,
 	ShadowMCPAccessRuleV1,
 	ShadowMCPApprovalV1,
+	SkillEfficacySettingsV1,
 	SkillV1,
 	TemplateV1,
 	ToolsetV1,

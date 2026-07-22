@@ -344,6 +344,8 @@ trackedFiles:
   src/funcs/riskResultsListForAgent.ts: {}
   src/funcs/riskResultsUnmask.ts: {}
   src/funcs/riskRulesTest.ts: {}
+  src/funcs/skillEfficacyGetSettings.ts: {}
+  src/funcs/skillEfficacyUpsertSettings.ts: {}
   src/funcs/skillsAddVersion.ts: {}
   src/funcs/skillsArchive.ts: {}
   src/funcs/skillsCreate.ts: {}
@@ -952,6 +954,7 @@ trackedFiles:
   src/models/components/skillbreakdownrow.ts: {}
   src/models/components/skilldistribution.ts: {}
   src/models/components/skilldrift.ts: {}
+  src/models/components/skillefficacysettings.ts: {}
   src/models/components/skillsightingtimelinepoint.ts: {}
   src/models/components/skillsummary.ts: {}
   src/models/components/skilltimeseriespoint.ts: {}
@@ -1068,6 +1071,7 @@ trackedFiles:
   src/models/components/upsertglobaltoolvariationresult.ts: {}
   src/models/components/upsertkeyrequestbody.ts: {}
   src/models/components/upsertrequestbody.ts: {}
+  src/models/components/upsertsettingsrequestbody.ts: {}
   src/models/components/usagetiers.ts: {}
   src/models/components/useraccount.ts: {}
   src/models/components/usersession.ts: {}
@@ -1270,6 +1274,7 @@ trackedFiles:
   src/models/operations/getrole.ts: {}
   src/models/operations/getshadowmcpinventoryserver.ts: {}
   src/models/operations/getskill.ts: {}
+  src/models/operations/getskillefficacysettings.ts: {}
   src/models/operations/getsourceenvironment.ts: {}
   src/models/operations/gettemplate.ts: {}
   src/models/operations/gettokensundermanagement.ts: {}
@@ -1497,6 +1502,7 @@ trackedFiles:
   src/models/operations/upsertotelforwardingconfig.ts: {}
   src/models/operations/upsertservernameoverride.ts: {}
   src/models/operations/upsertshadowmcpinventorypolicybypass.ts: {}
+  src/models/operations/upsertskillefficacysettings.ts: {}
   src/models/operations/validateapikey.ts: {}
   src/models/operations/verifyonboardinghookssetup.ts: {}
   src/models/operations/verifyremotemcpurl.ts: {}
@@ -2002,6 +2008,8 @@ trackedFiles:
   src/react-query/skill.ts: {}
   src/react-query/skillDistributions.core.ts: {}
   src/react-query/skillDistributions.ts: {}
+  src/react-query/skillEfficacySettings.core.ts: {}
+  src/react-query/skillEfficacySettings.ts: {}
   src/react-query/skillVersions.core.ts: {}
   src/react-query/skillVersions.ts: {}
   src/react-query/skills.core.ts: {}
@@ -2074,6 +2082,7 @@ trackedFiles:
   src/react-query/upsertModelProviderKey.ts: {}
   src/react-query/upsertOtelForwardingConfig.ts: {}
   src/react-query/upsertShadowMCPInventoryPolicyBypass.ts: {}
+  src/react-query/upsertSkillEfficacySettings.ts: {}
   src/react-query/userSessionClient.core.ts: {}
   src/react-query/userSessionClient.ts: {}
   src/react-query/userSessionClients.core.ts: {}
@@ -2149,6 +2158,7 @@ trackedFiles:
   src/sdk/risk.ts: {}
   src/sdk/rules.ts: {}
   src/sdk/sdk.ts: {}
+  src/sdk/skillefficacy.ts: {}
   src/sdk/skills.ts: {}
   src/sdk/telemetry.ts: {}
   src/sdk/templates.ts: {}
@@ -4137,6 +4147,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getSkillEfficacySettings:
+    speakeasy-default-get-skill-efficacy-settings:
+      responses:
+        "200":
+          application/json: {"enabled": false, "is_default": false, "new_version_burst": 671662, "org_daily_cap": 922876, "organization_id": "<id>", "per_skill_daily_cap": 625480}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getSlackApp:
     speakeasy-default-get-slack-app:
       parameters:
@@ -6644,6 +6663,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  upsertSkillEfficacySettings:
+    speakeasy-default-upsert-skill-efficacy-settings:
+      requestBody:
+        application/json: {"enabled": false, "new_version_burst": 933496, "org_daily_cap": 145756, "per_skill_daily_cap": 676888}
+      responses:
+        "200":
+          application/json: {"enabled": false, "is_default": true, "new_version_burst": 352016, "org_daily_cap": 351464, "organization_id": "<id>", "per_skill_daily_cap": 294635}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   validateAPIKey:
     speakeasy-default-validate-API-key:
       responses:
