@@ -357,6 +357,7 @@ CREATE TABLE IF NOT EXISTS skill_observations (
   skill_id uuid,
   skill_version_id uuid,
   reconciled_at timestamptz,
+  metrics_synced_at timestamptz,
   reconcile_error_code TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
@@ -381,6 +382,10 @@ WHERE raw_sha256 IS NOT NULL;
 CREATE INDEX IF NOT EXISTS skill_observations_pending_reconciliation_idx
 ON skill_observations (project_id, seen_at, id)
 WHERE reconciled_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_pending_metrics_sync_idx
+ON skill_observations (project_id, seen_at, id)
+WHERE reconciled_at IS NOT NULL AND metrics_synced_at IS NULL AND session_id IS NOT NULL AND skill_version_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_id_seen_at_idx
 ON skill_observations (project_id, skill_id, seen_at DESC)
