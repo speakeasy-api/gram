@@ -297,6 +297,10 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 // from CH's perspective: it acks once the rows are queued in CH's async insert
 // buffer, not once they are committed to disk.
 func (q *Queries) InsertTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams) error {
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert":          1,
+		"wait_for_async_insert": 0,
+	}))
 	return q.insertTelemetryLogsInto(ctx, "telemetry_logs", args)
 }
 
@@ -603,7 +607,9 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 	for _, upsert := range upserts {
 		rows = append(rows, upsert)
 	}
-	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert": 0,
+	}))
 	if err := q.insertShadowMCPInventoryURLRows(ctx, rows); err != nil {
 		return fmt.Errorf("upserting shadow mcp inventory urls: %w", err)
 	}
