@@ -158,6 +158,16 @@ func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
 	require.Equal(t, int64(1), countAIIntegrationConfigs(t, ctx, conn, orgID, false))
 }
 
+func TestInitialPollLookbackForProviderUsesLongCodexBackfill(t *testing.T) {
+	t.Parallel()
+
+	// Codex compliance backfills a month of cheap hourly aggregates; other
+	// providers keep the conservative 24h first-poll window.
+	require.Equal(t, 30*24*time.Hour, initialPollLookbackForProvider(ProviderCodexCompliance))
+	require.Equal(t, 24*time.Hour, initialPollLookbackForProvider(ProviderCursor))
+	require.Equal(t, 24*time.Hour, initialPollLookbackForProvider(ProviderAnthropicCompliance))
+}
+
 func TestUpsertWithTxStartsSingleCodexSchedule(t *testing.T) {
 	t.Parallel()
 
