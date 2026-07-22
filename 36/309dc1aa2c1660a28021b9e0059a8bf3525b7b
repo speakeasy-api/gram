@@ -1,0 +1,1361 @@
+server/internal/skills/efficacy/observer.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-58
+server/internal/mcp/serve_platform.go
+  s_e5952da15582a2::t_ddaafe246decdb 311
+server/internal/aiintegrations/anthropic_analytics_polling_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-526
+server/design/remotesessionissuers/design.go
+  s_e5952da15582a2::t_ddaafe246decdb 383-442
+server/clickhouse/migrations/atlas.sum
+  s_e5952da15582a2::t_ddaafe246decdb 1,75-78
+server/internal/thirdparty/codex/client_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-160
+server/internal/mcpmetadata/impl.go
+  s_e5952da15582a2::t_ddaafe246decdb 1009-1021
+server/internal/telemetry/project_overview.go
+  s_e5952da15582a2::t_ddaafe246decdb 49-63,65-68,72-86,88-91,95-129,131,138-139,142,147,149,156,159
+server/internal/platformtools/memory/remember_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 35,78,118
+client/dashboard/src/pages/setup/setup-data.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1,128,143,148,150,152-155,159,161-164,166,168-171,176-184,246-258
+server/internal/urn/skill_efficacy_settings_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-67
+client/dashboard/src/pages/settings/model-key-slots.ts
+  s_e5952da15582a2::t_ddaafe246decdb 39
+server/internal/telemetry/logger.go
+  s_e5952da15582a2::t_ddaafe246decdb 18-19,67-71,77,80,157-158,174-175,181-186
+  s_e5952da15582a2::t_582554f03a9f53 187-188
+server/migrations/20260722165701_add-skill-efficacy-pipeline.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-58
+server/internal/chat/sources.go
+  s_e5952da15582a2::t_ddaafe246decdb 8-11,13-18
+client/sdk/esm/models/components/aiintegrationconfig.d.ts
+  s_e5952da15582a2::t_ddaafe246decdb 34,74
+client/dashboard/src/components/assistants/sessions-list.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 2,110
+server/internal/plugins/hooks_release_pins.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-57
+server/internal/telemetry/setup_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 125
+server/migrations/20260721125001_ai-integration-poll-checkpoint.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-2
+server/migrations/20260722120647_aiintegrations-sync-pause-controls.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-2
+server/internal/scanners/shadowmcpscan/scanner.go
+  s_e5952da15582a2::t_ddaafe246decdb 2-3,5-22,30-31,38,46,50-65,69,74-94,98-102,107-108,111-112,114-118,121-130,133-135,139-140,144-154,156-160,162-167,170,175-188,190-192,194-227,229-328,330-371,373-374,377,380-390
+client/dashboard/src/pages/costs/SessionTable.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1,18,152-154
+server/internal/aiintegrations/store_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 9,11,16,29,68-143,161-292,317-377
+  s_e5952da15582a2::t_9a4ee4b0e9f19a 378
+server/cmd/tools/migrations/riskfindings/transform_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-199
+.agents/skills/golang/SKILL.md
+  s_e5952da15582a2::t_ddaafe246decdb 27
+server/internal/externalkeys/impl.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-699
+server/database/schema.sql
+  s_e5952da15582a2::t_ddaafe246decdb 360-361,387-394,479-547,997-1002,1289-1298,1932-1945,2214-2218,3116-3119,3121,3128-3137,4011-4020
+  s_e5952da15582a2::t_53fbe51d14df5d 4021-4022
+server/internal/chat/sources_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 13-15,19-21,27,41-45,63-67
+client/dashboard/src/pages/org/ai-integration-connection-row.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-216
+server/internal/platformtools/skills/setup_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-161
+server/cmd/tools/migrations/riskfindings/sink_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-66
+client/dashboard/src/pages/costs/CostBreakdownChart.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-139
+server/internal/aiintegrations/cursor_usage_polling_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 19-37,40-46,57
+client/dashboard/src/pages/org/ai-integration-status-badge.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-136
+server/internal/telemetry/repo/skill_version_metrics.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-305
+server/internal/thirdparty/openrouter/errors_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 7-8,11,15-18,96-101,105-110,112-135,156-160,165-198
+  s_e5952da15582a2::t_f77c1dbb023b8b 199-200
+server/internal/aiintegrations/queries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-4,10,20-22,76-86,88,97,100-119,132,142-144,154,160,163-164,168,172-173,180-181,183,186-234,240,250-252,261,267,270,276-277,279-282,289-353,355-378
+.changeset/hooks-pin-0-3-2.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+server/internal/aiintegrations/impl.go
+  s_e5952da15582a2::t_ddaafe246decdb 5-6,19,49,166,274-507,522-551
+server/internal/thirdparty/cursor/client.go
+  s_e5952da15582a2::t_ddaafe246decdb 18-19
+server/migrations/20260722094814_custom-domains-add-health.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-2
+server/cmd/tools/migrations/riskfindings/transform.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-139
+server/cmd/skillefficacybench/main.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-548
+hooks/wire/wire.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-16
+client/dashboard/src/components/shadow-mcp/shadowMCPInventoryActionItems.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-70
+server/internal/background/skill_observations_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 11,37-44,67-68,71-97
+  s_e5952da15582a2::t_2586f511220596 98
+server/internal/audit/skillefficacysettings.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-71
+server/internal/externalkeys/updateawskmskey_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-152
+.changeset/external-keys-org-crud.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+server/migrations/atlas.sum
+  s_e5952da15582a2::t_ddaafe246decdb 1,284-293
+server/internal/remotemcp/tools_call_clickhouse_log_interceptor_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 41,141,213,350
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_e5952da15582a2::t_08c98a7d2ab142 110-111
+  s_e5952da15582a2::t_ddaafe246decdb 9,30-35,81-84
+ts-framework/functions/vitest.config.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-7
+client/dashboard/src/components/shadow-mcp/ShadowMCPInventoryActions.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 14-17,154,159,167-171,194,201-210,220,228,243-247,294,308,422
+server/internal/hooks/ingest_hooks.go
+  s_e5952da15582a2::t_ddaafe246decdb 29-32,61,70,120,128-135,168-172,174,179,181-182,187,192,196,210-212,214,382-383,386-391,401-407
+  s_e5952da15582a2::t_27cabfd21bcd91 408-409
+server/internal/platformtools/slack/tool_list_reminders_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 45
+.changeset/clickhouse-client-tracing.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+server/internal/skills/reconcile_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 30,44-65,90-152
+server/internal/skills/repo/models.go
+  s_e5952da15582a2::t_ddaafe246decdb 42-71,90-91
+client/dashboard/src/components/stacked-time-series-panel.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-506
+ts-framework/functions/src/build/gram.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-46
+client/sdk/esm/models/components/upsertaiintegrationconfigrequest.d.ts
+  s_e5952da15582a2::t_ddaafe246decdb 16,20
+server/internal/platformtools/slack/tool_get_reminder_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 43
+client/dashboard/src/pages/remote-identity-providers/migrationCandidates.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-80
+server/internal/thirdparty/openrouter/unified_client.go
+  s_e5952da15582a2::t_ddaafe246decdb 333,387,473
+server/internal/skills/efficacy/publish.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-630
+server/internal/background/risk_analysis_coordinator.go
+  s_e5952da15582a2::t_ddaafe246decdb 163-165,200-208,212,219,229,235,251,258,267
+.changeset/remote-mcp-drop-toolset-id-echo.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+client/dashboard/src/pages/setup/components/onboarding-stepper.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 68-76
+.changeset/chat-session-summaries-mv.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+server/internal/background/activities/poll_ai_data_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 4,13,15,20,24-44,55-58
+client/dashboard/src/components/observe/LogsTools.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 19,50,779,1057
+server/internal/background/activities/skill_efficacy_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-178
+server/internal/database/models.go
+  s_e5952da15582a2::t_ddaafe246decdb 56-57,59,66-67,389-407,1673-1702,1721-1722
+client/dashboard/src/pages/org/ai-integration-providers.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 2,10,38-106,108-117,119-126,128-186,188-197,199-202,204-255,257-278,280-298
+.changeset/observe-assistant-skill-activations.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+client/dashboard/src/elements/plugins/chart/ui/donut-chart.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 11,14,61-62,65,128-129
+client/sdk/docs/models/operations/getaiintegrationconfigrequest.md
+  s_e5952da15582a2::t_ddaafe246decdb 15-19
+server/internal/externalkeys/rbac_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-59
+server/internal/platformtools/slack/tool_complete_reminder_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 43,64
+server/internal/externalkeys/queries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-112
+server/internal/hooks/repo/models.go
+  s_e5952da15582a2::t_ddaafe246decdb 53-54
+server/clickhouse/migrations/20260721123653_add-skill-session-versions.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-15
+server/internal/chat/impl.go
+  s_e5952da15582a2::t_ddaafe246decdb 359-360,846-847
+client/dashboard/src/components/billing/tum-section.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 19,35,83-84,87,90,291-306
+server/internal/testenv/queries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 152-162
+.github/workflows/sync-docs-to-marketing.yaml
+  s_e5952da15582a2::t_ddaafe246decdb 26
+client/dashboard/src/pages/setup/components/onboarding-wizard.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 134-137,140,248
+server/internal/thirdparty/openrouter/errors.go
+  s_e5952da15582a2::t_ddaafe246decdb 4,9-12,38-94,97,105-116,118,120,153-178,182,184
+  s_e5952da15582a2::t_a1b8d46c7cb689 179-181,183
+client/dashboard/src/pages/org/ai-integration-configure-sheet.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-196
+server/clickhouse/local/golang_migrate/20260722190436_trace-summaries-start-time-index.down.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1
+client/dashboard/src/pages/shadow-mcp/ShadowMCPServerDetail.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 13,21,254-255,260-261,267-272,275-276,278-280,282,284-309,325-333,583-584,616
+server/design/chat/design.go
+  s_e5952da15582a2::t_ddaafe246decdb 24,335-336
+client/dashboard/src/pages/mcp/dotEnvUtils.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-62
+server/internal/background/activities/skill_efficacy.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-222
+server/clickhouse/local/golang_migrate/20260721123657_add-skill-session-versions.down.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-2
+server/internal/aiintegrations/store.go
+  s_e5952da15582a2::t_ddaafe246decdb 6,8,18,28,31-148,153,155-175,178-193,195-200,213,222,234,238-252,276,313-321,372-402,406,411,415,434-437,484-487,501,505-506,512-659,670-672,676,678-681,688-786,790-793,798-799,801,803,808-844,850-853,856,864-865,882-885,888,896-897,914-981,984,992-993,1010-1013,1016,1024-1025,1063,1072
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_e5952da15582a2::t_ddaafe246decdb 72,97-98,102,107
+.mise-tasks/hooks/test.sh
+  s_e5952da15582a2::t_ddaafe246decdb 102-116
+docs/skills/measuring-skill-efficacy.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-39
+server/clickhouse/migrations/20260721203159_chat-session-summaries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-38
+server/internal/skills/efficacy/verdict.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-131
+client/dashboard/src/pages/costs/CostWidgets.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1
+server/internal/background/worker.go
+  s_e5952da15582a2::t_ddaafe246decdb 273-277,372,402-410,469-471,539-542,549,566-574,577-580,596-600,621-626,631
+server/internal/background/activities/skill_observations.go
+  s_e5952da15582a2::t_ddaafe246decdb 12,27-36,38-43,46-92
+.changeset/chat-session-summaries-backfill.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+server/internal/background/skill_efficacy_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-601
+server/cmd/tools/migrations/pipeline/pipeline_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-311
+server/internal/hooks/session_capture.go
+  s_e5952da15582a2::t_ddaafe246decdb 16,24-25,80-83,85,211-214
+server/internal/aiintegrations/timewindowpoller/poller.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-278
+client/dashboard/src/pages/skills/SkillInsightsSection.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-536
+server/cmd/gram/worker.go
+  s_e5952da15582a2::t_ddaafe246decdb 50,63,562,586-596,666,677,680,827-828
+  s_e5952da15582a2::t_7ce180c1054def 829
+server/internal/instances/impl.go
+  s_e5952da15582a2::t_ddaafe246decdb 340
+pystreams/src/pystreams/risk/scanner.py
+  s_e5952da15582a2::t_ddaafe246decdb 294-315,332-337
+server/database/sqlc.yaml
+  s_e5952da15582a2::t_ddaafe246decdb 234-242
+  s_e5952da15582a2::t_e3bf0630254356 233
+client/dashboard/src/pages/costs/breakdownCopy.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 31,41,53,255,276
+server/internal/telemetry/repo/staging.go
+  s_e5952da15582a2::t_ddaafe246decdb 96-100
+server/internal/audit/remotesessionissuers.go
+  s_e5952da15582a2::t_ddaafe246decdb 18-21,130-201,204
+  s_e5952da15582a2::t_4e06d92edafd50 202-203,205
+server/internal/platformtools/skills/insights_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-169
+server/internal/hooks/claude_hooks.go
+  s_e5952da15582a2::t_ddaafe246decdb 278,283,1049
+.changeset/repin-hooks-binary-030.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+.changeset/config.json
+  s_e5952da15582a2::t_ddaafe246decdb 12
+.changeset/skill-version-telemetry.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+server/internal/background/activities/risk_analysis/metrics.go
+  s_e5952da15582a2::t_ddaafe246decdb 12,25,35,98-106,114,156-168
+  s_e5952da15582a2::t_bc13ba707b5a9b 169-171
+client/dashboard/src/pages/mcp/dotEnvUtils.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-81
+.changeset/drop-pi-classifier-references.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-6
+.changeset/measure-skill-efficacy.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-6
+.github/workflows/pr.yaml
+  s_e5952da15582a2::t_ddaafe246decdb 496,659,1899
+client/dashboard/src/lib/money.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-26
+server/clickhouse/local/golang_migrate/atlas.sum
+  s_e5952da15582a2::t_ddaafe246decdb 1,70-73
+server/clickhouse/migrations/20260722190432_trace-summaries-start-time-index.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+client/dashboard/package.json
+  s_e5952da15582a2::t_ddaafe246decdb 4,84
+server/cmd/gram/deps.go
+  s_e5952da15582a2::t_ddaafe246decdb 219-223,775-776,793
+server/internal/aiintegrations/compliance_import_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 20-33,74,287
+server/internal/mcpmetadata/serve_install_page_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 7,1604-1605,1629,1637-1642,1650-1660
+server/internal/plugins/artifacts.go
+  s_e5952da15582a2::t_ddaafe246decdb 38-50
+server/internal/toolconfig/env.go
+  s_e5952da15582a2::t_ddaafe246decdb 141-142
+server/internal/urn/aws_kms_key_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-64
+.changeset/manage-skill-efficacy-settings.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+pystreams/Dockerfile.pystreams
+  s_e5952da15582a2::t_ddaafe246decdb 71
+server/internal/platformtools/slack/tool_search_messages_and_files_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 29,66
+server/clickhouse/local/golang_migrate/20260722190436_trace-summaries-start-time-index.up.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+server/internal/background/activities/risk_analysis/scan_tool_calls.go
+  s_e5952da15582a2::t_ddaafe246decdb 5,13,16-21,33-34
+server/internal/telemetry/repo/skill_efficacy_scores.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-506
+client/dashboard/src/components/page-header.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 78
+client/dashboard/src/components/observe/account-display-utils.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-19
+client/dashboard/src/lib/chat-owner.ts
+  s_e5952da15582a2::t_ddaafe246decdb 8-26,36,40,45-46,50-51,54-66,68-75
+client/sdk/esm/models/components/deleteaiintegrationconfigrequest.d.ts
+  s_e5952da15582a2::t_ddaafe246decdb 4
+client/sdk/esm/models/components/deleteconfigrequestbody.d.ts
+  s_e5952da15582a2::t_ddaafe246decdb 4
+server/internal/telemetry/repo/skill_efficacy_scores_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-567
+server/cmd/pin-hooks-release/main.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-364
+server/internal/shadowmcp/hosted_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-63
+server/internal/externalkeys/updategcpkmskey_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-74
+client/dashboard/src/elements/plugins/chart/ui/bar-chart.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 13,15-16,19,120,133-143
+server/internal/modelkeys/resolver_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 120
+server/internal/skillefficacy/setup_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-121
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/IdentityProviderAttachmentErrorAlert.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-72
+server/internal/skills/efficacy/publish_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-1201
+client/dashboard/src/pages/setup/components/platform-instrumentation-sheet.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 15,40,141,458,460-476,479,532
+client/dashboard/src/pages/skills/SkillDetail.test.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 71-74
+server/internal/mcp/rpc_tools_call.go
+  s_e5952da15582a2::t_ddaafe246decdb 264
+server/internal/skills/efficacy/enqueue.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-322
+server/internal/xmcp/setup_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 147,154,158
+server/internal/remotesessions/issuerhandlers.go
+  s_e5952da15582a2::t_ddaafe246decdb 70-73
+ts-framework/functions/package.json
+  s_e5952da15582a2::t_ddaafe246decdb 62,68
+server/Dockerfile
+  s_e5952da15582a2::t_ddaafe246decdb 1
+server/internal/shadowmcp/cache.go
+  s_e5952da15582a2::t_ddaafe246decdb 6,63-67,70,73-76
+server/internal/externalkeys/listawskmskeys_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-31
+server/internal/hooks/ingest_hooks_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 637
+server/internal/billing/tracking_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-14
+server/design/externalkeys/design.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-271
+client/dashboard/CHANGELOG.md
+  s_e5952da15582a2::t_ddaafe246decdb 3-31
+client/dashboard/src/pages/chat/Chat.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 37,646-649
+.github/workflows/composite/build-push/action.yaml
+  s_e5952da15582a2::t_ddaafe246decdb 50,70
+server/internal/skills/efficacy/settings_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-70
+server/internal/aiintegrations/event_key.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-58
+server/internal/plugins/hooks_bootstrap.go
+  s_e5952da15582a2::t_ddaafe246decdb 38
+server/CHANGELOG.md
+  s_e5952da15582a2::t_ddaafe246decdb 3-29
+server/internal/skillefficacy/impl.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-516
+client/dashboard/src/lib/formatPlatform.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-28
+server/design/skillefficacy/design.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-188
+server/internal/remotesessions/issuermigration.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-280
+.changeset/chat-session-summaries-read-path.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+client/sdk/docs/models/components/deleteconfigrequestbody.md
+  s_e5952da15582a2::t_ddaafe246decdb 15-17
+server/internal/assistants/skill_attachments_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 5-6,12,19,24,186,188,203,205,244,246,275-279,281,284-286,295-298,301-302,305-362,374,377-379,392,395-517,520,526
+go.mod
+  s_e5952da15582a2::t_ddaafe246decdb 12,20-23,35,101,112,142-145,147-153,341
+server/internal/platformtools/skills/shared.go
+  s_e5952da15582a2::t_ddaafe246decdb 7-8,19-31
+server/internal/skills/efficacy/types_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-73
+server/internal/remotemcp/proxymanager.go
+  s_e5952da15582a2::t_ddaafe246decdb 23-24,32-37,160-163,167
+server/internal/aiintegrations/schedule_state_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-229
+server/internal/remotesessions/queries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 654-672,878-941
+  s_e5952da15582a2::t_cd8ae7ad2e0889 942
+server/internal/externalkeys/repo/db.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-32
+server/internal/middleware/hook_device_telemetry_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-130
+server/internal/mv/externalkey.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-68
+server/internal/risk/setup_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 159
+server/internal/telemetry/repo/sessions_schema_sync_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-168
+client/dashboard/src/pages/org/use-ai-integration-config-form.ts
+  s_e5952da15582a2::t_ddaafe246decdb 24,40,132-155,192
+server/design/remotesessionissuers/admin.go
+  s_e5952da15582a2::t_ddaafe246decdb 47-76
+server/internal/externalkeys/repo/models.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-41
+client/dashboard/src/components/shadow-mcp/shadowMCPInventoryStatus.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 5,53-74
+  s_e5952da15582a2::t_a78ce84c12b699 75
+server/internal/assistants/managed_assistant_instructions.txt
+  s_e5952da15582a2::t_ddaafe246decdb 15
+server/internal/shadowmcp/hosted.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-149
+server/internal/aiintegrations/sync_error.go
+  s_e5952da15582a2::t_ddaafe246decdb 136-153
+server/internal/urn/skill_efficacy_settings.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-130
+server/internal/platformtools/slack/client_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 31,49
+server/internal/scanners/shadowmcpscan/scanner_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 8,14,39-46,49-68,70,74-85,88-89,92-103,107-115,118,122-144,147-153,156-158,161-169,171-172,176-177,180-208,212-213,216-217,219-254,257-260,264-265,268,270,272-296,299-322,326-327,331-333,336,338-340,343,346-356,358,361-363,368-369,371,373-374,377-379,382-398,401,403,405,408,411,413-660
+server/internal/skills/efficacy/settings.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-85
+.changeset/costs-week-over-week-chart.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+server/internal/platformtools/skills/load_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-96
+.changeset/hooks-pin-0-3-1.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+server/internal/hooks/otel_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 415
+client/dashboard/src/components/ui/toggle-button.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-29
+client/dashboard/src/lib/proxyRegisterUpstreamClient.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 3,40,42,48-57,75,80-87
+client/dashboard/src/components/observe/InsightsEmployees.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 10,699-701
+server/internal/aiintegrations/timewindowpoller/poller_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-288
+server/internal/platformtools/slack/tool_add_reminder_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 30,66,98
+server/internal/hooks/skill_capture_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 146,182-237,523-550
+server/clickhouse/local/golang_migrate/20260721203204_chat-session-summaries.up.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-38
+server/internal/customdomains/repo/models.go
+  s_e5952da15582a2::t_ddaafe246decdb 13-31
+server/internal/o11y/clickhouse_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-187
+server/internal/thirdparty/codex/client.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-237
+client/sdk/docs/models/components/deleteaiintegrationconfigrequest.md
+  s_e5952da15582a2::t_ddaafe246decdb 15-17
+client/dashboard/src/components/chart/chartUtils.ts
+  s_e5952da15582a2::t_ddaafe246decdb 81-93
+server/internal/outbox/events/catalog_gen.yaml
+  s_e5952da15582a2::t_ddaafe246decdb 601-654,1033-1086,2120-2173
+server/cmd/gram/start.go
+  s_e5952da15582a2::t_ddaafe246decdb 66,94,109,111,685,701-718,756,762,997-999,1072,1123,1135,1204,1330-1331
+  s_e5952da15582a2::t_c4e70d92c0b68a 1332
+server/internal/remotesessions/organizationissuerhandlers.go
+  s_e5952da15582a2::t_ddaafe246decdb 6,610-832
+  s_e5952da15582a2::t_f035380566494b 833
+server/internal/middleware/hook_device_telemetry.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-74
+server/internal/risk/queries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 866-876
+server/internal/externalkeys/deletegcpkmskey_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-108
+server/internal/skillefficacy/insights_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-180
+client/dashboard/src/pages/hooks/HookSourceIcon.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 82-138,347-355
+.mise-tasks/seed.mts
+  s_e5952da15582a2::t_ddaafe246decdb 2577-2578,2591,2604,2675-2681,2685,2687-2697,2700,2702,2705,4348,4353,4479-4571
+  s_e5952da15582a2::t_91c03b4f1126b4 4572-4574
+server/internal/externalkeys/getgcpkmskey_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-58
+client/dashboard/src/components/shadow-mcp/shadowMCPInventoryActionItems.ts
+  s_e5952da15582a2::t_ddaafe246decdb 5-7,18,22,32-35,52-53,59-64
+server/internal/platformtools/slack/tool_delete_reminder_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 43
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 34,53,710
+server/internal/xmcp/serveruntime_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1243-1244
+server/internal/aiintegrations/impl_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 20,23,26,34-39,41,43,46,50-73,86-88,90,98,121,144
+server/internal/background/activities/skill_observations_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-118
+server/internal/hooks/shadow_mcp_inventory.go
+  s_e5952da15582a2::t_ddaafe246decdb 12-24,31-50,52-70,72-73,76-84
+server/migrations/20260722101626_risk-results-open-policy-idx.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-4
+server/internal/telemetry/repo/dimensions.go
+  s_e5952da15582a2::t_ddaafe246decdb 36-43,57,65,73,81,89,105,117,129,137,148,159,172,180,188,196,204,212,220,228,236,260-266
+  s_e5952da15582a2::t_535aa060add52f 267
+.changeset/remove-risk-finding-bq-writer-subscription.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-4
+server/internal/aiintegrations/compliance_import.go
+  s_e5952da15582a2::t_ddaafe246decdb 30-31,243,414-417,506-509
+server/cmd/tools/migrations/RISK_RESULTS_MIGRATION.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-190
+server/cmd/tools/migrations/riskfindings/source.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-212
+client/dashboard/src/pages/costs/taxonomy.ts
+  s_e5952da15582a2::t_ddaafe246decdb 6,448
+server/cmd/tools/migrations/main.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-334
+server/internal/assistants/queries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 174-180,191,207-242
+  s_e5952da15582a2::t_c6d2c379e359d9 243
+client/dashboard/src/pages/org/use-ai-integration-schedules.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-161
+client/dashboard/src/elements/plugins/chart/ui/scatter-chart.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 14-16,27,122-138
+server/internal/aiintegrations/cursor_usage_polling.go
+  s_e5952da15582a2::t_ddaafe246decdb 6,10,19,22,28,33,40-41,47-50,52-74,76-93,96-107,109-116,118-120,122-127,129-135,137-139,141-143,145-154,157-159,161-164,166,169,205-206,210-215
+client/dashboard/src/pages/org/ai-integration-streams-table.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-206
+client/dashboard/src/pages/costs/taxonomy.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-24
+client/sdk/esm/models/operations/getaiintegrationconfig.d.ts
+  s_e5952da15582a2::t_ddaafe246decdb 8
+client/dashboard/src/pages/chatLogs/ChatLogsTable.test.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 101-124
+server/internal/remotemcp/setup_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 70-73,121-124
+server/internal/shadowmcp/setup_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 67
+server/internal/externalkeys/creategcpkmskey_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-134
+hooks/package.json
+  s_e5952da15582a2::t_ddaafe246decdb 3
+server/internal/skills/insights_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 18,24-25
+server/design/externalkeys/types.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-100
+client/dashboard/src/pages/skills/SkillsList.page.test.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 14,17-19,58,64-71,105,165,168-171,191,204,225-246
+server/clickhouse/local/golang_migrate/20260721110206_add-skill-efficacy-scores.up.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-31
+server/internal/platformtools/memory/forget_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 33,75,130,173
+server/migrations/20260722090456_chat-messages-autovacuum-cadence.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-8
+client/dashboard/src/pages/costs/CostTable.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1,28,167,171,268-269,277,457
+server/internal/platformtools/skills/tools_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 19-22,27-29,35-40,46-48,66,114
+client/dashboard/nginx.conf
+  s_e5952da15582a2::t_ddaafe246decdb 26-35
+client/dashboard/src/components/observe/observeTargetFilters.ts
+  s_e5952da15582a2::t_ddaafe246decdb 21-29,117-123
+  s_e5952da15582a2::t_7dad4b5beb2713 124-125
+server/internal/platformtools/skills/insights.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-420
+server/internal/aiintegrations/codex_cost_import.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-510
+server/internal/telemetry/shadow_mcp_inventory.go
+  s_e5952da15582a2::t_ddaafe246decdb 69-73
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/IdentityProviderAttachmentErrorAlert.test.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-93
+.github/workflows/release-hooks.yaml
+  s_e5952da15582a2::t_ddaafe246decdb 1-227
+hooks/relay/skills_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 174-194,298,302,307-308,313-317,320,323-324,333-337
+server/internal/risk/impl.go
+  s_e5952da15582a2::t_ddaafe246decdb 1354-1357,1359-1370,1381-1391
+  s_e5952da15582a2::t_02feaaf22fec37 1392-1393
+client/dashboard/src/components/billing/tum-usage-card.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 5
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 9,35,781-891,1299-1307,1312,1321
+server/internal/hooks/metrics.go
+  s_e5952da15582a2::t_ddaafe246decdb 56,61,100,106
+server/internal/o11y/clickhouse.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-64
+server/internal/plugins/generate.go
+  s_e5952da15582a2::t_ddaafe246decdb 357-361
+client/dashboard/src/pages/costs/breakdownCopy.ts
+  s_e5952da15582a2::t_ddaafe246decdb 15-16
+.changeset/async-shadow-mcp-inventory-upsert.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+server/internal/telemetry/impl.go
+  s_e5952da15582a2::t_ddaafe246decdb 1678
+server/internal/background/activities/poll_cursor_usage_metrics.go
+  s_e5952da15582a2::t_ddaafe246decdb 15,28-30,40,42-44,74,83-107,115
+client/dashboard/src/routes.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 61,879-883
+  s_e5952da15582a2::t_a8b736f247f7d4 884
+server/internal/skills/efficacy/sweep_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-120
+client/dashboard/src/components/org-sidebar.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 81,113,186-187
+  s_e5952da15582a2::t_2944d40ef74653 188-189
+server/internal/externalkeys/listgcpkmskeys_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-31
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_e5952da15582a2::t_ddaafe246decdb 77-78
+server/clickhouse/local/golang_migrate/20260721110206_add-skill-efficacy-scores.down.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-2
+client/dashboard/src/pages/shadow-mcp/ShadowMCP.test.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 223,246
+client/dashboard/src/lib/proxyRegisterUpstreamClient.ts
+  s_e5952da15582a2::t_ddaafe246decdb 18-28,51-52,74,76-79,84,86,89-94,99
+server/internal/telemetry/query_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 16,18,325-398,534-674
+  s_e5952da15582a2::t_58fee62d88ec6d 675
+server/migrations/20260721225140_ai-integration-sync-schedules-contract.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-2
+server/internal/externalkeys/setup_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-173
+pystreams/tests/test_risk_scanner.py
+  s_e5952da15582a2::t_ddaafe246decdb 508-584
+server/internal/hooks/setup_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 8-9,61-96,133-135,153,160-166
+client/dashboard/src/pages/shadow-mcp/ShadowMCPServerDetail.test.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 766-809,831-834,855-1040
+server/internal/externalkeys/crossorg_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-103
+server/internal/skills/efficacy/verdict_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-133
+server/internal/audit/events.go
+  s_e5952da15582a2::t_ddaafe246decdb 20,27,37
+server/internal/remotemcp/tools_call_strip_toolset_id_interceptor_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-252
+client/dashboard/src/components/billing/tum-details-table.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 11,16,85-90,110-115,126,128
+client/dashboard/src/components/billing/breakdown-options.ts
+  s_e5952da15582a2::t_ddaafe246decdb 2,106-124
+  s_e5952da15582a2::t_dae069ae89d997 125
+client/dashboard/src/components/observe/InsightsEmployeeDetail.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 16,1635-1637
+client/dashboard/src/pages/remote-identity-providers/RemoteIdentityProviders.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 45-46,74-75,78-86,141,162,187-194,207,216,283,297,303,339-341
+server/cmd/skillefficacybench/cases.json
+  s_e5952da15582a2::t_ddaafe246decdb 1-349
+server/cmd/skillefficacybench/.gitignore
+  s_e5952da15582a2::t_ddaafe246decdb 1-2
+server/internal/skills/efficacy/judge_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-367
+client/dashboard/src/lib/chat-owner.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 3-8,57-64,104-150
+client/dashboard/src/lib/personal-account-governance.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-6
+client/dashboard/src/pages/remote-identity-providers/migrationCandidates.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-30
+server/internal/attr/conventions.go
+  s_e5952da15582a2::t_ddaafe246decdb 346-350,358-371,442-451,455-464,489,631-632,1871-1876
+  s_e5952da15582a2::t_009ca3ffd386d8 1877
+hooks/relay/device_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-57
+client/sdk/docs/models/components/aiintegrationconfig.md
+  s_e5952da15582a2::t_ddaafe246decdb 25,35
+server/internal/aiintegrations/timewindowpoller/checkpoint.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-144
+client/sdk/docs/models/components/upsertaiintegrationconfigrequest.md
+  s_e5952da15582a2::t_ddaafe246decdb 17-22
+agents/runtime-image/Dockerfile
+  s_e5952da15582a2::t_ddaafe246decdb 1,33,50
+server/internal/chat/session_id.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-23
+server/design/telemetry/design.go
+  s_e5952da15582a2::t_ddaafe246decdb 1395,1418
+server/internal/background/activities/poll_ai_data.go
+  s_e5952da15582a2::t_ddaafe246decdb 17,23,51-56,67-86,88-89,91,95-98,102-111,113-122,142-148,152,155-159,167-174,187-222,224,244-247
+server/internal/users/queries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 70-71,74
+hooks/relay/runner.go
+  s_e5952da15582a2::t_ddaafe246decdb 178
+client/dashboard/src/pages/costs/BreakdownBar.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 17-21,23-28,64,74-75,77-79,109-125,134-142,144-145
+server/internal/telemetry/query.go
+  s_e5952da15582a2::t_ddaafe246decdb 12,35-37,40-48,115-117,163-174,185-189,197-201,476,485-488
+hooks/relay/skills.go
+  s_e5952da15582a2::t_ddaafe246decdb 568-575,579-584,589
+server/internal/background/skill_efficacy.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-401
+server/cmd/tools/migrations/README.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-109
+server/internal/externalkeys/deleteawskmskey_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-109
+server/migrations/20260722123722_users-email-lower-idx.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-4
+server/internal/outbox/events/catalog_gen.go
+  s_e5952da15582a2::t_ddaafe246decdb 21,28,51
+.changeset/ais-290-migrate-remote-session-issuer.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-6
+server/internal/telemetry/list_sessions_summary_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-543
+client/dashboard/src/pages/skills/SkillDetail.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 34-36,58,226-227
+  s_e5952da15582a2::t_37e8cc1716e514 33
+server/internal/skills/efficacy/sweep.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-67
+client/dashboard/src/pages/skills/skills-list-helpers.ts
+  s_e5952da15582a2::t_ddaafe246decdb 2-8,31-60
+  s_e5952da15582a2::t_66a755e4a9781c 61-63
+server/internal/remotesessions/issuermigration_internal_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-222
+client/dashboard/src/components/shadow-mcp/ShadowMCPInventoryTable.test.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1430-1504
+server/internal/chat/queries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 303-304,319,427-428,443,540-541,546-547,589-590,626-627,630-631,689-729,1062-1063,1074,1326-1331
+  s_e5952da15582a2::t_4377a4c19f5244 1332-1333
+client/dashboard/src/pages/chatLogs/ChatLogsTable.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 2,7,252-271,276
+server/internal/background/activities.go
+  s_e5952da15582a2::t_ddaafe246decdb 49,126,236,258-266,342-343,481-484
+  s_e5952da15582a2::t_132378dc53d858 485-488
+client/dashboard/src/pages/skills/SkillsList.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 12,25-30,50-64,82,96-109,114-115,118-126,132,134,139,197,200-246,282,338-345,347-356,363,367-382,395,404,418
+server/clickhouse/local/backfill/20260721220000_backfill-chat-session-summaries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-300
+client/dashboard/src/components/project/ProjectDashboard.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 24,258
+server/internal/billing/tracking.go
+  s_e5952da15582a2::t_ddaafe246decdb 29-32,55-64,92-95,100
+otel-collector/Dockerfile
+  s_e5952da15582a2::t_ddaafe246decdb 1
+client/dashboard/src/components/observe/LogsAgents.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 704
+.speakeasy/openapi-hooks.yaml
+  s_e5952da15582a2::t_ddaafe246decdb 614-615,672-673
+server/internal/externalkeys/createawskmskey_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-166
+server/internal/hooks/impl.go
+  s_e5952da15582a2::t_ddaafe246decdb 32,58-63,156-178,199,221
+server/internal/skills/efficacy/reserve.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-346
+server/internal/skills/efficacy/reserve_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-887
+server/internal/background/ai_integration_usage_poller.go
+  s_e5952da15582a2::t_ddaafe246decdb 93,98,132,148,155-156,163,165,168
+client/dashboard/src/components/observe/ObserveFilterBar.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 2,14,218-219,223,419-433,459-474
+server/internal/remotesessions/clienthandlers.go
+  s_e5952da15582a2::t_ddaafe246decdb 45-53,66-71,270-281,438-444
+  s_e5952da15582a2::t_2d7191e8eafc13 445
+client/dashboard/src/elements/plugins/chart/ui/pie-chart.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 11,14,57-58,61,124-125
+server/internal/remotemcp/tools_call_strip_toolset_id_interceptor.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-123
+server/internal/telemetry/project_overview_internal_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 23,54
+client/dashboard/src/components/observe/account-display-utils.ts
+  s_e5952da15582a2::t_ddaafe246decdb 21-22,24-25
+.changeset/simplify-clickhouse-trace-forwarding.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+infra/pyproject.toml
+  s_e5952da15582a2::t_ddaafe246decdb 13,39
+server/design/gram.go
+  s_e5952da15582a2::t_ddaafe246decdb 26,50
+server/internal/hooks/cursor_hooks.go
+  s_e5952da15582a2::t_ddaafe246decdb 38,43,575-578,581-583
+server/internal/platformtools/memory/recall_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 34,80,121
+server/internal/background/ai_integration_usage_poller_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 12,22-23,37-67,79,83-84,87,91-92,95,99-100,103,107-108,111,115-116,119,123-124,127,131-132,160-161,172,185,189-190,193,197-198,201,205-206,234-236,239,250-307,310,313
+server/internal/chat/list_chats_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 802,821
+server/internal/skills/efficacy/types.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-183
+.changeset/codex-compliance-cost-polling.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-6
+server/internal/urn/aws_kms_key.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-158
+server/clickhouse/schema.sql
+  s_e5952da15582a2::t_ddaafe246decdb 232-245,789-971,1122-1182
+server/internal/hooks/metrics_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 24,52-55
+client/sdk/esm/models/components/upsertconfigrequestbody.d.ts
+  s_e5952da15582a2::t_ddaafe246decdb 16,20
+server/migrations/20260722152825_remote-session-issuers-issuer-idx.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-4
+server/internal/thirdparty/polar/client.go
+  s_e5952da15582a2::t_ddaafe246decdb 194-196,268-269
+  s_e5952da15582a2::t_4897bdd574a928 270-271
+server/internal/telemetry/clickhouse_span_forwarding_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-102
+server/cmd/tools/migrations/riskfindings/sink.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-178
+server/internal/telemetry/repo/skill_session_versions.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-65
+client/dashboard/src/elements/plugins/chart/ui/line-chart.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 14,17,109
+client/sdk/docs/models/components/upsertconfigrequestbody.md
+  s_e5952da15582a2::t_ddaafe246decdb 22-23
+hooks/relay/device.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-117
+hooks/relay/client.go
+  s_e5952da15582a2::t_ddaafe246decdb 102-103
+server/internal/skills/efficacy/transcript_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-299
+client/dashboard/src/components/shadow-mcp/shadowMCPInventoryStatus.ts
+  s_e5952da15582a2::t_ddaafe246decdb 18-30
+hooks/CHANGELOG.md
+  s_e5952da15582a2::t_ddaafe246decdb 3-9
+client/dashboard/src/components/skill-detail-sidebar-nav.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 19,32,93
+client/dashboard/src/pages/costs/CostsExplorer.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1,15-20,37,76-80,462-465,474,505,514,588,605-625,638,650,659-660,662-663,785,810,838-841,853-854,856-858,902,940-941,957-961,1003-1005,1007,1009-1012,1014-1015,1030-1039,1122-1124,1126,1181,1228-1241,1257-1271,1320-1323,1362-1363
+server/cmd/tools/migrations/pipeline/pipeline.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-136
+server/internal/aiintegrations/repo/models.go
+  s_e5952da15582a2::t_ddaafe246decdb 26-44
+server/internal/audit/gcpkmskeys.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-155
+server/internal/platformtools/impl_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 68
+server/internal/thirdparty/anthropic/client.go
+  s_e5952da15582a2::t_ddaafe246decdb 19-21,324
+server/internal/thirdparty/cursor/client_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 16-22
+server/internal/platformtools/skills/load.go
+  s_e5952da15582a2::t_ddaafe246decdb 8,10,17,22,30-34,36-39,42-46,60-65,72,92,98,101-149
+.changeset/hooks-device-telemetry-spans.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+server/package.json
+  s_e5952da15582a2::t_ddaafe246decdb 3
+server/internal/audit/awskmskeys.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-156
+server/internal/usage/tum_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 284-337
+client/dashboard/src/pages/mcp/AddVariableSheet.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 18-19,35-42,62-64,68,119-151,247
+hooks/cmd/speakeasy-hooks/main.go
+  s_e5952da15582a2::t_ddaafe246decdb 29
+server/internal/skills/queries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 26-52,59-85,95-133,939-1572
+server/internal/platformtools/runtime/service.go
+  s_e5952da15582a2::t_ddaafe246decdb 121,123,204,210
+server/internal/externalkeys/listexternalkeys_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-64
+client/dashboard/src/pages/remote-identity-providers/MigrateIssuerDialog.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-233
+client/dashboard/src/components/stacked-time-series.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-35
+client/dashboard/src/components/billing/token-usage-panel.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 2-18,38-41,43-44,48-50,53-54,56-59,64,67-76,78-81,83-85,118-124,128-139
+server/internal/aiintegrations/README.md
+  s_e5952da15582a2::t_ddaafe246decdb 10-14,18,95,103,107-108,119
+server/internal/platformtools/runtime/service_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 107,113,123,179,207
+server/internal/thirdparty/anthropic/analytics_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-239
+server/clickhouse/local/golang_migrate/20260721203204_chat-session-summaries.down.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-4
+server/.golangci.yaml
+  s_e5952da15582a2::t_ddaafe246decdb 64,68,76
+server/internal/skills/efficacy/enqueue_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-834
+client/dashboard/src/components/chat-owner-label.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-38
+.github/workflows/release.yaml
+  s_e5952da15582a2::t_ddaafe246decdb 30,92,142,148
+pystreams/pyproject.toml
+  s_e5952da15582a2::t_ddaafe246decdb 9,11,20,31,42
+server/migrations/20260722165353_skill-observations-metrics-sync.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-6
+.changeset/codex-onboarding-supported.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+.changeset/ai-integration-per-stream-schedules.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-6
+.agents/skills/page-toolbar/SKILL.md
+  s_e5952da15582a2::t_ddaafe246decdb 42,51-64
+  s_e5952da15582a2::t_37fe5c036babe2 65
+server/internal/skills/efficacy/transcript.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-344
+.github/workflows/plugin-generate-check.yml
+  s_e5952da15582a2::t_ddaafe246decdb 15
+client/dashboard/src/components/shadow-mcp/ShadowMCPInventoryTable.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 194,335,503
+server/clickhouse/migrations/20260721110202_add-skill-efficacy-scores.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-31
+server/internal/hooks/codex_hooks.go
+  s_e5952da15582a2::t_ddaafe246decdb 33,38
+server/internal/shadowmcp/schema.go
+  s_e5952da15582a2::t_ddaafe246decdb 11-18,79-83
+server/internal/urn/gcp_kms_key_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-64
+ts-framework/functions/src/build/gram.ts
+  s_e5952da15582a2::t_ddaafe246decdb 2,156,163
+server/internal/aiintegrations/anthropic_analytics_polling.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-485
+server/internal/aiintegrations/compliance_import_db_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-103
+server/internal/thirdparty/polar/client_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 23-31
+server/internal/aiintegrations/timewindowpoller/checkpoint_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-34
+server/cmd/skillefficacybench/main_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-125
+server/clickhouse/local/golang_migrate/20260721123657_add-skill-session-versions.up.sql
+  s_e5952da15582a2::t_ddaafe246decdb 1-15
+client/dashboard/src/lib/formatPlatform.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-24,26-27,30-36
+server/internal/telemetry/repo/sessions.go
+  s_e5952da15582a2::t_ddaafe246decdb 7,9,35-42,154-161,213,259-286,319-328,335-336,341-345,347-352,406-585,591,596
+client/dashboard/src/pages/skills/SkillsList.test.ts
+  s_e5952da15582a2::t_ddaafe246decdb 3-7,99-130
+  s_e5952da15582a2::t_59f513a5dcaabc 131
+server/internal/hooks/session_capture_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 6,15,240-272
+  s_e5952da15582a2::t_e6fc15029e0042 273
+server/internal/hooks/queries.sql
+  s_e5952da15582a2::t_ddaafe246decdb 18
+client/dashboard/src/pages/chatLogs/ChatDetailPanel.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 62,65,265,333,401,642,874-885,1257
+server/internal/telemetry/repo/mcp_match_lookup.go
+  s_e5952da15582a2::t_ddaafe246decdb 8,13-38,41-49,51,65,68-84,88,90-97,99,103,105-107,113-117,121
+server/internal/urn/gcp_kms_key.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-158
+.changeset/claude-desktop-session-user-attribution.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-6
+server/internal/skills/efficacy/observer_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-54
+server/internal/hooks/shadow_mcp_inventory_capture_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 14,433-446
+server/internal/externalkeys/getawskmskey_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-58
+server/internal/mcp/setup_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 176,198,202
+server/internal/audit/aiintegrationconfigs.go
+  s_e5952da15582a2::t_ddaafe246decdb 16-19,22-29,95-191,193-194
+  s_e5952da15582a2::t_dc90a7864d4175 192,195
+client/dashboard/src/pages/costs/EntityProfile.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1,10-14,19-20,28,64,118-128,220-222,225-226,231,237-240,275,283,311-333,348,398-419,421-438,440-446,448-450,453,455,457-458,460-476,534-548,557-581,584-619
+server/internal/aiintegrations/event_key_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-133
+server/internal/thirdparty/anthropic/analytics.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-167
+client/dashboard/src/pages/shadow-mcp/ShadowMCP.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 3,6-9,48-49
+client/dashboard/src/lib/insights-suggestions.ts
+  s_e5952da15582a2::t_ddaafe246decdb 927
+server/design/aiintegrations/design.go
+  s_e5952da15582a2::t_ddaafe246decdb 15,17,42-77,94,124,126,157,174-264
+server/internal/skillefficacy/settings_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-191
+server/internal/aiintegrations/codex_cost_import_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-405
+server/cmd/gram/streams.go
+  s_e5952da15582a2::t_ddaafe246decdb 314-316,318-321
+server/internal/skills/efficacy/judge.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-310
+server/internal/hooks/shadow_mcp_access.go
+  s_e5952da15582a2::t_ddaafe246decdb 28,156
+server/cmd/skillefficacybench/README.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-42
+server/internal/chat/session_id_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-34
+server/internal/remotesessions/migrateissuer_test.go
+  s_e5952da15582a2::t_ddaafe246decdb 1-442
+client/dashboard/src/elements/plugins/chart/ui/radar-chart.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 14,17,83
+server/internal/hooks/risk_scan.go
+  s_e5952da15582a2::t_ddaafe246decdb 16-33,81
+client/dashboard/src/pages/security/detection-rules-data.ts
+  s_e5952da15582a2::t_ddaafe246decdb 9,61,70
+client/dashboard/src/pages/org/OrgAIIntegrations.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 1-44
+server/internal/mcp/rpc_resources_read.go
+  s_e5952da15582a2::t_ddaafe246decdb 203
+.changeset/bump-archiver.md
+  s_e5952da15582a2::t_ddaafe246decdb 1-5
+client/dashboard/src/components/ui/toolbar.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 37-38,50-67,73-81,84,91,96,100,108,112-116,122-164,169-186,264-268,283,336-337,522,525
+client/dashboard/src/pages/security/policy-data.ts
+  s_e5952da15582a2::t_ddaafe246decdb 1-2,1611
+server/internal/outbox/events/audit_log.go
+  s_e5952da15582a2::t_ddaafe246decdb 27,36,59
+server/internal/background/skill_observations.go
+  s_e5952da15582a2::t_ddaafe246decdb 27,54,63-85,92-94
+client/dashboard/src/components/insights-dock.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 21,767-773,800
+client/dashboard/src/elements/plugins/chart/ui/area-chart.tsx
+  s_e5952da15582a2::t_ddaafe246decdb 14,17,107
+.speakeasy/out.openapi.yaml
+  s_e5952da15582a2::t_238afa403b1acb 4129,4134,4221-4510,8093,8097,13149-14112,17077-17176,17179,17181-17185,17208-17213,17219,17281,17283-17284,17286-17290,17292-17300,17385,17388,17390-17394,17397,17401,17404-17410,17434-17437,17499,17502,17504-17505,17507-17508,17511,17513,17515,17519,17521,17523-17532,17560,17622,17625,17627-17628,17630-17631,17634-17636,17638,17640-17714,17716,17718,17720,17724,17726,17728,17756,17818,17821,17823-17827,17836-17855,17861,17918-17921,17923,17926,17928-17932,17935,17938,17940,17965-17966,18027,18029-18030,18032-18036,18064,18126,18128-18129,18131-18135,18158-18163,18165-18170,18231,18234,18236-18240,18263-18268,18274,18336,18339,18341-18342,18344-18345,18365,18372,18429,18432,18434-18435,18437-18438,18440-18441,18461,18468,18525,18528,18530-18531,18533-18537,18539-18547,18623,18626,18628-18632,18634-18642,18722,18725,18727-18731,18758-18761,18821,18824,18826-18827,18829-18830,18833,18835,18838,18841-18855,18875,18935,18938-18946,18948-18949,18951-18952,18957,18982,19042,19045,19047-19051,19067-19072,19134,19137,19139-19143,19159-19164,19170,19230,19233,19235-19236,19238-19239,19259,19263-19266,19326,19328-19329,19331-19335,19337-19345,19421,19423-19424,19426-19430,19432-19440,19520,19523,19525-19529,19556-19559,19619,19622,19624-19625,19627-19628,19631,19633,19636-19645,19667,19727,19730,19732-19733,19735-19736,19739,19741,19743,19745-19752,19772,19832,19835-19843,19845-19849,19865-19870,19876,19936,19939,19941,30307-30507,30569,30572-30573,30575-30576,30578-30579,30607,30669,30672-30673,30675-30677,30679-30680,30682-30689,30716,30778,30781,30784-30786,30788-30789,30817,30879,30882,30885-30886,30888-30889,30892,30894,30896,30899-30910,30937,30999,31002,31005-31006,31008-31009,31011-31102,31129,31191,31194,31197-31198,31200-31201,31204,31206,31208,31211,31213,31215-31219,31246,31308,31311-31312,31314-31315,31317-31318,31438,31500,31504,31506-31510,31513-31515,31517,31520-31522,31524-31708,31730-31735,31741,31803,31806-31807,31809-31814,31837-31842,31848,31910,31913-31914,31916-31918,31920-31921,31948,31955,32017,32020-32021,32023,32025-32028,32030-32036,32044-32050,32055,32115-32118,32120,32123-32125,32127-32128,32155,32162,32224,32227-32228,32230,32232,32234-32235,32262,32269,32331,32334-32335,32337,32339-32342,32369,32376,32438,32441-32442,32444,32446-32449,32476,32480-32483,32545,32549-32553,32555-32572,32657,32660-32661,32663,32665,32667-32668,32695,32702,32764,32767-32768,32770-32775,32777-32785,32812,32874,32877-32878,32880-32885,32912,32919,32981,32985,32987,32989-32992,33013,33071,33073,33075-33076,33078-33079,33081-33082,33085,33087,33089-33099,33102-33104,33106-33107,33109-33122,33142,33202,33204-33205,33207,33209,33211-33212,33232,33239,33297,33299,33301-33302,33304,43651,43688,43699-43754,44854-44907,45289-45294,45452-45457,46018-46044,46260-46282,46303-46329,47613,48316-48365,49008-49061,50822-50840,51100-51109,52593-52606,52632-52648,53450-53487,54658,54756,54787,55482-55493,57701-57716,58359-58596,58742-58757,61009-61040,61159-61190,62262,62265,62380-62408,62931-62932,62989-62990
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_e5952da15582a2::t_e7a597cf2f4e19 78-80,167-177,235,237,363-365,497,515,539,548,616,633,696,714,799,802,823,902,970,988-994,1000,1067,1072,1114,1162,1173,1209,1216,1273,1280,1300,1324,1344,1354,1367,1370,1441,1448,1464,1490,1515,1521,1562,1578-1579,1627,1635,1666,1670,1719-1720,1729-1730,1813-1814,1827-1828,1833-1834,1891,1914-1915,1971,2066,2089-2092,2126,2130,2167,2211,2244,2571-2581,2691-2701,3085-3094,3151-3160,3742-3753,3822-3833,4039-4051,4312-4320,4546-4557,4658-4666,4792-4800,4821-4829,5551-5561,5651-5664,5821-5831,6121-6131,6391-6401,6460-6470,6936-6946
+client/dashboard/src/sdk/src/funcs/aiIntegrationsListSchedules.ts
+  s_e5952da15582a2::t_4355ba2c1d2564 1-212
+client/dashboard/src/sdk/src/funcs/aiIntegrationsRetrySchedule.ts
+  s_e5952da15582a2::t_0963d33944f099 1-210
+client/dashboard/src/sdk/src/funcs/aiIntegrationsSetScheduleEnabled.ts
+  s_e5952da15582a2::t_24466f34975a86 1-211
+client/dashboard/src/sdk/src/funcs/externalKeysCreateAwsKms.ts
+  s_e5952da15582a2::t_b7e6fe7653c3c8 1-199
+client/dashboard/src/sdk/src/funcs/externalKeysCreateGcpKms.ts
+  s_e5952da15582a2::t_b753bc655cf7b2 1-199
+client/dashboard/src/sdk/src/funcs/externalKeysDeleteAwsKms.ts
+  s_e5952da15582a2::t_06bbf40bc441cc 1-197
+client/dashboard/src/sdk/src/funcs/externalKeysDeleteGcpKms.ts
+  s_e5952da15582a2::t_0159719f11a438 1-197
+client/dashboard/src/sdk/src/funcs/externalKeysGetAwsKms.ts
+  s_e5952da15582a2::t_125fc0a42df632 1-201
+client/dashboard/src/sdk/src/funcs/externalKeysGetGcpKms.ts
+  s_e5952da15582a2::t_6de559e3653d4f 1-201
+client/dashboard/src/sdk/src/funcs/externalKeysList.ts
+  s_e5952da15582a2::t_e20475374173aa 1-202
+client/dashboard/src/sdk/src/funcs/externalKeysListAwsKms.ts
+  s_e5952da15582a2::t_c03656b99d01c2 1-196
+client/dashboard/src/sdk/src/funcs/externalKeysListGcpKms.ts
+  s_e5952da15582a2::t_ef9fd80c734b4a 1-196
+client/dashboard/src/sdk/src/funcs/externalKeysUpdateAwsKms.ts
+  s_e5952da15582a2::t_a42fc264b9a0cc 1-199
+client/dashboard/src/sdk/src/funcs/externalKeysUpdateGcpKms.ts
+  s_e5952da15582a2::t_6d8960f39f6733 1-199
+client/dashboard/src/sdk/src/funcs/organizationRemoteSessionIssuersGetMigratePreflight.ts
+  s_e5952da15582a2::t_de672c29ded0fd 1-223
+client/dashboard/src/sdk/src/funcs/organizationRemoteSessionIssuersMigrate.ts
+  s_e5952da15582a2::t_8a1c53533b4003 1-214
+client/dashboard/src/sdk/src/funcs/skillEfficacyGetSettings.ts
+  s_e5952da15582a2::t_058d69ae7e5cff 1-211
+client/dashboard/src/sdk/src/funcs/skillEfficacyQueryInsights.ts
+  s_e5952da15582a2::t_24faa5a290c3eb 1-3,5-218
+client/dashboard/src/sdk/src/funcs/skillEfficacyUpsertSettings.ts
+  s_e5952da15582a2::t_1671f7d30ead0f 1-211
+client/dashboard/src/sdk/src/models/components/aiintegrationconfig.ts
+  s_e5952da15582a2::t_531be33b56d9f3 42,82
+client/dashboard/src/sdk/src/models/components/aiintegrationschedulestate.ts
+  s_e5952da15582a2::t_144e230744d53c 1-147
+client/dashboard/src/sdk/src/models/components/awskmskey.ts
+  s_e5952da15582a2::t_f1432026ea444f 1-133
+client/dashboard/src/sdk/src/models/components/chat.ts
+  s_e5952da15582a2::t_0da02df45f8544 25-32,129-130,168-169
+client/dashboard/src/sdk/src/models/components/chatoverview.ts
+  s_e5952da15582a2::t_f79607576d81e5 20-27,92-93,122-123
+client/dashboard/src/sdk/src/models/components/createawskmskeyform.ts
+  s_e5952da15582a2::t_6577d4271b2015 1-85
+client/dashboard/src/sdk/src/models/components/creategcpkmskeyform.ts
+  s_e5952da15582a2::t_7fbec3d996f449 1-87
+client/dashboard/src/sdk/src/models/components/deleteconfigrequestbody.ts
+  s_e5952da15582a2::t_5736d776c79615 9
+client/dashboard/src/sdk/src/models/components/externalkeysummary.ts
+  s_e5952da15582a2::t_7b12fe71e61c49 1-133
+client/dashboard/src/sdk/src/models/components/gcpkmskey.ts
+  s_e5952da15582a2::t_68c52ac82df076 1-133
+client/dashboard/src/sdk/src/models/components/listaiintegrationschedulesresult.ts
+  s_e5952da15582a2::t_e14d5ef5f70530 1-58
+client/dashboard/src/sdk/src/models/components/listexternalkeysresult.ts
+  s_e5952da15582a2::t_bffaca8a774d0e 1-37
+client/dashboard/src/sdk/src/models/components/migrateissuerrequestbody.ts
+  s_e5952da15582a2::t_6fb68c257f1bcc 1-3,5-48
+client/dashboard/src/sdk/src/models/components/migrateorganizationremotesessionissuerresult.ts
+  s_e5952da15582a2::t_05933d5adefcce 1-63
+client/dashboard/src/sdk/src/models/components/organizationissuermigratepreflight.ts
+  s_e5952da15582a2::t_01eb1868222d48 1-74
+client/dashboard/src/sdk/src/models/components/queryfilter.ts
+  s_e5952da15582a2::t_7af161c47192e1 26
+client/dashboard/src/sdk/src/models/components/querypayload.ts
+  s_e5952da15582a2::t_bd077ee84bbe6b 32,64
+client/dashboard/src/sdk/src/models/components/retryschedulerequestbody.ts
+  s_e5952da15582a2::t_5f85c12f48ab6f 1-39
+client/dashboard/src/sdk/src/models/components/setscheduleenabledrequestbody.ts
+  s_e5952da15582a2::t_9d9992487fed4f 1-47
+client/dashboard/src/sdk/src/models/components/skillefficacyinsight.ts
+  s_e5952da15582a2::t_00a9146673613b 1-50
+client/dashboard/src/sdk/src/models/components/skillefficacyinsightsresult.ts
+  s_e5952da15582a2::t_7232466bd1a89a 1-61
+client/dashboard/src/sdk/src/models/components/skillefficacymetrics.ts
+  s_e5952da15582a2::t_58e3b7c768d574 1-65
+client/dashboard/src/sdk/src/models/components/skillefficacyscoredsession.ts
+  s_e5952da15582a2::t_0e6ee0483c9631 1-98
+client/dashboard/src/sdk/src/models/components/skillefficacysettings.ts
+  s_e5952da15582a2::t_b232b79148de4a 1-73
+client/dashboard/src/sdk/src/models/components/skillinsightmetrics.ts
+  s_e5952da15582a2::t_416756f357af1b 1-52
+client/dashboard/src/sdk/src/models/components/skillinsightpoint.ts
+  s_e5952da15582a2::t_4391e2e7a3d453 1-58
+client/dashboard/src/sdk/src/models/components/skillversioninsight.ts
+  s_e5952da15582a2::t_6148b2592fc17d 1-50
+client/dashboard/src/sdk/src/models/components/updateawskmskeyrequestbody.ts
+  s_e5952da15582a2::t_3b30dd3c5b4b4e 1-93
+client/dashboard/src/sdk/src/models/components/updategcpkmskeyrequestbody.ts
+  s_e5952da15582a2::t_b2aa4bafaf0808 1-93
+client/dashboard/src/sdk/src/models/components/upsertconfigrequestbody.ts
+  s_e5952da15582a2::t_c77c0960f553a4 22,26
+client/dashboard/src/sdk/src/models/components/upsertsettingsrequestbody.ts
+  s_e5952da15582a2::t_99fcf84168bcf7 1-61
+client/dashboard/src/sdk/src/models/operations/createawskmskey.ts
+  s_e5952da15582a2::t_72c449340194e8 1-82
+client/dashboard/src/sdk/src/models/operations/creategcpkmskey.ts
+  s_e5952da15582a2::t_b57e19d52401d1 1-82
+client/dashboard/src/sdk/src/models/operations/deleteawskmskey.ts
+  s_e5952da15582a2::t_4a571c69292467 1-79
+client/dashboard/src/sdk/src/models/operations/deletegcpkmskey.ts
+  s_e5952da15582a2::t_5c9b408deaac55 1-79
+client/dashboard/src/sdk/src/models/operations/getaiintegrationconfig.ts
+  s_e5952da15582a2::t_0e4a8f81b23c17 15
+client/dashboard/src/sdk/src/models/operations/getawskmskey.ts
+  s_e5952da15582a2::t_1402e1c1aa572e 1-79
+client/dashboard/src/sdk/src/models/operations/getgcpkmskey.ts
+  s_e5952da15582a2::t_58caaf7071b831 1-79
+client/dashboard/src/sdk/src/models/operations/getorganizationremotesessionissuermigratepreflight.ts
+  s_e5952da15582a2::t_657bd4f9fdbb5d 1-106
+client/dashboard/src/sdk/src/models/operations/getskillefficacysettings.ts
+  s_e5952da15582a2::t_45e78114d81106 1-88
+client/dashboard/src/sdk/src/models/operations/listaiintegrationschedules.ts
+  s_e5952da15582a2::t_4eb4d52bb657b6 1-94
+client/dashboard/src/sdk/src/models/operations/listawskmskeys.ts
+  s_e5952da15582a2::t_e28d8a9dd79285 1-73
+client/dashboard/src/sdk/src/models/operations/listchats.ts
+  s_e5952da15582a2::t_3d1d031d1ac4b2 88
+client/dashboard/src/sdk/src/models/operations/listexternalkeys.ts
+  s_e5952da15582a2::t_9e3f2f15665d7e 1-97
+client/dashboard/src/sdk/src/models/operations/listgcpkmskeys.ts
+  s_e5952da15582a2::t_061d63d77e6efc 1-73
+client/dashboard/src/sdk/src/models/operations/migrateorganizationremotesessionissuer.ts
+  s_e5952da15582a2::t_1975422edfa8a3 1-101
+client/dashboard/src/sdk/src/models/operations/queryskillefficacyinsights.ts
+  s_e5952da15582a2::t_8be164ff677358 1-121
+client/dashboard/src/sdk/src/models/operations/retryaiintegrationschedule.ts
+  s_e5952da15582a2::t_17c86cfa1b80cf 1-97
+client/dashboard/src/sdk/src/models/operations/setaiintegrationscheduleenabled.ts
+  s_e5952da15582a2::t_e0825997933e3a 1-102
+client/dashboard/src/sdk/src/models/operations/updateawskmskey.ts
+  s_e5952da15582a2::t_da45b02bfbe5ec 1-3,5-11,13-15,17-82
+client/dashboard/src/sdk/src/models/operations/updategcpkmskey.ts
+  s_e5952da15582a2::t_004971530d19c3 1-82
+client/dashboard/src/sdk/src/models/operations/upsertskillefficacysettings.ts
+  s_e5952da15582a2::t_34ef4005cf8353 1-97
+client/dashboard/src/sdk/src/react-query/aiIntegrationSchedules.core.ts
+  s_e5952da15582a2::t_aa49378661fbde 1-88
+client/dashboard/src/sdk/src/react-query/aiIntegrationSchedules.ts
+  s_e5952da15582a2::t_74b0e1ea31c2b9 1-162
+client/dashboard/src/sdk/src/react-query/createAwsKmsKey.ts
+  s_e5952da15582a2::t_9add5446fcc056 1-117
+client/dashboard/src/sdk/src/react-query/createGcpKmsKey.ts
+  s_e5952da15582a2::t_30f87645df176d 1-117
+client/dashboard/src/sdk/src/react-query/deleteAwsKmsKey.ts
+  s_e5952da15582a2::t_879502bdb0189b 1-116
+client/dashboard/src/sdk/src/react-query/deleteGcpKmsKey.ts
+  s_e5952da15582a2::t_eba01a7b780dbe 1-116
+client/dashboard/src/sdk/src/react-query/getAwsKmsKey.core.ts
+  s_e5952da15582a2::t_99980e320b990a 1-81
+client/dashboard/src/sdk/src/react-query/getAwsKmsKey.ts
+  s_e5952da15582a2::t_49baaa6173fc28 1-138
+client/dashboard/src/sdk/src/react-query/getGcpKmsKey.core.ts
+  s_e5952da15582a2::t_d2d82febb05e7b 1-81
+client/dashboard/src/sdk/src/react-query/getGcpKmsKey.ts
+  s_e5952da15582a2::t_0e2dfa788d954b 1-138
+client/dashboard/src/sdk/src/react-query/listAwsKmsKeys.core.ts
+  s_e5952da15582a2::t_2ecead505b5714 1-78
+client/dashboard/src/sdk/src/react-query/listAwsKmsKeys.ts
+  s_e5952da15582a2::t_da93be234e0fee 1-138
+client/dashboard/src/sdk/src/react-query/listExternalKeys.core.ts
+  s_e5952da15582a2::t_ada0c7430b2d71 1-87
+client/dashboard/src/sdk/src/react-query/listExternalKeys.ts
+  s_e5952da15582a2::t_b687a52bbdac47 1-153
+client/dashboard/src/sdk/src/react-query/listGcpKmsKeys.core.ts
+  s_e5952da15582a2::t_7b5c70b066e182 1-78
+client/dashboard/src/sdk/src/react-query/listGcpKmsKeys.ts
+  s_e5952da15582a2::t_4d26128d3f0fd5 1-138
+client/dashboard/src/sdk/src/react-query/migrateOrganizationRemoteSessionIssuer.ts
+  s_e5952da15582a2::t_7a53c60d8951bf 1-118
+client/dashboard/src/sdk/src/react-query/organizationRemoteSessionIssuerMigratePreflight.core.ts
+  s_e5952da15582a2::t_899cf2faa18fb3 1-101
+client/dashboard/src/sdk/src/react-query/organizationRemoteSessionIssuerMigratePreflight.ts
+  s_e5952da15582a2::t_bd974023e05203 1-176
+client/dashboard/src/sdk/src/react-query/retryAIIntegrationSchedule.ts
+  s_e5952da15582a2::t_97824acf472e78 1-117
+client/dashboard/src/sdk/src/react-query/setAIIntegrationScheduleEnabled.ts
+  s_e5952da15582a2::t_6c682e89116971 1-118
+client/dashboard/src/sdk/src/react-query/skillEfficacyInsights.core.ts
+  s_e5952da15582a2::t_af53a4e5e07c2c 1-3,5-96
+client/dashboard/src/sdk/src/react-query/skillEfficacyInsights.ts
+  s_e5952da15582a2::t_947c611e9bebff 1-170
+client/dashboard/src/sdk/src/react-query/skillEfficacySettings.core.ts
+  s_e5952da15582a2::t_2898432e8cdb82 1-3,5-86
+client/dashboard/src/sdk/src/react-query/skillEfficacySettings.ts
+  s_e5952da15582a2::t_aba5f1f57e8f25 1-155
+client/dashboard/src/sdk/src/react-query/updateAwsKmsKey.ts
+  s_e5952da15582a2::t_5beafab7eb6d3e 1-117
+client/dashboard/src/sdk/src/react-query/updateGcpKmsKey.ts
+  s_e5952da15582a2::t_e54f46c72de1db 1-117
+client/dashboard/src/sdk/src/react-query/upsertSkillEfficacySettings.ts
+  s_e5952da15582a2::t_4121572e2e02d1 1-117
+client/dashboard/src/sdk/src/sdk/aiintegrations.ts
+  s_e5952da15582a2::t_8a8a73bbff0850 7-9,13-14,23-34,80-136
+client/dashboard/src/sdk/src/sdk/externalkeys.ts
+  s_e5952da15582a2::t_2b7360729e2ee1 1-275
+client/dashboard/src/sdk/src/sdk/organizationremotesessionissuers.ts
+  s_e5952da15582a2::t_4a76d14115cea9 9,11,15,17,35-38,44-47,138-158,183-201
+client/dashboard/src/sdk/src/sdk/sdk.ts
+  s_e5952da15582a2::t_22968c93f1a89f 24,50,161-165,297-301
+client/dashboard/src/sdk/src/sdk/skillefficacy.ts
+  s_e5952da15582a2::t_42ec76f545c69c 1-82
+go.sum
+  s_e5952da15582a2::t_b5b3f28e271ea2 108-109,112-123,126-141,289-290,1020-1021,1193-1196,1201-1202,1205-1206,1211-1212,1215-1216
+pnpm-lock.yaml
+  s_e5952da15582a2::t_6330a338ed8b93 100,103,106,199,273-274,319,517-518,530-531,3007-3017,3305-3307,3633-3634,3809-3811,4084-4086,4347-4349,4421-4423,4803-4804,5140-5142,6184-6195,6286-6288,6298-6300,6302,6304-6312,7087-7088,7272-7274,7379,7389,7394,7398,7413,7415,7428,7430,7450,9664-9675,9883-9884,10270,10272,10450,10462,10477-10478,10631,10637,10713,10717-10719,10721,10723,10953,10956-10957,11022,11422,11849-11850,13179-13187,13284,13286,13298,13300,13302-13305,13309-13310,13312-13322,13963-13964,14329,14553,14555-14556,14575,14580,14583,14586
+server/gen/ai_integrations/client.go
+  s_e5952da15582a2::t_b9c92e42c4eb97 18-23,27,29-34,101-169
+server/gen/ai_integrations/endpoints.go
+  s_e5952da15582a2::t_22337e9e88fd23 19-24,33-38,48-50,157-261
+server/gen/ai_integrations/service.go
+  s_e5952da15582a2::t_de6013e082070a 26-34,57,66-67,71-72,104-139,145-146,155-187,189-206,214-215,219-220
+server/gen/chat/service.go
+  s_e5952da15582a2::t_073ca70e918a12 124-127,205-208,356
+server/gen/external_keys/client.go
+  s_e5952da15582a2::t_b5e424441d20f1 1-289
+server/gen/external_keys/endpoints.go
+  s_e5952da15582a2::t_72445eb0e29ab8 1-317
+server/gen/external_keys/service.go
+  s_e5952da15582a2::t_d33d7fee4fe6f1 1-336
+server/gen/http/ai_integrations/client/cli.go
+  s_e5952da15582a2::t_8d3c854c194578 111-204
+server/gen/http/ai_integrations/client/client.go
+  s_e5952da15582a2::t_196d7521466829 32-43,65-75,150-221
+server/gen/http/ai_integrations/client/encode_decode.go
+  s_e5952da15582a2::t_1b506bc1972bdf 720-1454
+server/gen/http/ai_integrations/client/paths.go
+  s_e5952da15582a2::t_59c915480afd6f 24-38
+server/gen/http/ai_integrations/client/types.go
+  s_e5952da15582a2::t_61eb7b5872db3a 18-19,23-24,36-37,41-64,72-73,77-78,117-118,122-123,155-237,793-809,812-828,831-847,850-866,869-884,887-903,906-921,924-941,943-959,962-2358,2370-2402,2411-2690,2692,2695-2699,2701-2716,2719-2723,2725-2740,2743-2747,2749-2764,2767-2771,2773-2788,2791-2795,2797-2812,2815-2819,2821-2836,2839-2858,2860,2863-2867,2869-2870,2872-2873,2875-2884,2887-2891,2893-2908,2911-2915,2917-2932,2935-2939,2941-2956,2959-2963,2965-2980,2983-2987,2989-3004,3007-3023,3025-3028,3031-3035,3037-3052,3055-3059,3061-3076,3079-3083,3085-3100,3103-3107,3109-3124,3127-3131,3133-3148,3151-3161,3163-3173,3175-3196,3199-3218,3220-3221,3223-3244,3247-3251,3253-3254,3256-3257,3259-3260,3262-3263,3265-3266,3268-3275,3277-3278,3280-3281,3283-3290,3295-3299,3301-3302,3304-3305,3307-3308,3310-3311,3313-3314,3316-3323,3325-3326,3328-3329,3331-3338,3343-3345,3367-3369,3391-3393,3415-3417,3439-3441,3463-3465,3487-3489,3511-3513,3535-3537,3559-3561,3583-3585,3607-3609,3631-3633,3655-3657,3679-3681,3703-3705,3727-3729,3751-3753,3775-3777,3799-3801,3823-3825,3847-3849,3871-3873,3895-3897,3919-3921,3943-3945,3967-3969,3991-3993,4015-4017,4039-4041,4062-4101
+server/gen/http/ai_integrations/server/encode_decode.go
+  s_e5952da15582a2::t_380c787811fb48 682-1366
+server/gen/http/ai_integrations/server/paths.go
+  s_e5952da15582a2::t_8e7ca9a81a9b2c 24-38
+server/gen/http/ai_integrations/server/server.go
+  s_e5952da15582a2::t_19cd539a38f453 21-27,60-62,64-69,81-83,94-96,262-420
+server/gen/http/ai_integrations/server/types.go
+  s_e5952da15582a2::t_b458bfe959a238 18-19,23-24,36-37,41-64,72-73,77-78,117-118,122-123,155-237,793-809,812-828,831-847,850-866,869-884,887-903,906-921,924-940,943-1880,1882-1886,1897-1900,1911-1914,1925-1928,1939-1942,1953-1956,1967-1970,1981-1984,1995-1996,1998-1999,2010-2013,2024-2025,2027-2028,2039-2042,2053-2056,2067-2071,2082-2086,2097-2101,2112-2116,2127-2131,2142-2158,2160-2161,2172-2176,2187-2188,2190-2191,2202-2206,2217-2348,2398-2435,2459-2485
+server/gen/http/chat/client/encode_decode.go
+  s_e5952da15582a2::t_1339fd0f9e4656 1967-1968
+server/gen/http/chat/client/types.go
+  s_e5952da15582a2::t_fb5eed5ee29cb4 96-99,1618-1621,1991-1992
+server/gen/http/chat/server/encode_decode.go
+  s_e5952da15582a2::t_2d3a9e86d8091e 2052-2053
+server/gen/http/chat/server/types.go
+  s_e5952da15582a2::t_95110d94f41a9d 97-100,1619-1622,1817-1818
+server/gen/http/cli/gram/cli.go
+  s_e5952da15582a2::t_6f54aafabbe5a1 36,63,92,105,127,134,406-420,862-905,1659-1669,2079-2098,2756-2758,2862-2874,3052-3053,3133-3137,3315-3316,3373-3374,3578-3586,3871-3907,4396-4401,4626-4638,5172-5180,5476-5512,6002-6007,6231-6243,7629-7631,7702-7767,9731-9967,13182-13183,13344-13389,15101-15185
+server/gen/http/external_keys/client/cli.go
+  s_e5952da15582a2::t_837e0bbf9b5523 1-323
+server/gen/http/external_keys/client/client.go
+  s_e5952da15582a2::t_f014aa59013159 1-365
+server/gen/http/external_keys/client/encode_decode.go
+  s_e5952da15582a2::t_4831cdd9daf674 1-2575
+server/gen/http/external_keys/client/paths.go
+  s_e5952da15582a2::t_501f6a60a94241 1-63
+server/gen/http/external_keys/client/types.go
+  s_e5952da15582a2::t_863de49f6d1871 1-7303
+server/gen/http/external_keys/server/encode_decode.go
+  s_e5952da15582a2::t_a1f5a034fdeffc 1-2290
+server/gen/http/external_keys/server/paths.go
+  s_e5952da15582a2::t_a2c891482ebac7 1-63
+server/gen/http/external_keys/server/server.go
+  s_e5952da15582a2::t_d68f00a7cf0f87 1-710
+server/gen/http/external_keys/server/types.go
+  s_e5952da15582a2::t_e61aa99f286834 1-4350
+server/gen/http/openapi3.yaml
+  s_e5952da15582a2::t_b42b0132c86510 4864,4869,4955-5241,8772,8776,13778-14730,15607-15824,15826-15831,15833-15836,15838-15840,15844-15851,15872,15930,15932-15933,15936,15938,15940-15944,15964,16023,16026-16032,16034,16037,16039,16041-16046,16052-16053,16059,16065,16071,16077,16083,16089,16095,16101,16107,16109-16116,16118-16119,16133,16190-16191,16193,16196-16200,16202-16209,16276,16279,16281-16282,16284-16285,16288,16290,16292,16299,16356-16357,16360,16362-16366,16369,16371,16374-16384,16393-16406,16409-16412,16469-16473,16475-16476,16478-16482,16484-16490,16498-16510,16516,16573-16574,16576-16577,16579-16580,16582-16586,16589,16591,16594,16680,16683,16685-16689,16691-16715,16803,16806,16808-16812,16815,16817,16819,16845-16848,16909,16912,16914-16918,16941-16946,17013,17016,17018-17022,17025-17027,17029,17045-17050,17056,17115-17117,17119-17120,17122-17126,17129-17131,17133-17143,17152-17158,17171,17230-17232,17234-17235,17237-17238,17240-17241,17268,17275,17336,17339-17343,17346,17348-17349,17351-17352,17355-17357,17359,17376-17377,17435-17437,17439-17444,17447-17450,17452-17461,17470-17476,17489,17548-17550,17552-17557,17560,17564,17567-17580,17603-17608,17668,17671-17674,17676-17677,17705,17766,17769-17775,17798-17803,17809,17870,17872-17873,17875-17879,17881-17889,17973,17975-17976,17978-17982,17984-17998,18086,18089,18091-18095,18098,18100,18102-18118,18144-18147,18208,18211,18213-18214,18216-18298,18341,18402,18405,18407-18411,18434-18439,18445,18506,18509,18511-18515,18517-18525,18533-18546,18548-18549,18605-18609,18611-18612,18614-18615,18617-18618,18646,18707,18709-18710,18712-18713,18715-18716,18743,18750,18811,18814,18816-18820,18843-18848,18854,18915,18918,18920-18921,18923-18924,18944,18951,19008,19010,19012-19013,19015-19016,19018-19019,19039,19046,19103,19105,19107-19108,19110-19114,19116-19124,19199,19202,19204-19208,19210-19218,19297,19300,19302-19306,19333-19336,19395,19398,19400-19401,19403-19404,19407,19409,19412,19415-19429,19449,19508,19511-19519,19521-19522,19524-19525,19530,19555,19614,19617,19619-19623,19626-19628,19630,19633-19635,19637,19639-19715,19730-19735,19741,19800,19803,19805-19809,19825-19830,19836,19895,19897-19898,19900-19904,19907-19910,19912-19913,19989,19991-19992,19994-19998,20000-20008,20087,20090,20092-20096,20123-20126,20185,20188,20190-20191,20193-20194,20197,20199,20202-20211,20233,20292,20295,20297-20298,20300-20301,20304,20306,20308,20310-20317,20337,20396,20399-20407,20409-20413,20429-20434,20440,20499,20502,20504,31698-32189,32250,32253-32254,32256-32261,32284-32289,32295,32356,32359-32360,32362-32364,32366-32367,32394,32401,32462,32465-32466,32468,32470-32473,32475-32481,32489-32495,32500,32560-32564,32567-32569,32571-32572,32599,32606,32667,32670-32671,32673,32675,32677-32678,32705,32712,32773,32776-32777,32779,32781-32784,32811,32818,32879,32882-32883,32885,32887-32890,32917,32921-32924,32985,32989-32993,32995-33012,33096,33099-33100,33102,33104,33106-33107,33134,33141,33202,33205-33206,33208-33213,33215-33223,33250,33311,33314-33315,33317-33322,33349,33356,33417,33421,33423,33425-33428,33449,33507-33508,33510-33511,33513-33514,33516-33517,33520,33522,33524-33534,33537-33539,33541-33542,33544-33557,33577,33636,33638-33639,33641,33643,33645-33646,33666,33673,33731-33732,33734-33735,33737,43987,44024,44035-44090,45190-45243,45625-45630,45788-45793,46354-46380,46596-46618,46639-46665,47949,48651-48700,49343-49396,51157-51175,51435-51444,52928-52941,52967-52983,53785-53822,54993,55091,55122,55817-55828,58036-58051,58694-58931,59077-59092,61344-61375,61494-61525,62597,62600,62715-62743,63266-63267,63324-63325
+server/gen/http/organization_remote_session_issuers/client/cli.go
+  s_e5952da15582a2::t_b4d364667921e9 356-435
+server/gen/http/organization_remote_session_issuers/client/client.go
+  s_e5952da15582a2::t_60e378c1454c08 49-56,78-91,262-310
+server/gen/http/organization_remote_session_issuers/client/encode_decode.go
+  s_e5952da15582a2::t_a6614f06350df7 1681-2159
+server/gen/http/organization_remote_session_issuers/client/paths.go
+  s_e5952da15582a2::t_bbb0578656e5f4 44-53
+server/gen/http/organization_remote_session_issuers/client/types.go
+  s_e5952da15582a2::t_79880a8d76354b 128-138,364-401,1732-1748,1751-1757,1759-1774,1776-1786,1789-1805,1808-1824,1827-1843,1846-2296,2348-2723,2736-2738,2751-2753,2766-2768,2781-2783,2796-2969,2982-2984,2997-3000,3013-3016,3029-3032,3045-3046,3048-3069,3071-3092,3099-3101,3114-3116,3129-3131,3144-3146,3159-3161,3174-3176,3189-3191,3204-3206,3219-3221,3234-3236,3249-3251,3264-3266,3279-3281,3294-3296,3309-3311,3324-3326,3339-3341,3354-3356,3369-3371,3384-3386,3399-3423,3425-3447,3453-3455,3468-3470,3483-3485,3498-3500,3513-3515,3528-3530,3543-3545,3558-3560,3573-3575,3588-3590,3603-3609,3611-3613,3615-3617,3619-3621,3623-3625,3631-3634,3647-3650,3663-3666,3679-3682,3695-3698,3711-3714,3727-3730,3743-3746,3759-3762,3775-3778,3791-3806,3819-3821,3834-3836,3849-3851,3864-3866,3879-3881,3894-3896,3909-3911,3922-3926,3939-3941,3954-3958,3960-3961,3963-3964,3966-3967,3969-4012,4015-4169,4171,4174-4178,4180-4195,4198-4202,4204-4215,4218-4222,4224-4239,4242-4246,4248-4263,4266-4270,4272-4287,4290-4294,4296-4311,4314-4318,4320-4335,4338-4357,4359,4362-4366,4368-4383,4386-4391,4395-4396,4398-4399,4401-4402,4404-4405,4407-4414,4416-4417,4419-4420,4422-4423,4425-4426,4428-4429,4431-4438,4440-4441,4443-4453,4458-4462,4464-4477,4482-4487,4491-4492,4494-4495,4497-4498,4500-4501,4503-4510,4512-4513,4515-4516,4518-4519,4521-4522,4524-4525,4527-4534,4536-4537,4539-4549,4554-4558,4560-4573,4578-4583,4587-4588,4590-4591,4593-4594,4596-4597,4599-4606,4608-4609,4611-4612,4614-4615,4617-4618,4620-4621,4626-4631,4635-4636,4638-4639,4641-4642,4644-4645,4647-4654,4656-4657,4659-4660,4662-4663,4665-4666,4668-4669,4671-4678,4680-4681,4683-4693,4698-4700,4722-4724,4746-4748,4770-4772,4794-4796,4818-4820,4842-4844,4866-4868,4890-4892,4914-4916,4938-4940,4962-4964,4986-4988,5010-5012,5034-5036,5058-5061,5083-5085,5107-5110,5132-5134,5156-5158,5180-5182,5204-5206,5228-5230,5252-5254,5276-5278,5300-5302,5324-5326,5348-5350,5372-5374,5396-5398,5420-5422,5444-5446,5468-5470,5492-5494,5516-5518,5540-5542,5564-5566,5588-5590,5612-5614,5636-5638,5660-5662,5684-5686,5708-5710,5732-5734,5756-5758,5780-5782,5804-5806,5828-5830,5852-5854,5876-5878,5900-5902,5924-5926,5948-5950,5972-5974,5996-5998,6020-6023,6045-6047,6069-6072,6094-6096,6118-6120,6142-6144,6166-6168,6190-6192,6214-6216,6238-6240,6262-6264,6286-6288,6310-6312,6334-6336,6358-6360
+server/gen/http/organization_remote_session_issuers/server/encode_decode.go
+  s_e5952da15582a2::t_57f22c685659d3 1565-2012
+server/gen/http/organization_remote_session_issuers/server/paths.go
+  s_e5952da15582a2::t_56b5904987e50e 44-53
+server/gen/http/organization_remote_session_issuers/server/server.go
+  s_e5952da15582a2::t_433e47bee291fd 22-31,68-69,71-79,95-96,112-113,498-606
+server/gen/http/organization_remote_session_issuers/server/types.go
+  s_e5952da15582a2::t_da4916f3f89cb3 128-138,364-401,1732-1738,1740-1748,1751-1767,1770-1786,1789-1805,1808-2311,2409-2451,2453-2454,2456-2459,2461-2476,3531-3830,3991-4016,4064-4081
+server/gen/http/skill_efficacy/client/cli.go
+  s_e5952da15582a2::t_f0b3e1fc65ef54 1-174
+server/gen/http/skill_efficacy/client/client.go
+  s_e5952da15582a2::t_0aedf4a3fa97ef 1-134
+server/gen/http/skill_efficacy/client/encode_decode.go
+  s_e5952da15582a2::t_a63e37c7599553 1-876
+server/gen/http/skill_efficacy/client/paths.go
+  s_e5952da15582a2::t_644d6e4d3d7f25 1-23
+server/gen/http/skill_efficacy/client/types.go
+  s_e5952da15582a2::t_ffe0f66fbbd3ba 1-2299
+server/gen/http/skill_efficacy/server/encode_decode.go
+  s_e5952da15582a2::t_c62ed1b210287a 1-854
+server/gen/http/skill_efficacy/server/paths.go
+  s_e5952da15582a2::t_ffac23e7c9eb0f 1-23
+server/gen/http/skill_efficacy/server/server.go
+  s_e5952da15582a2::t_2cf0c5510dd38e 1-246
+server/gen/http/skill_efficacy/server/types.go
+  s_e5952da15582a2::t_6a7e8c01a415a5 1-1284
+server/gen/http/telemetry/client/cli.go
+  s_e5952da15582a2::t_7d0c6258e0c1ce 624-625
+server/gen/http/telemetry/client/types.go
+  s_e5952da15582a2::t_6fc4bffbc73c1e 16145-16146
+server/gen/http/telemetry/server/types.go
+  s_e5952da15582a2::t_13a8b5b9e05c06 10116-10117,10571-10572
+server/gen/organization_remote_session_issuers/client.go
+  s_e5952da15582a2::t_679fbf68535b04 19-27,32,34-42,202-247
+server/gen/organization_remote_session_issuers/endpoints.go
+  s_e5952da15582a2::t_6e77bb307d4257 19-27,36-44,58-59,307-377
+server/gen/organization_remote_session_issuers/service.go
+  s_e5952da15582a2::t_4c182857ad26cd 50-65,88,165-175,204-227,249-272
+server/gen/skill_efficacy/client.go
+  s_e5952da15582a2::t_05d5d7d35ffb50 1-98
+server/gen/skill_efficacy/endpoints.go
+  s_e5952da15582a2::t_d836276fb4689b 1-146
+server/gen/skill_efficacy/service.go
+  s_e5952da15582a2::t_a6626144ad6dc6 1-230
+server/internal/aiintegrations/repo/queries.sql.go
+  s_e5952da15582a2::t_a3a4a96330e0d0 20,26,30-65,88-140,144-154,156-157,159,162,165,169-176,181-182,184,191-192,196-203,212,219-220,227,232,242-244,270,281-283,302,331,335-336,338,348-350,355,358-447,463,474-475,492-577,654,664-666,689,724,744-804,807,811-812,819-820,822,832,836-837,850,854-855,867-894,901-905,907-908,914,916,919-922,924-930,937,943,946,950-953,961,969,975,979,986,990-995,999-1088
+server/internal/assistants/repo/queries.sql.go
+  s_e5952da15582a2::t_61b62813b16704 2084-2090,2101,2124-2133,2135-2144,2557-2614
+server/internal/chat/repo/queries.sql.go
+  s_e5952da15582a2::t_e97c84d4123982 13,99-100,115,237,248,316,595-596,599-600,621-622,649-650,1685-1786,1818-1819,1834,1931-1932,1937-1938,1980-1981,2020-2021,2075-2076,2669-2698
+server/internal/customdomains/repo/queries.sql.go
+  s_e5952da15582a2::t_ad4222f07d5625 31,63-68,90,109-114,124,143-148,158,187-192,202,222-227,247,279-284,300,321-326
+server/internal/externalkeys/repo/queries.sql.go
+  s_e5952da15582a2::t_431fdd4e8b07d9 1-427
+server/internal/hooks/repo/queries.sql.go
+  s_e5952da15582a2::t_5d79dae966577f 353,403-404,419-422,561,594-595
+server/internal/remotesessions/repo/queries.sql.go
+  s_e5952da15582a2::t_0b906b56473740 1025-1083,1440-1504,2523-2542,3234-3265
+server/internal/risk/repo/queries.sql.go
+  s_e5952da15582a2::t_879da37039668b 1111,1152-1153,1168-1177,1192-1193
+server/internal/skills/repo/queries.sql.go
+  s_e5952da15582a2::t_e6a049b15a8e61 102,143-144,267-381,727-857,1244-1403,1858-1863,1866-1868,1871-1872,1879-1880,1883,1891-1916,1919-1951,1956,1958-1977,1980,1988,1990-2000,2002-2007,2010-2018,2021,2023-2025,2028-2056,2058-2060,2066,2068-2079,2090,2092-2654,2811,2867-2868,2882-2971,2995-3060,3099-3185,3236-3259,3558-3673
+server/internal/telemetry/repo/queries.sql.go
+  s_e5952da15582a2::t_be9d27e34a1406 496-499,567-570,572-575,579-597,730-777
+server/internal/testenv/testrepo/queries.sql.go
+  s_e5952da15582a2::t_70dc59b4828463 491-515
+server/internal/users/repo/queries.sql.go
+  s_e5952da15582a2::t_58662804e09735 73,83-84
+uv.lock
+  s_e5952da15582a2::t_8e9c907c9997d9 41,46,48,191,196,198,422,437,873,876-877,885,887,1088,1090,1099,1110,1475-1495
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "36309dc1aa2c1660a28021b9e0059a8bf3525b7b",
+  "prompts": {},
+  "sessions": {
+    "s_e5952da15582a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8b4a-b218-76f0-becc-8d70e94d8075",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
