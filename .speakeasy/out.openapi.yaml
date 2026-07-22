@@ -33076,6 +33076,136 @@ paths:
       x-speakeasy-name-override: getSettings
       x-speakeasy-react-hook:
         name: SkillEfficacySettings
+  /rpc/skillEfficacy.queryInsights:
+    get:
+      description: Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.
+      operationId: querySkillEfficacyInsights
+      parameters:
+        - allowEmptyValue: true
+          description: Active skill IDs to query (up to 200). Omit to query all active project skills.
+          in: query
+          name: skill_ids
+          schema:
+            description: Active skill IDs to query (up to 200). Omit to query all active project skills.
+            items:
+              type: string
+            type: array
+        - allowEmptyValue: true
+          description: RFC3339 window start; defaults to 30 days before to.
+          in: query
+          name: from
+          schema:
+            description: RFC3339 window start; defaults to 30 days before to.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: RFC3339 window end; defaults to now.
+          in: query
+          name: to
+          schema:
+            description: RFC3339 window end; defaults to now.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Include per-version daily trends.
+          in: query
+          name: include_versions
+          schema:
+            description: Include per-version daily trends.
+            type: boolean
+        - allowEmptyValue: true
+          description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+          in: query
+          name: include_scored_sessions
+          schema:
+            description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+            type: boolean
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillEfficacyInsightsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: queryInsights skillEfficacy
+      tags:
+        - skillEfficacy
+      x-speakeasy-name-override: queryInsights
+      x-speakeasy-react-hook:
+        name: SkillEfficacyInsights
+        type: query
   /rpc/skillEfficacy.upsertSettings:
     post:
       description: Create or replace organization-wide skill efficacy sampling settings.
@@ -58226,6 +58356,154 @@ components:
         - on_target_machines
         - drifted_machines
         - indeterminate_machines
+    SkillEfficacyInsight:
+      type: object
+      properties:
+        metrics:
+          $ref: '#/components/schemas/SkillInsightMetrics'
+        skill_id:
+          type: string
+          format: uuid
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillVersionInsight'
+      required:
+        - skill_id
+        - metrics
+        - versions
+    SkillEfficacyInsightsResult:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date-time
+        insights:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillEfficacyInsight'
+        interval_seconds:
+          type: integer
+          format: int64
+        scored_sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillEfficacyScoredSession'
+        scores_available:
+          type: boolean
+        to:
+          type: string
+          format: date-time
+      required:
+        - from
+        - to
+        - interval_seconds
+        - scores_available
+        - insights
+        - scored_sessions
+    SkillEfficacyMetrics:
+      type: object
+      properties:
+        average_score:
+          type: number
+          format: double
+        estimated_minutes_saved_average:
+          type: number
+          format: double
+        estimated_minutes_saved_samples:
+          type: integer
+          format: int64
+        estimated_minutes_saved_total:
+          type: number
+          format: double
+        estimated_turns_saved_average:
+          type: number
+          format: double
+        estimated_turns_saved_samples:
+          type: integer
+          format: int64
+        estimated_turns_saved_total:
+          type: number
+          format: double
+        flag_counts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        roi_confidence_counts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        scored_sessions:
+          type: integer
+          format: int64
+      required:
+        - scored_sessions
+        - average_score
+        - estimated_turns_saved_total
+        - estimated_turns_saved_samples
+        - estimated_minutes_saved_total
+        - estimated_minutes_saved_samples
+        - roi_confidence_counts
+        - flag_counts
+    SkillEfficacyScoredSession:
+      type: object
+      properties:
+        activated_at:
+          type: string
+          format: date-time
+        estimated_minutes_saved:
+          type: number
+          format: double
+        estimated_turns_saved:
+          type: number
+          format: double
+        flags:
+          type: array
+          items:
+            type: string
+        gram_chat_id:
+          type: string
+          format: uuid
+        id:
+          type: string
+          format: uuid
+        rationale:
+          type: string
+        roi_confidence:
+          type: string
+          enum:
+            - low
+            - med
+            - high
+        score:
+          type: number
+          format: double
+        scored_at:
+          type: string
+          format: date-time
+        skill_id:
+          type: string
+          format: uuid
+        skill_version_id:
+          type: string
+          format: uuid
+        surface:
+          type: string
+          enum:
+            - dev
+            - assistant
+      required:
+        - id
+        - skill_id
+        - skill_version_id
+        - surface
+        - activated_at
+        - scored_at
+        - score
+        - rationale
+        - flags
     SkillEfficacySettings:
       type: object
       properties:
@@ -58264,6 +58542,58 @@ components:
         - org_daily_cap
         - new_version_burst
         - is_default
+    SkillInsightMetrics:
+      type: object
+      properties:
+        activated_sessions:
+          type: integer
+          format: int64
+        activations:
+          type: integer
+          format: int64
+        average_session_cost_usd:
+          type: number
+          format: double
+        efficacy:
+          $ref: '#/components/schemas/SkillEfficacyMetrics'
+        session_cost_usd:
+          type: number
+          format: double
+      required:
+        - activations
+        - activated_sessions
+        - session_cost_usd
+    SkillInsightPoint:
+      type: object
+      properties:
+        activated_sessions:
+          type: integer
+          format: int64
+        activations:
+          type: integer
+          format: int64
+        average_score:
+          type: number
+          format: double
+        bucket_start:
+          type: string
+          format: date-time
+        estimated_minutes_saved:
+          type: number
+          format: double
+        scored_sessions:
+          type: integer
+          format: int64
+        session_cost_usd:
+          type: number
+          format: double
+      required:
+        - bucket_start
+        - activations
+        - activated_sessions
+        - session_cost_usd
+        - scored_sessions
+        - estimated_minutes_saved
     SkillSightingTimelinePoint:
       type: object
       properties:
@@ -58409,6 +58739,22 @@ components:
         - created_at
         - created_by_user_id
         - seen_count
+    SkillVersionInsight:
+      type: object
+      properties:
+        metrics:
+          $ref: '#/components/schemas/SkillInsightMetrics'
+        skill_version_id:
+          type: string
+          format: uuid
+        trend:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillInsightPoint'
+      required:
+        - skill_version_id
+        - metrics
+        - trend
     SourceEnvironmentLink:
       type: object
       properties:

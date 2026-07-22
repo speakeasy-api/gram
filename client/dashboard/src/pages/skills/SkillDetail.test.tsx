@@ -68,6 +68,10 @@ vi.mock("./SkillPluginBanner", () => ({
 vi.mock("./SkillDistributionsSection", () => ({
   SkillDistributionsSection: () => <div>Distribution controls</div>,
 }));
+vi.mock("./SkillInsightsSection", () => ({
+  SKILL_INSIGHTS_SECTION_ID: "insights",
+  SkillInsightsSection: () => <div>Skill insights</div>,
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => testState.queryClient,
 }));

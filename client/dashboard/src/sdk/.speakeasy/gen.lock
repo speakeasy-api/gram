@@ -361,6 +361,7 @@ trackedFiles:
   src/funcs/riskResultsUnmask.ts: {}
   src/funcs/riskRulesTest.ts: {}
   src/funcs/skillEfficacyGetSettings.ts: {}
+  src/funcs/skillEfficacyQueryInsights.ts: {}
   src/funcs/skillEfficacyUpsertSettings.ts: {}
   src/funcs/skillsAddVersion.ts: {}
   src/funcs/skillsArchive.ts: {}
@@ -984,12 +985,19 @@ trackedFiles:
   src/models/components/skillbreakdownrow.ts: {}
   src/models/components/skilldistribution.ts: {}
   src/models/components/skilldrift.ts: {}
+  src/models/components/skillefficacyinsight.ts: {}
+  src/models/components/skillefficacyinsightsresult.ts: {}
+  src/models/components/skillefficacymetrics.ts: {}
+  src/models/components/skillefficacyscoredsession.ts: {}
   src/models/components/skillefficacysettings.ts: {}
+  src/models/components/skillinsightmetrics.ts: {}
+  src/models/components/skillinsightpoint.ts: {}
   src/models/components/skillsightingtimelinepoint.ts: {}
   src/models/components/skillsummary.ts: {}
   src/models/components/skilltimeseriespoint.ts: {}
   src/models/components/skillvalidationerror.ts: {}
   src/models/components/skillversion.ts: {}
+  src/models/components/skillversioninsight.ts: {}
   src/models/components/sourceenvironmentlink.ts: {}
   src/models/components/submitfeedbackrequestbody.ts: {}
   src/models/components/submitriskblockfeedbackrequestbody.ts: {}
@@ -1437,6 +1445,7 @@ trackedFiles:
   src/models/operations/publish.ts: {}
   src/models/operations/publishplugins.ts: {}
   src/models/operations/query.ts: {}
+  src/models/operations/queryskillefficacyinsights.ts: {}
   src/models/operations/querytumdetails.ts: {}
   src/models/operations/receiveworkoswebhook.ts: {}
   src/models/operations/redeploydeployment.ts: {}
@@ -2077,6 +2086,8 @@ trackedFiles:
   src/react-query/skill.ts: {}
   src/react-query/skillDistributions.core.ts: {}
   src/react-query/skillDistributions.ts: {}
+  src/react-query/skillEfficacyInsights.core.ts: {}
+  src/react-query/skillEfficacyInsights.ts: {}
   src/react-query/skillEfficacySettings.core.ts: {}
   src/react-query/skillEfficacySettings.ts: {}
   src/react-query/skillVersions.core.ts: {}
@@ -5637,6 +5648,20 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  querySkillEfficacyInsights:
+    speakeasy-default-query-skill-efficacy-insights:
+      parameters:
+        query:
+          skill_ids: ["<value 1>"]
+      requestBody:
+        application/json: {"skill_ids": ["<value 1>"]}
+      responses:
+        "200":
+          application/json: {"from": "2024-09-17T05:02:27.951Z", "insights": [], "interval_seconds": 830319, "scored_sessions": [{"activated_at": "2026-02-28T22:04:06.379Z", "flags": ["<value 1>", "<value 2>"], "id": "e9f4a5e1-bc14-4994-b776-223b5ed80019", "rationale": "<value>", "score": 6193.28, "scored_at": "2026-03-09T19:33:54.414Z", "skill_id": "58f213a6-c60a-41bf-965b-6afaaf7b51c1", "skill_version_id": "f6db9702-54da-4ee1-a209-e8f7b96d5ce0", "surface": "assistant"}], "scores_available": true, "to": "2024-01-24T06:40:46.020Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   queryTumDetails:
     speakeasy-default-query-tum-details:
       requestBody:

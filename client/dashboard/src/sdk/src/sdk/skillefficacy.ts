@@ -3,13 +3,19 @@
  */
 
 import { skillEfficacyGetSettings } from "../funcs/skillEfficacyGetSettings.js";
+import { skillEfficacyQueryInsights } from "../funcs/skillEfficacyQueryInsights.js";
 import { skillEfficacyUpsertSettings } from "../funcs/skillEfficacyUpsertSettings.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { SkillEfficacyInsightsResult } from "../models/components/skillefficacyinsightsresult.js";
 import { SkillEfficacySettings } from "../models/components/skillefficacysettings.js";
 import {
   GetSkillEfficacySettingsRequest,
   GetSkillEfficacySettingsSecurity,
 } from "../models/operations/getskillefficacysettings.js";
+import {
+  QuerySkillEfficacyInsightsRequest,
+  QuerySkillEfficacyInsightsSecurity,
+} from "../models/operations/queryskillefficacyinsights.js";
 import {
   UpsertSkillEfficacySettingsRequest,
   UpsertSkillEfficacySettingsSecurity,
@@ -29,6 +35,25 @@ export class SkillEfficacy extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SkillEfficacySettings> {
     return unwrapAsync(skillEfficacyGetSettings(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * queryInsights skillEfficacy
+   *
+   * @remarks
+   * Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.
+   */
+  async queryInsights(
+    request?: QuerySkillEfficacyInsightsRequest | undefined,
+    security?: QuerySkillEfficacyInsightsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SkillEfficacyInsightsResult> {
+    return unwrapAsync(skillEfficacyQueryInsights(
       this,
       request,
       security,

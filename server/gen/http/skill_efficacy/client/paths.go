@@ -16,3 +16,8 @@ func GetSettingsSkillEfficacyPath() string {
 func UpsertSettingsSkillEfficacyPath() string {
 	return "/rpc/skillEfficacy.upsertSettings"
 }
+
+// QueryInsightsSkillEfficacyPath returns the URL path to the skillEfficacy service queryInsights HTTP endpoint.
+func QueryInsightsSkillEfficacyPath() string {
+	return "/rpc/skillEfficacy.queryInsights"
+}

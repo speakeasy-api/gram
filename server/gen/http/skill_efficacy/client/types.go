@@ -64,6 +64,17 @@ type UpsertSettingsResponseBody struct {
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 }
 
+// QueryInsightsResponseBody is the type of the "skillEfficacy" service
+// "queryInsights" endpoint HTTP response body.
+type QueryInsightsResponseBody struct {
+	From            *string                                   `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	To              *string                                   `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	IntervalSeconds *int64                                    `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
+	ScoresAvailable *bool                                     `form:"scores_available,omitempty" json:"scores_available,omitempty" xml:"scores_available,omitempty"`
+	Insights        []*SkillEfficacyInsightResponseBody       `form:"insights,omitempty" json:"insights,omitempty" xml:"insights,omitempty"`
+	ScoredSessions  []*SkillEfficacyScoredSessionResponseBody `form:"scored_sessions,omitempty" json:"scored_sessions,omitempty" xml:"scored_sessions,omitempty"`
+}
+
 // GetSettingsUnauthorizedResponseBody is the type of the "skillEfficacy"
 // service "getSettings" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -437,6 +448,265 @@ type UpsertSettingsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// QueryInsightsUnauthorizedResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the "unauthorized"
+// error.
+type QueryInsightsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryInsightsForbiddenResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the "forbidden"
+// error.
+type QueryInsightsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryInsightsBadRequestResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the "bad_request"
+// error.
+type QueryInsightsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryInsightsNotFoundResponseBody is the type of the "skillEfficacy" service
+// "queryInsights" endpoint HTTP response body for the "not_found" error.
+type QueryInsightsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryInsightsConflictResponseBody is the type of the "skillEfficacy" service
+// "queryInsights" endpoint HTTP response body for the "conflict" error.
+type QueryInsightsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryInsightsUnsupportedMediaResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the
+// "unsupported_media" error.
+type QueryInsightsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryInsightsInvalidResponseBody is the type of the "skillEfficacy" service
+// "queryInsights" endpoint HTTP response body for the "invalid" error.
+type QueryInsightsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryInsightsInvariantViolationResponseBody is the type of the
+// "skillEfficacy" service "queryInsights" endpoint HTTP response body for the
+// "invariant_violation" error.
+type QueryInsightsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryInsightsUnexpectedResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the "unexpected"
+// error.
+type QueryInsightsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryInsightsGatewayErrorResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the "gateway_error"
+// error.
+type QueryInsightsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SkillEfficacyInsightResponseBody is used to define fields on response body
+// types.
+type SkillEfficacyInsightResponseBody struct {
+	SkillID  *string                            `form:"skill_id,omitempty" json:"skill_id,omitempty" xml:"skill_id,omitempty"`
+	Metrics  *SkillInsightMetricsResponseBody   `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
+	Versions []*SkillVersionInsightResponseBody `form:"versions,omitempty" json:"versions,omitempty" xml:"versions,omitempty"`
+}
+
+// SkillInsightMetricsResponseBody is used to define fields on response body
+// types.
+type SkillInsightMetricsResponseBody struct {
+	Activations           *uint64  `form:"activations,omitempty" json:"activations,omitempty" xml:"activations,omitempty"`
+	ActivatedSessions     *uint64  `form:"activated_sessions,omitempty" json:"activated_sessions,omitempty" xml:"activated_sessions,omitempty"`
+	SessionCostUsd        *float64 `form:"session_cost_usd,omitempty" json:"session_cost_usd,omitempty" xml:"session_cost_usd,omitempty"`
+	AverageSessionCostUsd *float64 `form:"average_session_cost_usd,omitempty" json:"average_session_cost_usd,omitempty" xml:"average_session_cost_usd,omitempty"`
+	// Absent when no sampled score exists.
+	Efficacy *SkillEfficacyMetricsResponseBody `form:"efficacy,omitempty" json:"efficacy,omitempty" xml:"efficacy,omitempty"`
+}
+
+// SkillEfficacyMetricsResponseBody is used to define fields on response body
+// types.
+type SkillEfficacyMetricsResponseBody struct {
+	ScoredSessions               *uint64           `form:"scored_sessions,omitempty" json:"scored_sessions,omitempty" xml:"scored_sessions,omitempty"`
+	AverageScore                 *float64          `form:"average_score,omitempty" json:"average_score,omitempty" xml:"average_score,omitempty"`
+	EstimatedTurnsSavedTotal     *float64          `form:"estimated_turns_saved_total,omitempty" json:"estimated_turns_saved_total,omitempty" xml:"estimated_turns_saved_total,omitempty"`
+	EstimatedTurnsSavedAverage   *float64          `form:"estimated_turns_saved_average,omitempty" json:"estimated_turns_saved_average,omitempty" xml:"estimated_turns_saved_average,omitempty"`
+	EstimatedTurnsSavedSamples   *uint64           `form:"estimated_turns_saved_samples,omitempty" json:"estimated_turns_saved_samples,omitempty" xml:"estimated_turns_saved_samples,omitempty"`
+	EstimatedMinutesSavedTotal   *float64          `form:"estimated_minutes_saved_total,omitempty" json:"estimated_minutes_saved_total,omitempty" xml:"estimated_minutes_saved_total,omitempty"`
+	EstimatedMinutesSavedAverage *float64          `form:"estimated_minutes_saved_average,omitempty" json:"estimated_minutes_saved_average,omitempty" xml:"estimated_minutes_saved_average,omitempty"`
+	EstimatedMinutesSavedSamples *uint64           `form:"estimated_minutes_saved_samples,omitempty" json:"estimated_minutes_saved_samples,omitempty" xml:"estimated_minutes_saved_samples,omitempty"`
+	RoiConfidenceCounts          map[string]uint64 `form:"roi_confidence_counts,omitempty" json:"roi_confidence_counts,omitempty" xml:"roi_confidence_counts,omitempty"`
+	FlagCounts                   map[string]uint64 `form:"flag_counts,omitempty" json:"flag_counts,omitempty" xml:"flag_counts,omitempty"`
+}
+
+// SkillVersionInsightResponseBody is used to define fields on response body
+// types.
+type SkillVersionInsightResponseBody struct {
+	SkillVersionID *string                          `form:"skill_version_id,omitempty" json:"skill_version_id,omitempty" xml:"skill_version_id,omitempty"`
+	Metrics        *SkillInsightMetricsResponseBody `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
+	Trend          []*SkillInsightPointResponseBody `form:"trend,omitempty" json:"trend,omitempty" xml:"trend,omitempty"`
+}
+
+// SkillInsightPointResponseBody is used to define fields on response body
+// types.
+type SkillInsightPointResponseBody struct {
+	BucketStart           *string  `form:"bucket_start,omitempty" json:"bucket_start,omitempty" xml:"bucket_start,omitempty"`
+	Activations           *uint64  `form:"activations,omitempty" json:"activations,omitempty" xml:"activations,omitempty"`
+	ActivatedSessions     *uint64  `form:"activated_sessions,omitempty" json:"activated_sessions,omitempty" xml:"activated_sessions,omitempty"`
+	SessionCostUsd        *float64 `form:"session_cost_usd,omitempty" json:"session_cost_usd,omitempty" xml:"session_cost_usd,omitempty"`
+	ScoredSessions        *uint64  `form:"scored_sessions,omitempty" json:"scored_sessions,omitempty" xml:"scored_sessions,omitempty"`
+	AverageScore          *float64 `form:"average_score,omitempty" json:"average_score,omitempty" xml:"average_score,omitempty"`
+	EstimatedMinutesSaved *float64 `form:"estimated_minutes_saved,omitempty" json:"estimated_minutes_saved,omitempty" xml:"estimated_minutes_saved,omitempty"`
+}
+
+// SkillEfficacyScoredSessionResponseBody is used to define fields on response
+// body types.
+type SkillEfficacyScoredSessionResponseBody struct {
+	ID                    *string  `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	SkillID               *string  `form:"skill_id,omitempty" json:"skill_id,omitempty" xml:"skill_id,omitempty"`
+	SkillVersionID        *string  `form:"skill_version_id,omitempty" json:"skill_version_id,omitempty" xml:"skill_version_id,omitempty"`
+	Surface               *string  `form:"surface,omitempty" json:"surface,omitempty" xml:"surface,omitempty"`
+	ActivatedAt           *string  `form:"activated_at,omitempty" json:"activated_at,omitempty" xml:"activated_at,omitempty"`
+	ScoredAt              *string  `form:"scored_at,omitempty" json:"scored_at,omitempty" xml:"scored_at,omitempty"`
+	Score                 *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
+	Rationale             *string  `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
+	EstimatedTurnsSaved   *float64 `form:"estimated_turns_saved,omitempty" json:"estimated_turns_saved,omitempty" xml:"estimated_turns_saved,omitempty"`
+	EstimatedMinutesSaved *float64 `form:"estimated_minutes_saved,omitempty" json:"estimated_minutes_saved,omitempty" xml:"estimated_minutes_saved,omitempty"`
+	RoiConfidence         *string  `form:"roi_confidence,omitempty" json:"roi_confidence,omitempty" xml:"roi_confidence,omitempty"`
+	Flags                 []string `form:"flags,omitempty" json:"flags,omitempty" xml:"flags,omitempty"`
+	GramChatID            *string  `form:"gram_chat_id,omitempty" json:"gram_chat_id,omitempty" xml:"gram_chat_id,omitempty"`
+}
+
 // NewUpsertSettingsRequestBody builds the HTTP request body from the payload
 // of the "upsertSettings" endpoint of the "skillEfficacy" service.
 func NewUpsertSettingsRequestBody(p *skillefficacy.UpsertSettingsPayload) *UpsertSettingsRequestBody {
@@ -779,6 +1049,185 @@ func NewUpsertSettingsGatewayError(body *UpsertSettingsGatewayErrorResponseBody)
 	return v
 }
 
+// NewQueryInsightsSkillEfficacyInsightsResultOK builds a "skillEfficacy"
+// service "queryInsights" endpoint result from a HTTP "OK" response.
+func NewQueryInsightsSkillEfficacyInsightsResultOK(body *QueryInsightsResponseBody) *skillefficacy.SkillEfficacyInsightsResult {
+	v := &skillefficacy.SkillEfficacyInsightsResult{
+		From:            *body.From,
+		To:              *body.To,
+		IntervalSeconds: *body.IntervalSeconds,
+		ScoresAvailable: *body.ScoresAvailable,
+	}
+	v.Insights = make([]*skillefficacy.SkillEfficacyInsight, len(body.Insights))
+	for i, val := range body.Insights {
+		if val == nil {
+			v.Insights[i] = nil
+			continue
+		}
+		v.Insights[i] = unmarshalSkillEfficacyInsightResponseBodyToSkillefficacySkillEfficacyInsight(val)
+	}
+	v.ScoredSessions = make([]*skillefficacy.SkillEfficacyScoredSession, len(body.ScoredSessions))
+	for i, val := range body.ScoredSessions {
+		if val == nil {
+			v.ScoredSessions[i] = nil
+			continue
+		}
+		v.ScoredSessions[i] = unmarshalSkillEfficacyScoredSessionResponseBodyToSkillefficacySkillEfficacyScoredSession(val)
+	}
+
+	return v
+}
+
+// NewQueryInsightsUnauthorized builds a skillEfficacy service queryInsights
+// endpoint unauthorized error.
+func NewQueryInsightsUnauthorized(body *QueryInsightsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryInsightsForbidden builds a skillEfficacy service queryInsights
+// endpoint forbidden error.
+func NewQueryInsightsForbidden(body *QueryInsightsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryInsightsBadRequest builds a skillEfficacy service queryInsights
+// endpoint bad_request error.
+func NewQueryInsightsBadRequest(body *QueryInsightsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryInsightsNotFound builds a skillEfficacy service queryInsights
+// endpoint not_found error.
+func NewQueryInsightsNotFound(body *QueryInsightsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryInsightsConflict builds a skillEfficacy service queryInsights
+// endpoint conflict error.
+func NewQueryInsightsConflict(body *QueryInsightsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryInsightsUnsupportedMedia builds a skillEfficacy service
+// queryInsights endpoint unsupported_media error.
+func NewQueryInsightsUnsupportedMedia(body *QueryInsightsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryInsightsInvalid builds a skillEfficacy service queryInsights
+// endpoint invalid error.
+func NewQueryInsightsInvalid(body *QueryInsightsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryInsightsInvariantViolation builds a skillEfficacy service
+// queryInsights endpoint invariant_violation error.
+func NewQueryInsightsInvariantViolation(body *QueryInsightsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryInsightsUnexpected builds a skillEfficacy service queryInsights
+// endpoint unexpected error.
+func NewQueryInsightsUnexpected(body *QueryInsightsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryInsightsGatewayError builds a skillEfficacy service queryInsights
+// endpoint gateway_error error.
+func NewQueryInsightsGatewayError(body *QueryInsightsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetSettingsResponseBody runs the validations defined on
 // GetSettingsResponseBody
 func ValidateGetSettingsResponseBody(body *GetSettingsResponseBody) (err error) {
@@ -882,6 +1331,50 @@ func ValidateUpsertSettingsResponseBody(body *UpsertSettingsResponseBody) (err e
 	if body.NewVersionBurst != nil {
 		if *body.NewVersionBurst > 10000 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.new_version_burst", *body.NewVersionBurst, 10000, false))
+		}
+	}
+	return
+}
+
+// ValidateQueryInsightsResponseBody runs the validations defined on
+// QueryInsightsResponseBody
+func ValidateQueryInsightsResponseBody(body *QueryInsightsResponseBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.IntervalSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
+	}
+	if body.ScoresAvailable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scores_available", "body"))
+	}
+	if body.Insights == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("insights", "body"))
+	}
+	if body.ScoredSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scored_sessions", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	for _, e := range body.Insights {
+		if e != nil {
+			if err2 := ValidateSkillEfficacyInsightResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ScoredSessions {
+		if e != nil {
+			if err2 := ValidateSkillEfficacyScoredSessionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -1363,6 +1856,444 @@ func ValidateUpsertSettingsGatewayErrorResponseBody(body *UpsertSettingsGatewayE
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInsightsUnauthorizedResponseBody runs the validations defined
+// on queryInsights_unauthorized_response_body
+func ValidateQueryInsightsUnauthorizedResponseBody(body *QueryInsightsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInsightsForbiddenResponseBody runs the validations defined on
+// queryInsights_forbidden_response_body
+func ValidateQueryInsightsForbiddenResponseBody(body *QueryInsightsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInsightsBadRequestResponseBody runs the validations defined on
+// queryInsights_bad_request_response_body
+func ValidateQueryInsightsBadRequestResponseBody(body *QueryInsightsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInsightsNotFoundResponseBody runs the validations defined on
+// queryInsights_not_found_response_body
+func ValidateQueryInsightsNotFoundResponseBody(body *QueryInsightsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInsightsConflictResponseBody runs the validations defined on
+// queryInsights_conflict_response_body
+func ValidateQueryInsightsConflictResponseBody(body *QueryInsightsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInsightsUnsupportedMediaResponseBody runs the validations
+// defined on queryInsights_unsupported_media_response_body
+func ValidateQueryInsightsUnsupportedMediaResponseBody(body *QueryInsightsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInsightsInvalidResponseBody runs the validations defined on
+// queryInsights_invalid_response_body
+func ValidateQueryInsightsInvalidResponseBody(body *QueryInsightsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInsightsInvariantViolationResponseBody runs the validations
+// defined on queryInsights_invariant_violation_response_body
+func ValidateQueryInsightsInvariantViolationResponseBody(body *QueryInsightsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInsightsUnexpectedResponseBody runs the validations defined on
+// queryInsights_unexpected_response_body
+func ValidateQueryInsightsUnexpectedResponseBody(body *QueryInsightsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInsightsGatewayErrorResponseBody runs the validations defined
+// on queryInsights_gateway_error_response_body
+func ValidateQueryInsightsGatewayErrorResponseBody(body *QueryInsightsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSkillEfficacyInsightResponseBody runs the validations defined on
+// SkillEfficacyInsightResponseBody
+func ValidateSkillEfficacyInsightResponseBody(body *SkillEfficacyInsightResponseBody) (err error) {
+	if body.SkillID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_id", "body"))
+	}
+	if body.Metrics == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("metrics", "body"))
+	}
+	if body.Versions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("versions", "body"))
+	}
+	if body.SkillID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_id", *body.SkillID, goa.FormatUUID))
+	}
+	if body.Metrics != nil {
+		if err2 := ValidateSkillInsightMetricsResponseBody(body.Metrics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Versions {
+		if e != nil {
+			if err2 := ValidateSkillVersionInsightResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSkillInsightMetricsResponseBody runs the validations defined on
+// SkillInsightMetricsResponseBody
+func ValidateSkillInsightMetricsResponseBody(body *SkillInsightMetricsResponseBody) (err error) {
+	if body.Activations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activations", "body"))
+	}
+	if body.ActivatedSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activated_sessions", "body"))
+	}
+	if body.SessionCostUsd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_cost_usd", "body"))
+	}
+	if body.Efficacy != nil {
+		if err2 := ValidateSkillEfficacyMetricsResponseBody(body.Efficacy); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateSkillEfficacyMetricsResponseBody runs the validations defined on
+// SkillEfficacyMetricsResponseBody
+func ValidateSkillEfficacyMetricsResponseBody(body *SkillEfficacyMetricsResponseBody) (err error) {
+	if body.ScoredSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scored_sessions", "body"))
+	}
+	if body.AverageScore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("average_score", "body"))
+	}
+	if body.EstimatedTurnsSavedTotal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("estimated_turns_saved_total", "body"))
+	}
+	if body.EstimatedTurnsSavedSamples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("estimated_turns_saved_samples", "body"))
+	}
+	if body.EstimatedMinutesSavedTotal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("estimated_minutes_saved_total", "body"))
+	}
+	if body.EstimatedMinutesSavedSamples == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("estimated_minutes_saved_samples", "body"))
+	}
+	if body.RoiConfidenceCounts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("roi_confidence_counts", "body"))
+	}
+	if body.FlagCounts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("flag_counts", "body"))
+	}
+	return
+}
+
+// ValidateSkillVersionInsightResponseBody runs the validations defined on
+// SkillVersionInsightResponseBody
+func ValidateSkillVersionInsightResponseBody(body *SkillVersionInsightResponseBody) (err error) {
+	if body.SkillVersionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_version_id", "body"))
+	}
+	if body.Metrics == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("metrics", "body"))
+	}
+	if body.Trend == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trend", "body"))
+	}
+	if body.SkillVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_version_id", *body.SkillVersionID, goa.FormatUUID))
+	}
+	if body.Metrics != nil {
+		if err2 := ValidateSkillInsightMetricsResponseBody(body.Metrics); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Trend {
+		if e != nil {
+			if err2 := ValidateSkillInsightPointResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSkillInsightPointResponseBody runs the validations defined on
+// SkillInsightPointResponseBody
+func ValidateSkillInsightPointResponseBody(body *SkillInsightPointResponseBody) (err error) {
+	if body.BucketStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_start", "body"))
+	}
+	if body.Activations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activations", "body"))
+	}
+	if body.ActivatedSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activated_sessions", "body"))
+	}
+	if body.SessionCostUsd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_cost_usd", "body"))
+	}
+	if body.ScoredSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scored_sessions", "body"))
+	}
+	if body.EstimatedMinutesSaved == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("estimated_minutes_saved", "body"))
+	}
+	if body.BucketStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.bucket_start", *body.BucketStart, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSkillEfficacyScoredSessionResponseBody runs the validations defined
+// on SkillEfficacyScoredSessionResponseBody
+func ValidateSkillEfficacyScoredSessionResponseBody(body *SkillEfficacyScoredSessionResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.SkillID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_id", "body"))
+	}
+	if body.SkillVersionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_version_id", "body"))
+	}
+	if body.Surface == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("surface", "body"))
+	}
+	if body.ActivatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activated_at", "body"))
+	}
+	if body.ScoredAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scored_at", "body"))
+	}
+	if body.Score == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("score", "body"))
+	}
+	if body.Rationale == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rationale", "body"))
+	}
+	if body.Flags == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("flags", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SkillID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_id", *body.SkillID, goa.FormatUUID))
+	}
+	if body.SkillVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_version_id", *body.SkillVersionID, goa.FormatUUID))
+	}
+	if body.Surface != nil {
+		if !(*body.Surface == "dev" || *body.Surface == "assistant") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.surface", *body.Surface, []any{"dev", "assistant"}))
+		}
+	}
+	if body.ActivatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.activated_at", *body.ActivatedAt, goa.FormatDateTime))
+	}
+	if body.ScoredAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.scored_at", *body.ScoredAt, goa.FormatDateTime))
+	}
+	if body.RoiConfidence != nil {
+		if !(*body.RoiConfidence == "low" || *body.RoiConfidence == "med" || *body.RoiConfidence == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.roi_confidence", *body.RoiConfidence, []any{"low", "med", "high"}))
+		}
+	}
+	if body.GramChatID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.gram_chat_id", *body.GramChatID, goa.FormatUUID))
 	}
 	return
 }

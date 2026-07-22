@@ -64,6 +64,17 @@ type UpsertSettingsResponseBody struct {
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
 }
 
+// QueryInsightsResponseBody is the type of the "skillEfficacy" service
+// "queryInsights" endpoint HTTP response body.
+type QueryInsightsResponseBody struct {
+	From            string                                    `form:"from" json:"from" xml:"from"`
+	To              string                                    `form:"to" json:"to" xml:"to"`
+	IntervalSeconds int64                                     `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+	ScoresAvailable bool                                      `form:"scores_available" json:"scores_available" xml:"scores_available"`
+	Insights        []*SkillEfficacyInsightResponseBody       `form:"insights" json:"insights" xml:"insights"`
+	ScoredSessions  []*SkillEfficacyScoredSessionResponseBody `form:"scored_sessions" json:"scored_sessions" xml:"scored_sessions"`
+}
+
 // GetSettingsUnauthorizedResponseBody is the type of the "skillEfficacy"
 // service "getSettings" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -437,6 +448,265 @@ type UpsertSettingsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// QueryInsightsUnauthorizedResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the "unauthorized"
+// error.
+type QueryInsightsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryInsightsForbiddenResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the "forbidden"
+// error.
+type QueryInsightsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryInsightsBadRequestResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the "bad_request"
+// error.
+type QueryInsightsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryInsightsNotFoundResponseBody is the type of the "skillEfficacy" service
+// "queryInsights" endpoint HTTP response body for the "not_found" error.
+type QueryInsightsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryInsightsConflictResponseBody is the type of the "skillEfficacy" service
+// "queryInsights" endpoint HTTP response body for the "conflict" error.
+type QueryInsightsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryInsightsUnsupportedMediaResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the
+// "unsupported_media" error.
+type QueryInsightsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryInsightsInvalidResponseBody is the type of the "skillEfficacy" service
+// "queryInsights" endpoint HTTP response body for the "invalid" error.
+type QueryInsightsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryInsightsInvariantViolationResponseBody is the type of the
+// "skillEfficacy" service "queryInsights" endpoint HTTP response body for the
+// "invariant_violation" error.
+type QueryInsightsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryInsightsUnexpectedResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the "unexpected"
+// error.
+type QueryInsightsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// QueryInsightsGatewayErrorResponseBody is the type of the "skillEfficacy"
+// service "queryInsights" endpoint HTTP response body for the "gateway_error"
+// error.
+type QueryInsightsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SkillEfficacyInsightResponseBody is used to define fields on response body
+// types.
+type SkillEfficacyInsightResponseBody struct {
+	SkillID  string                             `form:"skill_id" json:"skill_id" xml:"skill_id"`
+	Metrics  *SkillInsightMetricsResponseBody   `form:"metrics" json:"metrics" xml:"metrics"`
+	Versions []*SkillVersionInsightResponseBody `form:"versions" json:"versions" xml:"versions"`
+}
+
+// SkillInsightMetricsResponseBody is used to define fields on response body
+// types.
+type SkillInsightMetricsResponseBody struct {
+	Activations           uint64   `form:"activations" json:"activations" xml:"activations"`
+	ActivatedSessions     uint64   `form:"activated_sessions" json:"activated_sessions" xml:"activated_sessions"`
+	SessionCostUsd        float64  `form:"session_cost_usd" json:"session_cost_usd" xml:"session_cost_usd"`
+	AverageSessionCostUsd *float64 `form:"average_session_cost_usd,omitempty" json:"average_session_cost_usd,omitempty" xml:"average_session_cost_usd,omitempty"`
+	// Absent when no sampled score exists.
+	Efficacy *SkillEfficacyMetricsResponseBody `form:"efficacy,omitempty" json:"efficacy,omitempty" xml:"efficacy,omitempty"`
+}
+
+// SkillEfficacyMetricsResponseBody is used to define fields on response body
+// types.
+type SkillEfficacyMetricsResponseBody struct {
+	ScoredSessions               uint64            `form:"scored_sessions" json:"scored_sessions" xml:"scored_sessions"`
+	AverageScore                 float64           `form:"average_score" json:"average_score" xml:"average_score"`
+	EstimatedTurnsSavedTotal     float64           `form:"estimated_turns_saved_total" json:"estimated_turns_saved_total" xml:"estimated_turns_saved_total"`
+	EstimatedTurnsSavedAverage   *float64          `form:"estimated_turns_saved_average,omitempty" json:"estimated_turns_saved_average,omitempty" xml:"estimated_turns_saved_average,omitempty"`
+	EstimatedTurnsSavedSamples   uint64            `form:"estimated_turns_saved_samples" json:"estimated_turns_saved_samples" xml:"estimated_turns_saved_samples"`
+	EstimatedMinutesSavedTotal   float64           `form:"estimated_minutes_saved_total" json:"estimated_minutes_saved_total" xml:"estimated_minutes_saved_total"`
+	EstimatedMinutesSavedAverage *float64          `form:"estimated_minutes_saved_average,omitempty" json:"estimated_minutes_saved_average,omitempty" xml:"estimated_minutes_saved_average,omitempty"`
+	EstimatedMinutesSavedSamples uint64            `form:"estimated_minutes_saved_samples" json:"estimated_minutes_saved_samples" xml:"estimated_minutes_saved_samples"`
+	RoiConfidenceCounts          map[string]uint64 `form:"roi_confidence_counts" json:"roi_confidence_counts" xml:"roi_confidence_counts"`
+	FlagCounts                   map[string]uint64 `form:"flag_counts" json:"flag_counts" xml:"flag_counts"`
+}
+
+// SkillVersionInsightResponseBody is used to define fields on response body
+// types.
+type SkillVersionInsightResponseBody struct {
+	SkillVersionID string                           `form:"skill_version_id" json:"skill_version_id" xml:"skill_version_id"`
+	Metrics        *SkillInsightMetricsResponseBody `form:"metrics" json:"metrics" xml:"metrics"`
+	Trend          []*SkillInsightPointResponseBody `form:"trend" json:"trend" xml:"trend"`
+}
+
+// SkillInsightPointResponseBody is used to define fields on response body
+// types.
+type SkillInsightPointResponseBody struct {
+	BucketStart           string   `form:"bucket_start" json:"bucket_start" xml:"bucket_start"`
+	Activations           uint64   `form:"activations" json:"activations" xml:"activations"`
+	ActivatedSessions     uint64   `form:"activated_sessions" json:"activated_sessions" xml:"activated_sessions"`
+	SessionCostUsd        float64  `form:"session_cost_usd" json:"session_cost_usd" xml:"session_cost_usd"`
+	ScoredSessions        uint64   `form:"scored_sessions" json:"scored_sessions" xml:"scored_sessions"`
+	AverageScore          *float64 `form:"average_score,omitempty" json:"average_score,omitempty" xml:"average_score,omitempty"`
+	EstimatedMinutesSaved float64  `form:"estimated_minutes_saved" json:"estimated_minutes_saved" xml:"estimated_minutes_saved"`
+}
+
+// SkillEfficacyScoredSessionResponseBody is used to define fields on response
+// body types.
+type SkillEfficacyScoredSessionResponseBody struct {
+	ID                    string   `form:"id" json:"id" xml:"id"`
+	SkillID               string   `form:"skill_id" json:"skill_id" xml:"skill_id"`
+	SkillVersionID        string   `form:"skill_version_id" json:"skill_version_id" xml:"skill_version_id"`
+	Surface               string   `form:"surface" json:"surface" xml:"surface"`
+	ActivatedAt           string   `form:"activated_at" json:"activated_at" xml:"activated_at"`
+	ScoredAt              string   `form:"scored_at" json:"scored_at" xml:"scored_at"`
+	Score                 float64  `form:"score" json:"score" xml:"score"`
+	Rationale             string   `form:"rationale" json:"rationale" xml:"rationale"`
+	EstimatedTurnsSaved   *float64 `form:"estimated_turns_saved,omitempty" json:"estimated_turns_saved,omitempty" xml:"estimated_turns_saved,omitempty"`
+	EstimatedMinutesSaved *float64 `form:"estimated_minutes_saved,omitempty" json:"estimated_minutes_saved,omitempty" xml:"estimated_minutes_saved,omitempty"`
+	RoiConfidence         *string  `form:"roi_confidence,omitempty" json:"roi_confidence,omitempty" xml:"roi_confidence,omitempty"`
+	Flags                 []string `form:"flags" json:"flags" xml:"flags"`
+	GramChatID            *string  `form:"gram_chat_id,omitempty" json:"gram_chat_id,omitempty" xml:"gram_chat_id,omitempty"`
+}
+
 // NewGetSettingsResponseBody builds the HTTP response body from the result of
 // the "getSettings" endpoint of the "skillEfficacy" service.
 func NewGetSettingsResponseBody(res *skillefficacy.SkillEfficacySettings) *GetSettingsResponseBody {
@@ -461,6 +731,42 @@ func NewUpsertSettingsResponseBody(res *skillefficacy.SkillEfficacySettings) *Up
 		OrgDailyCap:      res.OrgDailyCap,
 		NewVersionBurst:  res.NewVersionBurst,
 		IsDefault:        res.IsDefault,
+	}
+	return body
+}
+
+// NewQueryInsightsResponseBody builds the HTTP response body from the result
+// of the "queryInsights" endpoint of the "skillEfficacy" service.
+func NewQueryInsightsResponseBody(res *skillefficacy.SkillEfficacyInsightsResult) *QueryInsightsResponseBody {
+	body := &QueryInsightsResponseBody{
+		From:            res.From,
+		To:              res.To,
+		IntervalSeconds: res.IntervalSeconds,
+		ScoresAvailable: res.ScoresAvailable,
+	}
+	if res.Insights != nil {
+		body.Insights = make([]*SkillEfficacyInsightResponseBody, len(res.Insights))
+		for i, val := range res.Insights {
+			if val == nil {
+				body.Insights[i] = nil
+				continue
+			}
+			body.Insights[i] = marshalSkillefficacySkillEfficacyInsightToSkillEfficacyInsightResponseBody(val)
+		}
+	} else {
+		body.Insights = []*SkillEfficacyInsightResponseBody{}
+	}
+	if res.ScoredSessions != nil {
+		body.ScoredSessions = make([]*SkillEfficacyScoredSessionResponseBody, len(res.ScoredSessions))
+		for i, val := range res.ScoredSessions {
+			if val == nil {
+				body.ScoredSessions[i] = nil
+				continue
+			}
+			body.ScoredSessions[i] = marshalSkillefficacySkillEfficacyScoredSessionToSkillEfficacyScoredSessionResponseBody(val)
+		}
+	} else {
+		body.ScoredSessions = []*SkillEfficacyScoredSessionResponseBody{}
 	}
 	return body
 }
@@ -747,6 +1053,148 @@ func NewUpsertSettingsGatewayErrorResponseBody(res *goa.ServiceError) *UpsertSet
 	return body
 }
 
+// NewQueryInsightsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "queryInsights" endpoint of the "skillEfficacy" service.
+func NewQueryInsightsUnauthorizedResponseBody(res *goa.ServiceError) *QueryInsightsUnauthorizedResponseBody {
+	body := &QueryInsightsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryInsightsForbiddenResponseBody builds the HTTP response body from the
+// result of the "queryInsights" endpoint of the "skillEfficacy" service.
+func NewQueryInsightsForbiddenResponseBody(res *goa.ServiceError) *QueryInsightsForbiddenResponseBody {
+	body := &QueryInsightsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryInsightsBadRequestResponseBody builds the HTTP response body from
+// the result of the "queryInsights" endpoint of the "skillEfficacy" service.
+func NewQueryInsightsBadRequestResponseBody(res *goa.ServiceError) *QueryInsightsBadRequestResponseBody {
+	body := &QueryInsightsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryInsightsNotFoundResponseBody builds the HTTP response body from the
+// result of the "queryInsights" endpoint of the "skillEfficacy" service.
+func NewQueryInsightsNotFoundResponseBody(res *goa.ServiceError) *QueryInsightsNotFoundResponseBody {
+	body := &QueryInsightsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryInsightsConflictResponseBody builds the HTTP response body from the
+// result of the "queryInsights" endpoint of the "skillEfficacy" service.
+func NewQueryInsightsConflictResponseBody(res *goa.ServiceError) *QueryInsightsConflictResponseBody {
+	body := &QueryInsightsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryInsightsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "queryInsights" endpoint of the "skillEfficacy"
+// service.
+func NewQueryInsightsUnsupportedMediaResponseBody(res *goa.ServiceError) *QueryInsightsUnsupportedMediaResponseBody {
+	body := &QueryInsightsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryInsightsInvalidResponseBody builds the HTTP response body from the
+// result of the "queryInsights" endpoint of the "skillEfficacy" service.
+func NewQueryInsightsInvalidResponseBody(res *goa.ServiceError) *QueryInsightsInvalidResponseBody {
+	body := &QueryInsightsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryInsightsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "queryInsights" endpoint of the "skillEfficacy"
+// service.
+func NewQueryInsightsInvariantViolationResponseBody(res *goa.ServiceError) *QueryInsightsInvariantViolationResponseBody {
+	body := &QueryInsightsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryInsightsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "queryInsights" endpoint of the "skillEfficacy" service.
+func NewQueryInsightsUnexpectedResponseBody(res *goa.ServiceError) *QueryInsightsUnexpectedResponseBody {
+	body := &QueryInsightsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewQueryInsightsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "queryInsights" endpoint of the "skillEfficacy" service.
+func NewQueryInsightsGatewayErrorResponseBody(res *goa.ServiceError) *QueryInsightsGatewayErrorResponseBody {
+	body := &QueryInsightsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetSettingsPayload builds a skillEfficacy service getSettings endpoint
 // payload.
 func NewGetSettingsPayload(apikeyToken *string, sessionToken *string) *skillefficacy.GetSettingsPayload {
@@ -768,6 +1216,21 @@ func NewUpsertSettingsPayload(body *UpsertSettingsRequestBody, apikeyToken *stri
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewQueryInsightsPayload builds a skillEfficacy service queryInsights
+// endpoint payload.
+func NewQueryInsightsPayload(skillIds []string, from *string, to *string, includeVersions *bool, includeScoredSessions *bool, sessionToken *string, projectSlugInput *string) *skillefficacy.QueryInsightsPayload {
+	v := &skillefficacy.QueryInsightsPayload{}
+	v.SkillIds = skillIds
+	v.From = from
+	v.To = to
+	v.IncludeVersions = includeVersions
+	v.IncludeScoredSessions = includeScoredSessions
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

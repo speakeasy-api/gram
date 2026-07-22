@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	GetSettings    goa.Endpoint
 	UpsertSettings goa.Endpoint
+	QueryInsights  goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "skillEfficacy" service with endpoints.
@@ -27,6 +28,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		GetSettings:    NewGetSettingsEndpoint(s, a.APIKeyAuth),
 		UpsertSettings: NewUpsertSettingsEndpoint(s, a.APIKeyAuth),
+		QueryInsights:  NewQueryInsightsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -35,6 +37,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSettings = m(e.GetSettings)
 	e.UpsertSettings = m(e.UpsertSettings)
+	e.QueryInsights = m(e.QueryInsights)
 }
 
 // NewGetSettingsEndpoint returns an endpoint function that calls the method
@@ -104,5 +107,40 @@ func NewUpsertSettingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.UpsertSettings(ctx, p)
+	}
+}
+
+// NewQueryInsightsEndpoint returns an endpoint function that calls the method
+// "queryInsights" of service "skillEfficacy".
+func NewQueryInsightsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*QueryInsightsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.QueryInsights(ctx, p)
 	}
 }
