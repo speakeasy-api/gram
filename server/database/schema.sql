@@ -2102,8 +2102,8 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key
 ON users (email);
 
--- Connected-user resolution matches emails case-insensitively
--- (GetConnectedUsersByEmails), which users_email_key cannot serve.
+-- Serves case-insensitive email lookups (matching on lower(email), e.g. for
+-- connected-user resolution), which the raw-column users_email_key cannot.
 CREATE INDEX IF NOT EXISTS users_email_lower_idx
 ON users (lower(email));
 
