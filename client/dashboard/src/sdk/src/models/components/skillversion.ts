@@ -33,9 +33,17 @@ export type SkillVersion = {
    */
   createdByUserId: string;
   /**
+   * The source version this version was derived from.
+   */
+  derivedFromVersionId?: string | undefined;
+  /**
    * The optional description from this manifest version.
    */
   description?: string | undefined;
+  /**
+   * When this exact version was first activated.
+   */
+  firstSeenAt?: Date | undefined;
   /**
    * All top-level frontmatter fields parsed from this manifest version.
    */
@@ -45,6 +53,10 @@ export type SkillVersion = {
    */
   id: string;
   /**
+   * When this exact version was most recently activated.
+   */
+  lastSeenAt?: Date | undefined;
+  /**
    * Metadata parsed from this manifest version.
    */
   metadata: { [k: string]: any };
@@ -52,6 +64,10 @@ export type SkillVersion = {
    * The SHA-256 digest of the exact uploaded SKILL.md content.
    */
   rawSha256: string;
+  /**
+   * The number of activations attributed to this exact version.
+   */
+  seenCount: number;
   /**
    * The skill that owns this version.
    */
@@ -77,11 +93,19 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
         z.transform(v => new Date(v)),
       ),
       created_by_user_id: z.string(),
+      derived_from_version_id: z.optional(z.string()),
       description: z.optional(z.string()),
+      first_seen_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       frontmatter: z.record(z.string(), z.any()),
       id: z.string(),
+      last_seen_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       metadata: z.record(z.string(), z.any()),
       raw_sha256: z.string(),
+      seen_count: z.int(),
       skill_id: z.string(),
       spec_valid: z.boolean(),
       validation_errors: z.array(SkillValidationError$inboundSchema),
@@ -91,7 +115,11 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
         "canonical_sha256": "canonicalSha256",
         "created_at": "createdAt",
         "created_by_user_id": "createdByUserId",
+        "derived_from_version_id": "derivedFromVersionId",
+        "first_seen_at": "firstSeenAt",
+        "last_seen_at": "lastSeenAt",
         "raw_sha256": "rawSha256",
+        "seen_count": "seenCount",
         "skill_id": "skillId",
         "spec_valid": "specValid",
         "validation_errors": "validationErrors",

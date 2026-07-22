@@ -50,6 +50,12 @@ function describeSaveResult(addedCount: number, removedCount: number): string {
     : "Distributed to plugin";
 }
 
+function saveButtonLabel(isSaving: boolean, isDistributed: boolean): string {
+  if (isSaving) return "Saving";
+  if (isDistributed) return "Update";
+  return "Distribute";
+}
+
 /**
  * The distribution status banner at the top of the skill detail page:
  * summarizes which plugins carry this skill and lets writers stage and save
@@ -271,15 +277,14 @@ export function SkillPluginBanner({
                   disabled={!hasChanges || isSaving}
                   onClick={() => void handleSave()}
                 >
-                  {isSaving ? (
-                    <>
-                      <Spinner /> Saving
-                    </>
-                  ) : isDistributed ? (
-                    "Update"
-                  ) : (
-                    "Distribute"
+                  {isSaving && (
+                    <Button.LeftIcon>
+                      <Spinner />
+                    </Button.LeftIcon>
                   )}
+                  <Button.Text>
+                    {saveButtonLabel(isSaving, isDistributed)}
+                  </Button.Text>
                 </Button>
               </div>
             </RequireScope>

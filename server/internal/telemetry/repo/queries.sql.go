@@ -493,8 +493,10 @@ func decodeShadowMCPInventoryUserCursor(cursor string) (shadowMCPInventoryUserCu
 }
 
 // UpsertShadowMCPInventoryURLs merges the given rows with any existing
-// inventory rows and writes them using a server-side async insert
-// (fire-and-forget), same as InsertTelemetryLogs.
+// inventory rows (one batched lookup per project) and writes them with a
+// synchronous insert: the read-merge-write depends on previously written rows
+// being visible, so the insert must not be deferred by ClickHouse async
+// insert buffering.
 func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []UpsertShadowMCPInventoryURLParams) error {
 	if len(args) == 0 {
 		return nil
@@ -562,26 +564,37 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 		return nil
 	}
 
+	// Fetch existing rows with one batched lookup per project instead of one
+	// point-SELECT per URL — the sequential per-URL reads dominated the
+	// upsert's latency for inventories with many servers (DNO-606).
+	urlsByProject := make(map[string][]string)
 	for _, upsert := range upserts {
-		existing, err := q.getShadowMCPInventoryURL(ctx, upsert.GramProjectID, upsert.CanonicalServerURL)
+		urlsByProject[upsert.GramProjectID] = append(urlsByProject[upsert.GramProjectID], upsert.CanonicalServerURL)
+	}
+	for projectID, urls := range urlsByProject {
+		existingByURL, err := q.listShadowMCPInventoryURLRowsByURLs(ctx, projectID, urls)
 		if err != nil {
 			return err
 		}
-		if existing == nil {
-			continue
-		}
-		upsert.ServerNameOverride = existing.ServerNameOverride
-		if upsert.URLHost == "" {
-			upsert.URLHost = existing.URLHost
-		}
-		if upsert.ServerName == "" {
-			upsert.ServerName = existing.ServerName
-		}
-		if existing.FirstSeen.Before(upsert.FirstSeen) {
-			upsert.FirstSeen = existing.FirstSeen
-		}
-		if existing.LastSeen.After(upsert.LastSeen) {
-			upsert.LastSeen = existing.LastSeen
+		for _, url := range urls {
+			existing, ok := existingByURL[url]
+			if !ok {
+				continue
+			}
+			upsert := upserts[projectID+"\x00"+url]
+			upsert.ServerNameOverride = existing.ServerNameOverride
+			if upsert.URLHost == "" {
+				upsert.URLHost = existing.URLHost
+			}
+			if upsert.ServerName == "" {
+				upsert.ServerName = existing.ServerName
+			}
+			if existing.FirstSeen.Before(upsert.FirstSeen) {
+				upsert.FirstSeen = existing.FirstSeen
+			}
+			if existing.LastSeen.After(upsert.LastSeen) {
+				upsert.LastSeen = existing.LastSeen
+			}
 		}
 	}
 
@@ -709,6 +722,54 @@ func (q *Queries) ListShadowMCPInventoryURLsBySlugHash(ctx context.Context, arg 
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating shadow mcp inventory slug hash lookup rows: %w", err)
+	}
+
+	return result, nil
+}
+
+// listShadowMCPInventoryURLRowsByURLs fetches the existing inventory rows for
+// a set of canonical URLs within one project in a single query, keyed by
+// canonical URL. Batch counterpart of getShadowMCPInventoryURL for the upsert
+// merge path.
+func (q *Queries) listShadowMCPInventoryURLRowsByURLs(ctx context.Context, projectID string, canonicalURLs []string) (map[string]*ShadowMCPInventoryURLRow, error) {
+	if len(canonicalURLs) == 0 {
+		return map[string]*ShadowMCPInventoryURLRow{}, nil
+	}
+
+	sb := sq.Select(
+		"canonical_server_url",
+		"max(url_host) AS url_host",
+		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"argMax(server_name_override, updated_at) AS server_name_override",
+		"min(first_seen) AS first_seen",
+		"max(last_seen) AS last_seen",
+	).
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", projectID).
+		Where(squirrel.Eq{"canonical_server_url": canonicalURLs}).
+		GroupBy("gram_project_id", "canonical_server_url")
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory url batch lookup query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory url batch lookup: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string]*ShadowMCPInventoryURLRow, len(canonicalURLs))
+	for rows.Next() {
+		var row ShadowMCPInventoryURLRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory url batch lookup row: %w", err)
+		}
+		result[row.CanonicalServerURL] = &row
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory url batch lookup rows: %w", err)
 	}
 
 	return result, nil
@@ -3065,6 +3126,27 @@ type ToolUsageFilterOptions struct {
 	Users         []ToolUsageUserFilterOptionRow
 }
 
+// GetMcpServerActivityParams defines the parameters for per-MCP-server tool-call
+// activity used by the Distribute MCP listing indicators.
+type GetMcpServerActivityParams struct {
+	GramProjectID     string
+	TimeStart         int64 // Start of the overall lookback window (unix nanos)
+	TimeEnd           int64 // End of the overall lookback window (unix nanos)
+	RecentThresholdNs int64 // Tool calls at or after this time count as recent
+	HostedMCPMatchers []HostedMCPMatcher
+	MCPServerMatchers []MCPServerMatcher
+}
+
+// McpServerActivityRow is one aggregated per-server activity row.
+type McpServerActivityRow struct {
+	TargetType           string `ch:"target_type"`
+	TargetID             string `ch:"target_id"`
+	TargetLabel          string `ch:"target_label"`
+	TotalToolCalls       uint64 `ch:"total_tool_calls"`
+	RecentToolCalls      uint64 `ch:"recent_tool_calls"`
+	LastToolCallUnixNano int64  `ch:"last_tool_call_unix_nano"`
+}
+
 type ToolUsageHostedServerFilterOptionRow struct {
 	ToolsetSlug string `ch:"toolset_slug"`
 	EventCount  uint64 `ch:"event_count"`
@@ -3471,6 +3553,83 @@ func (q *Queries) getToolUsageTargets(ctx context.Context, arg GetToolUsageSumma
 		var row ToolUsageTargetSummaryRow
 		if err = rows.ScanStruct(&row); err != nil {
 			return nil, fmt.Errorf("scan tool usage target row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetMcpServerActivity returns one row per MCP server (hosted or tunneled) that
+// has received at least one tool call inside the lookback window. It reuses the
+// same target-attribution pipeline as the tool usage summary (normalized_events)
+// so target_id matches the toolset slug (hosted) or MCP server slug (tunneled)
+// the caller already holds. Unlike the summary, it is not top-N limited: the
+// listing needs every server so absence from the result reliably means "never
+// received a tool call" within the retention window.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActivityParams) ([]McpServerActivityRow, error) {
+	// Only MCP server targets matter for the listing. Restricting target_type
+	// here also lets normalized_events prune local_tool/skill/shadow rows early.
+	filterArg := GetToolUsageSummaryParams{
+		GramProjectID:      arg.GramProjectID,
+		TimeStart:          arg.TimeStart,
+		TimeEnd:            arg.TimeEnd,
+		BucketSizeNs:       0,
+		HostedMCPMatchers:  arg.HostedMCPMatchers,
+		MCPServerMatchers:  arg.MCPServerMatchers,
+		TargetTypes:        []string{ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP},
+		HostedToolsetSlugs: nil,
+		ShadowServerNames:  nil,
+		UserFilters:        nil,
+		HookSources:        nil,
+		AccountType:        "",
+		TargetLimit:        0,
+		UserLimit:          0,
+		UsersByTargetLimit: 0,
+		TargetToolRowLimit: 0,
+		TimeSeriesRowLimit: 0,
+		UserSeriesRowLimit: 0,
+	}
+
+	// RecentThresholdNs is a server-computed epoch value, so inlining it as a
+	// literal is safe and keeps it out of the CTE's positional-argument stream.
+	recentExpr := fmt.Sprintf("countIf(event_time_ns >= %d) AS recent_tool_calls", arg.RecentThresholdNs)
+
+	sb, err := toolUsageFilteredSelect(filterArg,
+		"target_type",
+		"target_id",
+		"target_label",
+		"count() AS total_tool_calls",
+		recentExpr,
+		"max(event_time_ns) AS last_tool_call_unix_nano",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building mcp server activity source: %w", err)
+	}
+	sb = sb.
+		GroupBy("target_type", "target_id", "target_label").
+		OrderBy("total_tool_calls DESC", "target_label ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building mcp server activity query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []McpServerActivityRow{}
+	for rows.Next() {
+		var row McpServerActivityRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan mcp server activity row: %w", err)
 		}
 		result = append(result, row)
 	}

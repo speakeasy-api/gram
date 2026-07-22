@@ -72,6 +72,16 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 		ctx := r.Context()
 		contentType := r.Header.Get("Content-Type")
 		contentEncoding := r.Header.Get("Content-Encoding")
+		skillUpload := r.URL.Path == "/rpc/hooks.uploadSkillContent"
+		logBody := func(body []byte) []byte {
+			if skillUpload {
+				return nil
+			}
+			return body
+		}
+		if skillUpload && r.Body != nil {
+			r.Body = http.MaxBytesReader(nil, r.Body, maxSkillUploadRequestBodyBytes)
+		}
 
 		raw, err := io.ReadAll(r.Body)
 		_ = r.Body.Close()
@@ -89,16 +99,27 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 			if gerr != nil {
 				wrapped := fmt.Errorf("open gzip reader for hooks request: %w", gerr)
 				return decoderFunc(func(_ any) error {
-					logDecodeFailure(ctx, logger, wrapped, raw, contentType, contentEncoding)
+					logDecodeFailure(ctx, logger, wrapped, logBody(raw), contentType, contentEncoding)
 					return wrapped
 				})
 			}
-			decompressed, gerr := io.ReadAll(gz)
+			var reader io.Reader = gz
+			if skillUpload {
+				reader = io.LimitReader(gz, maxSkillUploadRequestBodyBytes+1)
+			}
+			decompressed, gerr := io.ReadAll(reader)
 			_ = gz.Close()
 			if gerr != nil {
 				wrapped := fmt.Errorf("decompress gzip hooks request body: %w", gerr)
 				return decoderFunc(func(_ any) error {
-					logDecodeFailure(ctx, logger, wrapped, raw, contentType, contentEncoding)
+					logDecodeFailure(ctx, logger, wrapped, logBody(raw), contentType, contentEncoding)
+					return wrapped
+				})
+			}
+			if skillUpload && len(decompressed) > maxSkillUploadRequestBodyBytes {
+				wrapped := fmt.Errorf("decompressed skill content upload exceeds %d bytes", maxSkillUploadRequestBodyBytes)
+				return decoderFunc(func(_ any) error {
+					logDecodeFailure(ctx, logger, wrapped, nil, contentType, contentEncoding)
 					return wrapped
 				})
 			}
@@ -119,7 +140,7 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 
 		return decoderFunc(func(v any) error {
 			if derr := inner.Decode(v); derr != nil {
-				logDecodeFailure(ctx, logger, derr, body, contentType, contentEncoding)
+				logDecodeFailure(ctx, logger, derr, logBody(body), contentType, contentEncoding)
 				return fmt.Errorf("decode hooks request body: %w", derr)
 			}
 			return nil
@@ -254,11 +275,12 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	}
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
+	ctx, riskScanned := withRiskScanTracker(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
 	if hasPluginAuth {
@@ -747,6 +769,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 			ExternalAccountUUID: "",
 			ExternalAccountID:   "",
 			DeviceID:            "",
+			Hostname:            "",
 			AccountType:         "",
 			BillingMode:         "",
 			UserAccountID:       "",
@@ -766,6 +789,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
+		Hostname:            "",
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",

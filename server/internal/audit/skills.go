@@ -15,6 +15,7 @@ import (
 const (
 	ActionSkillCreate             Action = "skill:create"
 	ActionSkillAddVersion         Action = "skill:add_version"
+	ActionSkillUpdate             Action = "skill:update"
 	ActionSkillArchive            Action = "skill:archive"
 	ActionSkillDistribute         Action = "skill:distribute"
 	ActionSkillUpdateDistribution Action = "skill:update_distribution"
@@ -22,7 +23,8 @@ const (
 )
 
 // SkillSnapshot captures content-free parent state for skill audit events. It
-// deliberately excludes Summary because that value comes from manifest content.
+// deliberately excludes Summary because registry summaries may contain
+// manifest-derived content.
 type SkillSnapshot struct {
 	ID              string
 	ProjectID       string
@@ -43,6 +45,7 @@ type SkillDistributionSnapshot struct {
 	ProjectID         string
 	SkillID           string
 	PluginID          *string
+	AssistantID       *string
 	PinnedVersionID   *string
 	ResolvedVersionID string
 	Channel           string
@@ -137,6 +140,52 @@ func (l *Logger) LogSkillAddVersion(ctx context.Context, dbtx repo.DBTX, event L
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.SkillV1})
+}
+
+type LogSkillUpdateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SkillURN            urn.Skill
+	SkillName           string
+	SkillDisplayName    string
+	SkillSnapshotBefore *SkillSnapshot
+	SkillSnapshotAfter  *SkillSnapshot
+}
+
+func (l *Logger) LogSkillUpdate(ctx context.Context, dbtx repo.DBTX, event LogSkillUpdateEvent) error {
+	action := ActionSkillUpdate
+	beforeSnapshot, err := marshalAuditPayload(event.SkillSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.SkillSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+		ActorID:            event.Actor.ID,
+		ActorType:          string(event.Actor.Type),
+		ActorDisplayName:   conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:          conv.PtrToPGTextEmpty(event.ActorSlug),
+		Action:             string(action),
+		SubjectID:          event.SkillURN.ID.String(),
+		SubjectType:        string(subjectTypeSkill),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.SkillDisplayName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.SkillName),
+		BeforeSnapshot:     beforeSnapshot,
+		AfterSnapshot:      afterSnapshot,
+		Metadata:           nil,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.SkillV1})

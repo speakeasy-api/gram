@@ -7,16 +7,31 @@ import { Type } from "@/components/ui/type";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { HumanizeDateTime } from "@/lib/dates";
 import {
+  SKILL_ADOPTION_SECTION_ID,
+  SKILL_TIMELINE_SECTION_ID,
+} from "@/pages/skills/SkillActivitySections";
+import {
   SKILL_DISTRIBUTIONS_SECTION_ID,
   SKILL_FRONTMATTER_SECTION_ID,
   SKILL_MANIFEST_SECTION_ID,
   SKILL_VERSIONS_SECTION_ID,
 } from "@/pages/skills/SkillDetail";
+import {
+  SkillClassificationBadge,
+  SkillSourceBadge,
+} from "@/pages/skills/skill-badges";
 import { useRoutes } from "@/routes";
 import { useSkill } from "@gram/client/react-query/skill.js";
 import { useSkillDistributionsInfinite } from "@gram/client/react-query/skillDistributions.js";
 import { Badge } from "@speakeasy-api/moonshine";
-import { Braces, FileText, History, Puzzle } from "lucide-react";
+import {
+  Activity,
+  Braces,
+  ChartNoAxesColumn,
+  FileText,
+  History,
+  Puzzle,
+} from "lucide-react";
 import * as React from "react";
 import { useLocation, useParams } from "react-router";
 
@@ -66,12 +81,27 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
   });
 
   const items: McpSidebarNavItem[] = [
-    sectionItem(SKILL_MANIFEST_SECTION_ID, "SKILL.md", FileText, true),
+    sectionItem(
+      SKILL_ADOPTION_SECTION_ID,
+      "Adoption and drift",
+      ChartNoAxesColumn,
+      true,
+    ),
+    sectionItem(SKILL_TIMELINE_SECTION_ID, "Activation timeline", Activity),
+    sectionItem(SKILL_MANIFEST_SECTION_ID, "SKILL.md", FileText),
     ...(hasFrontmatter
       ? [sectionItem(SKILL_FRONTMATTER_SECTION_ID, "Frontmatter", Braces)]
       : []),
-    sectionItem(SKILL_DISTRIBUTIONS_SECTION_ID, "Plugin distributions", Puzzle),
-    sectionItem(SKILL_VERSIONS_SECTION_ID, "Version history", History),
+    ...(latestVersion
+      ? [
+          sectionItem(
+            SKILL_DISTRIBUTIONS_SECTION_ID,
+            "Plugin distributions",
+            Puzzle,
+          ),
+          sectionItem(SKILL_VERSIONS_SECTION_ID, "Version history", History),
+        ]
+      : []),
   ];
 
   const cardContent = skill && (
@@ -84,17 +114,11 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        <Badge variant="neutral">{skill.classification}</Badge>
+        <SkillSourceBadge value={skill.sourceKind} />
+        <SkillClassificationBadge value={skill.classification} />
         {latestVersion && !latestVersion.specValid && (
           <Badge variant="destructive">Needs review</Badge>
         )}
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Source</McpSidebarInfoLabel>
-        <Type variant="small" muted className="font-mono text-xs">
-          {skill.sourceKind}
-        </Type>
       </div>
 
       <div className="flex flex-col gap-1">
@@ -113,6 +137,19 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
         <Type variant="small" muted className="text-xs">
           {skill.versionCount} · updated{" "}
           <HumanizeDateTime date={skill.updatedAt} />
+        </Type>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <McpSidebarInfoLabel>Activations</McpSidebarInfoLabel>
+        <Type variant="small" muted className="text-xs">
+          {skill.seenCount}
+          {skill.lastSeenAt && (
+            <>
+              {" "}
+              · last <HumanizeDateTime date={skill.lastSeenAt} />
+            </>
+          )}
         </Type>
       </div>
     </>

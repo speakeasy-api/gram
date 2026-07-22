@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type DistributeSkillRequestBody = {
   /**
+   * The assistant that carries the skill.
+   */
+  assistantId?: string | undefined;
+  /**
    * The skill ID.
    */
   id: string;
@@ -17,14 +21,15 @@ export type DistributeSkillRequestBody = {
   /**
    * The plugin that carries the skill.
    */
-  pluginId: string;
+  pluginId?: string | undefined;
 };
 
 /** @internal */
 export type DistributeSkillRequestBody$Outbound = {
+  assistant_id?: string | undefined;
   id: string;
   pinned_version_id?: string | undefined;
-  plugin_id: string;
+  plugin_id?: string | undefined;
 };
 
 /** @internal */
@@ -33,12 +38,14 @@ export const DistributeSkillRequestBody$outboundSchema: z.ZodMiniType<
   DistributeSkillRequestBody
 > = z.pipe(
   z.object({
+    assistantId: z.optional(z.string()),
     id: z.string(),
     pinnedVersionId: z.optional(z.string()),
-    pluginId: z.string(),
+    pluginId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      assistantId: "assistant_id",
       pinnedVersionId: "pinned_version_id",
       pluginId: "plugin_id",
     });

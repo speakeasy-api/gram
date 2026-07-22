@@ -21,17 +21,25 @@ export type Skill = {
    */
   createdAt: Date;
   /**
-   * The display name from the latest recorded manifest.
+   * The user-facing registry name.
    */
   displayName: string;
+  /**
+   * When this skill was first activated.
+   */
+  firstSeenAt?: Date | undefined;
   /**
    * The skill ID.
    */
   id: string;
   /**
+   * When this skill was most recently activated.
+   */
+  lastSeenAt?: Date | undefined;
+  /**
    * The derived latest version ID, selected from immutable version creation order.
    */
-  latestVersionId: string;
+  latestVersionId?: string | undefined;
   /**
    * The normalized project-unique skill name.
    */
@@ -41,11 +49,15 @@ export type Skill = {
    */
   projectId: string;
   /**
+   * The number of reconciled activations observed for this skill.
+   */
+  seenCount: number;
+  /**
    * How the skill entered the registry.
    */
   sourceKind: string;
   /**
-   * The optional summary from the latest recorded manifest.
+   * The optional registry summary.
    */
   summary?: string | undefined;
   /**
@@ -67,10 +79,17 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
       z.transform(v => new Date(v)),
     ),
     display_name: z.string(),
+    first_seen_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     id: z.string(),
-    latest_version_id: z.string(),
+    last_seen_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    latest_version_id: z.optional(z.string()),
     name: z.string(),
     project_id: z.string(),
+    seen_count: z.int(),
     source_kind: z.string(),
     summary: z.optional(z.string()),
     updated_at: z.pipe(
@@ -83,8 +102,11 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
     return remap$(v, {
       "created_at": "createdAt",
       "display_name": "displayName",
+      "first_seen_at": "firstSeenAt",
+      "last_seen_at": "lastSeenAt",
       "latest_version_id": "latestVersionId",
       "project_id": "projectId",
+      "seen_count": "seenCount",
       "source_kind": "sourceKind",
       "updated_at": "updatedAt",
       "version_count": "versionCount",

@@ -701,7 +701,7 @@ function AgentSessionsPageContent({
             <Page.Toolbar.Search
               value={searchQuery}
               onChange={setSearchQuery}
-              placeholder="Search by chat ID, user ID, or title..."
+              placeholder="Search by chat ID, user ID, user name, or title..."
               debounceMs={500}
             />
             <Page.Toolbar.Filters

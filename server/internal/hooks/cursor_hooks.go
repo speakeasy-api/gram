@@ -35,11 +35,12 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	}
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
+	ctx, riskScanned := withRiskScanTracker(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
 	logger := s.logger.With(
@@ -315,6 +316,7 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
+		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",

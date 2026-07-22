@@ -102,6 +102,11 @@ func GetToolUsageFilterOptionsTelemetryPath() string {
 	return "/rpc/telemetry.getToolUsageFilterOptions"
 }
 
+// GetMcpServerActivityTelemetryPath returns the URL path to the telemetry service getMcpServerActivity HTTP endpoint.
+func GetMcpServerActivityTelemetryPath() string {
+	return "/rpc/telemetry.getMcpServerActivity"
+}
+
 // ListHooksTracesTelemetryPath returns the URL path to the telemetry service listHooksTraces HTTP endpoint.
 func ListHooksTracesTelemetryPath() string {
 	return "/rpc/telemetry.listHooksTraces"

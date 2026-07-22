@@ -1,3 +1,4 @@
+import { formatCost } from "@/lib/money";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -24,14 +25,7 @@ import {
   ESTIMATED_COST_TOOLTIP,
   isMeteredBilling,
 } from "@/components/estimated-cost-utils";
-import { isAttributionDim } from "./taxonomy";
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
+import { displayName, isAttributionDim } from "./taxonomy";
 
 // Average cost per chat session for a row; 0 when there are no sessions.
 function costPerSession(row: QueryRow): number {
@@ -83,15 +77,23 @@ function LegendTooltip({
   );
 }
 
-// A plain info icon + tooltip for explaining a column header.
+// A plain info icon + tooltip for explaining a column header or a special row.
+// The trigger is a span (not the Radix default button) so it can also render
+// inside the row drill buttons without nesting interactive elements.
 function InfoTooltip({ text }: { text: string }): JSX.Element {
   return (
     <Tooltip>
-      <TooltipTrigger
-        aria-label={text}
-        className="text-muted-foreground inline-flex cursor-help"
-      >
-        <Info className="size-3.5" />
+      <TooltipTrigger asChild>
+        {/* stopPropagation keeps a click on the icon from activating the
+            surrounding row drill button. */}
+        <span
+          tabIndex={0}
+          aria-label={text}
+          onClick={(event) => event.stopPropagation()}
+          className="text-muted-foreground inline-flex shrink-0 cursor-help"
+        >
+          <Info className="size-3.5" />
+        </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-56">{text}</TooltipContent>
     </Tooltip>
@@ -102,9 +104,12 @@ const GREEN = "#10b981";
 const RED = "#f43f5e";
 const GREY = "#94a3b8";
 
-function displayValue(groupValue: string): string {
-  return groupValue === "" ? "(unset)" : groupValue;
-}
+// Why the Team-wide API Usage row exists, surfaced as an info tooltip on the
+// user breakdown's empty-identity bucket.
+const TEAM_WIDE_USAGE_TOOLTIP =
+  "Sessions authenticated with a shared company credential (an API key or " +
+  "gateway) carry no user identity, so their usage can't be attributed to an " +
+  "individual and is grouped here.";
 
 // "" is the "(unset)" bucket — a real slice (everyone missing this attribute),
 // so it stays drillable. Only "Other" — the synthetic top-N overflow rollup of
@@ -159,10 +164,11 @@ function sortValue(
   row: QueryRow,
   key: SortKey,
   seriesByGroup: Map<string, number[]>,
+  groupBy: Dimension,
 ): number | string {
   switch (key) {
     case "name":
-      return displayValue(row.groupValue).toLowerCase();
+      return displayName(groupBy, row.groupValue).toLowerCase();
     case "cost":
     // Share is cost ÷ a constant total, so it sorts identically to cost.
     case "share":
@@ -221,6 +227,9 @@ export type CostTableProps = {
   // The view's resolved billing mode; "metered" shows real cost rather than the
   // API-rate estimate on the cost headers.
   billingMode?: string;
+  // Zero-row copy override — e.g. an active search should read "no matches",
+  // not "no data".
+  emptyMessage?: string;
 };
 
 export function CostTable({
@@ -232,6 +241,7 @@ export function CostTable({
   seriesByGroup,
   isLoading,
   billingMode,
+  emptyMessage,
 }: CostTableProps): JSX.Element {
   const [sort, setSort] = useState<Sort>({ key: "cost", dir: "desc" });
   const [page, setPage] = useState(0);
@@ -255,8 +265,8 @@ export function CostTable({
     const main = rows.filter((r) => r.groupValue !== "Other");
     const other = rows.filter((r) => r.groupValue === "Other");
     main.sort((a, b) => {
-      const av = sortValue(a, sort.key, seriesByGroup);
-      const bv = sortValue(b, sort.key, seriesByGroup);
+      const av = sortValue(a, sort.key, seriesByGroup, groupBy);
+      const bv = sortValue(b, sort.key, seriesByGroup, groupBy);
       const cmp =
         typeof av === "string"
           ? av.localeCompare(bv as string)
@@ -264,7 +274,7 @@ export function CostTable({
       return sort.dir === "asc" ? cmp : -cmp;
     });
     return [...main, ...other];
-  }, [rows, sort, seriesByGroup]);
+  }, [rows, sort, seriesByGroup, groupBy]);
 
   if (isLoading) return <SkeletonTable />;
 
@@ -404,7 +414,7 @@ export function CostTable({
           style={{ gridColumn: "1 / -1" }}
         >
           <Type className="text-muted-foreground">
-            No cost data for this slice.
+            {emptyMessage ?? "No cost data for this slice."}
           </Type>
         </div>
       ) : (
@@ -444,8 +454,11 @@ export function CostTable({
                   />
                 )}
                 <span className="truncate font-medium">
-                  {displayValue(row.groupValue)}
+                  {displayName(groupBy, row.groupValue)}
                 </span>
+                {groupBy === Dimension.Email && row.groupValue === "" && (
+                  <InfoTooltip text={TEAM_WIDE_USAGE_TOOLTIP} />
+                )}
                 {drillable && (
                   <ChevronRight className="text-muted-foreground size-4 shrink-0" />
                 )}

@@ -1,3 +1,4 @@
+import { formatCost } from "@/lib/money";
 import { telemetryListAttributeKeys } from "@gram/client/funcs/telemetryListAttributeKeys";
 import { telemetryListSessions } from "@gram/client/funcs/telemetryListSessions";
 import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
@@ -11,8 +12,12 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useChatDeleteMutation } from "@gram/client/react-query/chatDelete.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { resolveScopeBillingMode } from "@/components/estimated-cost-utils";
@@ -29,6 +34,7 @@ import {
 } from "@/lib/insights-suggestions";
 import { useRoutes } from "@/routes";
 import { ChatDetailSheet } from "../chatLogs/ChatDetailPanel";
+import { CostBreakdownChart } from "./CostBreakdownChart";
 import { type CardSpec, CostWidgets } from "./CostWidgets";
 import { EntityProfile } from "./EntityProfile";
 import { SessionTable, type SessionColumnId } from "./SessionTable";
@@ -49,6 +55,7 @@ import {
   defaultGroupBy,
   displayName,
   encodeCrumb,
+  firstSplittableDimension,
   isAttributionDim,
   isDataset,
   isDimension,
@@ -61,6 +68,15 @@ import {
   SESSIONS_AXIS,
   showsTopSessionsWidget,
 } from "./taxonomy";
+
+// Server-side cap on the per-session list (ranked by cost). SessionTable's
+// truncation footer and the search zero-match copy both key off it.
+const SESSION_LIMIT = 100;
+
+// Server-side cap on breakdown groups per query. Beyond it the server appends
+// one synthetic rollup row — detected by row count below so the chart can fold
+// it into its own remainder bucket instead of charting it as a real group.
+const BREAKDOWN_TOP_N = 100;
 
 const EMPTY_MEASURES: Measures = {
   cost: 0,
@@ -99,13 +115,6 @@ function entityLevel(entity: Crumb | null): CostEntityLevel {
   return "group";
 }
 
-function formatDollars(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
 // Compact human date range for the widget titles, e.g. "June 15–19" within a
 // month or "Jun 28 – Jul 4" across months.
 function formatDateRange(from: Date, to: Date): string {
@@ -139,6 +148,10 @@ export function CostsExplorer(): JSX.Element {
   // Which session's detail overlay is open (ephemeral UI, not drill state — so
   // it lives in component state rather than the URL).
   const [openChatId, setOpenChatId] = useState<string | null>(null);
+  // Free-text filter over the visible table rows (ephemeral view state, like
+  // openChatId). Client-side only: the table already holds the server-ranked
+  // top-N slice, so search narrows what's shown without touching the queries.
+  const [breakdownSearch, setBreakdownSearch] = useState("");
 
   // Drill state is the URL. The filter `path` is encoded as pathname segments
   // (so the breadcrumb tracks it and the view is shareable/refresh-safe); the
@@ -272,9 +285,20 @@ export function CostsExplorer(): JSX.Element {
   const byParamParent = isDimension(byParam)
     ? datasetPivotParent(dataset, byParam)
     : null;
-  const groupBy =
+  // A `?by=` naming a dimension the drill path already pins (e.g. a stale link
+  // ending `division~X/department~Y?by=department_name`) would render a
+  // degenerate one-row "breakdown" of the entity by itself — with a drill
+  // chevron that no-ops, since drillIntoDim refuses to re-add a pinned dim.
+  // Treat it like any other invalid axis and fall back to the default.
+  //
+  // This is only the CANDIDATE axis: it validates the URL against the dataset
+  // and drill path, but not against the slice's data. The final `groupBy`
+  // below re-resolves it once the detail query reports the slice's distinct
+  // values, skipping axes that cannot split it (see there).
+  const candidateGroupBy =
     isDimension(byParam) &&
     datasetDimSet.has(byParam) &&
+    !path.some((c) => c.dim === byParam) &&
     (byParamParent === null || path.some((c) => c.dim === byParamParent))
       ? byParam
       : datasetDefaultGroupBy(dataset, path, availableDims);
@@ -283,26 +307,27 @@ export function CostsExplorer(): JSX.Element {
   // (the endpoints are org-scoped, but project_id is an allowlisted dimension),
   // then narrowed further by the drill path. This keeps the dashboard to the
   // project in the URL and guarantees session detail (project-scoped) loads.
-  const filters: QueryFilter[] = useMemo(() => {
+  //
+  // These are the ENTITY's filters — everything that identifies the node in
+  // view, independent of how it is being broken down. The detail query feeds
+  // off them, so the slice's dimension_values (and with them the final
+  // breakdown axis) resolve without depending on the axis itself.
+  const entityFilters: QueryFilter[] = useMemo(() => {
     const drill = path.map((c) => ({ dimension: c.dim, values: [c.value] }));
-    // Skill is its own drill tree (Subagent → Skill). When Skill is in view —
-    // grouped, or already drilled into — without an ancestor Subagent, this is
-    // the "skills run outside a subagent" branch: exclude rows that also carry a
-    // subagent (agent_name = '') so agent+skill spend surfaces only under
-    // Subagent → Skill, never leaking into the root Skill breakdown.
-    const skillInContext =
-      groupBy === Dimension.SkillName ||
-      path.some((c) => c.dim === Dimension.SkillName);
+    // Skill is its own drill tree (Subagent → Skill). A Skill pinned without an
+    // ancestor Subagent identifies the "skills run outside a subagent" branch,
+    // so the agent_name='' restriction is part of the entity here (the axis-
+    // driven case lives in `filters` below).
     const hasAgentCrumb = path.some((c) => c.dim === Dimension.AgentName);
     const synthetic: QueryFilter[] =
-      skillInContext && !hasAgentCrumb
+      path.some((c) => c.dim === Dimension.SkillName) && !hasAgentCrumb
         ? [{ dimension: Dimension.AgentName, values: [""] }]
         : [];
     const base: QueryFilter[] = project.id
       ? [{ dimension: Dimension.ProjectId, values: [project.id] }]
       : [];
     return [...base, ...drill, ...synthetic];
-  }, [path, project.id, groupBy]);
+  }, [path, project.id]);
 
   // Drop session columns whose dimension the drill path already pins to a single
   // value — that column would just repeat the same value down every row. Mapped
@@ -322,6 +347,101 @@ export function CostsExplorer(): JSX.Element {
   // never run org-wide (without the project_id filter) during the first paint.
   const projectReady = Boolean(project.id);
 
+  // A no-group_by query over the entity's filters returns a single aggregate
+  // row for the whole slice. Two things come off it:
+  //   • its dimension_values are the current entity's distinct division/
+  //     department/job_title/roles/etc — "(unset)" buckets included — which
+  //     drive the axis resolution and pivot pruning below, and
+  //   • its measures are the TRUE slice totals — critically the distinct session
+  //     count, which cannot be recovered by summing the per-group breakdown rows
+  //     (see `stats`). Runs at every level so the root headline is correct too.
+  const { data: detailData, status: detailStatus } = useQuery({
+    queryKey: [
+      "costs-explorer-detail",
+      from.toISOString(),
+      to.toISOString(),
+      entityFilters,
+    ],
+    enabled: projectReady,
+    throwOnError: false,
+    queryFn: () =>
+      unwrapAsync(
+        telemetryQuery(client, {
+          queryPayload: {
+            from,
+            to,
+            topN: 1,
+            filters: entityFilters.length ? entityFilters : undefined,
+          },
+        }),
+      ),
+  });
+  const detailRow = detailData?.table?.[0];
+  // Attribute counts + pivot pruning only apply once drilled into an entity; at
+  // the root, keep this undefined so those consumers still fail open (show every
+  // pivot). The row's measures, by contrast, are used at every level.
+  const attributes = path.length > 0 ? detailRow?.dimensionValues : undefined;
+
+  // Distinct groups a breakdown by `dim` would produce within the current
+  // slice ("(unset)" included — the server surfaces the '' bucket for every
+  // groupable dim); undefined while the slice is unknown (root, or detail
+  // still loading) so callers fail open.
+  const sliceValueCount = (dim: Dimension): number | undefined =>
+    attributes ? (attributes[dim]?.length ?? 0) : undefined;
+  // The same count over named values only — for consumers that hide the
+  // "(unset)" bucket (the mix cards), where an axis splittable only via
+  // "(unset)" would still make a pointless one-row card.
+  const sliceNamedValueCount = (dim: Dimension): number | undefined =>
+    attributes
+      ? (attributes[dim]?.filter((v) => v !== "").length ?? 0)
+      : undefined;
+
+  // The final breakdown axis: the candidate, unless the slice can't actually
+  // be split by it — a division whose spend all sits in one department must
+  // not land on (or offer) a Department cut. Resolved against the entity
+  // slice's group counts, falling down the chain to the first splittable axis.
+  const groupBy = firstSplittableDimension(
+    candidateGroupBy,
+    availableDims,
+    sliceValueCount,
+  );
+
+  // Drill state is the URL: when resolution lands on a different axis than
+  // `?by=` claims (stale link, mix-card drill, or a slice the requested axis
+  // can't split), rewrite the param in place so copied links and back/forward
+  // reflect what is actually rendered. Gated on a settled resolution
+  // (attributes known) and skipped in sessions mode, whose sentinel rides
+  // `?by=` itself. groupBy always survives its own re-resolution, so the
+  // rewrite reaches a fixed point after one pass.
+  useEffect(() => {
+    if (!attributes || sessionsMode) return;
+    if (byParam === groupBy) return;
+    goToNode(path, groupBy, true);
+  });
+
+  // The breakdown queries' filters: the entity's, plus the skill-only
+  // synthetic filter when the AXIS is the root Skill cut — excluding rows that
+  // also carry a subagent (agent_name = '') so agent+skill spend surfaces only
+  // under Subagent → Skill, never leaking into the root Skill breakdown. (The
+  // path-pinned skill case already carries it in entityFilters.)
+  const filters: QueryFilter[] = useMemo(() => {
+    const skillAxis =
+      groupBy === Dimension.SkillName &&
+      !path.some(
+        (c) => c.dim === Dimension.SkillName || c.dim === Dimension.AgentName,
+      );
+    return skillAxis
+      ? [...entityFilters, { dimension: Dimension.AgentName, values: [""] }]
+      : entityFilters;
+  }, [entityFilters, groupBy, path]);
+
+  // Hold the grouped queries until the axis is resolved on a drilled node —
+  // otherwise a slice whose landing axis collapses fetches every grouped query
+  // twice (candidate axis, then corrected axis). The root skips the wait (no
+  // slice pruning there), and a failed detail probe fails open rather than
+  // blocking the page (the main query doubles as the logs-disabled probe).
+  const axisResolving = path.length > 0 && detailStatus === "pending";
+
   // The primary query also doubles as the logs-enabled probe: telemetry.query
   // returns 404 when logging is off for the org. Opt out of the app-wide
   // throw-to-error-boundary policy (Sdk.tsx) so that 404 lands in `error`
@@ -337,8 +457,12 @@ export function CostsExplorer(): JSX.Element {
           groupBy,
           filters,
         ],
-        enabled: projectReady,
+        enabled: projectReady && !axisResolving,
         throwOnError: false,
+        // Re-pivoting or drilling changes the query key; keep the previous
+        // slice's rows on screen while the new cut loads, so the page updates
+        // in place instead of flashing every widget back to a skeleton.
+        placeholderData: keepPreviousData,
         queryFn: () =>
           unwrapAsync(
             telemetryQuery(client, {
@@ -347,7 +471,7 @@ export function CostsExplorer(): JSX.Element {
                 to,
                 groupBy: groupBy as GroupBy,
                 sortBy: "total_cost",
-                topN: 100,
+                topN: BREAKDOWN_TOP_N,
                 // Daily buckets → ~30 points per group for the row trend sparklines.
                 granularitySeconds: 86400,
                 filters: filters.length ? filters : undefined,
@@ -357,43 +481,10 @@ export function CostsExplorer(): JSX.Element {
       }),
     );
 
-  // Treat "project not resolved yet" as loading, so the skeleton shows instead
-  // of an empty "no data" flash before the project-scoped queries enable.
-  const loadingSlice = (!projectReady || isFetching) && !data;
-
-  // A no-group_by query over the same filters returns a single aggregate row for
-  // the whole slice. Two things come off it:
-  //   • its dimension_values are the current entity's distinct division/
-  //     department/job_title/roles/etc (only meaningful once drilled in), and
-  //   • its measures are the TRUE slice totals — critically the distinct session
-  //     count, which cannot be recovered by summing the per-group breakdown rows
-  //     (see `stats`). Runs at every level so the root headline is correct too.
-  const { data: detailData } = useQuery({
-    queryKey: [
-      "costs-explorer-detail",
-      from.toISOString(),
-      to.toISOString(),
-      filters,
-    ],
-    enabled: projectReady,
-    throwOnError: false,
-    queryFn: () =>
-      unwrapAsync(
-        telemetryQuery(client, {
-          queryPayload: {
-            from,
-            to,
-            topN: 1,
-            filters: filters.length ? filters : undefined,
-          },
-        }),
-      ),
-  });
-  const detailRow = detailData?.table?.[0];
-  // Attribute grid + pivot pruning only apply once drilled into an entity; at the
-  // root, keep this undefined so those consumers still fail open (show every
-  // pivot). The row's measures, by contrast, are used at every level.
-  const attributes = path.length > 0 ? detailRow?.dimensionValues : undefined;
+  // Treat "project not resolved yet" (and a still-resolving axis) as loading,
+  // so the skeleton shows instead of an empty "no data" flash before the
+  // project-scoped queries enable.
+  const loadingSlice = (!projectReady || axisResolving || isFetching) && !data;
 
   // Previous equal-length period (immediately before [from, to]) — for the
   // per-group % change column.
@@ -409,8 +500,9 @@ export function CostsExplorer(): JSX.Element {
       groupBy,
       filters,
     ],
-    enabled: projectReady,
+    enabled: projectReady && !axisResolving,
     throwOnError: false,
+    placeholderData: keepPreviousData,
     queryFn: () =>
       unwrapAsync(
         telemetryQuery(client, {
@@ -419,7 +511,7 @@ export function CostsExplorer(): JSX.Element {
             to: prevTo,
             groupBy: groupBy as GroupBy,
             sortBy: "total_cost",
-            topN: 100,
+            topN: BREAKDOWN_TOP_N,
             filters: filters.length ? filters : undefined,
           },
         }),
@@ -432,7 +524,7 @@ export function CostsExplorer(): JSX.Element {
       "costs-explorer-prev-detail",
       prevFrom.toISOString(),
       prevTo.toISOString(),
-      filters,
+      entityFilters,
     ],
     enabled: projectReady,
     throwOnError: false,
@@ -443,7 +535,7 @@ export function CostsExplorer(): JSX.Element {
             from: prevFrom,
             to: prevTo,
             topN: 1,
-            filters: filters.length ? filters : undefined,
+            filters: entityFilters.length ? entityFilters : undefined,
           },
         }),
       ),
@@ -474,7 +566,7 @@ export function CostsExplorer(): JSX.Element {
             from,
             to,
             sortBy: "total_cost",
-            limit: 100,
+            limit: SESSION_LIMIT,
             filters: filters.length ? filters : undefined,
           },
         }),
@@ -493,6 +585,7 @@ export function CostsExplorer(): JSX.Element {
     ],
     enabled: projectReady && showSessionsWidget,
     throwOnError: false,
+    placeholderData: keepPreviousData,
     queryFn: () =>
       unwrapAsync(
         telemetryListSessions(client, {
@@ -509,6 +602,27 @@ export function CostsExplorer(): JSX.Element {
 
   const rows = data?.table ?? [];
 
+  // The server's synthetic remainder row, present only when the slice has
+  // more groups than BREAKDOWN_TOP_N — the server always appends it last. The
+  // chart folds its series into the client-side remainder bucket so the two
+  // rollups read as one "everything else".
+  const serverRollupValue =
+    rows.length > BREAKDOWN_TOP_N
+      ? rows[rows.length - 1]!.groupValue
+      : undefined;
+
+  // The axis the FETCHED slice is actually grouped by. With keepPreviousData,
+  // `data` lags `groupBy` for the refetch window after a re-pivot — labeling
+  // or filtering the old rows under the new axis would mislabel (and could
+  // wrongly merge) them. Everything that RENDERS the slice (table rows, chart
+  // stacks, section title, drill targets) keys off this; the live `groupBy`
+  // keeps driving the queries and the control bar, so the lit segment answers
+  // the click instantly while the content swaps atomically when data lands.
+  const rawDataGroupBy = data?.groupBy;
+  const dataGroupBy: Dimension = isDimension(rawDataGroupBy)
+    ? rawDataGroupBy
+    : groupBy;
+
   // The view's billing mode drives whether cost reads as real spend or an
   // estimate: confidently "metered" only when every row in the view is metered.
   const viewBillingMode = useMemo(() => {
@@ -521,17 +635,32 @@ export function CostsExplorer(): JSX.Element {
 
   // Attribution breakdowns hide the "" group — it's spend where the attribute
   // is not applicable ("not included"), not an "(unset)" slice worth drilling.
-  const visibleRows = isAttributionDim(groupBy)
+  const visibleRows = isAttributionDim(dataGroupBy)
     ? rows.filter((r) => r.groupValue !== "")
     : rows;
+
+  // Search narrows the table only — headline stats, widgets, and CSV-adjacent
+  // aggregates stay slice totals. Rows match on both the raw group value and
+  // its display name (a user's email matches their prettified name too).
+  const normalizedSearch = breakdownSearch.trim().toLowerCase();
+  const searchedRows = normalizedSearch
+    ? visibleRows.filter(
+        (r) =>
+          r.groupValue.toLowerCase().includes(normalizedSearch) ||
+          displayName(dataGroupBy, r.groupValue)
+            .toLowerCase()
+            .includes(normalizedSearch),
+      )
+    : visibleRows;
 
   // At the root, an attribution breakdown is presented as a "collection" (e.g.
   // "MCP Servers") rather than the project — and its headline stats then sum
   // only the attributed rows, so the hero reconciles with the residual-hidden
-  // table below. Everywhere else the hero keeps the full slice total.
+  // table below. Everywhere else the hero keeps the full slice total. Keyed to
+  // the fetched axis so the hero identity flips together with the rows.
   const collectionDim: Dimension | null =
-    path.length === 0 && !sessionsMode && isAttributionDim(groupBy)
-      ? groupBy
+    path.length === 0 && !sessionsMode && isAttributionDim(dataGroupBy)
+      ? dataGroupBy
       : null;
 
   // Roll the child rows up into the current entity's headline stats. Cost,
@@ -627,7 +756,9 @@ export function CostsExplorer(): JSX.Element {
   }, [data, collectionDim]);
 
   // Per-level secondary breakdowns: the configured cuts for the current axis,
-  // minus any already filtered or that don't vary within this slice (≤1 value).
+  // minus any already filtered or that don't vary within this slice. Counted
+  // over NAMED values: the cards drop the "" bucket from display, so an axis
+  // splittable only via "(unset)" would make a pointless one-row card.
   const mixDims = (MIX_DIMS[groupBy] ?? [Dimension.Model]).filter(
     (d) =>
       d !== groupBy &&
@@ -636,7 +767,7 @@ export function CostsExplorer(): JSX.Element {
       // In an unscoped dataset view only the dataset's own attribution dims are
       // correctly scoped; a cross-cut like Model would sum whole-project spend.
       (sliceScoped || datasetDimSet.has(d)) &&
-      (!attributes || (attributes[d]?.length ?? 0) > 1),
+      (sliceNamedValueCount(d) ?? 2) > 1,
   );
   const mixDimA = mixDims[0];
   const mixDimB = mixDims[1];
@@ -649,8 +780,9 @@ export function CostsExplorer(): JSX.Element {
       mixDimA,
       filters,
     ],
-    enabled: projectReady && !!mixDimA,
+    enabled: projectReady && !axisResolving && !!mixDimA,
     throwOnError: false,
+    placeholderData: keepPreviousData,
     queryFn: () =>
       unwrapAsync(
         telemetryQuery(client, {
@@ -673,8 +805,9 @@ export function CostsExplorer(): JSX.Element {
       mixDimB,
       filters,
     ],
-    enabled: projectReady && !!mixDimB,
+    enabled: projectReady && !axisResolving && !!mixDimB,
     throwOnError: false,
+    placeholderData: keepPreviousData,
     queryFn: () =>
       unwrapAsync(
         telemetryQuery(client, {
@@ -694,12 +827,18 @@ export function CostsExplorer(): JSX.Element {
     const out: CardSpec[] = [];
     // Mix cards are compact "spend by X" rankings, so drop the "" bucket
     // entirely — an "(unset)" row is noise here (e.g. the $0 tool-row model
-    // bucket). The full breakdown table still surfaces it for non-attribution
-    // dims where "unset" is a real, drillable slice.
-    const toRows = (t: QueryRow[]) =>
+    // bucket). The user dimension is the exception: its "" bucket is the
+    // Team-wide API Usage (company-credential sessions carry no user identity),
+    // a real ranked spender the card must show. The full breakdown table
+    // still surfaces "" for non-attribution dims where it is a real,
+    // drillable slice.
+    const toRows = (t: QueryRow[], dim: Dimension) =>
       t
-        .filter((r) => r.groupValue !== "")
-        .map((r) => ({ label: r.groupValue, cost: r.measures.totalCost ?? 0 }));
+        .filter((r) => r.groupValue !== "" || dim === Dimension.Email)
+        .map((r) => ({
+          label: displayName(dim, r.groupValue),
+          cost: r.measures.totalCost ?? 0,
+        }));
     const cardTitle = (dim: Dimension) =>
       dim === Dimension.Email
         ? "Top spenders"
@@ -711,16 +850,19 @@ export function CostsExplorer(): JSX.Element {
       isSessionLeaf(dim) || nextAvailableDimension(dim, availableDims) !== null;
     // A user breakdown already ranks people in its table — surface the top
     // spenders as a compact card too (reuses the main rows, no extra query).
-    if (groupBy === Dimension.Email) {
+    // Keyed to the FETCHED axis: the rows are only user rows once they land.
+    if (dataGroupBy === Dimension.Email) {
       const userRows = (data?.table ?? [])
-        .filter((r) => r.groupValue !== "Other")
+        .filter(
+          (r) => r.groupValue !== "Other" && r.groupValue !== serverRollupValue,
+        )
         .slice(0, 5);
       out.push({
         kind: "mix",
         title: "Top spenders",
         dim: Dimension.Email,
         drillable: drillableDim(Dimension.Email),
-        rows: toRows(userRows),
+        rows: toRows(userRows, Dimension.Email),
         loading: loadingSlice,
       });
     }
@@ -730,7 +872,7 @@ export function CostsExplorer(): JSX.Element {
         title: cardTitle(mixDimA),
         dim: mixDimA,
         drillable: drillableDim(mixDimA),
-        rows: toRows(mixDataA?.table ?? []),
+        rows: toRows(mixDataA?.table ?? [], mixDimA),
         loading: mixLoadingA,
       });
     }
@@ -740,7 +882,7 @@ export function CostsExplorer(): JSX.Element {
         title: cardTitle(mixDimB),
         dim: mixDimB,
         drillable: drillableDim(mixDimB),
-        rows: toRows(mixDataB?.table ?? []),
+        rows: toRows(mixDataB?.table ?? [], mixDimB),
         loading: mixLoadingB,
       });
     }
@@ -757,7 +899,7 @@ export function CostsExplorer(): JSX.Element {
         title: "Cost per session",
         value:
           perSession(stats.cost) !== null
-            ? `$${perSession(stats.cost)!.toFixed(2)}`
+            ? formatCost(perSession(stats.cost)!)
             : "—",
         caption,
         loading,
@@ -795,7 +937,8 @@ export function CostsExplorer(): JSX.Element {
     mixDataB,
     mixLoadingA,
     mixLoadingB,
-    groupBy,
+    dataGroupBy,
+    serverRollupValue,
     availableDims,
     stats,
     data,
@@ -805,10 +948,17 @@ export function CostsExplorer(): JSX.Element {
   // Filter by a (dimension, value) and advance to that dimension's child axis.
   // Used by both the main table (current axis) and the mix-card rows (their own
   // cross-cut axis, e.g. drilling a department straight from the Division view).
-  const drillIntoDim = (dim: Dimension, value: string) => {
+  const drillIntoDim = (
+    dim: Dimension,
+    value: string,
+    rowValues?: Record<string, string[]>,
+  ) => {
     // "" (the "(unset)" bucket) is drillable — it filters to the entities
-    // missing this attribute. Only "Other" (the synthetic top-N rollup) isn't.
-    if (value === "Other") return;
+    // missing this attribute. Synthetic top-N rollups aren't: the main
+    // table's remainder is matched by identity (serverRollupValue covers the
+    // suffixed label a collision produces); the literal covers the mix
+    // cards' own smaller-topN rollup rows.
+    if (value === "Other" || value === serverRollupValue) return;
     // Never re-add a dimension already in the path — that produces nonsensical
     // chains (e.g. the same user/agent twice). The pivot list already hides
     // filtered dims; this guards the mix-card + fallback-chain paths too.
@@ -831,20 +981,38 @@ export function CostsExplorer(): JSX.Element {
     // means nothing populated below — don't drill into an empty level. (While
     // availability is still loading this returns the static next dimension, so
     // drilling stays enabled and never blocks prematurely.)
-    const next = nextAvailableDimension(dim, availableDims);
-    if (next === null) return;
+    const staticNext = nextAvailableDimension(dim, availableDims);
+    if (staticNext === null) return;
+    // When the drilled row's own distinct values are known (a main-table row —
+    // each query row carries the dimension_values of its slice), resolve the
+    // landing axis against them so a one-department division drills straight
+    // to its users, with the URL correct from the first render. Same resolver
+    // as the on-load `groupBy` — one policy, two entry points. Mix-card drills
+    // pass no rowValues and land statically; the destination's own resolution
+    // (plus the URL rewrite) corrects the axis on arrival.
+    const next = rowValues
+      ? firstSplittableDimension(
+          staticNext,
+          availableDims,
+          (d) => rowValues[d]?.length ?? 0,
+        )
+      : staticNext;
     goToNode([...path, { dim, value }], next, false, ds);
   };
 
-  // Drill into a main-table row: use the current breakdown axis.
-  const drillInto = (row: QueryRow) => drillIntoDim(groupBy, row.groupValue);
+  // Drill into a main-table row: use the FETCHED axis — the displayed rows'
+  // groupValues belong to it, and during a re-pivot's keepPreviousData window
+  // drilling must target what the user actually sees, not the pending axis.
+  const drillInto = (row: QueryRow) =>
+    drillIntoDim(dataGroupBy, row.groupValue, row.dimensionValues);
 
-  // Rows are drillable only when there's a *populated* level below the current
-  // axis — so you can't drill into an empty breakdown. (Availability-unknown
-  // during load falls back to the static chain, keeping rows drillable.)
+  // Rows are drillable only when there's a *populated* level below the
+  // displayed axis — so you can't drill into an empty breakdown.
+  // (Availability-unknown during load falls back to the static chain, keeping
+  // rows drillable.)
   const canDrill =
-    isSessionLeaf(groupBy) ||
-    nextAvailableDimension(groupBy, availableDims) !== null;
+    isSessionLeaf(dataGroupBy) ||
+    nextAvailableDimension(dataGroupBy, availableDims) !== null;
 
   // Go up one ancestor: drop the deepest filter and regroup by the axis that
   // produced it (the removed crumb's dimension) — i.e. show the parent's profile.
@@ -859,6 +1027,16 @@ export function CostsExplorer(): JSX.Element {
   const goHome = () =>
     goToNode([], defaultGroupBy([], availableDims), false, "all");
 
+  // The control bar's Reset: back to the default view in one navigation —
+  // root drill path, default axis, `all` dataset, default date range (drops
+  // the from/to/range/label params goToNode would preserve), search cleared.
+  const resetView = () => {
+    setBreakdownSearch("");
+    const params = new URLSearchParams();
+    params.set(BREAKDOWN_PARAM, defaultGroupBy([], availableDims));
+    void navigate(`${costsBase}?${params.toString()}`);
+  };
+
   // Re-pivot the current node's breakdown axis without drilling (view-only).
   const changeGroupBy = (axis: Axis) => goToNode(path, axis, true);
 
@@ -869,9 +1047,12 @@ export function CostsExplorer(): JSX.Element {
     goToNode([], datasetDefaultGroupBy(ds, [], availableDims), false, ds);
 
   // Offer a breakdown axis only if it can actually partition the current slice
-  // into >1 row. `attributes` (the entity's distinct dimension values) tells us:
-  // a dim with ≤1 value collapses to a single row and is shown as a fact in the
-  // Profile grid instead. Always keep the active axis; show everything at the
+  // into >1 group ("(unset)" buckets count — the table renders them, see
+  // sliceValueCount). The active axis is always kept: the slice-aware `groupBy`
+  // resolution guarantees it can split the slice, except (a) the terminal
+  // nothing-splits case, where a one-row table with its axis shown beats an
+  // empty track, and (b) attribution axes, which the resolver accepts as-is
+  // (their pruning is the dataset structure itself). Show everything at the
   // org root, where there's no slice to measure against yet.
   const filteredDims = new Set(path.map((c) => c.dim));
   const pivotOptions = datasetPivots(dataset).filter((p) => {
@@ -884,8 +1065,7 @@ export function CostsExplorer(): JSX.Element {
     if (parent && !filteredDims.has(parent)) return false;
     // Hide dimensions the org has no data for at all (IDP doesn't populate them).
     if (availableDims && !availableDims.has(p.dim)) return false;
-    if (!attributes) return true;
-    return (attributes[p.dim]?.length ?? 0) > 1;
+    return (sliceValueCount(p.dim) ?? 2) > 1;
   });
 
   // The breakdown <Select> options: dimension pivots plus the always-available
@@ -905,6 +1085,33 @@ export function CostsExplorer(): JSX.Element {
       : []),
   ];
   const axisValue: string = sessionsMode ? SESSIONS_AXIS : groupBy;
+
+  // A search typed against one cut is meaningless against another — clear it
+  // when the drill path or the breakdown axis changes.
+  useEffect(() => {
+    setBreakdownSearch("");
+  }, [location.pathname, axisValue]);
+
+  // The session list matches on everything its rows display: title, chat id,
+  // user, agent, and model.
+  const allSessions = sessionsData?.sessions ?? [];
+  const searchedSessions = normalizedSearch
+    ? allSessions.filter((s) =>
+        [s.title, s.gramChatId, s.userEmail, s.hookSource, s.model].some(
+          (field) => field?.toLowerCase().includes(normalizedSearch),
+        ),
+      )
+    : allSessions;
+
+  // Zero-match copy for the session search. Over a capped slice, scope the
+  // claim to what was actually searched — lower-ranked sessions may still match.
+  let sessionsEmptyMessage: string | undefined;
+  if (normalizedSearch) {
+    sessionsEmptyMessage = "No matches for your search.";
+    if (allSessions.length >= SESSION_LIMIT) {
+      sessionsEmptyMessage = `No matches in the ${SESSION_LIMIT} most expensive sessions.`;
+    }
+  }
   const onViewSessions =
     sessionsMode || !sliceScoped
       ? undefined
@@ -912,9 +1119,11 @@ export function CostsExplorer(): JSX.Element {
 
   // The root Skill breakdown is scoped to agent-less spend (skill-only branch of
   // the Subagent → Skill tree). Rather than relabel the axis "Skill (only)",
-  // surface the caveat as an info tooltip beside the breakdown select.
+  // surface the caveat as an info tooltip beside the breakdown select. Keyed
+  // to the FETCHED axis like the heading it decorates, so the caveat never
+  // describes a cut the rows aren't showing yet.
   const skillOnlyBranch =
-    groupBy === Dimension.SkillName &&
+    dataGroupBy === Dimension.SkillName &&
     !path.some((c) => c.dim === Dimension.AgentName);
   const axisHint =
     skillOnlyBranch && !sessionsMode
@@ -969,7 +1178,7 @@ export function CostsExplorer(): JSX.Element {
   const scope = entityLabel
     ? `the ${entityType.toLowerCase()} "${entityLabel}"`
     : `the "${project.name}" project`;
-  const assistantContext = `Cost dashboard — viewing ${scope}, broken down by ${childLabel.toLowerCase()}. Over ${rangeLabel}: ${formatDollars(stats.cost)} total cost, ${stats.sessions.toLocaleString()} chat sessions, ${stats.tools.toLocaleString()} tool calls, ${stats.tokens.toLocaleString()} tokens. Active filters: ${filterSummary}.`;
+  const assistantContext = `Cost dashboard — viewing ${scope}, broken down by ${childLabel.toLowerCase()}. Over ${rangeLabel}: ${formatCost(stats.cost)} total cost, ${stats.sessions.toLocaleString()} chat sessions, ${stats.tools.toLocaleString()} tool calls, ${stats.tokens.toLocaleString()} tokens. Active filters: ${filterSummary}.`;
   const assistantSuggestions = costExplorerSuggestions({
     level,
     entityLabel,
@@ -1016,6 +1225,20 @@ export function CostsExplorer(): JSX.Element {
     ? [sessionsCard, ...cards.slice(0, 1)]
     : cards;
 
+  // Chart drill-down: a clicked/dragged bucket becomes the page's custom date
+  // range, clamped to the current period (week/month buckets can overhang its
+  // edges, and a week bar can extend past "now"). Stable identity — it feeds
+  // the chart panel's chartOptions memo.
+  const handleChartRangeSelect = useCallback(
+    (start: Date, end: Date): void => {
+      const s = new Date(Math.max(start.getTime(), from.getTime()));
+      const e = new Date(Math.min(end.getTime(), to.getTime()));
+      if (e <= s) return;
+      setCustomRangeParam(s, e);
+    },
+    [from, to, setCustomRangeParam],
+  );
+
   const widgets = (
     <CostWidgets
       series={widgetSeries}
@@ -1028,6 +1251,21 @@ export function CostsExplorer(): JSX.Element {
       onOpenSession={setOpenChatId}
       loading={loadingSlice}
       billingMode={viewBillingMode}
+    />
+  );
+
+  // The stacked cost-over-time chart lives inside the breakdown section (under
+  // the control bar, above the table) — it stacks by the same axis the bar
+  // controls. Sessions mode swaps the table for the per-session list, where a
+  // dimension-stacked chart would mismatch the view, so it comes off with it.
+  const breakdownChart = sessionsMode ? undefined : (
+    <CostBreakdownChart
+      data={data}
+      groupBy={dataGroupBy}
+      serverRollupValue={serverRollupValue}
+      loading={loadingSlice}
+      isError={isError}
+      onSelectRange={handleChartRangeSelect}
     />
   );
 
@@ -1079,34 +1317,41 @@ export function CostsExplorer(): JSX.Element {
         projectName={project.name}
         parentValue={parentValue}
         stats={stats}
-        groupBy={groupBy}
+        // The FETCHED axis: the rows/table/section title render what the data
+        // is actually grouped by, while axisValue (the lit segment) tracks the
+        // live selection — see dataGroupBy.
+        groupBy={dataGroupBy}
         canDrill={canDrill}
         axisValue={axisValue}
         axisOptions={axisOptions}
         axisHint={axisHint}
         onAxisChange={(value) => changeGroupBy(value as Axis)}
-        rows={visibleRows}
+        searchValue={breakdownSearch}
+        onSearchChange={setBreakdownSearch}
+        rows={searchedRows}
         billingMode={viewBillingMode}
         onDrill={drillInto}
         tableOverride={
           sessionsMode ? (
             <SessionTable
-              sessions={sessionsData?.sessions ?? []}
+              sessions={searchedSessions}
               isLoading={sessionsFetching && !sessionsData}
               isError={sessionsError}
               onOpen={setOpenChatId}
               hiddenColumns={hiddenSessionColumns}
               billingMode={viewBillingMode}
+              emptyMessage={sessionsEmptyMessage}
+              sourceCount={allSessions.length}
             />
           ) : undefined
         }
         overrideCsv={
           sessionsMode
             ? {
-                rowCount: sessionsData?.sessions.length ?? 0,
+                rowCount: searchedSessions.length,
                 build: () =>
                   buildSessionCsv(
-                    sessionsData?.sessions ?? [],
+                    searchedSessions,
                     hiddenSessionColumns,
                     viewBillingMode,
                   ),
@@ -1114,6 +1359,8 @@ export function CostsExplorer(): JSX.Element {
             : undefined
         }
         onViewSessions={onViewSessions}
+        onReset={resetView}
+        chart={breakdownChart}
         seriesByGroup={seriesByGroup}
         datasetValue={dataset}
         datasetOptions={DATASET_OPTIONS}

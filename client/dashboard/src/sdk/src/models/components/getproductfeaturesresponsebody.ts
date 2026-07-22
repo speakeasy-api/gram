@@ -42,6 +42,10 @@ export type GetProductFeaturesResponseBody = {
    */
   sessionCaptureEnabled: boolean;
   /**
+   * Whether skill capture stores activation metadata without requesting manifest content
+   */
+  skillCaptureMetadataOnly: boolean;
+  /**
    * Whether the Skills page is enabled for the organization
    */
   skillsEnabled: boolean;
@@ -73,6 +77,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     logs_enabled: z.boolean(),
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
+    skill_capture_metadata_only: z.boolean(),
     skills_enabled: z.boolean(),
     sso_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
@@ -88,6 +93,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
       "logs_enabled": "logsEnabled",
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
+      "skill_capture_metadata_only": "skillCaptureMetadataOnly",
       "skills_enabled": "skillsEnabled",
       "sso_enabled": "ssoEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",

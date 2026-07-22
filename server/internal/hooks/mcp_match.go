@@ -268,6 +268,26 @@ func trustedGramHostedMCPHostMatches(u *url.URL, trustedHost string) bool {
 	return strings.EqualFold(u.Hostname(), trustedHost)
 }
 
+// gramHostedMCPTrustedHostsForOrg returns the trusted Gram-hosted MCP hosts
+// for an org — the configured server host plus the org's verified+activated
+// custom domain — with a single custom_domains query. Use it over
+// isGramHostedMCPURLForOrg when classifying many URLs for the same org in one
+// pass, which would otherwise repeat the custom-domain lookup per URL.
+func (s *Service) gramHostedMCPTrustedHostsForOrg(ctx context.Context, orgID string) []string {
+	trustedHosts := make([]string, 0, 2)
+	if s.serverURL != nil && s.serverURL.Host != "" {
+		trustedHosts = append(trustedHosts, s.serverURL.Host)
+	}
+	if orgID == "" {
+		return trustedHosts
+	}
+	customDomain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, orgID)
+	if err == nil && customDomain.Verified && customDomain.Activated {
+		trustedHosts = append(trustedHosts, customDomain.Domain)
+	}
+	return trustedHosts
+}
+
 // isGramHostedMCPURLForOrg checks if a URL is a Gram-managed MCP server for
 // the given organization. It checks against the canonical host first (no DB
 // hit), then falls back to checking the org's custom domain if needed.

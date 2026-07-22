@@ -58,6 +58,7 @@ import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
+import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import {
@@ -875,6 +876,12 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
+  aiIntegrations: {
+    title: "AI Integrations",
+    url: "ai-integrations",
+    icon: "bot",
+    component: OrgAIIntegrations,
+  },
   webhooks: {
     title: "Webhooks",
     url: "webhooks",
@@ -933,7 +940,6 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Device Agent",
     url: "device-agent",
     icon: "laptop",
-    stage: "preview",
     component: DeviceAgent,
   },
   access: {

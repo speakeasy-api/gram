@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -26,6 +27,8 @@ const perAttemptTime = 10 * time.Second
 // verdict.
 const sendBudget = 45 * time.Second
 
+const skillUploadBudget = 30 * time.Second
+
 // retryMaxElapsedMS caps the SDK's backoff budget for retryable statuses
 // (429/5xx). A var rather than a const so tests that script 5xx responses can
 // shrink it below the wall clock they can afford.
@@ -40,6 +43,11 @@ type decision struct {
 
 func (d decision) denied() bool { return strings.EqualFold(d.Decision, "deny") }
 
+type skillCapture struct {
+	rawSHA256       string
+	contentRequired bool
+}
+
 // ingestResult reports the outcome of an ingest attempt.
 type ingestResult struct {
 	// statusCode is the final HTTP status, or 0 if the server was never
@@ -50,7 +58,8 @@ type ingestResult struct {
 	authRejected bool
 	// failOpen carries the org's downtime posture from the response's
 	// org_settings effects; nil when the server sent none.
-	failOpen *bool
+	failOpen     *bool
+	skillCapture *skillCapture
 }
 
 // accepted reports a definitive 2xx exchange — the server stored (or
@@ -92,6 +101,9 @@ func newClient(serverURL string) *client {
 			sdk.WithClient(&http.Client{
 				Timeout:   perAttemptTime,
 				Transport: &deviceTransport{base: http.DefaultTransport},
+				CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+					return http.ErrUseLastResponse
+				},
 			}),
 			// Retries cover connection errors and 429/5xx; the SDK rewinds the
 			// request body per attempt, so the Idempotency-Key header minted in
@@ -109,6 +121,49 @@ func newClient(serverURL string) *client {
 			}),
 		),
 	}
+}
+
+func (cl *client) uploadSkillContent(ctx context.Context, c creds, rawSHA256, content string) error {
+	ctx, cancel := context.WithTimeout(ctx, skillUploadBudget)
+	defer cancel()
+
+	request := operations.UploadSkillContentRequest{
+		GramKey:     nil,
+		GramProject: nil,
+		Body: components.UploadSkillContentPayload{
+			Content:       content,
+			RawSha256:     rawSHA256,
+			SchemaVersion: components.SchemaVersionHookSkillContentV1,
+		},
+	}
+	security := &operations.UploadSkillContentSecurity{
+		ApikeyHeaderGramKey:          &c.APIKey,
+		ProjectSlugHeaderGramProject: nil,
+	}
+	if c.Project != "" {
+		security.ProjectSlugHeaderGramProject = &c.Project
+	}
+
+	var response *operations.UploadSkillContentResponse
+	var err error
+	for attempt := 0; ; attempt++ {
+		response, err = cl.sdk.Hooks.UploadSkillContent(ctx, request, security)
+		if err == nil {
+			break
+		}
+		if interpretError(err).statusCode != 0 || attempt >= 2 || ctx.Err() != nil {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(time.Duration(attempt+1) * 250 * time.Millisecond):
+		}
+	}
+	if response == nil || response.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("unexpected skill upload response status")
+	}
+	return nil
 }
 
 // send posts the payload to the ingest endpoint authenticated with c. The
@@ -158,7 +213,7 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		}
 	}
 
-	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil}
+	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil}
 	if res.IngestHookResult != nil {
 		out.decision = decision{
 			Decision: string(res.IngestHookResult.Decision),
@@ -168,6 +223,13 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		if settings, ok := res.IngestHookResult.Effects["org_settings"].(map[string]any); ok {
 			if v, ok := settings["fail_open"].(bool); ok {
 				out.failOpen = &v
+			}
+		}
+		if capture, ok := res.IngestHookResult.Effects["skill_capture"].(map[string]any); ok {
+			rawSHA256, hashOK := capture["raw_sha256"].(string)
+			contentRequired, requiredOK := capture["content_required"].(bool)
+			if hashOK && requiredOK && validRawSHA256(rawSHA256) {
+				out.skillCapture = &skillCapture{rawSHA256: rawSHA256, contentRequired: contentRequired}
 			}
 		}
 	}
@@ -186,6 +248,7 @@ func interpretError(err error) ingestResult {
 			decision:     decision{Decision: "", Reason: svcErr.Name, Message: svcErr.Message},
 			authRejected: status == http.StatusUnauthorized || status == http.StatusForbidden,
 			failOpen:     nil,
+			skillCapture: nil,
 		}
 	}
 	var apiErr *apierrors.APIError
@@ -201,6 +264,7 @@ func interpretError(err error) ingestResult {
 				decision:     decision{Decision: "", Reason: "", Message: "Speakeasy hooks could not read the server's verdict."},
 				authRejected: false,
 				failOpen:     nil,
+				skillCapture: nil,
 			}
 		}
 		return ingestResult{
@@ -208,9 +272,18 @@ func interpretError(err error) ingestResult {
 			decision:     decision{Decision: "", Reason: "", Message: ""},
 			authRejected: apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden,
 			failOpen:     nil,
+			skillCapture: nil,
 		}
 	}
-	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil}
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil}
+}
+
+func validRawSHA256(value string) bool {
+	if len(value) != sha256.Size*2 || value != strings.ToLower(value) {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
 
 func strDeref(s *string) string {

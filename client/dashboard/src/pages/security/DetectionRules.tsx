@@ -52,6 +52,8 @@ import {
   type SeverityLevel,
 } from "./detection-rules-data";
 import { CelExpressionField } from "./cel-field";
+import { CelReferenceSheet } from "./cel-reference";
+import { CelTrafficPreview } from "./cel-traffic-preview";
 import { useCelStatus } from "./use-cel-status";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getCategoryCodeForFinding } from "./risk-utils";
@@ -579,12 +581,16 @@ function CustomRuleDetail({
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Detection expression</Label>
+          <div className="flex items-center justify-between gap-3">
+            <Label className="text-sm font-medium">Detection expression</Label>
+            <CelReferenceSheet />
+          </div>
           <CelExpressionField
             value={detectionExpr}
             onChange={setDetectionExpr}
             examples={DETECTION_CEL_EXAMPLES}
           />
+          <CelTrafficPreview includeExpr={detectionExpr} mode="detection" />
         </div>
 
         <RulePlayground
@@ -1416,13 +1422,20 @@ function CreateCustomRuleSheet({
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Detection expression
-                </Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-sm font-medium">
+                    Detection expression
+                  </Label>
+                  <CelReferenceSheet />
+                </div>
                 <CelExpressionField
                   value={detectionExpr}
                   onChange={setDetectionExpr}
                   examples={DETECTION_CEL_EXAMPLES}
+                />
+                <CelTrafficPreview
+                  includeExpr={detectionExpr}
+                  mode="detection"
                 />
               </div>
             </div>

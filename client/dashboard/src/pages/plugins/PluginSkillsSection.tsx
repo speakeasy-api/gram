@@ -3,8 +3,11 @@ import { ErrorAlert } from "@/components/ui/alert";
 import { Button as UiButton } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { DotCard } from "@/components/ui/dot-card";
+import { DotRow } from "@/components/ui/dot-row";
+import { DotTable } from "@/components/ui/dot-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import type { ViewMode } from "@/components/ui/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
@@ -16,12 +19,13 @@ import {
 } from "@gram/client/react-query/skillDistributions.js";
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge, Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { SectionEmptyState } from "./SectionEmptyState";
 
 /**
  * The Skills section of the plugin detail page: lists the skills this plugin
@@ -30,9 +34,15 @@ import { toast } from "sonner";
  */
 export function PluginSkillsSection({
   pluginId,
+  searchQuery,
+  viewMode,
   onMutated,
 }: {
   pluginId: string;
+  /** Page-level search query; narrows the listed skill distributions. */
+  searchQuery: string;
+  /** Page-level entry layout shared with the server section. */
+  viewMode: ViewMode;
   /** Invoked after a successful change, e.g. to offer a marketplace publish. */
   onMutated: (message: string) => void;
 }): JSX.Element {
@@ -58,6 +68,18 @@ export function PluginSkillsSection({
     [distributionsQuery.data?.pages],
   );
 
+  // Case-insensitive match on the card's visible labels: the skill display
+  // name and its mono slug-style name.
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredDistributions = useMemo(() => {
+    if (!normalizedSearch) return distributions;
+    return distributions.filter(
+      (d) =>
+        d.skillDisplayName.toLowerCase().includes(normalizedSearch) ||
+        d.skillName.toLowerCase().includes(normalizedSearch),
+    );
+  }, [distributions, normalizedSearch]);
+
   const skillsQuery = useSkillsInfinite({ limit: 200 }, undefined, {
     throwOnError: false,
     enabled: isAddSkillOpen,
@@ -68,7 +90,10 @@ export function PluginSkillsSection({
     const distributedSkillIds = new Set(distributions.map((d) => d.skillId));
     return (
       skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
-    ).filter((skill) => !distributedSkillIds.has(skill.id));
+    ).filter(
+      (skill) =>
+        skill.latestVersionId != null && !distributedSkillIds.has(skill.id),
+    );
   }, [distributions, skillsQuery.data?.pages]);
 
   const distribute = useDistributeSkillMutation();
@@ -117,6 +142,62 @@ export function PluginSkillsSection({
     );
   };
 
+  // Precomputed list body keeps the JSX below free of nested ternaries while
+  // distinguishing "nothing distributed yet" from "no search matches".
+  let listContent: JSX.Element;
+  if (distributionsQuery.error && !distributionsQuery.data) {
+    listContent = (
+      <ErrorAlert
+        title="Unable to load distributed skills"
+        error={distributionsQuery.error}
+      />
+    );
+  } else if (!isMembershipLoaded) {
+    listContent = <Skeleton className="h-24 w-full rounded-xl" />;
+  } else if (distributions.length === 0) {
+    listContent = (
+      <SectionEmptyState
+        title="No skills distributed yet"
+        subtitle="Add project skills to bundle them with this plugin."
+      />
+    );
+  } else if (filteredDistributions.length === 0) {
+    listContent = <SectionEmptyState title="No skills match your search" />;
+  } else if (viewMode === "table") {
+    listContent = (
+      <DotTable
+        headers={[
+          { label: "Name" },
+          { label: "Identifier" },
+          { label: "Version" },
+          { label: "", className: "text-right" },
+        ]}
+      >
+        {filteredDistributions.map((distribution) => (
+          <PluginSkillTableRow
+            key={distribution.id}
+            distribution={distribution}
+            isRemoving={undistribute.isPending}
+            onRemove={() => handleRemoveSkill(distribution)}
+          />
+        ))}
+      </DotTable>
+    );
+  } else {
+    listContent = (
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {filteredDistributions.map((distribution) => (
+          <PluginSkillCard
+            key={distribution.id}
+            distribution={distribution}
+            isRemoving={undistribute.isPending}
+            onRemove={() => handleRemoveSkill(distribution)}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="mb-3 flex items-center gap-3">
@@ -160,41 +241,7 @@ export function PluginSkillsSection({
           </Button>
         </RequireScope>
       </div>
-      <div className="mb-8">
-        {distributionsQuery.error && !distributionsQuery.data ? (
-          <ErrorAlert
-            title="Unable to load distributed skills"
-            error={distributionsQuery.error}
-          />
-        ) : !isMembershipLoaded ? (
-          <Skeleton className="h-24 w-full rounded-xl" />
-        ) : distributions.length === 0 ? (
-          <Stack
-            gap={2}
-            className="border-border rounded-xl border py-8"
-            align="center"
-            justify="center"
-          >
-            <Type variant="body" muted>
-              No skills distributed yet
-            </Type>
-            <Type small muted>
-              Add project skills to bundle them with this plugin.
-            </Type>
-          </Stack>
-        ) : (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            {distributions.map((distribution) => (
-              <PluginSkillCard
-                key={distribution.id}
-                distribution={distribution}
-                isRemoving={undistribute.isPending}
-                onRemove={() => handleRemoveSkill(distribution)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      <div className="mb-8">{listContent}</div>
 
       {/* Add Skill Dialog */}
       <Dialog open={isAddSkillOpen} onOpenChange={setIsAddSkillOpen}>
@@ -291,19 +338,7 @@ function PluginSkillCard({
             {distribution.skillDisplayName}
           </Link>
         </Type>
-        {distribution.pinnedVersionId ? (
-          <Badge
-            variant="neutral"
-            className="text-xs"
-            title={distribution.pinnedVersionId}
-          >
-            Pinned
-          </Badge>
-        ) : (
-          <Badge variant="information" className="text-xs">
-            Latest
-          </Badge>
-        )}
+        <SkillVersionBadge distribution={distribution} />
       </div>
       <Type small muted className="truncate font-mono">
         {distribution.skillName}
@@ -333,5 +368,95 @@ function PluginSkillCard({
         </RequireScope>
       </div>
     </DotCard>
+  );
+}
+
+function PluginSkillTableRow({
+  distribution,
+  isRemoving,
+  onRemove,
+}: {
+  distribution: SkillDistribution;
+  isRemoving: boolean;
+  onRemove: () => void;
+}): JSX.Element {
+  const project = useProject();
+  const routes = useRoutes();
+  const href = routes.skills.detail.href(distribution.skillId);
+
+  return (
+    <DotRow
+      icon={<Sparkles className="text-muted-foreground h-5 w-5" />}
+      href={href}
+      ariaLabel={`View skill ${distribution.skillDisplayName}`}
+    >
+      <td className="px-3 py-3">
+        <Type
+          variant="subheading"
+          as="div"
+          className="group-hover:text-primary truncate text-sm transition-colors"
+          title={distribution.skillDisplayName}
+        >
+          {distribution.skillDisplayName}
+        </Type>
+      </td>
+      <td className="px-3 py-3">
+        <Type small muted className="truncate font-mono">
+          {distribution.skillName}
+        </Type>
+      </td>
+      <td className="px-3 py-3">
+        <SkillVersionBadge distribution={distribution} />
+      </td>
+      <td className="px-3 py-3">
+        <RequireScope
+          scope="skill:write"
+          resourceId={project.id}
+          level="component"
+        >
+          <div
+            className="relative z-20 flex items-center justify-end"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <UiButton
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              tooltip="Remove skill"
+              aria-label={`Remove skill ${distribution.skillDisplayName}`}
+              className="hover:text-destructive"
+              disabled={isRemoving}
+              onClick={onRemove}
+            >
+              <Trash2 className="h-4 w-4" />
+            </UiButton>
+          </div>
+        </RequireScope>
+      </td>
+    </DotRow>
+  );
+}
+
+function SkillVersionBadge({
+  distribution,
+}: {
+  distribution: SkillDistribution;
+}): JSX.Element {
+  if (distribution.pinnedVersionId) {
+    return (
+      <Badge
+        variant="neutral"
+        className="text-xs"
+        title={distribution.pinnedVersionId}
+      >
+        Pinned
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="information" className="text-xs">
+      Latest
+    </Badge>
   );
 }

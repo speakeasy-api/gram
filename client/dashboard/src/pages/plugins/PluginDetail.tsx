@@ -7,8 +7,10 @@ import { Button as UiButton } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { DotCard } from "@/components/ui/dot-card";
+import { DotTable } from "@/components/ui/dot-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { useViewMode } from "@/components/ui/use-view-mode";
 import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
@@ -47,7 +49,14 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Network, Puzzle, Sparkles, Trash2 } from "lucide-react";
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate, useParams } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
@@ -59,11 +68,14 @@ import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { downloadPluginPackage } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
+import { PluginInstallButton } from "./PluginInstallButton";
 import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
 import { PluginSkillsSection } from "./PluginSkillsSection";
 import { PluginAssignmentsList } from "./PluginAssignmentsList";
-import { memberMapByUrn, roleMapByUrn } from "./principals";
+import { PluginServerTableRow } from "./PluginServerTableRow";
+import { describePrincipal, memberMapByUrn, roleMapByUrn } from "./principals";
 import { PublishDialog } from "./PublishDialog";
+import { SectionEmptyState } from "./SectionEmptyState";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
 // a Remote MCP-backed mcp_server. The kind determines whether it is submitted
@@ -92,6 +104,11 @@ export default function PluginDetail(): JSX.Element | null {
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isAssignmentsOpen, setIsAssignmentsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useViewMode();
+  // The component stays mounted when only :pluginId changes, so a stale query
+  // from a previous plugin would filter the new plugin's lists.
+  useEffect(() => setSearch(""), [pluginId]);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
   // Polled so the publish-freshness badges/banner pick up the Temporal
@@ -384,6 +401,114 @@ export default function PluginDetail(): JSX.Element | null {
       : !addedMcpServerIds.has(o.id),
   );
 
+  // Client-side search across the page's entry lists. Servers match on their
+  // displayed name; assignments match on the resolved principal label (role
+  // name, member name, email, "Everyone") plus the member's email. Skills are
+  // filtered inside PluginSkillsSection with the same query.
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredServers = normalizedSearch
+    ? servers.filter((s) =>
+        s.displayName.toLowerCase().includes(normalizedSearch),
+      )
+    : servers;
+  const filteredAssignments = normalizedSearch
+    ? assignments.filter((a) => {
+        const { label } = describePrincipal(
+          a.principalUrn,
+          roleByUrn,
+          memberByUrn,
+        );
+        const email = memberByUrn.get(a.principalUrn)?.email ?? "";
+        return (
+          label.toLowerCase().includes(normalizedSearch) ||
+          email.toLowerCase().includes(normalizedSearch)
+        );
+      })
+    : assignments;
+
+  // Precomputed section bodies keep the JSX below free of nested ternaries
+  // while distinguishing "nothing added yet" from "no search matches".
+  let serversContent: JSX.Element;
+  if (servers.length === 0) {
+    serversContent = <SectionEmptyState title="No servers added yet" />;
+  } else if (filteredServers.length === 0) {
+    serversContent = <SectionEmptyState title="No servers match your search" />;
+  } else if (viewMode === "table") {
+    serversContent = (
+      <DotTable
+        headers={[
+          { label: "Name" },
+          { label: "Publish status" },
+          { label: "Type" },
+          { label: "Visibility" },
+          { label: "", className: "text-right" },
+        ]}
+      >
+        {filteredServers.map((server) => (
+          <PluginServerTableRow
+            key={server.id}
+            server={server}
+            toolset={
+              server.toolsetId ? toolsetById.get(server.toolsetId) : undefined
+            }
+            mcpServer={
+              server.mcpServerId
+                ? mcpServerById.get(server.mcpServerId)
+                : undefined
+            }
+            isLoading={isLoadingServers}
+            onRemove={() => handleRemoveServer(server)}
+            lastPublishedAt={publishStatus?.lastPublishedAt}
+          />
+        ))}
+      </DotTable>
+    );
+  } else {
+    serversContent = (
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {filteredServers.map((server) => (
+          <PluginServerCard
+            key={server.id}
+            server={server}
+            toolset={
+              server.toolsetId ? toolsetById.get(server.toolsetId) : undefined
+            }
+            mcpServer={
+              server.mcpServerId
+                ? mcpServerById.get(server.mcpServerId)
+                : undefined
+            }
+            isLoading={isLoadingServers}
+            onRemove={() => handleRemoveServer(server)}
+            lastPublishedAt={publishStatus?.lastPublishedAt}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  let assignmentsContent: JSX.Element;
+  if (assignments.length === 0) {
+    assignmentsContent = (
+      <SectionEmptyState
+        title="Not assigned to anyone yet"
+        subtitle="Assign this plugin to roles, users, or emails to deliver it to their devices."
+      />
+    );
+  } else if (filteredAssignments.length === 0) {
+    assignmentsContent = (
+      <SectionEmptyState title="No assignments match your search" />
+    );
+  } else {
+    assignmentsContent = (
+      <PluginAssignmentsList
+        assignments={filteredAssignments}
+        roleByUrn={roleByUrn}
+        memberByUrn={memberByUrn}
+      />
+    );
+  }
+
   return (
     <Page>
       <Page.Header>
@@ -431,13 +556,7 @@ export default function PluginDetail(): JSX.Element | null {
                 onOpenChange={setIsDownloadMenuOpen}
               >
                 <DropdownMenuTrigger asChild>
-                  <Button variant="primary">
-                    <Button.Text>Install</Button.Text>
-                    <span className="bg-primary-foreground/25 mx-1 h-4 w-px self-center" />
-                    <Button.RightIcon>
-                      <Icon name="chevron-down" className="h-4 w-4" />
-                    </Button.RightIcon>
-                  </Button>
+                  <PluginInstallButton />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
@@ -544,6 +663,17 @@ export default function PluginDetail(): JSX.Element | null {
         {/* Everything below the hero re-centers in the max-w-7xl column that
             Page.Body would normally provide (disabled here via fullWidth). */}
         <div className="mx-auto w-full max-w-7xl px-8 pb-24">
+          {/* One search box narrows every entry list on the page (servers,
+            assignments, skills) rather than a per-section input. */}
+          <Page.Toolbar className="mb-8">
+            <Page.Toolbar.Search
+              value={search}
+              onChange={setSearch}
+              placeholder="Search servers, skills, and assignments"
+            />
+            <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
+          </Page.Toolbar>
+
           {/* Servers section */}
           <div className="mb-3 flex items-center gap-3">
             <div className="border-border flex-1 border-t" />
@@ -568,42 +698,7 @@ export default function PluginDetail(): JSX.Element | null {
               <Button.Text>Add Server</Button.Text>
             </Button>
           </div>
-          <div className="mb-8">
-            {servers.length === 0 ? (
-              <Stack
-                gap={2}
-                className="border-border rounded-xl border py-8"
-                align="center"
-                justify="center"
-              >
-                <Type variant="body" muted>
-                  No servers added yet
-                </Type>
-              </Stack>
-            ) : (
-              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                {servers.map((server) => (
-                  <PluginServerCard
-                    key={server.id}
-                    server={server}
-                    toolset={
-                      server.toolsetId
-                        ? toolsetById.get(server.toolsetId)
-                        : undefined
-                    }
-                    mcpServer={
-                      server.mcpServerId
-                        ? mcpServerById.get(server.mcpServerId)
-                        : undefined
-                    }
-                    isLoading={isLoadingServers}
-                    onRemove={() => handleRemoveServer(server)}
-                    lastPublishedAt={publishStatus?.lastPublishedAt}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+          <div className="mb-8">{serversContent}</div>
 
           {/* Assignments only affect device-agent delivery, so the section is
             hidden for marketplace-only orgs (see showAssignments). */}
@@ -644,30 +739,7 @@ export default function PluginDetail(): JSX.Element | null {
                   <Button.Text>Manage assignments</Button.Text>
                 </Button>
               </div>
-              <div className="mb-8">
-                {assignments.length === 0 ? (
-                  <Stack
-                    gap={2}
-                    className="border-border rounded-xl border py-8"
-                    align="center"
-                    justify="center"
-                  >
-                    <Type variant="body" muted>
-                      Not assigned to anyone yet
-                    </Type>
-                    <Type small muted>
-                      Assign this plugin to roles, users, or emails to deliver
-                      it to their devices.
-                    </Type>
-                  </Stack>
-                ) : (
-                  <PluginAssignmentsList
-                    assignments={assignments}
-                    roleByUrn={roleByUrn}
-                    memberByUrn={memberByUrn}
-                  />
-                )}
-              </div>
+              <div className="mb-8">{assignmentsContent}</div>
             </>
           )}
 
@@ -681,6 +753,8 @@ export default function PluginDetail(): JSX.Element | null {
             >
               <PluginSkillsSection
                 pluginId={pluginId!}
+                searchQuery={search}
+                viewMode={viewMode}
                 onMutated={(message) => offerPublish(message)}
               />
             </RequireScope>

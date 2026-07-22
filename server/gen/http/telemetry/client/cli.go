@@ -621,8 +621,8 @@ func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken str
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
 		if body.GroupBy != nil {
-			if !(*body.GroupBy == "department_name" || *body.GroupBy == "job_title" || *body.GroupBy == "employee_type" || *body.GroupBy == "division_name" || *body.GroupBy == "cost_center_name" || *body.GroupBy == "email" || *body.GroupBy == "model" || *body.GroupBy == "hook_source" || *body.GroupBy == "account_type" || *body.GroupBy == "provider" || *body.GroupBy == "billing_mode" || *body.GroupBy == "query_source" || *body.GroupBy == "skill_name" || *body.GroupBy == "agent_name" || *body.GroupBy == "mcp_server_name" || *body.GroupBy == "mcp_tool_name" || *body.GroupBy == "role" || *body.GroupBy == "group" || *body.GroupBy == "project_id") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group_by", *body.GroupBy, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "model", "hook_source", "account_type", "provider", "billing_mode", "query_source", "skill_name", "agent_name", "mcp_server_name", "mcp_tool_name", "role", "group", "project_id"}))
+			if !(*body.GroupBy == "department_name" || *body.GroupBy == "job_title" || *body.GroupBy == "employee_type" || *body.GroupBy == "division_name" || *body.GroupBy == "cost_center_name" || *body.GroupBy == "email" || *body.GroupBy == "hostname" || *body.GroupBy == "model" || *body.GroupBy == "hook_source" || *body.GroupBy == "account_type" || *body.GroupBy == "provider" || *body.GroupBy == "billing_mode" || *body.GroupBy == "query_source" || *body.GroupBy == "skill_name" || *body.GroupBy == "agent_name" || *body.GroupBy == "mcp_server_name" || *body.GroupBy == "mcp_tool_name" || *body.GroupBy == "role" || *body.GroupBy == "group" || *body.GroupBy == "project_id") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group_by", *body.GroupBy, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "hostname", "model", "hook_source", "account_type", "provider", "billing_mode", "query_source", "skill_name", "agent_name", "mcp_server_name", "mcp_tool_name", "role", "group", "project_id"}))
 			}
 		}
 		for _, e := range body.Filters {
@@ -1242,6 +1242,51 @@ func BuildGetToolUsageFilterOptionsPayload(telemetryGetToolUsageFilterOptionsBod
 		v.OptionTypes = make([]telemetry.ToolUsageFilterOptionType, len(body.OptionTypes))
 		for i, val := range body.OptionTypes {
 			v.OptionTypes[i] = telemetry.ToolUsageFilterOptionType(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetMcpServerActivityPayload builds the payload for the telemetry
+// getMcpServerActivity endpoint from CLI flags.
+func BuildGetMcpServerActivityPayload(telemetryGetMcpServerActivityBody string, telemetryGetMcpServerActivityApikeyToken string, telemetryGetMcpServerActivitySessionToken string, telemetryGetMcpServerActivityProjectSlugInput string) (*telemetry.GetMcpServerActivityPayload, error) {
+	var err error
+	var body GetMcpServerActivityRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetMcpServerActivityBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"recent_window_days\": 2\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetMcpServerActivityApikeyToken != "" {
+			apikeyToken = &telemetryGetMcpServerActivityApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetMcpServerActivitySessionToken != "" {
+			sessionToken = &telemetryGetMcpServerActivitySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetMcpServerActivityProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetMcpServerActivityProjectSlugInput
+		}
+	}
+	v := &telemetry.GetMcpServerActivityPayload{
+		RecentWindowDays: body.RecentWindowDays,
+	}
+	{
+		var zero int
+		if v.RecentWindowDays == zero {
+			v.RecentWindowDays = 14
 		}
 	}
 	v.ApikeyToken = apikeyToken
