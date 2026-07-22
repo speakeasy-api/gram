@@ -55,6 +55,16 @@ func TestLogSafeURL(t *testing.T) {
 			in:   "/shared/other/value",
 			want: "/shared/other/value",
 		},
+		{
+			name: "absolute referrer URL with tokenized path redacted",
+			in:   "https://app.example.com/shared/skills/supersecrettoken",
+			want: "https://app.example.com/shared/skills/REDACTED",
+		},
+		{
+			name: "absolute referrer URL with token query redacted",
+			in:   "https://app.example.com/page?token=supersecret",
+			want: "https://app.example.com/page?token=REDACTED",
+		},
 	}
 
 	for _, tt := range tests {

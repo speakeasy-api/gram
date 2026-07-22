@@ -4,6 +4,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import type { Skill } from "@gram/client/models/components/skill.js";
@@ -86,8 +87,9 @@ export function SkillSharingCardBlocks({
 }: {
   skill: Skill;
 }): JSX.Element {
+  const project = useProject();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("skill:write");
+  const canWrite = hasScope("skill:write", project.id);
   const queryClient = useQueryClient();
   const share = useShareSkillMutation();
   const unshare = useUnshareSkillMutation();

@@ -101,6 +101,10 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			referrerHost := ""
 			if u, err := url.Parse(referrer); err == nil {
 				referrerHost = u.Host
+				// Referers can carry capability URLs (e.g. a browser on the
+				// public skill share page reports its tokenized URL); redact
+				// them like the request URL itself.
+				referrer = logSafeURL(u)
 			}
 
 			safeURL := logSafeURL(r.URL)
