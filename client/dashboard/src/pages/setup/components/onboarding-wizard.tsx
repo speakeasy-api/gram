@@ -131,9 +131,13 @@ export function SetupWizard(): JSX.Element | null {
     [setSearchParams],
   );
 
+  // Clicking a step in the stepper previews that step (forward or back) by
+  // swapping the `step` query param. It never advances the real onboarding
+  // signals — those only move when the user completes a step via Continue — so
+  // this is a pure preview, safe to jump anywhere in range.
   const goToStep = useCallback(
     (index: number) => {
-      if (index <= maxAllowedStep && index < currentStep) {
+      if (index >= 0 && index <= maxAllowedStep && index !== currentStep) {
         setCurrentStep(index);
       }
     },
@@ -241,6 +245,7 @@ export function SetupWizard(): JSX.Element | null {
               currentStep={currentStep}
               onStepClick={goToStep}
               maxAllowedStep={maxAllowedStep}
+              allowJumpAhead
             />
           </div>
 

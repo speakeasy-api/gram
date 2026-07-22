@@ -220,6 +220,7 @@ describe("ShadowMCP", () => {
       data: {
         policies: [
           riskPolicy({ action: "flag" }),
+          riskPolicy({ action: "block", enabled: false, id: "disabled-block" }),
           riskPolicy({ action: "block", id: "block-policy-1" }),
         ],
       },
@@ -242,7 +243,7 @@ describe("ShadowMCP", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText("Shadow MCP policies: flag-policy,block-policy-1"),
+      screen.getByText("Shadow MCP policies: block-policy-1"),
     ).toBeTruthy();
     expect(screen.getByText("Roles: Admin")).toBeTruthy();
     expect(screen.getByText("Members: Admin User")).toBeTruthy();

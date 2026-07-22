@@ -35,6 +35,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("approved_email_domains", ArrayOf(String), "For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty/omitted leaves the domain rule inert.")
+			Attribute("detection_scopes", ArrayOf(shared.RiskDetectionScope), "Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Empty/omitted = all recommendations apply unchanged.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
@@ -177,6 +178,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("approved_email_domains", ArrayOf(String), "For the account_identity source: corporate email domains considered approved. Omit to preserve the current list; send an empty array to clear it.")
+			Attribute("detection_scopes", ArrayOf(shared.RiskDetectionScope), "Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Omit to preserve the current value; send empty to clear.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
@@ -1664,16 +1666,21 @@ var RiskCategoryDefinition = Type("RiskCategoryDefinition", func() {
 	Attribute("source", String, "When non-empty, findings whose source equals this value belong to this category.")
 	Attribute("rule_ids", ArrayOf(String), "When non-empty, findings whose rule_id is in this exact list belong to this category. Checked before rule_id_prefix.")
 	Attribute("rule_id_prefix", String, "When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').")
+	Attribute("recommended_scope_include", String, "Centrally recommended CEL scope predicate for this category; empty = no include restriction.")
+	Attribute("recommended_scope_exempt", String, "Centrally recommended CEL exemption predicate; empty = no exemption.")
+	Attribute("recommended_scope_rationale", String, "User-facing explanation of the recommended scope and the consequences of disabling it. Empty when the category has no recommendation.")
+	Attribute("recommended_scope_applicable", Boolean, "False when the category is session-scoped and message scoping does not apply (e.g. account_identity).")
 
-	Required("key", "label", "description", "icon", "source", "rule_ids", "rule_id_prefix")
+	Required("key", "label", "description", "icon", "source", "rule_ids", "rule_id_prefix", "recommended_scope_include", "recommended_scope_exempt", "recommended_scope_rationale", "recommended_scope_applicable")
 })
 
 var RiskCategoriesResult = Type("RiskCategoriesResult", func() {
 	Description("Canonical risk category definitions used to classify findings, in classification-priority order. Consumers should iterate in order and pick the first match.")
 
 	Attribute("categories", ArrayOf(RiskCategoryDefinition), "Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.")
+	Attribute("recommended_scopes_version", Int64, "Version of the recommended-scope registry; bumps when any recommendation changes.")
 
-	Required("categories")
+	Required("categories", "recommended_scopes_version")
 })
 
 var ExprCompileResult = Type("ExprCompileResult", func() {

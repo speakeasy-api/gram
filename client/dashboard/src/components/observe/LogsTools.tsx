@@ -16,6 +16,7 @@ import {
 } from "@/components/observe/ObserveFilterBar";
 import {
   buildServerOptionGroups,
+  isDefaultToolUsageTypeSelection,
   parseTargetFilter,
   selectedHookSources,
   selectedTargetValues,
@@ -46,6 +47,7 @@ import {
 } from "@/pages/logs/log-filter-types";
 import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { type DateRangePreset } from "@/elements";
@@ -774,7 +776,7 @@ function LogsToolsContent({
                     traces={traces}
                     hasActiveFilters={
                       activeFilters.length > 0 ||
-                      selectedTypes.length > 0 ||
+                      !isDefaultToolUsageTypeSelection(selectedTypes) ||
                       selectedStatuses.length > 0 ||
                       selectedRoleIds.length > 0 ||
                       attributeFilters.length > 0 ||
@@ -1052,7 +1054,7 @@ function LogsToolsTraceRow({
                 className="size-4 shrink-0"
               />
               <span className="text-foreground truncate text-xs font-medium">
-                {trace.hookSource}
+                {formatPlatform(trace.hookSource)}
               </span>
             </>
           ) : (
