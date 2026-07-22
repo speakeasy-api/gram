@@ -1,9 +1,9 @@
 import { AccountTypeIcon } from "@/components/account-type-icon";
+import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { chatOwnerLabel } from "@/lib/chat-owner";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
@@ -260,12 +260,12 @@ export function ChatLogsTable({
                           <>
                             <AccountTypeIcon accountType={chat.accountType} />
                             <span className="max-w-[120px] truncate">
-                              {chatOwnerLabel(
-                                membersData?.members,
-                                chat,
-                                user,
-                                personalAccountEmail(chat),
-                              )}
+                              <ChatOwnerLabel
+                                members={membersData?.members}
+                                chat={chat}
+                                currentUser={user}
+                                accountEmail={personalAccountEmail(chat)}
+                              />
                             </span>
                           </>
                         )}
