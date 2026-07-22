@@ -924,7 +924,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "what detectors are available",
       icon: "sparkles",
       prompt:
-        "Which detection backends are configured on this server (e.g. the prompt-injection ML classifier)?",
+        "Which detection backends are configured on this server (e.g. the prompt-injection LLM judge)?",
     },
   ],
 
