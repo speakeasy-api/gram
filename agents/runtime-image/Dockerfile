@@ -30,7 +30,7 @@ RUN target=node_modules/playwright-core/lib/utilsBundle.js \
  && sed -i "s|const ws = exports.ws = require('./utilsBundleImpl').ws;|const ws = exports.ws = 'Bun' in globalThis ? require('ws') : require('./utilsBundleImpl').ws;|" "$target" \
  && grep -q "'Bun' in globalThis ? require('ws')" "$target"
 
-FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df AS lightpanda
+FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS lightpanda
 ARG TARGETARCH
 ARG LIGHTPANDA_VERSION=0.2.8
 ARG LIGHTPANDA_SHA256_AMD64=8e3a5e04cf508699990a78a0a8686ea3398912cd9891fda90513429b89230300
@@ -47,7 +47,7 @@ RUN case "${TARGETARCH:-amd64}" in \
  && echo "${sha}  /lightpanda" | sha256sum -c - \
  && chmod 0755 /lightpanda
 
-FROM debian:bookworm-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df
+FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
