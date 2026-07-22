@@ -684,7 +684,30 @@ func newStartCommand() *cli.Command {
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
-			telemLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled)
+			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
+			if err != nil {
+				shutdownFuncs = append(shutdownFuncs, pubsubShutdown)
+				return fmt.Errorf("failed to create pubsub client: %w", err)
+			}
+
+			publishers, publishersShutdown, err := newPublishers(ctx, psbroker)
+			// Stop and flush the publishers before closing the Pub/Sub client
+			// they publish through. runShutdown executes shutdown funcs
+			// concurrently, so this ordering must be enforced inside a single
+			// func - appending the two separately would race the publisher
+			// flush against the client close and could drop in-flight messages.
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				stopErr := publishersShutdown(ctx)
+				closeErr := pubsubShutdown(ctx)
+				return errors.Join(stopErr, closeErr)
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create publishers: %w", err)
+			}
+
+			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs, featureFlags)
+
+			telemLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
@@ -897,27 +920,6 @@ func newStartCommand() *cli.Command {
 				if err != nil {
 					return fmt.Errorf("create github app client: %w", err)
 				}
-			}
-
-			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
-			if err != nil {
-				shutdownFuncs = append(shutdownFuncs, pubsubShutdown)
-				return fmt.Errorf("failed to create pubsub client: %w", err)
-			}
-
-			publishers, shutdown, err := newPublishers(ctx, psbroker)
-			// Stop and flush the publishers before closing the Pub/Sub client
-			// they publish through. runShutdown executes shutdown funcs
-			// concurrently, so this ordering must be enforced inside a single
-			// func - appending the two separately would race the publisher
-			// flush against the client close and could drop in-flight messages.
-			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				stopErr := shutdown(ctx)
-				closeErr := pubsubShutdown(ctx)
-				return errors.Join(stopErr, closeErr)
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create publishers: %w", err)
 			}
 
 			// Marketplace proxy routes (URL-based marketplace.json + git Smart

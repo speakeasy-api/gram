@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
@@ -153,6 +154,7 @@ func ForDeploymentProcessing(
 			PromptInjectionAnalysis: gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
 			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
 		},
 	}
 }

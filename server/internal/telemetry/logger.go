@@ -12,6 +12,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/attribute"
@@ -59,6 +60,7 @@ type Logger struct {
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
 	users             *UserInfoResolver
+	logPublisher      *LogPublisher
 }
 
 func NewLogger(
@@ -73,7 +75,13 @@ func NewLogger(
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
 	users *UserInfoResolver,
+	logPublisher *LogPublisher,
 ) *Logger {
+	inv.Require(
+		"telemetry logger",
+		"log publisher set", logPublisher != nil,
+	)
+
 	logger = logger.With(attr.SlogComponent("telemetry_logger"))
 	return &Logger{
 		shutdownCtx:       func() context.Context { return shutdownCtx },
@@ -82,11 +90,13 @@ func NewLogger(
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
 		users:             users,
+		logPublisher:      logPublisher,
 	}
 }
 
 // NewStub returns a Logger with feature checks hard-wired to disabled. Log
-// is a no-op and the ClickHouse connection is never dialed.
+// is a no-op and the ClickHouse connection is never dialed; the shadow log
+// publisher is an inert noop with all flags off.
 func NewStub(logger *slog.Logger) *Logger {
 	disabled := func(context.Context, string) (bool, error) { return false, nil }
 	return &Logger{
@@ -96,6 +106,7 @@ func NewStub(logger *slog.Logger) *Logger {
 		logsEnabled:       disabled,
 		toolIOLogsEnabled: disabled,
 		users:             nil,
+		logPublisher:      NewNoopLogPublisher(logger),
 	}
 }
 
@@ -158,6 +169,12 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
 	}
+
+	// Shadow dual-write: mirror the rows onto Pub/Sub only after ClickHouse
+	// accepted them, so the shadow stream never contains rows the ledger
+	// rejected. Best-effort and non-blocking.
+	l.logPublisher.PublishLogs(ctx, logParams)
+
 	return nil
 }
 
