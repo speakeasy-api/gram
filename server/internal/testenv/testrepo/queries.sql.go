@@ -488,6 +488,31 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 	return items, nil
 }
 
+const resetSkillEfficacyReservationFixture = `-- name: ResetSkillEfficacyReservationFixture :execrows
+UPDATE skill_efficacy_evaluations
+SET state = 'pending',
+    reserved_on = NULL,
+    updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = $2
+  AND state = 'reserved'
+`
+
+type ResetSkillEfficacyReservationFixtureParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+// Test-only fixture for simulating a stale reaper taking one reserved row while
+// a publisher still holds it.
+func (q *Queries) ResetSkillEfficacyReservationFixture(ctx context.Context, arg ResetSkillEfficacyReservationFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, resetSkillEfficacyReservationFixture, arg.ProjectID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const scrubDeploymentFunctionMachineSpecs = `-- name: ScrubDeploymentFunctionMachineSpecs :exec
 UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = $1
 `

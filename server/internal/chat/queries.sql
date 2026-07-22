@@ -686,6 +686,47 @@ SELECT * FROM chat_messages
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid)
 ORDER BY created_at ASC, seq ASC;
 
+-- name: ListChatTranscriptMessagesPage :many
+-- Keyset page of one chat's messages, newest first, carrying only the columns
+-- transcript rendering reads. A transcript reader that pulled the whole chat
+-- held every message of an unbounded session in memory to then throw most of
+-- them away, so it walks backwards a page at a time instead and stops as soon
+-- as the rendering starts dropping messages: the trim is oldest-first, so every
+-- unread row is older than the ones already being dropped and would be dropped
+-- too.
+--
+-- The same project filter as ListChatMessages, so a page can never cross a
+-- project boundary. CountChatMessages supplies the total once per transcript;
+-- repeating a windowed count on every page makes long transcripts quadratic.
+--
+-- The cursor is the full transcript key (created_at, seq, id): created_at and
+-- seq alone are not unique, and a tie split across a page boundary would either
+-- repeat or skip a message.
+SELECT
+  cm.id,
+  cm.seq,
+  cm.created_at,
+  cm.role,
+  cm.content,
+  cm.tool_calls,
+  cm.tool_call_id,
+  cm.tool_urn,
+  cm.tool_outcome,
+  cm.tool_outcome_notes
+FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND (
+    sqlc.narg('cursor_created_at')::timestamptz IS NULL
+    OR (cm.created_at, cm.seq, cm.id) < (
+      sqlc.narg('cursor_created_at')::timestamptz,
+      sqlc.narg('cursor_seq')::bigint,
+      sqlc.narg('cursor_id')::uuid
+    )
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC, cm.id DESC
+LIMIT @lim::integer;
+
 -- name: CountChatMessages :one
 -- Must match ListChatMessages' project_id filter, otherwise count and the
 -- list drift and the client hits "chat history mismatch" at
@@ -1280,6 +1321,14 @@ RETURNING id;
 -- latest non-null message source, so source-filter tests seed messages this way.
 INSERT INTO chat_messages (chat_id, project_id, role, content, source, created_at)
 VALUES (@chat_id, @project_id, 'user', 'test message', @source, COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
+RETURNING id;
+
+-- name: SeedChatTranscriptMessage :one
+-- Test fixture: insert a chat message with an explicit role, content and
+-- created_at, which is what a transcript test needs to build a session long
+-- enough that rendering has to drop messages.
+INSERT INTO chat_messages (chat_id, project_id, role, content, created_at)
+VALUES (@chat_id, @project_id, @role, @content, COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
 RETURNING id;
 
 -- name: SeedChatMessageContent :one

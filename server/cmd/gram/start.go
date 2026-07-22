@@ -91,6 +91,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -106,6 +107,7 @@ import (
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills"
+	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/templates"
@@ -695,6 +697,24 @@ func newStartCommand() *cli.Command {
 
 			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter)
 
+			// One signaler for every efficacy producer in this process: the chat
+			// transcript writer below, the hooks ingest paths and the assistant
+			// skills_load tool all wake the same per-project coordinator.
+			//
+			// Throttled because every producer signals on every durable write —
+			// a single chat turn is many messages — and a wake carries no payload,
+			// so a burst of them and one of them ask the coordinator for exactly
+			// the same pass. The trailing edge is what keeps the last write of a
+			// burst from being the one that goes unanswered.
+			// efficacySignaler.Shutdown is NOT registered as a shutdownFunc, for
+			// the same reason riskSignaler's is not: see below.
+			efficacySignaler := background.NewThrottledSignaler(
+				&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
+				background.SkillEfficacySignalCooldown,
+				logger.With(attr.SlogComponent("skill-efficacy")),
+			)
+			chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
@@ -738,7 +758,7 @@ func newStartCommand() *cli.Command {
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
-			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db)
+			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
 			// mcpService captures this map by reference now; the remaining
 			// insights tools (chat/orgs/risk/deployments/skills) are merged in once
@@ -1048,6 +1068,8 @@ func newStartCommand() *cli.Command {
 				policyBypass,
 				shadowMCPClient,
 				chatWriter,
+				efficacySignaler,
+				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
 			))
@@ -1302,6 +1324,9 @@ func newStartCommand() *cli.Command {
 				// Temporal client is still open - runShutdown closes it concurrently.
 				if err := riskSignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(err))
+				}
+				if err := efficacySignaler.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush pending skill efficacy signals", attr.SlogError(err))
 				}
 			})
 

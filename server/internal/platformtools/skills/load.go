@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
+	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -26,16 +27,23 @@ type loadInput struct {
 	Name string `json:"name" jsonschema:"Name of the attached skill to load."`
 }
 
+// skillEfficacySignalTimeout bounds one wake. A wake is best-effort and always
+// follows a durable write, so it must never hold a tool call open on a slow
+// coordinator.
+const skillEfficacySignalTimeout = time.Second
+
 type Load struct {
-	db         *pgxpool.Pool
-	logger     *slog.Logger
-	descriptor core.ToolDescriptor
+	db               *pgxpool.Pool
+	logger           *slog.Logger
+	efficacySignaler efficacy.Signaler
+	descriptor       core.ToolDescriptor
 }
 
-func NewLoadTool(logger *slog.Logger, db *pgxpool.Pool) *Load {
-	return &Load{
-		db:     db,
-		logger: logger,
+func NewLoadTool(logger *slog.Logger, db *pgxpool.Pool, opts ...LoadOption) *Load {
+	t := &Load{
+		db:               db,
+		logger:           logger,
+		efficacySignaler: nil,
 		descriptor: core.ToolDescriptor{
 			SourceSlug:  "skills",
 			HandlerName: "load",
@@ -49,6 +57,12 @@ func NewLoadTool(logger *slog.Logger, db *pgxpool.Pool) *Load {
 			OwnerID:     nil,
 		},
 	}
+
+	for _, opt := range opts {
+		opt(t)
+	}
+
+	return t
 }
 
 func (t *Load) Descriptor() core.ToolDescriptor {
@@ -97,12 +111,13 @@ func (t *Load) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.
 		}
 		writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		if err := queries.RecordAssistantSkillObservation(writeCtx, assistantrepo.RecordAssistantSkillObservationParams{
+		written, err := queries.RecordAssistantSkillObservation(writeCtx, assistantrepo.RecordAssistantSkillObservationParams{
 			SessionID:      chatID.String(),
 			SkillVersionID: loaded.SkillVersionID,
 			ProjectID:      *authCtx.ProjectID,
 			SkillID:        loaded.SkillID,
-		}); err != nil {
+		})
+		if err != nil {
 			t.logger.ErrorContext(writeCtx, "failed to record assistant skill observation",
 				attr.SlogError(err),
 				attr.SlogProjectID(authCtx.ProjectID.String()),
@@ -111,7 +126,27 @@ func (t *Load) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.
 				attr.SlogChatID(chatID.String()),
 				attr.SlogName(loaded.Name),
 			)
+			return nil
 		}
+
+		// The activation is durable by here, so the wake is best-effort and
+		// detached from the tool call: a caller that walked away must not drop
+		// it, and a coordinator that refuses it must not change what the model
+		// sees.
+		if written > 0 && t.efficacySignaler != nil {
+			signalCtx, cancelSignal := context.WithTimeout(context.WithoutCancel(ctx), skillEfficacySignalTimeout)
+			defer cancelSignal()
+			if err := t.efficacySignaler.Signal(signalCtx, *authCtx.ProjectID); err != nil {
+				t.logger.ErrorContext(signalCtx, "signal skill efficacy coordinator from assistant skill load",
+					attr.SlogError(err),
+					attr.SlogProjectID(authCtx.ProjectID.String()),
+					attr.SlogAssistantID(principal.AssistantID.String()),
+					attr.SlogChatID(chatID.String()),
+					attr.SlogName(loaded.Name),
+				)
+			}
+		}
+
 		return nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {

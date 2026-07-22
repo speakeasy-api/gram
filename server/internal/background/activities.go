@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -122,6 +123,7 @@ type Activities struct {
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
 	pluginPublisher                 *activities.PluginPublisher
+	skillEfficacyScorer             *activities.SkillEfficacyScorer
 }
 
 func NewActivities(
@@ -253,6 +255,15 @@ func NewActivities(
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
+		// The judge draws on the same per-(org, model) bucket and the same
+		// completion client as every other platform judge, so efficacy scoring
+		// cannot outspend the org's key behind their backs.
+		skillEfficacyScorer: activities.NewSkillEfficacyScorer(
+			db,
+			productFeatures,
+			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter)),
+			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
+		),
 	}
 }
 

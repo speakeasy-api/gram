@@ -39,6 +39,36 @@ type SkillDistribution struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type SkillEfficacyEvaluation struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Surface         string
+	SessionID       string
+	ChatID          uuid.UUID
+	SkillID         uuid.UUID
+	SkillVersionID  uuid.UUID
+	CanonicalSha256 string
+	ObservedAt      pgtype.Timestamptz
+	State           string
+	ReservedOn      pgtype.Date
+	Attempts        int32
+	LastError       pgtype.Text
+	ScoredAt        pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type SkillEfficacySetting struct {
+	OrganizationID   string
+	Enabled          bool
+	PerSkillDailyCap int32
+	OrgDailyCap      int32
+	NewVersionBurst  int32
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
 type SkillObservation struct {
 	ID                 uuid.UUID
 	ProjectID          uuid.UUID
