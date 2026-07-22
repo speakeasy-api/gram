@@ -129,7 +129,7 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 	return policy, nil
 }
 
-func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
+func newClickhouseClient(ctx context.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
 	logger = logger.With(attr.SlogComponent("clickhouse"))
 	nilFunc := noopShutdown
 
@@ -216,7 +216,10 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		}
 		return nil
 	}
-	return conn, shutdown, nil
+	// Every consumer of this connection — all repos, current and future —
+	// inherits query tracing and the per-table duration metric by default
+	// (INC-417); no per-call-site wiring exists or is needed.
+	return o11y.TraceClickhouseConn(conn, tracerProvider, meterProvider, logger), shutdown, nil
 }
 
 type dbClientOptions struct {
