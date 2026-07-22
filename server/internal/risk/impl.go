@@ -26,6 +26,8 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	adminriskgen "github.com/speakeasy-api/gram/server/gen/admin_risk_analysis"
+	adminrisksrv "github.com/speakeasy-api/gram/server/gen/http/admin_risk_analysis/server"
 	srv "github.com/speakeasy-api/gram/server/gen/http/risk/server"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -64,6 +66,8 @@ import (
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
+var _ adminriskgen.Service = (*Service)(nil)
+var _ adminriskgen.Auther = (*Service)(nil)
 
 // RiskAnalysisSignaler signals the per-project risk analysis coordinator workflow.
 type RiskAnalysisSignaler interface {
@@ -84,15 +88,18 @@ type RiskPolicyResultsCleaner interface {
 }
 
 type Service struct {
-	tracer           trace.Tracer
-	logger           *slog.Logger
-	db               *pgxpool.Pool
-	repo             *repo.Queries
-	auth             *auth.Auth
-	authz            *authz.Engine
-	signaler         RiskAnalysisSignaler
-	reconciler       RiskExclusionReconciler
-	resultsCleaner   RiskPolicyResultsCleaner
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	db             *pgxpool.Pool
+	repo           *repo.Queries
+	auth           *auth.Auth
+	authz          *authz.Engine
+	signaler       RiskAnalysisSignaler
+	reconciler     RiskExclusionReconciler
+	resultsCleaner RiskPolicyResultsCleaner
+	// adhocClient starts/inspects operator-triggered ad-hoc analysis runs
+	// (adminRiskAnalysis service). nil in the lightweight observer.
+	adhocClient      AdhocAnalysisClient
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
 	audit            *audit.Logger
@@ -145,6 +152,7 @@ func NewObserver(
 		signaler:         signaler,
 		reconciler:       nil,
 		resultsCleaner:   nil,
+		adhocClient:      nil,
 		completionClient: nil,
 		shadowMCPClient:  nil,
 		audit:            auditLogger,
@@ -169,6 +177,7 @@ func NewService(
 	signaler RiskAnalysisSignaler,
 	reconciler RiskExclusionReconciler,
 	resultsCleaner RiskPolicyResultsCleaner,
+	adhocClient AdhocAnalysisClient,
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
@@ -193,6 +202,7 @@ func NewService(
 		signaler:         signaler,
 		reconciler:       reconciler,
 		resultsCleaner:   resultsCleaner,
+		adhocClient:      adhocClient,
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
 		audit:            auditLogger,
@@ -215,6 +225,14 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	srv.Mount(
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
+	)
+
+	adminEndpoints := adminriskgen.NewEndpoints(service)
+	adminEndpoints.Use(middleware.MapErrors())
+	adminEndpoints.Use(middleware.TraceMethods(service.tracer))
+	adminrisksrv.Mount(
+		mux,
+		adminrisksrv.New(adminEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 }
 

@@ -265,6 +265,13 @@ func NewTemporalWorker(
 		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
 	})
 
+	// Ad-hoc (operator-triggered) risk analysis runs on its own queue and
+	// worker so backfill load can never crowd out the live scan path.
+	riskAdhocWorker := worker.New(env.Client(), RiskAdhocAnalysisTaskQueue(env.Queue()), worker.Options{
+		Interceptors:                       workerInterceptors,
+		MaxConcurrentActivityExecutionSize: perPodAdhocAnalyzeBatchConcurrency,
+	})
+
 	aiUsageWorker := worker.New(env.Client(), AIUsagePollerTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
 		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
@@ -367,6 +374,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListProjectsWithPendingSkillObservations)
 	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
+	// Ad-hoc analysis: paging/count on the main worker, AnalyzeBatch on the
+	// dedicated ad-hoc worker.
+	temporalWorker.RegisterActivity(activities.FetchAdhocAnalysisMessages)
+	temporalWorker.RegisterActivity(activities.CountAdhocAnalysisMessages)
+	riskAdhocWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
 	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
 	temporalWorker.RegisterActivity(activities.ProcessAssistantThread)
@@ -426,6 +438,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TriggerWakeWorkflow)
 	// Risk analysis coordinator workflow
 	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(RiskAdhocAnalysisWorkflow)
 	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(ReconcileSkillObservationsWorkflow)
 	temporalWorker.RegisterWorkflow(SkillObservationReconciliationSweepWorkflow)
@@ -524,7 +537,7 @@ func NewTemporalWorker(
 		}
 	}
 
-	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker}
+	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, riskAdhoc: riskAdhocWorker, aiUsage: aiUsageWorker}
 }
 
 // Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
@@ -533,6 +546,14 @@ const perPodAnalyzeBatchConcurrency = 20
 
 func RiskAnalysisTaskQueue(mainQueue tenv.TaskQueueName) string {
 	return string(mainQueue) + "-risk-analysis"
+}
+
+// Deliberately far below perPodAnalyzeBatchConcurrency: ad-hoc backfills are
+// not latency-sensitive and share the database with the live scan path.
+const perPodAdhocAnalyzeBatchConcurrency = 5
+
+func RiskAdhocAnalysisTaskQueue(mainQueue tenv.TaskQueueName) string {
+	return string(mainQueue) + "-risk-adhoc"
 }
 
 const perPodAIUsagePollerConcurrency = 5
@@ -545,6 +566,7 @@ func AIUsagePollerTaskQueue(mainQueue tenv.TaskQueueName) string {
 type Workers struct {
 	main         worker.Worker
 	riskAnalysis worker.Worker
+	riskAdhoc    worker.Worker
 	aiUsage      worker.Worker
 }
 
@@ -555,6 +577,11 @@ func (w *Workers) Run(interruptCh <-chan any) error {
 		return fmt.Errorf("start risk analysis worker: %w", err)
 	}
 	defer w.riskAnalysis.Stop()
+
+	if err := w.riskAdhoc.Start(); err != nil {
+		return fmt.Errorf("start risk adhoc analysis worker: %w", err)
+	}
+	defer w.riskAdhoc.Stop()
 
 	if err := w.aiUsage.Start(); err != nil {
 		return fmt.Errorf("start ai integration usage worker: %w", err)
@@ -576,7 +603,13 @@ func (w *Workers) Start() error {
 		w.main.Stop()
 		return fmt.Errorf("start risk analysis worker: %w", err)
 	}
+	if err := w.riskAdhoc.Start(); err != nil {
+		w.riskAnalysis.Stop()
+		w.main.Stop()
+		return fmt.Errorf("start risk adhoc analysis worker: %w", err)
+	}
 	if err := w.aiUsage.Start(); err != nil {
+		w.riskAdhoc.Stop()
 		w.riskAnalysis.Stop()
 		w.main.Stop()
 		return fmt.Errorf("start ai integration usage worker: %w", err)
@@ -586,6 +619,7 @@ func (w *Workers) Start() error {
 
 func (w *Workers) Stop() {
 	w.aiUsage.Stop()
+	w.riskAdhoc.Stop()
 	w.riskAnalysis.Stop()
 	w.main.Stop()
 }

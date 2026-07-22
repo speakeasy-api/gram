@@ -3854,6 +3854,185 @@ paths:
       x-speakeasy-name-override: updateGlobalIssuer
       x-speakeasy-react-hook:
         name: UpdateGlobalRemoteSessionIssuer
+  /rpc/adminRiskAnalysis.status:
+    get:
+      description: Get the status and progress of a project's most recent ad-hoc risk analysis run. Requires platform admin.
+      operationId: getAdhocRiskAnalysisStatus
+      parameters:
+        - allowEmptyValue: true
+          description: The project to report on.
+          in: query
+          name: project_id
+          required: true
+          schema:
+            description: The project to report on.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdhocRiskAnalysisStatus'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: status adminRiskAnalysis
+      tags:
+        - adminRiskAnalysis
+      x-speakeasy-name-override: status
+      x-speakeasy-react-hook:
+        name: AdhocRiskAnalysisStatus
+  /rpc/adminRiskAnalysis.trigger:
+    post:
+      description: Start an ad-hoc risk analysis run re-scanning a project's chat messages against a policy over a time window. One run per project may be in flight at a time. Requires platform admin.
+      operationId: triggerAdhocRiskAnalysis
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdhocRiskAnalysisStatus'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: trigger adminRiskAnalysis
+      tags:
+        - adminRiskAnalysis
+      x-speakeasy-name-override: trigger
+      x-speakeasy-react-hook:
+        name: TriggerAdhocRiskAnalysis
   /rpc/agent.getPlugins:
     get:
       description: 'Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool''s own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool''s syncer decides how to render it into that tool''s native configuration.'
@@ -42405,6 +42584,69 @@ components:
       required:
         - id
         - content
+    AdhocRiskAnalysisProgress:
+      type: object
+      properties:
+        batches_completed:
+          type: integer
+          description: Analysis batches that completed successfully.
+          format: int64
+        batches_failed:
+          type: integer
+          description: Analysis batches that failed after retries.
+          format: int64
+        dispatched_messages:
+          type: integer
+          description: Messages dispatched for scanning so far.
+          format: int64
+        findings:
+          type: integer
+          description: Risk findings recorded so far.
+          format: int64
+        policies:
+          type: integer
+          description: Number of policies being scanned.
+          format: int64
+        processed_messages:
+          type: integer
+          description: Messages scanned across all completed batches.
+          format: int64
+        total_messages:
+          type: integer
+          description: Total messages in the requested time window.
+          format: int64
+      description: Progress counters for an ad-hoc risk analysis run.
+      required:
+        - total_messages
+        - dispatched_messages
+        - processed_messages
+        - findings
+        - batches_completed
+        - batches_failed
+        - policies
+    AdhocRiskAnalysisStatus:
+      type: object
+      properties:
+        closed_at:
+          type: string
+          description: When the run finished, if it has.
+          format: date-time
+        progress:
+          $ref: '#/components/schemas/AdhocRiskAnalysisProgress'
+        started_at:
+          type: string
+          description: When the run started.
+          format: date-time
+        status:
+          type: string
+          description: 'One of: none (no run ever triggered), running, completed, failed, canceled, terminated, timed_out.'
+        workflow_id:
+          type: string
+          description: The Temporal workflow id of the run; empty when status is none.
+      description: Status of a project's most recent ad-hoc risk analysis run.
+      required:
+        - workflow_id
+        - status
     AdminListOrganizationMembersResult:
       type: object
       properties:
@@ -58447,6 +58689,29 @@ components:
         - status
         - created_at
         - updated_at
+    TriggerRequestBody:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start of the message window (inclusive).
+          format: date-time
+        project_id:
+          type: string
+          description: The project whose messages to re-scan.
+          format: uuid
+        risk_policy_id:
+          type: string
+          description: The risk policy to scan against. Must be enabled.
+          format: uuid
+        to:
+          type: string
+          description: End of the message window (exclusive). Defaults to now.
+          format: date-time
+      required:
+        - project_id
+        - risk_policy_id
+        - from
     TriggerRiskAnalysisRequestBody:
       type: object
       properties:
@@ -60691,6 +60956,8 @@ tags:
     description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages
     description: Manages packages in Gram.
+  - name: adminRiskAnalysis
+    description: Platform-admin triggering and monitoring of ad-hoc risk analysis runs over an explicit time window. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: plugins
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features

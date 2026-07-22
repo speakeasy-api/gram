@@ -9,6 +9,7 @@ import {
   PlatformAdminFeaturesPanel,
   PlatformAdminInfoPanel,
   PlatformAdminOnboardingPanel,
+  PlatformAdminRiskPanel,
 } from "./platform-admin-panel";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,6 +19,7 @@ import {
   GripVertical,
   Info,
   Mail,
+  ScanSearch,
   Shield,
   SlidersHorizontal,
 } from "lucide-react";
@@ -671,6 +673,14 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
                 <Mail className="h-3 w-3" />
                 Onboarding
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("risk")}
+                className={tabClass(activeTab === "risk")}
+              >
+                <ScanSearch className="h-3 w-3" />
+                Risk
+              </button>
             </div>
 
             {/* Info tab: org info + override, plus the dev impersonation toggle */}
@@ -719,6 +729,13 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
             {activeTab === "onboarding" && (
               <div className="max-h-[440px] overflow-y-auto px-3 py-3">
                 <PlatformAdminOnboardingPanel />
+              </div>
+            )}
+
+            {/* Risk tab: ad-hoc risk analysis trigger + run status */}
+            {activeTab === "risk" && (
+              <div className="max-h-[440px] overflow-y-auto px-3 py-3">
+                <PlatformAdminRiskPanel />
               </div>
             )}
 

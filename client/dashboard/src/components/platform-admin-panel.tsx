@@ -1,7 +1,14 @@
 import { Input } from "@/components/ui/input";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
+import type { AdhocRiskAnalysisStatus } from "@gram/client/models/components/adhocriskanalysisstatus.js";
+import {
+  invalidateAllAdhocRiskAnalysisStatus,
+  useAdhocRiskAnalysisStatus,
+} from "@gram/client/react-query/adhocRiskAnalysisStatus.js";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useTriggerAdhocRiskAnalysisMutation } from "@gram/client/react-query/triggerAdhocRiskAnalysis.js";
 import { useDisableRBACMutation } from "@gram/client/react-query/disableRBAC.js";
 import { useEnableRBACMutation } from "@gram/client/react-query/enableRBAC.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
@@ -22,6 +29,7 @@ import {
   KeyRound,
   Loader2,
   Mail,
+  ScanSearch,
   ShieldCheck,
   Webhook,
 } from "lucide-react";
@@ -529,6 +537,205 @@ function OrgInfoSection(): ReactElement {
   );
 }
 
+function runStatusPillClass(status: string): string {
+  switch (status) {
+    case "running":
+      return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+    case "completed":
+      return "bg-emerald-500/10 text-emerald-500";
+    case "failed":
+    case "terminated":
+    case "timed_out":
+      return "bg-red-500/10 text-red-600 dark:text-red-400";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+function RunStatusPill({ status }: { status: string }): ReactElement {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${runStatusPillClass(status)}`}
+    >
+      {status.replace("_", " ")}
+    </span>
+  );
+}
+
+function AdhocRunStatus({
+  status,
+}: {
+  status: AdhocRiskAnalysisStatus;
+}): ReactElement {
+  const progress = status.progress;
+  const total = progress?.totalMessages ?? 0;
+  const processed = progress?.processedMessages ?? 0;
+  const percent =
+    total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <RunStatusPill status={status.status} />
+        <span className="text-muted-foreground truncate font-mono text-[10px]">
+          {status.workflowId}
+        </span>
+      </div>
+      {progress && (
+        <>
+          <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+            <div
+              className="bg-foreground h-full rounded-full transition-all"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px]">
+            <dt className="text-muted-foreground">Messages</dt>
+            <dd className="text-foreground tabular-nums">
+              {processed.toLocaleString()} / {total.toLocaleString()} scanned
+            </dd>
+            <dt className="text-muted-foreground">Findings</dt>
+            <dd className="text-foreground tabular-nums">
+              {progress.findings.toLocaleString()}
+            </dd>
+            <dt className="text-muted-foreground">Batches</dt>
+            <dd className="text-foreground tabular-nums">
+              {progress.batchesCompleted.toLocaleString()} completed
+              {progress.batchesFailed > 0 &&
+                `, ${progress.batchesFailed.toLocaleString()} failed`}
+            </dd>
+          </dl>
+        </>
+      )}
+      {status.startedAt && (
+        <p className="text-muted-foreground text-[10px]">
+          Started {status.startedAt.toLocaleString()}
+          {status.closedAt && ` · finished ${status.closedAt.toLocaleString()}`}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AdhocRiskAnalysisSection(): ReactElement {
+  const project = useProject();
+  const queryClient = useQueryClient();
+
+  const { data: policiesData } = useRiskListPolicies();
+  const enabledPolicies = (policiesData?.policies ?? []).filter(
+    (policy) => policy.enabled,
+  );
+
+  const [policyId, setPolicyId] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const statusQuery = useAdhocRiskAnalysisStatus(
+    { projectId: project.id },
+    undefined,
+    {
+      retry: false,
+      throwOnError: false,
+      refetchInterval: (query) =>
+        query.state.data?.status === "running" ? 4_000 : false,
+    },
+  );
+
+  const trigger = useTriggerAdhocRiskAnalysisMutation({
+    onSuccess: () => {
+      toast.success("Ad-hoc risk analysis started");
+      void invalidateAllAdhocRiskAnalysisStatus(queryClient);
+    },
+    onError: (error) => {
+      toast.error(`Failed to start ad-hoc risk analysis: ${error.message}`);
+    },
+  });
+
+  const canTrigger =
+    policyId !== "" &&
+    from !== "" &&
+    statusQuery.data?.status !== "running" &&
+    !trigger.isPending;
+
+  const onTrigger = () => {
+    trigger.mutate({
+      request: {
+        triggerRequestBody: {
+          projectId: project.id,
+          riskPolicyId: policyId,
+          from: new Date(from),
+          to: to !== "" ? new Date(to) : undefined,
+        },
+      },
+    });
+  };
+
+  return (
+    <Section
+      icon={ScanSearch}
+      title="Ad-hoc risk analysis"
+      description="Re-scan this project's chat messages against a policy over a time window, e.g. to backfill after a scanner fix. Runs on an isolated queue and is recorded in the org's audit log."
+    >
+      <div className="space-y-2">
+        <select
+          value={policyId}
+          onChange={(e) => setPolicyId(e.target.value)}
+          className="border-border bg-background text-foreground w-full rounded-md border px-2 py-1 text-[11px]"
+        >
+          <option value="">Select a policy…</option>
+          {enabledPolicies.map((policy) => (
+            <option key={policy.id} value={policy.id}>
+              {policy.name}
+            </option>
+          ))}
+        </select>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="space-y-0.5">
+            <span className="text-muted-foreground text-[10px]">From</span>
+            <Input
+              type="datetime-local"
+              value={from}
+              onChange={setFrom}
+              className="h-7 text-[11px]"
+            />
+          </label>
+          <label className="space-y-0.5">
+            <span className="text-muted-foreground text-[10px]">
+              To (default now)
+            </span>
+            <Input
+              type="datetime-local"
+              value={to}
+              onChange={setTo}
+              className="h-7 text-[11px]"
+            />
+          </label>
+        </div>
+        <div className="flex justify-end">
+          <ActionButton
+            onClick={onTrigger}
+            disabled={!canTrigger}
+            pending={trigger.isPending}
+          >
+            Start re-scan
+          </ActionButton>
+        </div>
+        <div className="border-border border-t pt-2">
+          {statusQuery.data && statusQuery.data.status !== "none" ? (
+            <AdhocRunStatus status={statusQuery.data} />
+          ) : (
+            <p className="text-muted-foreground text-[11px]">
+              {statusQuery.isLoading
+                ? "Loading run status…"
+                : "No ad-hoc runs for this project yet."}
+            </p>
+          )}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 // The panels below back the Platform Admin tabs in the Developer Toolkit, one
 // per tab: Info (org info + override), Features (RBAC + product features), and
 // Onboarding (enterprise admin email).
@@ -548,4 +755,8 @@ export function PlatformAdminFeaturesPanel(): ReactElement {
 
 export function PlatformAdminOnboardingPanel(): ReactElement {
   return <OnboardingSection />;
+}
+
+export function PlatformAdminRiskPanel(): ReactElement {
+  return <AdhocRiskAnalysisSection />;
 }
