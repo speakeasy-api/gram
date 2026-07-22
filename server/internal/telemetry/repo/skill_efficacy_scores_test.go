@@ -125,6 +125,83 @@ func TestInsertSkillEfficacyScores_EmptyInputIsNoop(t *testing.T) {
 	require.NoError(t, queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{}))
 }
 
+func TestQuerySkillInsightsAggregatesMappingsAndScoresWithoutUsage(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	queries := repo.New(conn)
+
+	orgID := uuid.NewString()
+	projectID := uuid.New()
+	observedAt := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	score := efficacyScoreFixture(t, orgID, projectID.String(), observedAt.Add(40*time.Minute))
+	score.SessionID = "insight-session"
+	score.Score = 0.8
+	turns := 2.0
+	minutes := 8.0
+	score.EstTurnsSaved = &turns
+	score.EstMinutesSaved = &minutes
+	score.Flags = []string{"partially_followed", "ignored"}
+
+	mappings := []repo.SkillSessionVersion{
+		{
+			ID:              uuid.New(),
+			CreatedAt:       observedAt,
+			SeenAt:          observedAt,
+			OrganizationID:  orgID,
+			ProjectID:       projectID,
+			SessionID:       score.SessionID,
+			SkillID:         score.SkillID,
+			SkillVersionID:  score.SkillVersionID,
+			CanonicalSHA256: score.CanonicalSHA256,
+			Surface:         score.Surface,
+		},
+		{
+			ID:              uuid.New(),
+			CreatedAt:       observedAt.Add(time.Minute),
+			SeenAt:          observedAt.Add(time.Minute),
+			OrganizationID:  orgID,
+			ProjectID:       projectID,
+			SessionID:       score.SessionID,
+			SkillID:         score.SkillID,
+			SkillVersionID:  score.SkillVersionID,
+			CanonicalSHA256: score.CanonicalSHA256,
+			Surface:         score.Surface,
+		},
+	}
+	require.NoError(t, queries.InsertSkillSessionVersions(ctx, mappings))
+	require.NoError(t, queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{score}))
+	testenv.FlushClickHouseAsyncInserts(t, conn)
+
+	rows, err := queries.QuerySkillInsights(ctx, repo.QuerySkillInsightsParams{
+		OrganizationID:  orgID,
+		ProjectID:       projectID.String(),
+		SkillIDs:        []string{score.SkillID.String()},
+		SkillVersionIDs: nil,
+		From:            observedAt.Add(-time.Hour),
+		To:              observedAt.Add(time.Hour),
+		IntervalSeconds: int64((24 * time.Hour).Seconds()),
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, score.SkillID.String(), rows[0].SkillID)
+	require.Equal(t, score.SkillVersionID.String(), rows[0].SkillVersionID)
+	require.EqualValues(t, 2, rows[0].ActivationCount)
+	require.EqualValues(t, 1, rows[0].ActivatedSessions)
+	require.Zero(t, rows[0].TotalSessionCost)
+	require.EqualValues(t, 1, rows[0].ScoredSessions)
+	require.InDelta(t, 0.8, rows[0].ScoreSum, 0)
+	require.InDelta(t, 2, rows[0].EstimatedTurnsSavedSum, 0)
+	require.EqualValues(t, 1, rows[0].EstimatedTurnsSamples)
+	require.InDelta(t, 8, rows[0].EstimatedMinutesSavedSum, 0)
+	require.EqualValues(t, 1, rows[0].EstimatedMinutesSamples)
+	require.EqualValues(t, 1, rows[0].ROIConfidenceHigh)
+	require.EqualValues(t, 1, rows[0].IgnoredCount)
+	require.EqualValues(t, 1, rows[0].PartiallyFollowedCount)
+}
+
 func TestInsertSkillEfficacyScores_ClassifiesConstraintViolations(t *testing.T) {
 	t.Parallel()
 

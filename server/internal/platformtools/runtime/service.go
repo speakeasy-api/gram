@@ -201,12 +201,13 @@ func ManagedAssistantChangelogTools(httpClient *guardian.HTTPClient) []platformt
 
 // ManagedAssistantSkillsTools returns read-only skill management tools for the
 // project's managed assistant.
-func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService) []platformtools.ExternalTool {
+func ManagedAssistantSkillsTools(skillsSvc platformskills.SkillsService, insights platformskills.SkillInsightsReader) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformskills.NewListTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewGetTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewListVersionsTool(skillsSvc), RequiredFeature: "skills"},
 		{Executor: platformskills.NewListDistributionsTool(skillsSvc), RequiredFeature: "skills"},
+		{Executor: platformskills.NewInsightsTool(skillsSvc, insights), RequiredFeature: "skills"},
 	}
 }
 
