@@ -36,7 +36,7 @@ dev = [
   # Pulls in trio so the backend-agnostic tests can exercise the library under
   # anyio's trio backend, not just asyncio.
   "anyio[trio]>=4.14.0",
-  "ty>=0.0.53",
+  "ty>=0.0.55",
   "types-protobuf>=7.34.1.20260518",
 ]
 
