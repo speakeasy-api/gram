@@ -78,6 +78,7 @@ export function OrgSidebar({
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
+    orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
   ].some((r) => r.active);
 
@@ -109,6 +110,7 @@ export function OrgSidebar({
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
+    orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
@@ -179,6 +181,10 @@ export function OrgSidebar({
                 />
                 <ScopeGatedNavItem
                   item={orgRoutes.logs}
+                  scope={["org:read", "org:admin"]}
+                />
+                <ScopeGatedNavItem
+                  item={orgRoutes.aiIntegrations}
                   scope={["org:read", "org:admin"]}
                 />
                 <ScopeGatedNavItem

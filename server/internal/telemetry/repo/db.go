@@ -3,7 +3,9 @@ package repo
 import (
 	"context"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // CHTX is the interface for executing ClickHouse queries and commands.
@@ -30,4 +32,15 @@ func New(conn CHTX) *Queries {
 	return &Queries{
 		conn: conn,
 	}
+}
+
+// chQueryContext forwards the caller's OTel span context to ClickHouse so the
+// server-side query spans (system.opentelemetry_span_log) join the request
+// trace. clickhouse-go only sends trace context that is explicitly attached
+// via clickhouse.Context/WithSpan — it never reads the span from ctx itself.
+func chQueryContext(ctx context.Context) context.Context {
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		return clickhouse.Context(ctx, clickhouse.WithSpan(sc))
+	}
+	return ctx
 }

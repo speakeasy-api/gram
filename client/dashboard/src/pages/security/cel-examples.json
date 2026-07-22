@@ -1,0 +1,45 @@
+{
+  "_comment": "Insertable CEL example snippets shown beneath the dashboard CEL editors. Compile-checked against the real engine by server/internal/risk/celenv/dashboard_examples_test.go; keep expressions valid celenv CEL.",
+  "scope_include": [
+    {
+      "label": "Only a GitHub server",
+      "expr": "tool_calls.exists(t, t.server.matchExact(\"github\"))"
+    },
+    {
+      "label": "Production prompts",
+      "expr": "prompt.matchText(\"production\")"
+    },
+    {
+      "label": "Delete-style tools",
+      "expr": "tool_calls.exists(t, t.function.matchGlob(\"*delete*\"))"
+    }
+  ],
+  "scope_exempt": [
+    {
+      "label": "Read-only tools",
+      "expr": "tool_calls.size() > 0 && tool_calls.all(t, t.function.matchGlob(\"*get*\") || t.function.matchGlob(\"*list*\"))"
+    },
+    {
+      "label": "A safelisted server",
+      "expr": "tool_calls.exists(t, t.server.matchExact(\"internal-docs\"))"
+    }
+  ],
+  "detection": [
+    {
+      "label": "Secret in content",
+      "expr": "content.matchRegex(\"sk-[A-Za-z0-9]{32}\")"
+    },
+    {
+      "label": "Password in prompt",
+      "expr": "prompt.matchText(\"password\")"
+    },
+    {
+      "label": "Destructive shell",
+      "expr": "tool_calls.exists(t, t.function.matchText(\"bash\") && t.args.get(\"command\").matchRegex(\"rm -rf\"))"
+    },
+    {
+      "label": "Tool error output",
+      "expr": "tool_result.matchText(\"error\")"
+    }
+  ]
+}

@@ -42,6 +42,8 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CreateRemoteIdentityProviderSheet } from "./CreateRemoteIdentityProviderSheet";
 import { issuerDisplayName } from "./issuerDisplay";
+import { MigrateIssuerDialog } from "./MigrateIssuerDialog";
+import { migrationCandidates } from "./migrationCandidates";
 
 export function RemoteIdentityProvidersRoot(): JSX.Element {
   return <Outlet />;
@@ -69,15 +71,19 @@ function RemoteIdentityProvidersOverview() {
     useState<OrganizationRemoteSessionIssuer | null>(null);
   const [moveTarget, setMoveTarget] =
     useState<OrganizationRemoteSessionIssuer | null>(null);
+  const [migrateSource, setMigrateSource] =
+    useState<OrganizationRemoteSessionIssuer | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const { organizational, projectSpecific } = useMemo(() => {
-    const items = data?.result.items ?? [];
-    return {
-      organizational: items.filter((item) => !item.issuer.projectId),
-      projectSpecific: items.filter((item) => !!item.issuer.projectId),
-    };
-  }, [data]);
+  const allItems = useMemo(() => data?.result.items ?? [], [data]);
+
+  const { organizational, projectSpecific } = useMemo(
+    () => ({
+      organizational: allItems.filter((item) => !item.issuer.projectId),
+      projectSpecific: allItems.filter((item) => !!item.issuer.projectId),
+    }),
+    [allItems],
+  );
 
   // Promoting a project-specific issuer to organizational applies immediately
   // from the menu (no project to pick); the picker dialog handles the cases that
@@ -132,6 +138,7 @@ function RemoteIdentityProvidersOverview() {
             onDelete={setDeleteTarget}
             onMakeOrganizational={handleMakeOrganizational}
             onMoveToProject={setMoveTarget}
+            onConsolidate={setMigrateSource}
           />
         </Page.Section.Body>
       </Page.Section>
@@ -152,6 +159,7 @@ function RemoteIdentityProvidersOverview() {
             onDelete={setDeleteTarget}
             onMakeOrganizational={handleMakeOrganizational}
             onMoveToProject={setMoveTarget}
+            onConsolidate={setMigrateSource}
           />
         </Page.Section.Body>
       </Page.Section>
@@ -176,6 +184,14 @@ function RemoteIdentityProvidersOverview() {
           onClose={() => setMoveTarget(null)}
         />
       )}
+
+      {migrateSource && (
+        <MigrateIssuerDialog
+          source={migrateSource}
+          candidates={migrationCandidates(migrateSource, allItems)}
+          onClose={() => setMigrateSource(null)}
+        />
+      )}
     </>
   );
 }
@@ -188,6 +204,7 @@ function IssuerTable({
   onDelete,
   onMakeOrganizational,
   onMoveToProject,
+  onConsolidate,
 }: {
   items: OrganizationRemoteSessionIssuer[];
   isLoading: boolean;
@@ -196,6 +213,7 @@ function IssuerTable({
   onDelete: (item: OrganizationRemoteSessionIssuer) => void;
   onMakeOrganizational: (item: OrganizationRemoteSessionIssuer) => void;
   onMoveToProject: (item: OrganizationRemoteSessionIssuer) => void;
+  onConsolidate: (item: OrganizationRemoteSessionIssuer) => void;
 }) {
   const orgRoutes = useOrgRoutes();
 
@@ -262,6 +280,7 @@ function IssuerTable({
               onDelete={() => onDelete(item)}
               onMakeOrganizational={() => onMakeOrganizational(item)}
               onMoveToProject={() => onMoveToProject(item)}
+              onConsolidate={() => onConsolidate(item)}
             />
           </td>
         </DotRow>
@@ -275,11 +294,13 @@ function RowActions({
   onDelete,
   onMakeOrganizational,
   onMoveToProject,
+  onConsolidate,
 }: {
   item: OrganizationRemoteSessionIssuer;
   onDelete: () => void;
   onMakeOrganizational: () => void;
   onMoveToProject: () => void;
+  onConsolidate: () => void;
 }) {
   const isOrganizational = !item.issuer.projectId;
 
@@ -315,6 +336,9 @@ function RowActions({
                 </DropdownMenuItem>
               </>
             )}
+            <DropdownMenuItem onClick={onConsolidate}>
+              Consolidate into another provider
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onDelete}>Delete</DropdownMenuItem>
           </DropdownMenuContent>

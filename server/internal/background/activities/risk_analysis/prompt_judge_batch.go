@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -83,7 +84,7 @@ func judgeFanout(
 	}
 }
 
-func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) [][]scanners.Finding {
+func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
@@ -92,7 +93,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 
 	indices := make([]int, 0, len(messages))
 	for i := range messages {
-		if len(outOfPolicyScope) > 0 && outOfPolicyScope[i] {
+		if !masks.InScope(i, categories.CategoryPromptPolicy) {
 			continue
 		}
 		indices = append(indices, i)

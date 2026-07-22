@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	ActionRemoteSessionIssuerCreate Action = "remote-session-issuer:create"
-	ActionRemoteSessionIssuerUpdate Action = "remote-session-issuer:update"
-	ActionRemoteSessionIssuerDelete Action = "remote-session-issuer:delete"
+	ActionRemoteSessionIssuerCreate  Action = "remote-session-issuer:create"
+	ActionRemoteSessionIssuerUpdate  Action = "remote-session-issuer:update"
+	ActionRemoteSessionIssuerDelete  Action = "remote-session-issuer:delete"
+	ActionRemoteSessionIssuerMigrate Action = "remote-session-issuer:migrate"
 )
 
 type LogRemoteSessionIssuerCreateEvent struct {
@@ -121,6 +122,82 @@ func (l *Logger) LogRemoteSessionIssuerUpdate(ctx context.Context, dbtx repo.DBT
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuerV1})
+}
+
+// LogRemoteSessionIssuerMigrateEvent records the consolidation of a source
+// issuer onto a target issuer. The subject is the source: it is the row that
+// disappears, and the migrate action stands in for the soft-delete that the
+// same transaction performs, so no separate delete event is emitted.
+type LogRemoteSessionIssuerMigrateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SourceRemoteSessionIssuerURN urn.RemoteSessionIssuer
+	SourceSlug                   string
+	SourceIssuerURL              string
+	SourceName                   *string
+
+	TargetRemoteSessionIssuerURN urn.RemoteSessionIssuer
+	TargetSlug                   string
+
+	ClientsMigrated int64
+
+	SnapshotBefore *types.RemoteSessionIssuer
+	SnapshotAfter  *types.RemoteSessionIssuer
+}
+
+func (l *Logger) LogRemoteSessionIssuerMigrate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerMigrateEvent) error {
+	action := ActionRemoteSessionIssuerMigrate
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"source_remote_session_issuer_urn": event.SourceRemoteSessionIssuerURN.String(),
+		"target_remote_session_issuer_urn": event.TargetRemoteSessionIssuerURN.String(),
+		"target_slug":                      event.TargetSlug,
+		"clients_migrated":                 event.ClientsMigrated,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	// The snapshots describe the source issuer before the migration and the
+	// target issuer that absorbed its clients, so a reader can see both ends of
+	// the consolidation from one entry.
+	beforeSnapshot, err := marshalAuditPayload(event.SnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(event.SnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.SourceRemoteSessionIssuerURN.ID.String(),
+		SubjectType:        string(subjectTypeRemoteSessionIssuer),
+		SubjectDisplayName: conv.ToPGTextEmpty(remoteSessionIssuerDisplayName(event.SourceName, event.SourceIssuerURL)),
+		SubjectSlug:        conv.ToPGTextEmpty(event.SourceSlug),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuerV1})

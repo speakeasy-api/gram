@@ -1,3 +1,4 @@
+import { formatCost } from "@/lib/money";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -24,14 +25,7 @@ import {
   ESTIMATED_COST_TOOLTIP,
   isMeteredBilling,
 } from "@/components/estimated-cost-utils";
-import { isAttributionDim, unsetLabel } from "./taxonomy";
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
+import { displayName, isAttributionDim } from "./taxonomy";
 
 // Average cost per chat session for a row; 0 when there are no sessions.
 function costPerSession(row: QueryRow): number {
@@ -110,10 +104,6 @@ const GREEN = "#10b981";
 const RED = "#f43f5e";
 const GREY = "#94a3b8";
 
-function displayValue(groupBy: Dimension, groupValue: string): string {
-  return groupValue === "" ? unsetLabel(groupBy) : groupValue;
-}
-
 // Why the Team-wide API Usage row exists, surfaced as an info tooltip on the
 // user breakdown's empty-identity bucket.
 const TEAM_WIDE_USAGE_TOOLTIP =
@@ -173,12 +163,12 @@ type Sort = { key: SortKey; dir: SortDir };
 function sortValue(
   row: QueryRow,
   key: SortKey,
-  groupBy: Dimension,
   seriesByGroup: Map<string, number[]>,
+  groupBy: Dimension,
 ): number | string {
   switch (key) {
     case "name":
-      return displayValue(groupBy, row.groupValue).toLowerCase();
+      return displayName(groupBy, row.groupValue).toLowerCase();
     case "cost":
     // Share is cost ÷ a constant total, so it sorts identically to cost.
     case "share":
@@ -275,8 +265,8 @@ export function CostTable({
     const main = rows.filter((r) => r.groupValue !== "Other");
     const other = rows.filter((r) => r.groupValue === "Other");
     main.sort((a, b) => {
-      const av = sortValue(a, sort.key, groupBy, seriesByGroup);
-      const bv = sortValue(b, sort.key, groupBy, seriesByGroup);
+      const av = sortValue(a, sort.key, seriesByGroup, groupBy);
+      const bv = sortValue(b, sort.key, seriesByGroup, groupBy);
       const cmp =
         typeof av === "string"
           ? av.localeCompare(bv as string)
@@ -284,7 +274,7 @@ export function CostTable({
       return sort.dir === "asc" ? cmp : -cmp;
     });
     return [...main, ...other];
-  }, [rows, sort, groupBy, seriesByGroup]);
+  }, [rows, sort, seriesByGroup, groupBy]);
 
   if (isLoading) return <SkeletonTable />;
 
@@ -464,7 +454,7 @@ export function CostTable({
                   />
                 )}
                 <span className="truncate font-medium">
-                  {displayValue(groupBy, row.groupValue)}
+                  {displayName(groupBy, row.groupValue)}
                 </span>
                 {groupBy === Dimension.Email && row.groupValue === "" && (
                   <InfoTooltip text={TEAM_WIDE_USAGE_TOOLTIP} />

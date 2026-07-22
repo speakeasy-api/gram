@@ -6,11 +6,15 @@ import { organizationRemoteSessionIssuersCreate } from "../funcs/organizationRem
 import { organizationRemoteSessionIssuersDelete } from "../funcs/organizationRemoteSessionIssuersDelete.js";
 import { organizationRemoteSessionIssuersGet } from "../funcs/organizationRemoteSessionIssuersGet.js";
 import { organizationRemoteSessionIssuersGetDeletePreflight } from "../funcs/organizationRemoteSessionIssuersGetDeletePreflight.js";
+import { organizationRemoteSessionIssuersGetMigratePreflight } from "../funcs/organizationRemoteSessionIssuersGetMigratePreflight.js";
 import { organizationRemoteSessionIssuersList } from "../funcs/organizationRemoteSessionIssuersList.js";
+import { organizationRemoteSessionIssuersMigrate } from "../funcs/organizationRemoteSessionIssuersMigrate.js";
 import { organizationRemoteSessionIssuersMove } from "../funcs/organizationRemoteSessionIssuersMove.js";
 import { organizationRemoteSessionIssuersUpdate } from "../funcs/organizationRemoteSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { MigrateOrganizationRemoteSessionIssuerResult } from "../models/components/migrateorganizationremotesessionissuerresult.js";
 import { OrganizationIssuerDeletePreflight } from "../models/components/organizationissuerdeletepreflight.js";
+import { OrganizationIssuerMigratePreflight } from "../models/components/organizationissuermigratepreflight.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
 import {
   CreateOrganizationRemoteSessionIssuerRequest,
@@ -29,10 +33,18 @@ import {
   GetOrganizationRemoteSessionIssuerDeletePreflightSecurity,
 } from "../models/operations/getorganizationremotesessionissuerdeletepreflight.js";
 import {
+  GetOrganizationRemoteSessionIssuerMigratePreflightRequest,
+  GetOrganizationRemoteSessionIssuerMigratePreflightSecurity,
+} from "../models/operations/getorganizationremotesessionissuermigratepreflight.js";
+import {
   ListOrganizationRemoteSessionIssuersRequest,
   ListOrganizationRemoteSessionIssuersResponse,
   ListOrganizationRemoteSessionIssuersSecurity,
 } from "../models/operations/listorganizationremotesessionissuers.js";
+import {
+  MigrateOrganizationRemoteSessionIssuerRequest,
+  MigrateOrganizationRemoteSessionIssuerSecurity,
+} from "../models/operations/migrateorganizationremotesessionissuer.js";
 import {
   MoveOrganizationRemoteSessionIssuerRequest,
   MoveOrganizationRemoteSessionIssuerSecurity,
@@ -124,6 +136,27 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
   }
 
   /**
+   * getIssuerMigratePreflight organizationRemoteSessionIssuers
+   *
+   * @remarks
+   * Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.
+   */
+  async getMigratePreflight(
+    request: GetOrganizationRemoteSessionIssuerMigratePreflightRequest,
+    security?:
+      | GetOrganizationRemoteSessionIssuerMigratePreflightSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationIssuerMigratePreflight> {
+    return unwrapAsync(organizationRemoteSessionIssuersGetMigratePreflight(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listIssuers organizationRemoteSessionIssuers
    *
    * @remarks
@@ -140,6 +173,25 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
     >
   > {
     return unwrapResultIterator(organizationRemoteSessionIssuersList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * migrateIssuer organizationRemoteSessionIssuers
+   *
+   * @remarks
+   * Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.
+   */
+  async migrate(
+    request: MigrateOrganizationRemoteSessionIssuerRequest,
+    security?: MigrateOrganizationRemoteSessionIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<MigrateOrganizationRemoteSessionIssuerResult> {
+    return unwrapAsync(organizationRemoteSessionIssuersMigrate(
       this,
       request,
       security,
