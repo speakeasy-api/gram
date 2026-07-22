@@ -422,6 +422,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		SortOrder:        params.sortOrder,
 		Cursor:           params.cursor,
 		Limit:            params.limit + 1,
+		MetricsDetail:    payload.Metrics,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error searching users")
@@ -691,7 +692,8 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 			UserIDs:          filter.UserIds,
 			SortOrder:        "desc",
 			Cursor:           "",
-			Limit:            10001, // Upper bound; orgs rarely have >10k users
+			Limit:            10001,  // Upper bound; orgs rarely have >10k users
+			MetricsDetail:    "full", // role aggregation sums cost/tokens across the full metric set
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error searching users for role aggregation")

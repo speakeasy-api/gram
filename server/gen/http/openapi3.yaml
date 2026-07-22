@@ -58224,6 +58224,13 @@ components:
                     format: int64
                     minimum: 1
                     maximum: 1000
+                metrics:
+                    type: string
+                    description: 'Level of usage metrics to compute per user. ''full'' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. ''basic'' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under ''basic''.'
+                    default: full
+                    enum:
+                        - full
+                        - basic
                 sort:
                     type: string
                     description: Sort order

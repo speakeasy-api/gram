@@ -1208,6 +1208,10 @@ var SearchUsersPayload = Type("SearchUsersPayload", func() {
 		Maximum(1000)
 		Default(50)
 	})
+	Attribute("metrics", String, "Level of usage metrics to compute per user. 'full' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. 'basic' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under 'basic'.", func() {
+		Enum("full", "basic")
+		Default("full")
+	})
 
 	Required("filter", "user_type")
 })

@@ -1116,6 +1116,11 @@ async function fetchEmployeeUsage(
           limit: 1000,
           sort: "desc",
           userType: "internal",
+          // The enrollment list renders only identity, last activity, token
+          // totals, and linked accounts (the latter from Postgres enrichment),
+          // so request the lean aggregation and skip the per-tool/hook-source
+          // map aggregates that dominate the ClickHouse query cost (DNO-618).
+          metrics: "basic",
         },
       }),
     );

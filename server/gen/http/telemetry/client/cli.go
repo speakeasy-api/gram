@@ -204,7 +204,7 @@ func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUse
 	{
 		err = json.Unmarshal([]byte(telemetrySearchUsersBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"account_type\": \"abc123\",\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"external_org_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"hook_source\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"group_by\": \"role\",\n      \"limit\": 2,\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"account_type\": \"abc123\",\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"external_org_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"hook_source\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"group_by\": \"role\",\n      \"limit\": 2,\n      \"metrics\": \"basic\",\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }'")
 		}
 		if body.Filter == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("filter", "body"))
@@ -228,6 +228,9 @@ func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUse
 		}
 		if body.Limit > 1000 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1000, false))
+		}
+		if !(body.Metrics == "full" || body.Metrics == "basic") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.metrics", body.Metrics, []any{"full", "basic"}))
 		}
 		if err != nil {
 			return nil, err
@@ -257,6 +260,7 @@ func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUse
 		Cursor:   body.Cursor,
 		Sort:     body.Sort,
 		Limit:    body.Limit,
+		Metrics:  body.Metrics,
 	}
 	if body.Filter != nil {
 		v.Filter = marshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(body.Filter)
@@ -277,6 +281,12 @@ func BuildSearchUsersPayload(telemetrySearchUsersBody string, telemetrySearchUse
 		var zero int
 		if v.Limit == zero {
 			v.Limit = 50
+		}
+	}
+	{
+		var zero string
+		if v.Metrics == zero {
+			v.Metrics = "full"
 		}
 	}
 	v.ApikeyToken = apikeyToken

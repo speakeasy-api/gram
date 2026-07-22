@@ -74,6 +74,13 @@ type SearchUsersRequestBody struct {
 	Sort string `form:"sort" json:"sort" xml:"sort"`
 	// Number of items to return (1-1000)
 	Limit int `form:"limit" json:"limit" xml:"limit"`
+	// Level of usage metrics to compute per user. 'full' (default) returns the
+	// complete set: chat counts, cost, cache tokens, tool-call totals, and the
+	// per-tool and per-hook-source breakdowns. 'basic' computes only user
+	// identity, first/last activity, and input/output token sums — a much cheaper
+	// aggregation for large orgs (e.g. the employee enrollment list, which renders
+	// only those fields). The remaining fields are zero/empty under 'basic'.
+	Metrics string `form:"metrics" json:"metrics" xml:"metrics"`
 }
 
 // CaptureEventRequestBody is the type of the "telemetry" service
@@ -7207,6 +7214,7 @@ func NewSearchUsersRequestBody(p *telemetry.SearchUsersPayload) *SearchUsersRequ
 		Cursor:   p.Cursor,
 		Sort:     p.Sort,
 		Limit:    p.Limit,
+		Metrics:  p.Metrics,
 	}
 	if p.Filter != nil {
 		body.Filter = marshalTelemetrySearchUsersFilterToSearchUsersFilterRequestBody(p.Filter)
@@ -7227,6 +7235,12 @@ func NewSearchUsersRequestBody(p *telemetry.SearchUsersPayload) *SearchUsersRequ
 		var zero int
 		if body.Limit == zero {
 			body.Limit = 50
+		}
+	}
+	{
+		var zero string
+		if body.Metrics == zero {
+			body.Metrics = "full"
 		}
 	}
 	return body

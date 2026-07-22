@@ -1196,6 +1196,71 @@ func TestSearchUsers_ScopedByProject(t *testing.T) {
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
+// TestSearchUsers_BasicMetricsOmitsBreakdowns pins the "basic" metrics detail
+// level used by the employee enrollment list (DNO-618): identity, activity
+// window, token sums, and raw_user_ids are computed, while the heavier
+// chat/cost/tool/hook aggregates are skipped and left zero/empty.
+func TestSearchUsers_BasicMetricsOmitsBreakdowns(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	userID := "basic-user-" + uuid.New().String()
+	chatID := uuid.New().String()
+
+	// A chat completion (tokens/cost/chat) plus a tool call and a hook row, so the
+	// full path would populate every breakdown — basic must still leave them empty.
+	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, 100, 50, 150, 1.5, "stop", "gpt-4", "openai", userID, "")
+	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, 200, 100, 300, 2.0, "tool_calls", "gpt-4", "openai", userID, "")
+	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, userID, "")
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+			Filter: &gen.SearchUsersFilter{
+				From: from,
+				To:   to,
+			},
+			UserType: "internal",
+			Limit:    100,
+			Sort:     "desc",
+			Metrics:  "basic",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+		if !assert.Len(c, res.Users, 1) {
+			return
+		}
+
+		u := res.Users[0]
+		// Lean fields the enrollment list renders are computed.
+		assert.Equal(c, userID, u.UserID)
+		assert.Equal(c, int64(300), u.TotalInputTokens)  // 100 + 200
+		assert.Equal(c, int64(150), u.TotalOutputTokens) // 50 + 100
+		assert.NotEqual(c, "0", u.LastSeenUnixNano, "last activity should be populated")
+
+		// Heavy aggregates are skipped under basic and left zero/empty.
+		assert.Equal(c, int64(0), u.TotalChats)
+		assert.Equal(c, int64(0), u.TotalChatRequests)
+		assert.Equal(c, int64(0), u.TotalTokens)
+		assert.Equal(c, int64(0), u.TotalToolCalls)
+		assert.Zero(c, u.TotalCost)
+		assert.Empty(c, u.Tools)
+		assert.Empty(c, u.HookSources)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
 func insertHookLogWithUser(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, userID, externalUserID, hookSource string, success bool) {
 	t.Helper()
 
