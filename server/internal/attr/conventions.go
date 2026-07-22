@@ -434,6 +434,11 @@ const (
 	// dedupe re-ingested windows by (gram_project_id, claude_chat.event_hash).
 	ClaudeChatEventHashKey = attribute.Key("claude_chat.event_hash")
 
+	// CodexComplianceEventHashKey fingerprints one OpenAI Compliance Logs COSTS
+	// event so consumers can dedupe re-ingested windows by
+	// (gram_project_id, codex.compliance.event_hash).
+	CodexComplianceEventHashKey = attribute.Key("codex.compliance.event_hash")
+
 	// CodexUsageToolTokensKey stores Codex's tool_token_count verbatim for
 	// fidelity. It equals input + output, so it is intentionally not summed
 	// into any total downstream.

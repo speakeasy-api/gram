@@ -29,6 +29,7 @@ const (
 	codexUsageMetricsURN          = "codex:usage:metrics"
 	codexHookSource               = "codex"
 	codexProviderOpenAI           = "openai"
+	codexCreditValueUSD           = 0.04
 )
 
 type codexComplianceClient interface {
@@ -298,7 +299,7 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	userEmail := conv.NormalizeEmail(event.Payload.Identity.Email)
 	usage := event.Payload.Measures.Usage
 	totalTokens := usage.TextInputTokens + usage.TextCachedInputTokens + usage.TextOutputTokens
-	totalCost, costUnit, billingSKUs := codexBillingSummary(event.Payload.Measures.Billing)
+	totalCostUSD, costUnit, billingSKUs := codexBillingSummary(event.Payload.Measures.Billing)
 
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:           string(telemetry.EventSourceAPI),
@@ -312,6 +313,7 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 		attr.AIIntegrationConfigIDKey: cfg.ID.String(),
 	}
 	addStringAttr(attrs, attr.CodexComplianceEventIDKey, event.EventID)
+	addStringAttr(attrs, attr.CodexComplianceEventHashKey, generateCodexCostEventHash(event))
 	addStringAttr(attrs, attr.CodexComplianceLogIDKey, file.ID)
 	addStringAttr(attrs, attr.CodexComplianceCostUnitKey, costUnit)
 	addStringAttr(attrs, attr.CodexComplianceClientKey, event.Payload.Client)
@@ -337,8 +339,8 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	if totalTokens > 0 {
 		attrs[attr.GenAIUsageTotalTokensKey] = totalTokens
 	}
-	if totalCost > 0 {
-		attrs[attr.GenAIUsageCostKey] = totalCost
+	if totalCostUSD > 0 {
+		attrs[attr.GenAIUsageCostKey] = totalCostUSD
 	}
 
 	return telemetry.LogParams{
@@ -357,6 +359,17 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	}, true, nil
 }
 
+func generateCodexCostEventHash(event codexCostEvent) string {
+	eventID := strings.TrimSpace(event.EventID)
+	if eventID == "" {
+		return ""
+	}
+	return eventKey{
+		"cost",
+		eventID,
+	}.hash()
+}
+
 func addStringAttr(attrs map[attr.Key]any, key attr.Key, value string) {
 	value = strings.TrimSpace(value)
 	if value != "" {
@@ -365,11 +378,11 @@ func addStringAttr(attrs map[attr.Key]any, key attr.Key, value string) {
 }
 
 func codexBillingSummary(lines []codexCostBillingLine) (float64, string, []string) {
-	total := float64(0)
+	totalUSD := float64(0)
 	unit := ""
 	skus := make([]string, 0, len(lines))
 	for _, line := range lines {
-		total += line.Cost.Value
+		totalUSD += codexCostValueUSD(line.Cost)
 		if line.Cost.Unit != "" {
 			if unit == "" {
 				unit = line.Cost.Unit
@@ -381,7 +394,18 @@ func codexBillingSummary(lines []codexCostBillingLine) (float64, string, []strin
 			skus = append(skus, strings.TrimSpace(line.SKU))
 		}
 	}
-	return total, unit, skus
+	return totalUSD, unit, skus
+}
+
+func codexCostValueUSD(amount codexCostAmount) float64 {
+	switch strings.ToUpper(strings.TrimSpace(amount.Unit)) {
+	case "CREDITS":
+		return amount.Value * codexCreditValueUSD
+	case "USD":
+		return amount.Value
+	default:
+		return 0
+	}
 }
 
 type codexCostEvent struct {

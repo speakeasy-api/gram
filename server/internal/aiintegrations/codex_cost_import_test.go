@@ -49,6 +49,7 @@ func TestBuildCodexCostLogParamsVerifiesSHAAndMapsTelemetry(t *testing.T) {
 	require.Equal(t, "openai", attrs[attr.ProviderKey])
 	require.Equal(t, cfg.ID.String(), attrs[attr.AIIntegrationConfigIDKey])
 	require.Equal(t, "event_1", attrs[attr.CodexComplianceEventIDKey])
+	require.Equal(t, "90eb39010cad917b66d5b9d7ce27fe9b7217b93b02760406e55aee41eb5433c3", attrs[attr.CodexComplianceEventHashKey])
 	require.Equal(t, "eclf_123", attrs[attr.CodexComplianceLogIDKey])
 	require.Equal(t, "CREDITS", attrs[attr.CodexComplianceCostUnitKey])
 	require.Equal(t, "github", attrs[attr.CodexComplianceClientKey])
@@ -62,7 +63,7 @@ func TestBuildCodexCostLogParamsVerifiesSHAAndMapsTelemetry(t *testing.T) {
 	require.Equal(t, int64(879616), attrs[attr.GenAIUsageCacheReadInputTokensKey])
 	require.Equal(t, int64(4858), attrs[attr.GenAIUsageOutputTokensKey])
 	require.Equal(t, int64(959822), attrs[attr.GenAIUsageTotalTokensKey])
-	require.InDelta(t, 24.0572, attrs[attr.GenAIUsageCostKey], 0.000001)
+	require.InDelta(t, 0.962288, attrs[attr.GenAIUsageCostKey], 0.000001)
 }
 
 func TestBuildCodexCostLogParamsRejectsSHAMismatch(t *testing.T) {

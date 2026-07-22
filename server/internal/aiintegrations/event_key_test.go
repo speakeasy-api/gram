@@ -88,6 +88,42 @@ func TestClaudeChatCostRowKeyGolden(t *testing.T) {
 		generateClaudeChatCostRowHash(row))
 }
 
+func TestCodexCostEventKeyGolden(t *testing.T) {
+	t.Parallel()
+
+	event := codexCostEvent{
+		// Untrimmed on purpose: pins that normalization happens inside
+		// the generator.
+		EventID:   " event_abc123 ",
+		Type:      codexComplianceCostsEventType,
+		Timestamp: "2026-07-16T10:30:00Z",
+		Payload: codexCostPayload{
+			Day:            "2026-07-16",
+			Hour:           10,
+			OrganizationID: "org-openai",
+			Identity:       codexCostIdentity{UserID: "user_abc", Email: "User@Example.com", Name: "User", Groups: nil},
+			Product:        "codex",
+			Client:         "github",
+			Surface:        "github_code_review",
+			Model:          "gpt-5.5",
+			ServiceTier:    "default",
+			Reasoning:      "high",
+			Measures: codexCostMeasures{
+				Usage: codexCostUsage{
+					TextInputTokens:       100,
+					TextCachedInputTokens: 200,
+					TextOutputTokens:      300,
+				},
+				Billing: nil,
+			},
+		},
+	}
+
+	require.Equal(t,
+		"234e1992eb486518c57a9a433ca9d3fe05c8cf55f07c463be7a81a23223f087d",
+		generateCodexCostEventHash(event))
+}
+
 func TestEventKeyPanicsOnUnsupportedFieldType(t *testing.T) {
 	t.Parallel()
 
