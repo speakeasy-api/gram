@@ -1572,6 +1572,9 @@ type HookIngestDataRequestBody struct {
 	Notification *HookNotificationDataRequestBody `form:"notification,omitempty" json:"notification,omitempty" xml:"notification,omitempty"`
 	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
 	McpAttribution []*HookMCPAttributionEntryRequestBody `form:"mcp_attribution,omitempty" json:"mcp_attribution,omitempty" xml:"mcp_attribution,omitempty"`
+	// Transcript-derived prompt attachment content (Claude
+	// Stop/SubagentStop/SessionEnd).
+	PromptAttachments []*HookPromptAttachmentEntryRequestBody `form:"prompt_attachments,omitempty" json:"prompt_attachments,omitempty" xml:"prompt_attachments,omitempty"`
 }
 
 // HookPromptDataRequestBody is used to define fields on request body types.
@@ -1679,6 +1682,32 @@ type HookMCPAttributionEntryRequestBody struct {
 	McpServer *string `form:"mcp_server,omitempty" json:"mcp_server,omitempty" xml:"mcp_server,omitempty"`
 	// Unredacted MCP tool name from the transcript.
 	McpTool *string `form:"mcp_tool,omitempty" json:"mcp_tool,omitempty" xml:"mcp_tool,omitempty"`
+}
+
+// HookPromptAttachmentEntryRequestBody is used to define fields on request
+// body types.
+type HookPromptAttachmentEntryRequestBody struct {
+	// Provider transcript entry UUID. Used as the stable attachment identifier.
+	EntryUUID string `form:"entry_uuid" json:"entry_uuid" xml:"entry_uuid"`
+	// Prompt identifier of the user turn this attachment belongs to, when the
+	// transcript parent chain resolves.
+	PromptID *string `form:"prompt_id,omitempty" json:"prompt_id,omitempty" xml:"prompt_id,omitempty"`
+	// Absolute provider-reported file or directory path, when available.
+	FilePath *string `form:"file_path,omitempty" json:"file_path,omitempty" xml:"file_path,omitempty"`
+	// Provider display path for the attachment, when available.
+	DisplayPath *string `form:"display_path,omitempty" json:"display_path,omitempty" xml:"display_path,omitempty"`
+	// Provider attachment kind, such as file or directory.
+	AttachmentKind string `form:"attachment_kind" json:"attachment_kind" xml:"attachment_kind"`
+	// Attachment text visible to the model.
+	Content string `form:"content" json:"content" xml:"content"`
+	// Number of lines included in the attachment window, when reported.
+	NumLines *int `form:"num_lines,omitempty" json:"num_lines,omitempty" xml:"num_lines,omitempty"`
+	// Total source file lines, when reported.
+	TotalLines *int `form:"total_lines,omitempty" json:"total_lines,omitempty" xml:"total_lines,omitempty"`
+	// First one-based source line included in the attachment window, when reported.
+	StartLine *int `form:"start_line,omitempty" json:"start_line,omitempty" xml:"start_line,omitempty"`
+	// Provider transcript timestamp for this attachment, when available.
+	Timestamp *string `form:"timestamp,omitempty" json:"timestamp,omitempty" xml:"timestamp,omitempty"`
 }
 
 // OTELResourceLogRequestBody is used to define fields on request body types.

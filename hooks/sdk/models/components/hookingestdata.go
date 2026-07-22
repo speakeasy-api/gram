@@ -20,6 +20,8 @@ type HookIngestData struct {
 	Notification *HookNotificationData `json:"notification,omitzero"`
 	// Prompt feature payload.
 	Prompt *HookPromptData `json:"prompt,omitzero"`
+	// Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).
+	PromptAttachments []HookPromptAttachmentEntry `json:"prompt_attachments,omitzero"`
 	// Skill activation payload.
 	Skill *HookSkillData `json:"skill,omitzero"`
 	// Tool call feature payload.
@@ -79,6 +81,13 @@ func (h *HookIngestData) GetPrompt() *HookPromptData {
 		return nil
 	}
 	return h.Prompt
+}
+
+func (h *HookIngestData) GetPromptAttachments() []HookPromptAttachmentEntry {
+	if h == nil {
+		return nil
+	}
+	return h.PromptAttachments
 }
 
 func (h *HookIngestData) GetSkill() *HookSkillData {

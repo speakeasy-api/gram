@@ -37,7 +37,11 @@ func (r iteratorForCreateChatMessage) Values() ([]interface{}, error) {
 		r.rows[0].ContentAssetUrl,
 		r.rows[0].StorageError,
 		r.rows[0].Model,
+		r.rows[0].MessageType,
 		r.rows[0].MessageID,
+		r.rows[0].PromptID,
+		r.rows[0].DisplayPath,
+		r.rows[0].AttachmentKind,
 		r.rows[0].ToolCallID,
 		r.rows[0].UserID,
 		r.rows[0].ExternalUserID,
@@ -66,5 +70,5 @@ func (r iteratorForCreateChatMessage) Err() error {
 // insert-time stamps would sort them out of conversation order. Transcript
 // readers order by (created_at, seq).
 func (q *Queries) CreateChatMessage(ctx context.Context, arg []CreateChatMessageParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"chat_messages"}, []string{"chat_id", "role", "project_id", "content", "content_raw", "content_asset_url", "storage_error", "model", "message_id", "tool_call_id", "user_id", "external_user_id", "finish_reason", "tool_calls", "prompt_tokens", "completion_tokens", "total_tokens", "origin", "user_agent", "ip_address", "source", "content_hash", "generation", "replayed", "created_at"}, &iteratorForCreateChatMessage{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"chat_messages"}, []string{"chat_id", "role", "project_id", "content", "content_raw", "content_asset_url", "storage_error", "model", "message_type", "message_id", "prompt_id", "display_path", "attachment_kind", "tool_call_id", "user_id", "external_user_id", "finish_reason", "tool_calls", "prompt_tokens", "completion_tokens", "total_tokens", "origin", "user_agent", "ip_address", "source", "content_hash", "generation", "replayed", "created_at"}, &iteratorForCreateChatMessage{rows: arg})
 }

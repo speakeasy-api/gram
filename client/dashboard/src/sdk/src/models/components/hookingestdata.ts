@@ -25,6 +25,11 @@ import {
   HookNotificationData$outboundSchema,
 } from "./hooknotificationdata.js";
 import {
+  HookPromptAttachmentEntry,
+  HookPromptAttachmentEntry$Outbound,
+  HookPromptAttachmentEntry$outboundSchema,
+} from "./hookpromptattachmententry.js";
+import {
   HookPromptData,
   HookPromptData$Outbound,
   HookPromptData$outboundSchema,
@@ -74,6 +79,10 @@ export type HookIngestData = {
    */
   prompt?: HookPromptData | undefined;
   /**
+   * Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).
+   */
+  promptAttachments?: Array<HookPromptAttachmentEntry> | undefined;
+  /**
    * Skill activation payload.
    */
   skill?: HookSkillData | undefined;
@@ -95,6 +104,7 @@ export type HookIngestData$Outbound = {
   message?: HookMessageData$Outbound | undefined;
   notification?: HookNotificationData$Outbound | undefined;
   prompt?: HookPromptData$Outbound | undefined;
+  prompt_attachments?: Array<HookPromptAttachmentEntry$Outbound> | undefined;
   skill?: HookSkillData$Outbound | undefined;
   tool_call?: HookToolCallData$Outbound | undefined;
   usage?: HookUsageData$Outbound | undefined;
@@ -112,6 +122,9 @@ export const HookIngestData$outboundSchema: z.ZodMiniType<
     message: z.optional(HookMessageData$outboundSchema),
     notification: z.optional(HookNotificationData$outboundSchema),
     prompt: z.optional(HookPromptData$outboundSchema),
+    promptAttachments: z.optional(
+      z.array(HookPromptAttachmentEntry$outboundSchema),
+    ),
     skill: z.optional(HookSkillData$outboundSchema),
     toolCall: z.optional(HookToolCallData$outboundSchema),
     usage: z.optional(HookUsageData$outboundSchema),
@@ -120,6 +133,7 @@ export const HookIngestData$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       mcpAttribution: "mcp_attribution",
       mcpInventory: "mcp_inventory",
+      promptAttachments: "prompt_attachments",
       toolCall: "tool_call",
     });
   }),

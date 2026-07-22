@@ -1108,7 +1108,7 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 }
 
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many
-SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
+SELECT cm.id, cm.role, cm.message_type, cm.content, cm.tool_calls, cm.created_at, cm.source,
   COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
 FROM chat_messages cm
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -1122,13 +1122,14 @@ type GetMessageContentBatchParams struct {
 }
 
 type GetMessageContentBatchRow struct {
-	ID         uuid.UUID
-	Role       string
-	Content    string
-	ToolCalls  []byte
-	CreatedAt  pgtype.Timestamptz
-	Source     pgtype.Text
-	ChatUserID string
+	ID          uuid.UUID
+	Role        string
+	MessageType pgtype.Text
+	Content     string
+	ToolCalls   []byte
+	CreatedAt   pgtype.Timestamptz
+	Source      pgtype.Text
+	ChatUserID  string
 }
 
 // The scanned user's id rides along so the LLM judge's completion telemetry
@@ -1158,6 +1159,7 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 		if err := rows.Scan(
 			&i.ID,
 			&i.Role,
+			&i.MessageType,
 			&i.Content,
 			&i.ToolCalls,
 			&i.CreatedAt,

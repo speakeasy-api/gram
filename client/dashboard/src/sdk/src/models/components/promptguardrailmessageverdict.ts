@@ -37,7 +37,7 @@ export type PromptGuardrailMessageVerdict = {
    */
   messageId: string;
   /**
-   * The judged message type (user_message, assistant_message, tool_request, tool_response).
+   * The judged message type (user_message, assistant_message, tool_request, tool_response, prompt_attachment).
    */
   messageType: string;
   /**

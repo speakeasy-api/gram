@@ -46,7 +46,7 @@ type RiskPolicy struct {
 	CustomRuleIds []string
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
-	// assistant_message.
+	// assistant_message, prompt_attachment.
 	MessageTypes []string
 	// CEL scope predicate: the policy evaluates a message only when this boolean
 	// expression is true (in addition to message_types). Null/empty means all

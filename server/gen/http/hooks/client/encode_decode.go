@@ -1758,6 +1758,16 @@ func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestDa
 			res.McpAttribution[i] = marshalHooksHookMCPAttributionEntryToHookMCPAttributionEntryRequestBody(val)
 		}
 	}
+	if v.PromptAttachments != nil {
+		res.PromptAttachments = make([]*HookPromptAttachmentEntryRequestBody, len(v.PromptAttachments))
+		for i, val := range v.PromptAttachments {
+			if val == nil {
+				res.PromptAttachments[i] = nil
+				continue
+			}
+			res.PromptAttachments[i] = marshalHooksHookPromptAttachmentEntryToHookPromptAttachmentEntryRequestBody(val)
+		}
+	}
 
 	return res
 }
@@ -1897,6 +1907,29 @@ func marshalHooksHookMCPAttributionEntryToHookMCPAttributionEntryRequestBody(v *
 	return res
 }
 
+// marshalHooksHookPromptAttachmentEntryToHookPromptAttachmentEntryRequestBody
+// builds a value of type *HookPromptAttachmentEntryRequestBody from a value of
+// type *hooks.HookPromptAttachmentEntry.
+func marshalHooksHookPromptAttachmentEntryToHookPromptAttachmentEntryRequestBody(v *hooks.HookPromptAttachmentEntry) *HookPromptAttachmentEntryRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookPromptAttachmentEntryRequestBody{
+		EntryUUID:      v.EntryUUID,
+		PromptID:       v.PromptID,
+		FilePath:       v.FilePath,
+		DisplayPath:    v.DisplayPath,
+		AttachmentKind: v.AttachmentKind,
+		Content:        v.Content,
+		NumLines:       v.NumLines,
+		TotalLines:     v.TotalLines,
+		StartLine:      v.StartLine,
+		Timestamp:      v.Timestamp,
+	}
+
+	return res
+}
+
 // marshalHookIngestSourceRequestBodyToHooksHookIngestSource builds a value of
 // type *hooks.HookIngestSource from a value of type
 // *HookIngestSourceRequestBody.
@@ -1986,6 +2019,16 @@ func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequ
 				continue
 			}
 			res.McpAttribution[i] = marshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(val)
+		}
+	}
+	if v.PromptAttachments != nil {
+		res.PromptAttachments = make([]*hooks.HookPromptAttachmentEntry, len(v.PromptAttachments))
+		for i, val := range v.PromptAttachments {
+			if val == nil {
+				res.PromptAttachments[i] = nil
+				continue
+			}
+			res.PromptAttachments[i] = marshalHookPromptAttachmentEntryRequestBodyToHooksHookPromptAttachmentEntry(val)
 		}
 	}
 
@@ -2122,6 +2165,29 @@ func marshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(v *
 		RequestID: v.RequestID,
 		McpServer: v.McpServer,
 		McpTool:   v.McpTool,
+	}
+
+	return res
+}
+
+// marshalHookPromptAttachmentEntryRequestBodyToHooksHookPromptAttachmentEntry
+// builds a value of type *hooks.HookPromptAttachmentEntry from a value of type
+// *HookPromptAttachmentEntryRequestBody.
+func marshalHookPromptAttachmentEntryRequestBodyToHooksHookPromptAttachmentEntry(v *HookPromptAttachmentEntryRequestBody) *hooks.HookPromptAttachmentEntry {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookPromptAttachmentEntry{
+		EntryUUID:      v.EntryUUID,
+		PromptID:       v.PromptID,
+		FilePath:       v.FilePath,
+		DisplayPath:    v.DisplayPath,
+		AttachmentKind: v.AttachmentKind,
+		Content:        v.Content,
+		NumLines:       v.NumLines,
+		TotalLines:     v.TotalLines,
+		StartLine:      v.StartLine,
+		Timestamp:      v.Timestamp,
 	}
 
 	return res

@@ -1877,7 +1877,11 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content_raw JSONB,
   content_asset_url TEXT, -- denormalization of the asset URL for faster access
   model TEXT,
+  message_type TEXT,
   message_id TEXT,
+  prompt_id TEXT,
+  display_path TEXT,
+  attachment_kind TEXT,
   finish_reason TEXT,
   tool_calls JSONB,
   prompt_tokens BIGINT NOT NULL DEFAULT 0,

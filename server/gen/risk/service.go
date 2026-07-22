@@ -441,8 +441,8 @@ type EvaluatePromptGuardrailPayload struct {
 	// judge model.
 	ModelConfig *types.RiskPolicyModelConfig
 	// Message types to judge (user_message, assistant_message, tool_request,
-	// tool_response), matching a policy's message_types. When empty or omitted,
-	// judges all supported types.
+	// tool_response, prompt_attachment), matching a policy's message_types. When
+	// empty or omitted, judges all supported types.
 	MessageTypes []string
 	// CEL scope predicate: the replay judges a message only when this boolean
 	// expression is true (in addition to message_types). Omit/empty means all
@@ -818,7 +818,7 @@ type PromptGuardrailMessageVerdict struct {
 	// Message sequence within the chat generation, ascending.
 	Seq int64
 	// The judged message type (user_message, assistant_message, tool_request,
-	// tool_response).
+	// tool_response, prompt_attachment).
 	MessageType string
 	// Tool name for a single-call tool_request message; empty otherwise.
 	ToolName *string

@@ -869,7 +869,7 @@ WHERE id = ANY(@message_ids::uuid[])
 -- metric to it, which is the one attribution available when the call resolved
 -- to no telemetry row at all — precisely the population that metric exists to
 -- measure.
-SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
+SELECT cm.id, cm.role, cm.message_type, cm.content, cm.tool_calls, cm.created_at, cm.source,
   COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
 FROM chat_messages cm
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE

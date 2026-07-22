@@ -164,7 +164,11 @@ INSERT INTO chat_messages (
   , content_asset_url
   , storage_error
   , model
+  , message_type
   , message_id
+  , prompt_id
+  , display_path
+  , attachment_kind
   , tool_call_id
   , user_id
   , external_user_id
@@ -191,7 +195,11 @@ VALUES (
   , @content_asset_url
   , @storage_error
   , @model
+  , @message_type
   , @message_id
+  , @prompt_id
+  , @display_path
+  , @attachment_kind
   , @tool_call_id
   , @user_id
   , @external_user_id

@@ -62,7 +62,7 @@ func EvalPromptGuardrail(
 	inScope := make([]int, 0, len(messages))
 	built := make([]batchMessage, len(messages))
 	for i, m := range messages {
-		msg, ok := newBatchMessage(ctx, logger, m.ID, m.Role, m.Content, m.ToolCalls)
+		msg, ok := newBatchMessage(ctx, logger, m.ID, m.Role, "", m.Content, m.ToolCalls)
 		if !ok {
 			continue
 		}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/message"
@@ -19,23 +20,26 @@ func TestFilterMessagesByMessageTypes(t *testing.T) {
 	assistantID := uuid.New()
 	toolRequestID := uuid.New()
 	toolResponseID := uuid.New()
+	promptAttachmentID := uuid.New()
 
 	messages := []repo.GetMessageContentBatchRow{
 		{ID: userID, Role: "user", Content: "hello"},
 		{ID: assistantID, Role: "assistant", Content: "thinking"},
 		{ID: toolRequestID, Role: "assistant", Content: "", ToolCalls: []byte(`[]`)},
 		{ID: toolResponseID, Role: "tool", Content: "done"},
+		{ID: promptAttachmentID, Role: "tool", MessageType: pgtype.Text{String: message.PromptAttachment, Valid: true}, Content: "attached content"},
 		{ID: uuid.New(), Role: "system", Content: "ignore"},
 	}
 
-	filtered := filterMessagesByMessageTypes(messages, []string{message.ToolRequest, message.ToolResponse})
-	require.Len(t, filtered, 2)
+	filtered := filterMessagesByMessageTypes(messages, []string{message.ToolRequest, message.ToolResponse, message.PromptAttachment})
+	require.Len(t, filtered, 3)
 	require.Equal(t, toolRequestID, filtered[0].ID)
 	require.Equal(t, toolResponseID, filtered[1].ID)
+	require.Equal(t, promptAttachmentID, filtered[2].ID)
 
 	all := filterMessagesByMessageTypes(messages, nil)
-	require.Len(t, all, 4)
-	require.Equal(t, []uuid.UUID{userID, assistantID, toolRequestID, toolResponseID}, []uuid.UUID{all[0].ID, all[1].ID, all[2].ID, all[3].ID})
+	require.Len(t, all, 5)
+	require.Equal(t, []uuid.UUID{userID, assistantID, toolRequestID, toolResponseID, promptAttachmentID}, []uuid.UUID{all[0].ID, all[1].ID, all[2].ID, all[3].ID, all[4].ID})
 }
 
 func TestParseRecordedToolCallsMalformedFallback(t *testing.T) {

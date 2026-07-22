@@ -673,6 +673,7 @@ trackedFiles:
   src/models/components/hookmcpdata.ts: {}
   src/models/components/hookmessagedata.ts: {}
   src/models/components/hooknotificationdata.ts: {}
+  src/models/components/hookpromptattachmententry.ts: {}
   src/models/components/hookpromptdata.ts: {}
   src/models/components/hooksbreakdownrow.ts: {}
   src/models/components/hookskilldata.ts: {}

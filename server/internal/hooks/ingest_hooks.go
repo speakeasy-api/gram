@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -654,6 +655,16 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 			attr.SlogProjectID(authCtx.ProjectID.String()),
 		)
 	}
+	if err := s.persistPromptAttachments(ctx, payload, authCtx, &metadata, timestamp); err != nil {
+		s.logger.WarnContext(ctx, "failed to persist prompt attachments",
+			attr.SlogEvent("hooks_ingest_prompt_attachment_persist_failed"),
+			attr.SlogError(err),
+			attr.SlogHookSource(payload.Source.Adapter),
+			attr.SlogHookEvent(payload.Event.Type),
+			attr.SlogGenAIConversationID(canonicalSessionID(payload)),
+			attr.SlogProjectID(authCtx.ProjectID.String()),
+		)
+	}
 }
 
 // canonicalSessionMetadata builds the session identity for a canonical hook
@@ -947,7 +958,11 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			ContentAssetUrl:  conv.ToPGTextEmpty(""),
 			StorageError:     conv.ToPGTextEmpty(""),
 			Model:            conv.ToPGTextEmpty(canonicalModel(payload)),
+			MessageType:      conv.ToPGTextEmpty(""),
 			MessageID:        conv.ToPGTextEmpty(""),
+			PromptID:         conv.ToPGTextEmpty(""),
+			DisplayPath:      conv.ToPGTextEmpty(""),
+			AttachmentKind:   conv.ToPGTextEmpty(""),
 			ToolCallID:       conv.ToPGTextEmpty(""),
 			UserID:           conv.ToPGTextEmpty(metadata.UserID),
 			ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
@@ -1021,6 +1036,96 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	}
 
 	return s.insertMessageWithFallbackUpsert(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, canonicalChatTitle(payload, titleContent))
+}
+
+func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, occurredAt time.Time) error {
+	if payload.Data == nil || len(payload.Data.PromptAttachments) == 0 || authCtx.ProjectID == nil {
+		return nil
+	}
+	sessionID := canonicalSessionID(payload)
+	if sessionID == "" {
+		return nil
+	}
+	if s.productFeatures == nil {
+		return nil
+	}
+	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
+	if err != nil {
+		return fmt.Errorf("check session_capture feature flag: %w", err)
+	}
+	if !enabled {
+		return nil
+	}
+
+	chatID := sessionIDToUUID(sessionID)
+	projectID := *authCtx.ProjectID
+	rows := make([]chatRepo.CreateChatMessageParams, 0, len(payload.Data.PromptAttachments))
+	for _, attachment := range payload.Data.PromptAttachments {
+		if attachment == nil || strings.TrimSpace(attachment.EntryUUID) == "" || strings.TrimSpace(attachment.Content) == "" {
+			continue
+		}
+		createdAt := occurredAt
+		if ts := strings.TrimSpace(conv.PtrValOr(attachment.Timestamp, "")); ts != "" {
+			if parsed, err := time.Parse(time.RFC3339Nano, ts); err == nil {
+				createdAt = parsed
+			}
+		}
+		rows = append(rows, chatRepo.CreateChatMessageParams{
+			ChatID:           chatID,
+			ProjectID:        projectID,
+			Role:             "tool",
+			Content:          attachment.Content,
+			ContentRaw:       nil,
+			ContentAssetUrl:  conv.ToPGTextEmpty(""),
+			StorageError:     conv.ToPGTextEmpty(""),
+			Model:            conv.ToPGTextEmpty(canonicalModel(payload)),
+			MessageType:      conv.ToPGTextEmpty(message.PromptAttachment),
+			MessageID:        conv.ToPGTextEmpty(strings.TrimSpace(attachment.EntryUUID)),
+			PromptID:         conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(attachment.PromptID, ""))),
+			DisplayPath:      conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(attachment.DisplayPath, ""))),
+			AttachmentKind:   conv.ToPGTextEmpty(strings.TrimSpace(attachment.AttachmentKind)),
+			ToolCallID:       conv.ToPGTextEmpty(""),
+			UserID:           conv.ToPGTextEmpty(metadata.UserID),
+			ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
+			FinishReason:     conv.ToPGTextEmpty(""),
+			ToolCalls:        nil,
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			TotalTokens:      0,
+			Origin:           conv.ToPGTextEmpty(""),
+			UserAgent:        conv.ToPGTextEmpty(""),
+			IpAddress:        conv.ToPGTextEmpty(""),
+			Source:           conv.ToPGTextEmpty(strings.TrimSpace(payload.Source.Adapter)),
+			ContentHash:      nil,
+			Generation:       0,
+			Replayed:         conv.PtrValOr(payload.Replayed, false),
+			CreatedAt:        conv.ToPGTimestamptz(createdAt),
+		})
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	if _, err := s.writer.Write(ctx, projectID, rows); err == nil {
+		return nil
+	} else if !isForeignKeyViolation(err) {
+		return fmt.Errorf("insert prompt attachment messages: %w", err)
+	}
+	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      projectID,
+		OrganizationID: metadata.GramOrgID,
+		UserID:         conv.ToPGTextEmpty(metadata.UserID),
+		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
+		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
+		Title:          conv.ToPGText(canonicalChatTitle(payload, rows[0].Content)),
+	})
+	if upsertErr != nil {
+		return fmt.Errorf("upsert claude code session for prompt attachments: %w", upsertErr)
+	}
+	if _, err := s.writer.Write(ctx, projectID, rows); err != nil {
+		return fmt.Errorf("insert prompt attachment messages after creating chat: %w", err)
+	}
+	return nil
 }
 
 func canonicalToolCallsJSON(payload *gen.IngestPayload) ([]byte, error) {

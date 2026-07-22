@@ -48380,7 +48380,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Message types to judge (user_message, assistant_message, tool_request, tool_response), matching a policy's message_types. When empty or omitted, judges all supported types.
+                    description: Message types to judge (user_message, assistant_message, tool_request, tool_response, prompt_attachment), matching a policy's message_types. When empty or omitted, judges all supported types.
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 prompt:
@@ -50343,6 +50343,11 @@ components:
                     $ref: '#/components/schemas/HookNotificationData'
                 prompt:
                     $ref: '#/components/schemas/HookPromptData'
+                prompt_attachments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HookPromptAttachmentEntry'
+                    description: Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).
                 skill:
                     $ref: '#/components/schemas/HookSkillData'
                 tool_call:
@@ -50474,6 +50479,47 @@ components:
                     type: string
                     description: Notification type.
             description: Local agent notification payload.
+        HookPromptAttachmentEntry:
+            type: object
+            properties:
+                attachment_kind:
+                    type: string
+                    description: Provider attachment kind, such as file or directory.
+                content:
+                    type: string
+                    description: Attachment text visible to the model.
+                display_path:
+                    type: string
+                    description: Provider display path for the attachment, when available.
+                entry_uuid:
+                    type: string
+                    description: Provider transcript entry UUID. Used as the stable attachment identifier.
+                file_path:
+                    type: string
+                    description: Absolute provider-reported file or directory path, when available.
+                num_lines:
+                    type: integer
+                    description: Number of lines included in the attachment window, when reported.
+                    format: int64
+                prompt_id:
+                    type: string
+                    description: Prompt identifier of the user turn this attachment belongs to, when the transcript parent chain resolves.
+                start_line:
+                    type: integer
+                    description: First one-based source line included in the attachment window, when reported.
+                    format: int64
+                timestamp:
+                    type: string
+                    description: Provider transcript timestamp for this attachment, when available.
+                total_lines:
+                    type: integer
+                    description: Total source file lines, when reported.
+                    format: int64
+            description: Transcript-derived content that a provider attached to a submitted prompt, such as Claude Code @file and @directory mentions.
+            required:
+                - entry_uuid
+                - attachment_kind
+                - content
         HookPromptData:
             type: object
             properties:
@@ -54544,7 +54590,7 @@ components:
                     format: uuid
                 message_type:
                     type: string
-                    description: The judged message type (user_message, assistant_message, tool_request, tool_response).
+                    description: The judged message type (user_message, assistant_message, tool_request, tool_response, prompt_attachment).
                 prompt_tokens:
                     type: integer
                     description: Prompt tokens billed for this judge call.
@@ -56127,7 +56173,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.'
+                    description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.'
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 name:
