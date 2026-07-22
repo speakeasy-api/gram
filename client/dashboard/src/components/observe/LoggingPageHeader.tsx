@@ -5,7 +5,7 @@ import { useState } from "react";
 export const LOG_DATA_RETENTION_MESSAGE =
   "Tool logs and agent sessions are retained for 90 days.";
 
-export function LogDataRetentionTooltip(): JSX.Element {
+function LogDataRetentionTooltip(): JSX.Element {
   return (
     <SimpleTooltip tooltip={LOG_DATA_RETENTION_MESSAGE}>
       <button
