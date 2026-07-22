@@ -1675,7 +1675,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 
 	eg.Go(func() error {
 		var fetchErr error
-		clickHouseResult, fetchErr = fetchProjectOverviewClickHouse(egCtx, s.tracer, s.chRepo, projectOverviewClickHouseParams{
+		clickHouseResult, fetchErr = fetchProjectOverviewClickHouse(egCtx, s.chRepo, projectOverviewClickHouseParams{
 			projectID:       projectID,
 			timeStart:       timeStart,
 			timeEnd:         timeEnd,
