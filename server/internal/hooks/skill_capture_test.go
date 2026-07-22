@@ -178,6 +178,66 @@ func TestIngest_BlockedInferredSkillIsNotObserved(t *testing.T) {
 	require.Empty(t, rows)
 }
 
+// Only a durable observation write is an efficacy wake. A blocked inferred
+// activation records nothing, and a failed recording records nothing — neither
+// may put a project in front of the coordinator.
+func TestIngest_OnlyDurableSkillObservationWakesEfficacy(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "woken-session", "repo-review", ""))
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{*authCtx.ProjectID}, ti.efficacySignals.signaled())
+
+	failedCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = ti.service.Ingest(failedCtx, skillPayload("claude", eventTypeSkillActivated, "failed-session", "repo-review", ""))
+	require.NoError(t, err)
+
+	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+	toolName, identity := "mcp__local_server__search", "local-server"
+	blocked := skillPayload("codex", "tool.requested", "blocked-session", "repo-review", "")
+	blocked.Data.ToolCall = &gen.HookToolCallData{Name: &toolName, Input: map[string]any{"query": "x"}}
+	blocked.Data.Mcp = &gen.HookMCPData{ServerIdentity: &identity}
+	result, err := ti.service.Ingest(ctx, blocked)
+	require.NoError(t, err)
+	require.Equal(t, "deny", result.Decision)
+
+	require.Equal(t, []uuid.UUID{*authCtx.ProjectID}, ti.efficacySignals.signaled(),
+		"a failed or blocked-away recording wakes nothing")
+}
+
+func TestIngest_SessionEndWakesEfficacy(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.service.Ingest(ctx, canonicalIngestPayload("claude", "session.ended", "ending-session"))
+	require.NoError(t, err)
+
+	require.Equal(t, []uuid.UUID{*authCtx.ProjectID}, ti.efficacySignals.signaled(),
+		"a session end may have made the units already queued for this project scoreable")
+}
+
+func TestIngest_EfficacyWakeFailureDoesNotChangeVerdictOrRecording(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ti.efficacySignals.failWith(errors.New("coordinator unreachable"))
+
+	result, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "unwakeable-session", "repo-review", ""))
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+}
+
 func TestSkillCapture_UnknownUploadThenKnown(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -462,4 +522,32 @@ func TestUploadSkillContent_HTTPRouteRequiresAuthentication(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, resp.Body.Close()) }()
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+}
+
+func TestIngest_RejectsReservedAssistantAdapter(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	content := captureManifest("spoofed", "body")
+	for _, adapter := range []string{"assistant", "Assistants", " ASSISTANT ", "assist ant"} {
+		_, err := ti.service.Ingest(ctx, skillPayload(adapter, eventTypeSkillActivated, "spoof-session", "spoofed", rawHash(content)))
+		require.Error(t, err, adapter)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		require.Equal(t, oops.CodeInvalid, oopsErr.Code, adapter)
+	}
+
+	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+
+	_, err = ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "honest-session", "honest", rawHash(content)))
+	require.NoError(t, err)
+	rows, err = ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "claude", rows[0].Provider)
 }

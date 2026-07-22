@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
@@ -20,14 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
-var (
-	// claudeSessionNamespace is the UUIDv5 namespace for Claude Code session IDs.
-	// This ensures deterministic UUID generation from session ID strings.
-	claudeSessionNamespace = uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
-
-	// ErrChatNotFound indicates the chat (conversation) does not exist.
-	ErrChatNotFound = errors.New("chat not found")
-)
+// ErrChatNotFound indicates the chat (conversation) does not exist.
+var ErrChatNotFound = errors.New("chat not found")
 
 // isForeignKeyViolation checks if the error is a PostgreSQL foreign key constraint violation.
 // This indicates that the referenced chat does not exist.
@@ -82,18 +77,12 @@ func (s *Service) sessionAgentVariant(ctx context.Context, sessionID string) str
 	return variant
 }
 
-// sessionIDToUUID converts a Claude Code session_id string to a UUID.
-// The session_id is expected to already be a valid UUID string.
-// If parsing fails, falls back to generating a deterministic UUIDv5 from the session_id.
+// sessionIDToUUID converts an agent session_id string to the chat id its
+// transcript is persisted under. Every hook capture path goes through here, and
+// the mapping itself lives in the chat package so consumers that read sessions
+// back — efficacy scoring, telemetry — resolve the same chat.
 func sessionIDToUUID(sessionID string) uuid.UUID {
-	// Try to parse the session ID as a UUID directly
-	parsedUUID, err := uuid.Parse(sessionID)
-	if err == nil {
-		return parsedUUID
-	}
-
-	// Fallback: generate a deterministic UUIDv5 from the session ID string
-	return uuid.NewSHA1(claudeSessionNamespace, []byte(sessionID))
+	return chat.SessionIDToChatID(sessionID)
 }
 
 // makeHookResult creates a ClaudeHookResult, attaching HookSpecificOutput only
@@ -219,9 +208,16 @@ func (s *Service) handleStop(ctx context.Context, ev *hookevents.Stop) (*gen.Cla
 	return makeHookResult(ev.RawEventType), nil
 }
 
-// handleSessionEnd finalizes the session by updating the timestamp.
+// handleSessionEnd finalizes the session by updating the timestamp. The end of
+// a session is an efficacy wake: the transcript behind any activation already
+// queued for this project may now go quiet and become scoreable. The project
+// comes from the normalized event context — resolved from the session's own
+// metadata, the same derivation the capture writes use — and is uuid.Nil for an
+// unattributed session, which wakes nothing.
 func (s *Service) handleSessionEnd(ctx context.Context, ev *hookevents.SessionEnd) (*gen.ClaudeHookResult, error) {
-	return makeHookResult(ev.RawEventType), nil
+	result := makeHookResult(ev.RawEventType)
+	s.signalSkillEfficacy(ctx, ev.Context.ProjectID)
+	return result, nil
 }
 
 // handleNotification handles notification events (permission_prompt, idle_prompt, etc.)

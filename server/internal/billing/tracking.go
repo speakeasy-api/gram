@@ -55,6 +55,16 @@ var (
 	// convention-only because the completions proxy legitimately accepts a
 	// client-supplied gram source on the chat key (Elements).
 	ModelUsageSourceRiskAnalysis = registerModelUsageSource("risk-analysis")
+
+	// ModelUsageSourceSkillEfficacy tags the skill efficacy judge: inference
+	// Gram spends AFTER a session ends to score how well a skill served it.
+	// Like risk analysis it reacts to observed traffic, so registering it here
+	// is what keeps it out of tokens under management.
+	//
+	// Its completions set openrouter.KeyTypeInternal so the usage bills against
+	// the org's internal OpenRouter key rather than the customer-facing chat
+	// key's monthly cap.
+	ModelUsageSourceSkillEfficacy = registerModelUsageSource("skill-efficacy")
 )
 
 // ModelUsageSourceAssistants tags assistants completions in telemetry but is

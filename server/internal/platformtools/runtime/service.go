@@ -118,9 +118,9 @@ func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool
 }
 
 // AssistantSkillTools returns the always-on attached-skill loader.
-func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool) []platformtools.ExternalTool {
+func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, opts ...platformskills.LoadOption) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
-		{Executor: platformskills.NewLoadTool(logger, db), RequiredFeature: ""},
+		{Executor: platformskills.NewLoadTool(logger, db, opts...), RequiredFeature: ""},
 	}
 }
 

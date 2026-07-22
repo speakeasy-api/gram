@@ -113,13 +113,22 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
-	skillCapture, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
+	skillCapture, observed, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
 	if observationErr != nil {
 		logger.WarnContext(ctx, "failed to record skill activation",
 			attr.SlogError(observationErr),
 			attr.SlogName(canonicalSkillName(payload)),
 		)
 		skillCapture = nil
+	}
+	// Two efficacy wakes ride this path, both strictly after the durable write
+	// they report: a recorded activation puts a new unit in the enqueue queue,
+	// and a session end means the session behind already-queued units may now
+	// go quiet and become scoreable. A failed or no-op recording wakes nothing.
+	// Retried deliveries may wake again — a wake names only a project and the
+	// coordinator's work is idempotent.
+	if observed || strings.TrimSpace(payload.Event.Type) == "session.ended" {
+		s.signalSkillEfficacy(ctx, *authCtx.ProjectID)
 	}
 	if !s.isHookDuplicate(ctx) {
 		// Detach from request cancellation: the idempotency token is already
@@ -153,14 +162,18 @@ type skillCaptureSignal struct {
 	known     bool
 }
 
-func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, seenAt time.Time, blockReason string) (*skillCaptureSignal, error) {
+// recordSkillActivation durably records one skill activation. The second
+// return reports whether an observation row was actually written — distinct
+// from a nil capture signal, which only says the payload carried no usable raw
+// hash — so callers can tell a durable write apart from a no-op or a failure.
+func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, seenAt time.Time, blockReason string) (*skillCaptureSignal, bool, error) {
 	if payload.Data == nil || payload.Data.Skill == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	skill := payload.Data.Skill
 	name := strings.TrimSpace(skill.Name)
 	if name == "" || !isExplicitSkillActivation(payload) && blockReason != "" {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	rawSHA256 := normalizeRawSHA256(conv.PtrValOr(skill.RawSha256, ""))
@@ -171,7 +184,7 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 			RawSha256: rawSHA256,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("resolve known skill raw hash: %w", err)
+			return nil, false, fmt.Errorf("resolve known skill raw hash: %w", err)
 		}
 		capture = &skillCaptureSignal{rawSHA256: rawSHA256, known: known}
 	}
@@ -190,9 +203,9 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 		RawSha256:      conv.ToPGTextEmpty(rawSHA256),
 		SeenAt:         conv.ToPGTimestamptz(seenAt),
 	}); err != nil {
-		return nil, fmt.Errorf("insert skill observation: %w", err)
+		return nil, false, fmt.Errorf("insert skill observation: %w", err)
 	}
-	return capture, nil
+	return capture, true, nil
 }
 
 func normalizeRawSHA256(value string) string {
@@ -360,8 +373,15 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if payload == nil || payload.Source == nil || payload.Event == nil {
 		return oops.E(oops.CodeInvalid, nil, "source and event are required")
 	}
-	if strings.TrimSpace(payload.Source.Adapter) == "" {
+	adapter := strings.TrimSpace(payload.Source.Adapter)
+	if adapter == "" {
 		return oops.E(oops.CodeInvalid, nil, "source.adapter is required")
+	}
+	// The assistant surface is derived from the observation provider, and only
+	// server-side assistant runs may claim it. Reserve those values so a client
+	// hook cannot forge assistant-attributed skill activity.
+	if isReservedAssistantAdapter(adapter) {
+		return oops.E(oops.CodeInvalid, nil, "source.adapter is reserved")
 	}
 	if strings.TrimSpace(payload.Event.Type) == "" {
 		return oops.E(oops.CodeInvalid, nil, "event.type is required")
@@ -370,6 +390,15 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 		return oops.E(oops.CodeInvalid, nil, "unsupported hook schema_version")
 	}
 	return nil
+}
+
+func isReservedAssistantAdapter(adapter string) bool {
+	switch strings.ToLower(strings.Join(strings.Fields(adapter), "")) {
+	case "assistant", "assistants":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) (string, string) {

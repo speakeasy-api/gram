@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const addUserFeedbackChatResolution = `-- name: AddUserFeedbackChatResolution :exec
@@ -1668,6 +1669,112 @@ func (q *Queries) ListChatSources(ctx context.Context, arg ListChatSourcesParams
 	return items, nil
 }
 
+const listChatTranscriptMessagesPage = `-- name: ListChatTranscriptMessagesPage :many
+SELECT
+  cm.id,
+  cm.seq,
+  cm.created_at,
+  cm.role,
+  cm.content,
+  cm.tool_calls,
+  cm.tool_call_id,
+  cm.tool_urn,
+  cm.tool_outcome,
+  cm.tool_outcome_notes,
+  (count(*) OVER ())::bigint AS total_count
+FROM chat_messages cm
+WHERE cm.chat_id = $1
+  AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
+  AND (
+    $3::timestamptz IS NULL
+    OR (cm.created_at, cm.seq, cm.id) < (
+      $3::timestamptz,
+      $4::bigint,
+      $5::uuid
+    )
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC, cm.id DESC
+LIMIT $6::integer
+`
+
+type ListChatTranscriptMessagesPageParams struct {
+	ChatID          uuid.UUID
+	ProjectID       uuid.UUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorSeq       pgtype.Int8
+	CursorID        uuid.NullUUID
+	Lim             int32
+}
+
+type ListChatTranscriptMessagesPageRow struct {
+	ID               uuid.UUID
+	Seq              int64
+	CreatedAt        pgtype.Timestamptz
+	Role             string
+	Content          string
+	ToolCalls        []byte
+	ToolCallID       pgtype.Text
+	ToolUrn          urn.Tool
+	ToolOutcome      pgtype.Text
+	ToolOutcomeNotes pgtype.Text
+	TotalCount       int64
+}
+
+// Keyset page of one chat's messages, newest first, carrying only the columns
+// transcript rendering reads. A transcript reader that pulled the whole chat
+// held every message of an unbounded session in memory to then throw most of
+// them away, so it walks backwards a page at a time instead and stops as soon
+// as the rendering starts dropping messages: the trim is oldest-first, so every
+// unread row is older than the ones already being dropped and would be dropped
+// too.
+//
+// The same project filter as ListChatMessages, so a page can never cross a
+// project boundary. total_count is the window over the WHERE clause, which
+// includes the cursor, so it counts the rows this page did not return AND
+// everything older than them - exactly what the omission marker owes.
+//
+// The cursor is the full transcript key (created_at, seq, id): created_at and
+// seq alone are not unique, and a tie split across a page boundary would either
+// repeat or skip a message.
+func (q *Queries) ListChatTranscriptMessagesPage(ctx context.Context, arg ListChatTranscriptMessagesPageParams) ([]ListChatTranscriptMessagesPageRow, error) {
+	rows, err := q.db.Query(ctx, listChatTranscriptMessagesPage,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.CursorCreatedAt,
+		arg.CursorSeq,
+		arg.CursorID,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatTranscriptMessagesPageRow
+	for rows.Next() {
+		var i ListChatTranscriptMessagesPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Content,
+			&i.ToolCalls,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChats = `-- name: ListChats :many
 WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
@@ -2530,6 +2637,36 @@ func (q *Queries) SeedChatMessageWithSource(ctx context.Context, arg SeedChatMes
 		arg.ChatID,
 		arg.ProjectID,
 		arg.Source,
+		arg.CreatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedChatTranscriptMessage = `-- name: SeedChatTranscriptMessage :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, created_at)
+VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, clock_timestamp()))
+RETURNING id
+`
+
+type SeedChatTranscriptMessageParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+	Role      string
+	Content   string
+	CreatedAt pgtype.Timestamptz
+}
+
+// Test fixture: insert a chat message with an explicit role, content and
+// created_at, which is what a transcript test needs to build a session long
+// enough that rendering has to drop messages.
+func (q *Queries) SeedChatTranscriptMessage(ctx context.Context, arg SeedChatTranscriptMessageParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedChatTranscriptMessage,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Role,
+		arg.Content,
 		arg.CreatedAt,
 	)
 	var id uuid.UUID
