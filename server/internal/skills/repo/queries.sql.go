@@ -783,7 +783,10 @@ WHERE EXISTS (
       AND (cm.project_id IS NULL OR cm.project_id = p.id)
       AND cm.created_at > now() - $11::interval
   )
-ON CONFLICT (project_id, session_id, skill_version_id, surface) DO NOTHING
+ON CONFLICT (project_id, session_id, skill_version_id, surface) DO UPDATE
+SET observed_at = GREATEST(skill_efficacy_evaluations.observed_at, excluded.observed_at),
+    updated_at = clock_timestamp()
+WHERE skill_efficacy_evaluations.state = 'pending'
 `
 
 type EnqueueSkillEfficacyEvaluationsParams struct {
@@ -801,12 +804,13 @@ type EnqueueSkillEfficacyEvaluationsParams struct {
 }
 
 // Idempotent enqueue of one evaluation per scoring unit, and the only place a
-// unit's eligibility is decided. A unit is admitted when its project is live,
-// its chat exists in that project and is not deleted, and that chat has at
-// least one message and none newer than the inactivity window — so a session
-// that never produced a transcript, or is still running, is skipped and retried
-// later. ON CONFLICT DO NOTHING returns nothing for pre-existing units, which
-// is why the stamp is authorised by ListSkillEfficacyEvaluationUnits instead.
+// unit's eligibility is decided. A unit is written when its project and chat are
+// live and the visible transcript is quiet. Confirmation and reservation also
+// require the activation itself to be quiet. A conflict refreshes a pending
+// unit's observed_at so a resumed session must become quiet again before
+// reservation. The stamp is authorised by ListSkillEfficacyEvaluationUnits
+// rather than the write count because terminal units also absorb later
+// activations of the same scoring unit.
 //
 // A dev unit is admitted only when the activation's actor is the chat's actor —
 // its user id against chats.user_id or its email against chats.external_user_id,
@@ -1811,6 +1815,39 @@ func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActi
 	return items, nil
 }
 
+const listDeletedSkillEfficacyChatIDs = `-- name: ListDeletedSkillEfficacyChatIDs :many
+SELECT id
+FROM chats
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+  AND deleted IS TRUE
+`
+
+type ListDeletedSkillEfficacyChatIDsParams struct {
+	ProjectID uuid.UUID
+	ChatIds   []uuid.UUID
+}
+
+func (q *Queries) ListDeletedSkillEfficacyChatIDs(ctx context.Context, arg ListDeletedSkillEfficacyChatIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDeletedSkillEfficacyChatIDs, arg.ProjectID, arg.ChatIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingSkillEfficacyEvaluations = `-- name: ListPendingSkillEfficacyEvaluations :many
 SELECT e.id, e.organization_id, e.project_id, e.surface, e.session_id, e.chat_id, e.skill_id, e.skill_version_id, e.canonical_sha256, e.observed_at, e.state, e.reserved_on, e.attempts, e.last_error, e.scored_at, e.created_at, e.updated_at
 FROM skill_efficacy_evaluations e
@@ -1823,16 +1860,25 @@ JOIN chats c
   AND c.deleted IS FALSE
 WHERE e.project_id = $1
   AND e.state = 'pending'
+  AND e.observed_at <= now() - $2::interval
+  AND NOT EXISTS (
+    SELECT 1
+    FROM chat_messages cm
+    WHERE cm.chat_id = c.id
+      AND (cm.project_id IS NULL OR cm.project_id = p.id)
+      AND cm.created_at > now() - $2::interval
+  )
   AND (
-    $2::timestamptz IS NULL
-    OR (e.observed_at, e.id) < ($2::timestamptz, $3::uuid)
+    $3::timestamptz IS NULL
+    OR (e.observed_at, e.id) < ($3::timestamptz, $4::uuid)
   )
 ORDER BY e.observed_at DESC, e.id DESC
-LIMIT $4
+LIMIT $5
 `
 
 type ListPendingSkillEfficacyEvaluationsParams struct {
 	ProjectID        uuid.UUID
+	Inactivity       pgtype.Interval
 	CursorObservedAt pgtype.Timestamptz
 	CursorID         uuid.NullUUID
 	PageSize         int32
@@ -1858,6 +1904,7 @@ type ListPendingSkillEfficacyEvaluationsParams struct {
 func (q *Queries) ListPendingSkillEfficacyEvaluations(ctx context.Context, arg ListPendingSkillEfficacyEvaluationsParams) ([]SkillEfficacyEvaluation, error) {
 	rows, err := q.db.Query(ctx, listPendingSkillEfficacyEvaluations,
 		arg.ProjectID,
+		arg.Inactivity,
 		arg.CursorObservedAt,
 		arg.CursorID,
 		arg.PageSize,
@@ -2089,6 +2136,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT so.project_id
         FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
         WHERE so.reconciled_at IS NOT NULL
           AND so.efficacy_enqueued_at IS NULL
           AND so.session_id IS NOT NULL
@@ -2101,6 +2151,13 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT e.project_id
         FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
+        JOIN chats c
+          ON c.project_id = e.project_id
+          AND c.id = e.chat_id
+          AND c.deleted IS FALSE
         WHERE e.state = 'pending'
           AND e.project_id > $3
         ORDER BY e.project_id
@@ -2110,6 +2167,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT e.project_id
         FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
         WHERE e.state = 'reserved'
           AND e.updated_at < now() - $1::interval
           AND e.project_id > $3
@@ -2129,6 +2189,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT so.project_id
         FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
         WHERE so.reconciled_at IS NOT NULL
           AND so.efficacy_enqueued_at IS NULL
           AND so.session_id IS NOT NULL
@@ -2141,6 +2204,13 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT e.project_id
         FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
+        JOIN chats c
+          ON c.project_id = e.project_id
+          AND c.id = e.chat_id
+          AND c.deleted IS FALSE
         WHERE e.state = 'pending'
           AND e.project_id > current_project.project_id
         ORDER BY e.project_id
@@ -2150,6 +2220,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT e.project_id
         FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
         WHERE e.state = 'reserved'
           AND e.updated_at < now() - $1::interval
           AND e.project_id > current_project.project_id
@@ -2233,6 +2306,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT so.project_id
         FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
         WHERE so.reconciled_at IS NOT NULL
           AND so.metrics_synced_at IS NULL
           AND so.session_id IS NOT NULL
@@ -2263,6 +2339,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT so.project_id
         FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
         WHERE so.reconciled_at IS NOT NULL
           AND so.metrics_synced_at IS NULL
           AND so.session_id IS NOT NULL
@@ -2376,14 +2455,30 @@ JOIN skill_efficacy_evaluations e
   AND e.session_id = unit.session_id
   AND e.surface = unit.surface
   AND e.skill_version_id = unit.skill_version_id
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.deleted IS FALSE
 JOIN chats c
   ON c.id = e.chat_id
-  AND c.project_id = e.project_id
+  AND c.project_id = p.id
+  AND c.deleted IS FALSE
   AND (
     unit.surface = 'assistant'
     OR (unit.user_id <> '' AND c.user_id = unit.user_id)
     OR (unit.user_email <> '' AND c.external_user_id = unit.user_email)
   )
+WHERE e.state IN ('scored', 'failed')
+   OR (
+     e.state = 'pending'
+     AND e.observed_at <= now() - $7::interval
+     AND NOT EXISTS (
+       SELECT 1
+       FROM chat_messages cm
+       WHERE cm.chat_id = c.id
+         AND (cm.project_id IS NULL OR cm.project_id = p.id)
+         AND cm.created_at > now() - $7::interval
+     )
+   )
 `
 
 type ListSkillEfficacyEvaluationUnitsParams struct {
@@ -2393,6 +2488,7 @@ type ListSkillEfficacyEvaluationUnitsParams struct {
 	UserIds         []string
 	UserEmails      []string
 	ProjectID       uuid.UUID
+	Inactivity      pgtype.Interval
 }
 
 type ListSkillEfficacyEvaluationUnitsRow struct {
@@ -2424,6 +2520,7 @@ func (q *Queries) ListSkillEfficacyEvaluationUnits(ctx context.Context, arg List
 		arg.UserIds,
 		arg.UserEmails,
 		arg.ProjectID,
+		arg.Inactivity,
 	)
 	if err != nil {
 		return nil, err
@@ -2972,8 +3069,8 @@ type RecordSkillEfficacyEvaluationAttemptRow struct {
 	Attempts int32
 }
 
-// Model-attempt failure. The row never returns to pending: that would free the
-// budget and let a second reservation re-spend the same unit.
+// Model, sink, or row-validation failure. The row never returns to pending:
+// that would free the budget and let a second reservation re-spend the same unit.
 func (q *Queries) RecordSkillEfficacyEvaluationAttempt(ctx context.Context, arg RecordSkillEfficacyEvaluationAttemptParams) (RecordSkillEfficacyEvaluationAttemptRow, error) {
 	row := q.db.QueryRow(ctx, recordSkillEfficacyEvaluationAttempt,
 		arg.LastError,
@@ -3083,6 +3180,30 @@ func (q *Queries) ResolveSkillObservationVersions(ctx context.Context, arg Resol
 		return nil, err
 	}
 	return items, nil
+}
+
+const retireSkillObservationsForDeletedChats = `-- name: RetireSkillObservationsForDeletedChats :execrows
+UPDATE skill_observations
+SET efficacy_enqueued_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+  AND efficacy_enqueued_at IS NULL
+`
+
+type RetireSkillObservationsForDeletedChatsParams struct {
+	ProjectID      uuid.UUID
+	ObservationIds []uuid.UUID
+}
+
+// A deleted chat can never become scoreable. Marking only observations Go
+// associated with confirmed deleted chat ids removes them from the safety sweep
+// without retiring missing chats whose transcript may still arrive late.
+func (q *Queries) RetireSkillObservationsForDeletedChats(ctx context.Context, arg RetireSkillObservationsForDeletedChatsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retireSkillObservationsForDeletedChats, arg.ProjectID, arg.ObservationIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeActiveSkillDistribution = `-- name: RevokeActiveSkillDistribution :one

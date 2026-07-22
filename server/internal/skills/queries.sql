@@ -37,6 +37,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT so.project_id
         FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
         WHERE so.reconciled_at IS NOT NULL
           AND so.metrics_synced_at IS NULL
           AND so.session_id IS NOT NULL
@@ -67,6 +70,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT so.project_id
         FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
         WHERE so.reconciled_at IS NOT NULL
           AND so.metrics_synced_at IS NULL
           AND so.session_id IS NOT NULL
@@ -980,12 +986,13 @@ LIMIT @batch_size;
 
 -- name: EnqueueSkillEfficacyEvaluations :exec
 -- Idempotent enqueue of one evaluation per scoring unit, and the only place a
--- unit's eligibility is decided. A unit is admitted when its project is live,
--- its chat exists in that project and is not deleted, and that chat has at
--- least one message and none newer than the inactivity window — so a session
--- that never produced a transcript, or is still running, is skipped and retried
--- later. ON CONFLICT DO NOTHING returns nothing for pre-existing units, which
--- is why the stamp is authorised by ListSkillEfficacyEvaluationUnits instead.
+-- unit's eligibility is decided. A unit is written when its project and chat are
+-- live and the visible transcript is quiet. Confirmation and reservation also
+-- require the activation itself to be quiet. A conflict refreshes a pending
+-- unit's observed_at so a resumed session must become quiet again before
+-- reservation. The stamp is authorised by ListSkillEfficacyEvaluationUnits
+-- rather than the write count because terminal units also absorb later
+-- activations of the same scoring unit.
 --
 -- A dev unit is admitted only when the activation's actor is the chat's actor —
 -- its user id against chats.user_id or its email against chats.external_user_id,
@@ -1052,7 +1059,10 @@ WHERE EXISTS (
       AND (cm.project_id IS NULL OR cm.project_id = p.id)
       AND cm.created_at > now() - @inactivity::interval
   )
-ON CONFLICT (project_id, session_id, skill_version_id, surface) DO NOTHING;
+ON CONFLICT (project_id, session_id, skill_version_id, surface) DO UPDATE
+SET observed_at = GREATEST(skill_efficacy_evaluations.observed_at, excluded.observed_at),
+    updated_at = clock_timestamp()
+WHERE skill_efficacy_evaluations.state = 'pending';
 
 -- name: ListSkillEfficacyEvaluationUnits :many
 -- Confirmation read: the only thing that may authorise stamping
@@ -1087,14 +1097,47 @@ JOIN skill_efficacy_evaluations e
   AND e.session_id = unit.session_id
   AND e.surface = unit.surface
   AND e.skill_version_id = unit.skill_version_id
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.deleted IS FALSE
 JOIN chats c
   ON c.id = e.chat_id
-  AND c.project_id = e.project_id
+  AND c.project_id = p.id
+  AND c.deleted IS FALSE
   AND (
     unit.surface = 'assistant'
     OR (unit.user_id <> '' AND c.user_id = unit.user_id)
     OR (unit.user_email <> '' AND c.external_user_id = unit.user_email)
-  );
+  )
+WHERE e.state IN ('scored', 'failed')
+   OR (
+     e.state = 'pending'
+     AND e.observed_at <= now() - @inactivity::interval
+     AND NOT EXISTS (
+       SELECT 1
+       FROM chat_messages cm
+       WHERE cm.chat_id = c.id
+         AND (cm.project_id IS NULL OR cm.project_id = p.id)
+         AND cm.created_at > now() - @inactivity::interval
+     )
+   );
+
+-- name: ListDeletedSkillEfficacyChatIDs :many
+SELECT id
+FROM chats
+WHERE project_id = @project_id
+  AND id = ANY(@chat_ids::uuid[])
+  AND deleted IS TRUE;
+
+-- name: RetireSkillObservationsForDeletedChats :execrows
+-- A deleted chat can never become scoreable. Marking only observations Go
+-- associated with confirmed deleted chat ids removes them from the safety sweep
+-- without retiring missing chats whose transcript may still arrive late.
+UPDATE skill_observations
+SET efficacy_enqueued_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = ANY(@observation_ids::uuid[])
+  AND efficacy_enqueued_at IS NULL;
 
 -- name: MarkSkillObservationsEfficacyEnqueued :execrows
 UPDATE skill_observations
@@ -1191,6 +1234,14 @@ JOIN chats c
   AND c.deleted IS FALSE
 WHERE e.project_id = @project_id
   AND e.state = 'pending'
+  AND e.observed_at <= now() - @inactivity::interval
+  AND NOT EXISTS (
+    SELECT 1
+    FROM chat_messages cm
+    WHERE cm.chat_id = c.id
+      AND (cm.project_id IS NULL OR cm.project_id = p.id)
+      AND cm.created_at > now() - @inactivity::interval
+  )
   AND (
     sqlc.narg('cursor_observed_at')::timestamptz IS NULL
     OR (e.observed_at, e.id) < (sqlc.narg('cursor_observed_at')::timestamptz, sqlc.narg('cursor_id')::uuid)
@@ -1249,8 +1300,8 @@ WHERE project_id = @project_id
   AND state = 'reserved';
 
 -- name: RecordSkillEfficacyEvaluationAttempt :one
--- Model-attempt failure. The row never returns to pending: that would free the
--- budget and let a second reservation re-spend the same unit.
+-- Model, sink, or row-validation failure. The row never returns to pending:
+-- that would free the budget and let a second reservation re-spend the same unit.
 UPDATE skill_efficacy_evaluations
 SET attempts = attempts + 1,
     last_error = @last_error,
@@ -1352,6 +1403,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT so.project_id
         FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
         WHERE so.reconciled_at IS NOT NULL
           AND so.efficacy_enqueued_at IS NULL
           AND so.session_id IS NOT NULL
@@ -1364,6 +1418,13 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT e.project_id
         FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
+        JOIN chats c
+          ON c.project_id = e.project_id
+          AND c.id = e.chat_id
+          AND c.deleted IS FALSE
         WHERE e.state = 'pending'
           AND e.project_id > @project_cursor
         ORDER BY e.project_id
@@ -1373,6 +1434,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT e.project_id
         FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
         WHERE e.state = 'reserved'
           AND e.updated_at < now() - @stale_after::interval
           AND e.project_id > @project_cursor
@@ -1392,6 +1456,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT so.project_id
         FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
         WHERE so.reconciled_at IS NOT NULL
           AND so.efficacy_enqueued_at IS NULL
           AND so.session_id IS NOT NULL
@@ -1404,6 +1471,13 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT e.project_id
         FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
+        JOIN chats c
+          ON c.project_id = e.project_id
+          AND c.id = e.chat_id
+          AND c.deleted IS FALSE
         WHERE e.state = 'pending'
           AND e.project_id > current_project.project_id
         ORDER BY e.project_id
@@ -1413,6 +1487,9 @@ WITH RECURSIVE pending_projects AS (
       (
         SELECT e.project_id
         FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
         WHERE e.state = 'reserved'
           AND e.updated_at < now() - @stale_after::interval
           AND e.project_id > current_project.project_id

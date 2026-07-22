@@ -36,6 +36,33 @@ func TestParseVerdictRejectsUnparseableOutput(t *testing.T) {
 	require.ErrorIs(t, err, ErrModelFailure)
 }
 
+func TestParseVerdictRequiresTheStructuredOutputShape(t *testing.T) {
+	t.Parallel()
+
+	invalid := []string{
+		`{}`,
+		`null`,
+		`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null}`,
+		`{"score":null,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[]}`,
+		`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[],"extra":true}`,
+	}
+	for _, raw := range invalid {
+		_, err := ParseVerdict(raw)
+		require.ErrorIs(t, err, ErrModelFailure)
+	}
+}
+
+func TestParseVerdictAcceptsExplicitNullNullableFields(t *testing.T) {
+	t.Parallel()
+
+	got, err := ParseVerdict(`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[]}`)
+	require.NoError(t, err)
+	require.InDelta(t, 0.5, got.Score, 0)
+	require.Nil(t, got.EstTurnsSaved)
+	require.Nil(t, got.EstMinutesSaved)
+	require.Nil(t, got.ROIConfidence)
+}
+
 func TestNormalizeVerdictRejectsNonFiniteScore(t *testing.T) {
 	t.Parallel()
 

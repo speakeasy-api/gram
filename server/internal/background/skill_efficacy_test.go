@@ -296,6 +296,49 @@ func TestSkillEfficacyCoordinatorWorkflowChainsThePendingCursorAcrossPasses(t *t
 	}, seen, "a bounded walk hands where it stopped to the next pass")
 }
 
+func TestSkillEfficacyCoordinatorWorkflowContinuesAfterAnEmptyProgressingReservation(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	advanced := efficacy.PendingCursor{ObservedAt: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC), ID: uuid.New()}
+
+	registerIdleEnqueue(env)
+	var seen []efficacy.PendingCursor
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, params activities.ReserveSkillEfficacyEvaluationsParams) (*activities.ReserveSkillEfficacyEvaluationsResult, error) {
+			seen = append(seen, params.Cursor)
+			switch len(seen) {
+			case 1:
+				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, NextCursor: advanced}, nil
+			case 2:
+				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: []uuid.UUID{uuid.New()}, NextCursor: efficacy.PendingCursor{}}, nil
+			default:
+				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, NextCursor: efficacy.PendingCursor{}}, nil
+			}
+		},
+		activity.RegisterOptions{Name: "ReserveSkillEfficacyEvaluations"},
+	)
+	registerEmptyClaim(env)
+	published := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, params activities.PublishSkillEfficacyBatchParams) (*activities.PublishSkillEfficacyBatchResult, error) {
+			published += len(params.IDs)
+			return &activities.PublishSkillEfficacyBatchResult{
+				Loaded: len(params.IDs), AlreadyPublished: 0, Scored: len(params.IDs),
+				ModelFailures: 0, Failed: 0, Retryable: 0,
+			}, nil
+		},
+		activity.RegisterOptions{Name: "PublishSkillEfficacyBatch"},
+	)
+
+	env.ExecuteWorkflow(SkillEfficacyCoordinatorWorkflow, SkillEfficacyCoordinatorParams{ProjectID: uuid.New()})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, []efficacy.PendingCursor{{}, advanced, {}}, seen)
+	require.Equal(t, 1, published)
+}
+
 func TestSkillEfficacyCoordinatorWorkflowPublishesReservationsAnOwnerAbandoned(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite

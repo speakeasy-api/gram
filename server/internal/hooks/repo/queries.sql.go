@@ -350,7 +350,7 @@ func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShad
 	return err
 }
 
-const insertSkillObservation = `-- name: InsertSkillObservation :exec
+const insertSkillObservation = `-- name: InsertSkillObservation :execrows
 INSERT INTO skill_observations (
     project_id
   , idempotency_key
@@ -400,8 +400,8 @@ type InsertSkillObservationParams struct {
 	SeenAt         pgtype.Timestamptz
 }
 
-func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObservationParams) error {
-	_, err := q.db.Exec(ctx, insertSkillObservation,
+func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertSkillObservation,
 		arg.ProjectID,
 		arg.IdempotencyKey,
 		arg.Provider,
@@ -416,7 +416,10 @@ func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObs
 		arg.RawSha256,
 		arg.SeenAt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertToolCallBlock = `-- name: InsertToolCallBlock :exec

@@ -125,6 +125,21 @@ func TestInsertSkillEfficacyScores_EmptyInputIsNoop(t *testing.T) {
 	require.NoError(t, queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{}))
 }
 
+func TestInsertSkillEfficacyScores_ClassifiesConstraintViolations(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	queries := repo.New(conn)
+
+	row := efficacyScoreFixture(t, uuid.NewString(), uuid.NewString(), time.Now().UTC())
+	row.Surface = "invalid"
+
+	err = queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{row})
+	require.ErrorIs(t, err, repo.ErrInvalidSkillEfficacyScore)
+}
+
 func TestListExistingSkillEfficacyScoreIDs_EmptyIDsSkipsQuery(t *testing.T) {
 	t.Parallel()
 

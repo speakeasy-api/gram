@@ -204,7 +204,7 @@ WHERE sd.assistant_id = @assistant_id
   AND sd.revoked_at IS NULL
   AND s.name = @name;
 
--- name: RecordAssistantSkillObservation :exec
+-- name: RecordAssistantSkillObservation :execrows
 WITH observed AS (
   SELECT clock_timestamp() AS seen_at
 )

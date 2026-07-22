@@ -39,15 +39,6 @@ const (
 	// last one read, so the page size is the whole of the memory the loader
 	// spends beyond the transcript it is going to send.
 	transcriptPageSize = 20
-	// maxTranscriptPages bounds the loader's backwards walk. The walk normally
-	// ends when the rendering starts dropping messages, but a session of very
-	// short messages fits thousands of them inside maxTranscriptRunes, and each
-	// page costs a count over the remaining window — so an unbounded chat buys an
-	// unbounded number of round trips over a widening scan. The bound is well past
-	// what the rendering can hold at any realistic message size, and past it the
-	// unread rows are folded into the omission marker exactly as the trim's own
-	// drops are: what the judge sees is still the end of the session.
-	maxTranscriptPages = 50
 )
 
 // modelFailureClass is the whole of what a model failure records, in last_error
@@ -62,6 +53,8 @@ var modelFailureClass = ErrModelFailure.Error()
 // distinct from modelFailureClass because the judge answered and was paid for —
 // the attempt is charged to bound that payment, not to blame the model.
 const sinkFailureClass = "skill efficacy score sink failure"
+
+const validationFailureClass = "skill efficacy row validation failure"
 
 // TranscriptSource reads one chat's messages a page at a time, newest first.
 // Satisfied by *chatrepo.Queries.
@@ -94,12 +87,11 @@ type PublishResult struct {
 	// ModelFailures is how many took a non-terminal model failure and stayed
 	// reserved with an incremented attempt count.
 	ModelFailures int
-	// Failed is how many exhausted MaxModelAttempts and terminated. A model
-	// failure and a post-inference sink failure both charge one attempt, so the
-	// ceiling bounds the paid calls a single evaluation can ever cost.
+	// Failed is how many terminated, either after exhausting MaxModelAttempts or
+	// immediately because row validation proved a retry cannot succeed.
 	Failed int
-	// Retryable is how many hit an infrastructure failure, leaving both state and
-	// attempts untouched.
+	// Retryable is how many hit an infrastructure failure that still needs
+	// another pass. Post-inference sink failures charge an attempt first.
 	Retryable int
 }
 
@@ -142,11 +134,12 @@ func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *
 // reset moved the row's reservation day forward.
 //
 // A model failure charges the evaluation an attempt and the batch continues; the
-// third one terminates that evaluation as failed and never writes a score. An
-// infrastructure failure changes no state and charges no attempt — it comes back
-// wrapping ErrRetryable so the caller retries the same reserved rows — with the
-// one exception of a sink failure after the judge has answered, which is charged
-// as well so a broken sink cannot buy the same inference forever.
+// third one terminates that evaluation as failed and never writes a score. A
+// deterministic row-validation failure terminates immediately. An infrastructure
+// failure changes no state and charges no attempt — it comes back wrapping
+// ErrRetryable so the caller retries the same reserved rows — with the one
+// exception of a sink failure after the judge has answered, which is charged as
+// well so a broken sink cannot buy the same inference forever.
 //
 // heartbeat, when given, is called once before each evaluation. It is what lets
 // the caller's own lease on the batch stay live across a long pass and, on the
@@ -338,10 +331,21 @@ func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, 
 }
 
 // publishOne judges one evaluation and publishes its score. It returns an error
-// only for infrastructure failures, which leave the row untouched; a model
-// failure is charged to the row's attempt counter and reported through result so
-// the rest of the batch still runs.
+// only for infrastructure failures; model failures and deterministic row
+// validation failures are charged locally so the rest of the batch still runs.
 func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, transcripts map[uuid.UUID]Transcript, result *PublishResult) error {
+	if input.Surface != SurfaceDev && input.Surface != SurfaceAssistant {
+		terminal, err := p.chargeAttempt(ctx, projectID, input, validationFailureClass, 1)
+		if err != nil {
+			result.Retryable++
+			return err
+		}
+		if terminal {
+			result.Failed++
+		}
+		return nil
+	}
+
 	transcript, err := p.loadTranscript(ctx, projectID, input.ChatID, transcripts)
 	if err != nil {
 		result.Retryable++
@@ -365,23 +369,41 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 		result.Retryable++
 		return fmt.Errorf("judge skill efficacy: %w", err)
 	}
+	normalized, err := judged.Verdict.Normalize()
+	if err != nil {
+		return p.recordAttempt(ctx, projectID, input, result)
+	}
+	judged.Verdict = normalized
 
-	// One row per insert: a CHECK the normalizer somehow let through then costs
-	// its own evaluation an attempt instead of dropping the whole batch.
+	// One row per insert: a CHECK the normalizer somehow let through terminates
+	// only its own evaluation instead of dropping or retrying the whole batch.
 	if err := p.scores.InsertSkillEfficacyScores(ctx, []telemetryrepo.SkillEfficacyScore{scoreRow(projectID, input, judged)}); err != nil {
+		if errors.Is(err, telemetryrepo.ErrInvalidSkillEfficacyScore) {
+			terminal, chargeErr := p.chargeAttempt(ctx, projectID, input, validationFailureClass, 1)
+			if chargeErr != nil {
+				result.Retryable++
+				return chargeErr
+			}
+			if terminal {
+				result.Failed++
+			}
+			return nil
+		}
+
 		// The inference is already paid for and the guard has nothing to find, so
 		// every retry of this row buys the model call again. A sink that stays
 		// broken would charge for it forever, which is why the attempt is charged
 		// here as well: the failure is still infrastructure and still retried, but
 		// the paid calls one evaluation can cost are bounded by MaxModelAttempts
 		// exactly as a model failure's are.
-		terminal, chargeErr := p.chargeAttempt(ctx, projectID, input, sinkFailureClass)
+		terminal, chargeErr := p.chargeAttempt(ctx, projectID, input, sinkFailureClass, MaxModelAttempts)
 		switch {
 		case chargeErr != nil:
 			result.Retryable++
 			return errors.Join(fmt.Errorf("insert skill efficacy score: %w: %w", ErrRetryable, err), chargeErr)
 		case terminal:
 			result.Failed++
+			return nil
 		default:
 			result.Retryable++
 		}
@@ -411,11 +433,6 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 // and every unread message is older than every message already dropped — so the
 // messages it keeps are exactly the ones a full load would have kept, and only
 // the omission count has to account for what was never read.
-//
-// maxTranscriptPages is the second stop, for the chat whose messages are short
-// enough that the rendering never fills. It costs the same accounting: the rows
-// past it are unread, and unread rows are already what the omission marker
-// counts.
 func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID, transcripts map[uuid.UUID]Transcript) (Transcript, error) {
 	if cached, ok := transcripts[chatID]; ok {
 		return cached, nil
@@ -435,7 +452,7 @@ func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, cha
 	// rendering a whole-chat read produced rather than a zero Transcript.
 	transcript := RenderTranscript(nil)
 	unread := int64(0)
-	for range maxTranscriptPages {
+	for {
 		rows, err := p.chats.ListChatTranscriptMessagesPage(ctx, page)
 		if err != nil {
 			return Transcript{}, fmt.Errorf("load skill efficacy transcript: %w: %w", ErrRetryable, err)
@@ -502,7 +519,7 @@ func transcriptPageMessage(row chatrepo.ListChatTranscriptMessagesPageRow) Trans
 // returns the row to pending, so its budget slot stays spent and no second
 // reservation can re-spend the unit.
 func (p *Publisher) recordAttempt(ctx context.Context, projectID uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, result *PublishResult) error {
-	terminal, err := p.chargeAttempt(ctx, projectID, input, modelFailureClass)
+	terminal, err := p.chargeAttempt(ctx, projectID, input, modelFailureClass, MaxModelAttempts)
 	if err != nil {
 		result.Retryable++
 		return err
@@ -525,11 +542,11 @@ func (p *Publisher) recordAttempt(ctx context.Context, projectID uuid.UUID, inpu
 // pass — a stale-reservation reset, or a concurrent terminal failure — and there
 // is nothing left here to charge. Failing the call would fail the whole batch
 // over one row another owner has already accounted for.
-func (p *Publisher) chargeAttempt(ctx context.Context, projectID uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, class string) (bool, error) {
+func (p *Publisher) chargeAttempt(ctx context.Context, projectID uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, class string, maxAttempts int32) (bool, error) {
 	// The class, never the cause.
 	row, err := repo.New(p.db).RecordSkillEfficacyEvaluationAttempt(ctx, repo.RecordSkillEfficacyEvaluationAttemptParams{
 		LastError:   conv.ToPGText(class),
-		MaxAttempts: MaxModelAttempts,
+		MaxAttempts: maxAttempts,
 		ProjectID:   projectID,
 		ID:          input.ID,
 	})

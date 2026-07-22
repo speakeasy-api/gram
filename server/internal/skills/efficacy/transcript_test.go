@@ -2,6 +2,7 @@ package efficacy
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -241,6 +242,30 @@ func TestRenderTranscriptBoundsHostileNewestMessage(t *testing.T) {
 		transcriptMessage(1, "user", "do the thing"),
 		msg,
 	}), "rendering must be deterministic")
+}
+
+func TestRenderToolCallsKeepsHeadAndTail(t *testing.T) {
+	t.Parallel()
+
+	var envelope strings.Builder
+	envelope.WriteString(`[`)
+	for i := range 50 {
+		if i > 0 {
+			envelope.WriteString(`,`)
+		}
+		fmt.Fprintf(&envelope, `{"id":"call-%02d","function":{"name":"tool-%02d","arguments":"{}"}}`, i, i)
+	}
+	envelope.WriteString(`]`)
+
+	got, truncated := renderToolCalls([]byte(envelope.String()), defaultCaps)
+	require.True(t, truncated)
+	require.Len(t, got, maxRenderedToolCalls)
+
+	ids := make([]string, 0, len(got))
+	for _, call := range got {
+		ids = append(ids, call.ID)
+	}
+	require.Equal(t, []string{"call-00", "call-01", "call-02", "call-03", "call-46", "call-47", "call-48", "call-49"}, ids)
 }
 
 func TestRenderTranscriptIsDeterministic(t *testing.T) {

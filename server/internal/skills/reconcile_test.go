@@ -27,7 +27,7 @@ func insertSkillObservation(t *testing.T, ti *testInstance, name, source, source
 
 func insertSkillObservationForProject(t *testing.T, ti *testInstance, projectID uuid.UUID, provider, name, source, sourceLevel, rawSHA256 string, seenAt time.Time) {
 	t.Helper()
-	require.NoError(t, hooksrepo.New(ti.conn).InsertSkillObservation(t.Context(), hooksrepo.InsertSkillObservationParams{
+	_, err := hooksrepo.New(ti.conn).InsertSkillObservation(t.Context(), hooksrepo.InsertSkillObservationParams{
 		ProjectID:      projectID,
 		IdempotencyKey: conv.ToPGText(uuid.NewString()),
 		Provider:       provider,
@@ -41,12 +41,13 @@ func insertSkillObservationForProject(t *testing.T, ti *testInstance, projectID 
 		SourcePath:     conv.ToPGTextEmpty(""),
 		RawSha256:      conv.ToPGTextEmpty(rawSHA256),
 		SeenAt:         conv.ToPGTimestamptz(seenAt),
-	}))
+	})
+	require.NoError(t, err)
 }
 
 func insertSkillObservationWithSession(t *testing.T, ti *testInstance, provider, sessionID, name, rawSHA256 string, seenAt time.Time) {
 	t.Helper()
-	require.NoError(t, hooksrepo.New(ti.conn).InsertSkillObservation(t.Context(), hooksrepo.InsertSkillObservationParams{
+	_, err := hooksrepo.New(ti.conn).InsertSkillObservation(t.Context(), hooksrepo.InsertSkillObservationParams{
 		ProjectID:      ti.projectID,
 		IdempotencyKey: conv.ToPGText(uuid.NewString()),
 		Provider:       provider,
@@ -60,7 +61,8 @@ func insertSkillObservationWithSession(t *testing.T, ti *testInstance, provider,
 		SourcePath:     conv.ToPGTextEmpty(""),
 		RawSha256:      conv.ToPGText(rawSHA256),
 		SeenAt:         conv.ToPGTimestamptz(seenAt),
-	}))
+	})
+	require.NoError(t, err)
 }
 
 func TestListProjectsWithPendingSkillObservationsPaginatesDistinctProjects(t *testing.T) {

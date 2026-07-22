@@ -143,6 +143,7 @@ func TestIngest_SkillObservationDurableIdempotencyIgnoresRedisDuplicate(t *testi
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, key, rows[0].IdempotencyKey.String)
+	require.Equal(t, []uuid.UUID{*authCtx.ProjectID}, ti.efficacySignals.signaled(), "a duplicate durable no-op wakes nothing")
 }
 
 func TestIngest_SkillObservationFailureDoesNotChangeVerdict(t *testing.T) {
@@ -209,17 +210,13 @@ func TestIngest_OnlyDurableSkillObservationWakesEfficacy(t *testing.T) {
 		"a failed or blocked-away recording wakes nothing")
 }
 
-func TestIngest_SessionEndWakesEfficacy(t *testing.T) {
+func TestIngest_SessionEndDoesNotWakeBeforeTranscriptPersistence(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
 	_, err := ti.service.Ingest(ctx, canonicalIngestPayload("claude", "session.ended", "ending-session"))
 	require.NoError(t, err)
 
-	require.Equal(t, []uuid.UUID{*authCtx.ProjectID}, ti.efficacySignals.signaled(),
-		"a session end may have made the units already queued for this project scoreable")
+	require.Empty(t, ti.efficacySignals.signaled(), "durable observations, messages, and the sweep provide later wakes")
 }
 
 func TestIngest_EfficacyWakeFailureDoesNotChangeVerdictOrRecording(t *testing.T) {

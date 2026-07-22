@@ -111,12 +111,13 @@ func (t *Load) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.
 		}
 		writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		if err := queries.RecordAssistantSkillObservation(writeCtx, assistantrepo.RecordAssistantSkillObservationParams{
+		written, err := queries.RecordAssistantSkillObservation(writeCtx, assistantrepo.RecordAssistantSkillObservationParams{
 			SessionID:      chatID.String(),
 			SkillVersionID: loaded.SkillVersionID,
 			ProjectID:      *authCtx.ProjectID,
 			SkillID:        loaded.SkillID,
-		}); err != nil {
+		})
+		if err != nil {
 			t.logger.ErrorContext(writeCtx, "failed to record assistant skill observation",
 				attr.SlogError(err),
 				attr.SlogProjectID(authCtx.ProjectID.String()),
@@ -132,7 +133,7 @@ func (t *Load) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.
 		// detached from the tool call: a caller that walked away must not drop
 		// it, and a coordinator that refuses it must not change what the model
 		// sees.
-		if t.efficacySignaler != nil {
+		if written > 0 && t.efficacySignaler != nil {
 			signalCtx, cancelSignal := context.WithTimeout(context.WithoutCancel(ctx), skillEfficacySignalTimeout)
 			defer cancelSignal()
 			if err := t.efficacySignaler.Signal(signalCtx, *authCtx.ProjectID); err != nil {

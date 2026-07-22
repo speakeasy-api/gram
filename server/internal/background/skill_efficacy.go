@@ -91,12 +91,11 @@ func skillEfficacyCoordinatorWorkflowID(projectID uuid.UUID) string {
 // SkillEfficacyCoordinatorWorkflow is the per-project driver of the efficacy
 // pipeline. One run is a sequence of passes, and one pass is: walk the enqueue
 // cursor until the pending activations are exhausted, reserve a batch against
-// the organization's budget, and publish it. Passes stop as soon as a pass finds
-// no batch it can process right now — an empty queue, a spent cap, or an
-// unentitled organization all look the same from here — because the next signal
-// or the next sweep is what says to look again. A run that instead spends its
-// whole pass budget still publishing continues as new, because there the cap is
-// the only reason it stopped and nothing else is going to say to look again.
+// the organization's budget, and publish it. An empty reservation with an
+// advanced cursor continues past capped candidates; one that reaches the queue
+// end or makes no progress stops until the next signal or sweep. A run that
+// spends its whole pass budget publishing or advancing continues as new because
+// unfinished work still remains.
 //
 // Its id is derived from the project, so SignalWithStart makes it exactly-one
 // per project: a second signal arriving while a run is live is delivered to that
@@ -171,6 +170,7 @@ func SkillEfficacyCoordinatorWorkflow(ctx workflow.Context, params SkillEfficacy
 			}
 		}
 
+		pendingCursor := params.PendingCursor
 		var reserved activities.ReserveSkillEfficacyEvaluationsResult
 		if err := workflow.ExecuteActivity(ctx, a.ReserveSkillEfficacyEvaluations, activities.ReserveSkillEfficacyEvaluationsParams{
 			ProjectID: params.ProjectID,
@@ -187,9 +187,9 @@ func SkillEfficacyCoordinatorWorkflow(ctx workflow.Context, params SkillEfficacy
 
 		ids := reserved.IDs
 		if len(ids) == 0 {
-			// Nothing new to spend on, so the only work that can remain is a
-			// reservation an earlier owner never published. Claiming it here is
-			// what makes a crash mid-pass cost a pass rather than a batch.
+			// Claim any reservation an earlier owner never published before deciding
+			// whether this empty result exhausted the queue or merely advanced past
+			// capped candidates.
 			var claimed activities.SkillEfficacyBatch
 			if err := workflow.ExecuteActivity(ctx, a.LoadReservedSkillEfficacyEvaluations, activities.LoadReservedSkillEfficacyEvaluationsParams{
 				ProjectID: params.ProjectID,
@@ -201,6 +201,9 @@ func SkillEfficacyCoordinatorWorkflow(ctx workflow.Context, params SkillEfficacy
 		}
 
 		if len(ids) == 0 {
+			if reserved.NextCursor != (efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}) && reserved.NextCursor != pendingCursor {
+				continue
+			}
 			exhausted = true
 			break
 		}
@@ -218,9 +221,8 @@ func SkillEfficacyCoordinatorWorkflow(ctx workflow.Context, params SkillEfficacy
 		}
 	}
 
-	// Every pass published a batch and the cap is what stopped the run, so the
-	// queue still holds work and no producer owes this project another signal for
-	// it. Completing here would leave that backlog to the sweep's next tick.
+	// Every pass published a batch or advanced over capped candidates, so the run
+	// stopped on its history budget rather than queue exhaustion.
 	if !exhausted {
 		return workflow.NewContinueAsNewError(ctx, SkillEfficacyCoordinatorWorkflow, params)
 	}

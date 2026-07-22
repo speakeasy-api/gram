@@ -163,7 +163,7 @@ func (f efficacyFixture) observeAs(t *testing.T, sessionID string, provider stri
 	ctx := t.Context()
 
 	rawHash := sha256.Sum256([]byte(skillContent))
-	require.NoError(t, hooksrepo.New(f.db).InsertSkillObservation(ctx, hooksrepo.InsertSkillObservationParams{
+	_, err := hooksrepo.New(f.db).InsertSkillObservation(ctx, hooksrepo.InsertSkillObservationParams{
 		ProjectID:      f.projectID,
 		IdempotencyKey: conv.ToPGText(uuid.NewString()),
 		Provider:       provider,
@@ -177,9 +177,10 @@ func (f efficacyFixture) observeAs(t *testing.T, sessionID string, provider stri
 		SourcePath:     pgtype.Text{String: "", Valid: false},
 		RawSha256:      conv.ToPGText(hex.EncodeToString(rawHash[:])),
 		SeenAt:         conv.ToPGTimestamptz(seenAt),
-	}))
+	})
+	require.NoError(t, err)
 
-	_, err := skills.ReconcileSkillObservations(ctx, f.db, f.projectID, 50)
+	_, err = skills.ReconcileSkillObservations(ctx, f.db, f.projectID, 50)
 	require.NoError(t, err)
 }
 
@@ -194,6 +195,7 @@ func (f efficacyFixture) pendingEvaluations(t *testing.T) []repo.SkillEfficacyEv
 		CursorObservedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		CursorID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		PageSize:         PendingCandidatePage,
+		Inactivity:       pgtype.Interval{Microseconds: InactivityWindow.Microseconds(), Days: 0, Months: 0, Valid: true},
 	}
 
 	var rows []repo.SkillEfficacyEvaluation
@@ -336,6 +338,35 @@ func TestEnqueuePageSkipsSessionWithRecentMessage(t *testing.T) {
 	require.Len(t, remaining, 1)
 }
 
+func TestEnqueuePageSkipsRecentActivationWithOldTranscript(t *testing.T) {
+	t.Parallel()
+	fixture := newEfficacyFixture(t, "skill_efficacy_enqueue_recent_activation")
+
+	sessionID := "claude-session-recent-activation"
+	fixture.seedChat(t, sessionID, 2, 90*time.Minute)
+	fixture.observe(t, sessionID, "claude-code", time.Now().UTC())
+
+	result := fixture.firstPage(t, 50)
+	require.Equal(t, enqueueCounts{Scanned: 1, Units: 1, Confirmed: 0, Stamped: 0}, countsOf(result))
+	require.Empty(t, fixture.pendingEvaluations(t), "the current activation cannot score an old visible transcript prefix")
+}
+
+func TestEnqueuePageRefreshesExistingPendingUnitForRecentActivation(t *testing.T) {
+	t.Parallel()
+	fixture := newEfficacyFixture(t, "efficacy_enqueue_resumed_session")
+
+	sessionID := "claude-session-resumed"
+	fixture.seedChat(t, sessionID, 2, 90*time.Minute)
+	fixture.observe(t, sessionID, "claude-code", time.Now().UTC().Add(-2*time.Hour))
+	first := fixture.firstPage(t, 50)
+	require.Equal(t, enqueueCounts{Scanned: 1, Units: 1, Confirmed: 1, Stamped: 1}, countsOf(first))
+
+	fixture.observe(t, sessionID, "claude-code", time.Now().UTC())
+	second := fixture.firstPage(t, 50)
+	require.Equal(t, enqueueCounts{Scanned: 1, Units: 1, Confirmed: 0, Stamped: 0}, countsOf(second))
+	require.Empty(t, fixture.pendingEvaluations(t), "the refreshed unit cannot reserve until the resumed session is quiet")
+}
+
 func TestEnqueuePageSkipsSessionWithoutMessages(t *testing.T) {
 	t.Parallel()
 	fixture := newEfficacyFixture(t, "skill_efficacy_enqueue_empty")
@@ -457,6 +488,17 @@ func TestEnqueuePageSkipsDeletedChatsAndProjects(t *testing.T) {
 	result := fixture.firstPage(t, 50)
 	require.Equal(t, enqueueCounts{Scanned: 1, Units: 1, Confirmed: 0, Stamped: 0}, countsOf(result))
 	require.Empty(t, fixture.pendingEvaluations(t))
+	remaining, err := repo.New(fixture.db).ListPendingSkillObservations(ctx, repo.ListPendingSkillObservationsParams{
+		ProjectID:   fixture.projectID,
+		BatchSize:   50,
+		AfterSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		AfterID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	require.Empty(t, remaining, "a deleted chat permanently retires its observation")
+	projects, err := PendingWorkProjects(ctx, fixture.db, uuid.Nil, StaleReservationAfter, MaxSweepProjectPage)
+	require.NoError(t, err)
+	require.Empty(t, projects, "a deleted chat's retired observation does not keep waking the project")
 
 	// A live session in a project that is then deleted is refused too.
 	liveSession := "claude-session-deleted-project"
@@ -467,11 +509,49 @@ func TestEnqueuePageSkipsDeletedChatsAndProjects(t *testing.T) {
 	require.NoError(t, err)
 
 	// A deleted project resolves no settings row, exactly as Reserve already
-	// treats it: nothing to admit, so nothing is even scanned. Its activations
-	// are retired by age rather than paged past forever.
+	// treats it: nothing to admit, so nothing is even scanned. The sweep excludes
+	// deleted projects rather than repeatedly signalling permanently dead work.
 	result = fixture.firstPage(t, 50)
 	require.Equal(t, enqueueCounts{Scanned: 0, Units: 0, Confirmed: 0, Stamped: 0}, countsOf(result))
 	require.Empty(t, fixture.pendingEvaluations(t))
+	projects, err = PendingWorkProjects(ctx, fixture.db, uuid.Nil, StaleReservationAfter, MaxSweepProjectPage)
+	require.NoError(t, err)
+	require.Empty(t, projects, "a deleted project's observation does not keep waking the project")
+}
+
+func TestEnqueueConfirmationRejectsAnExistingUnitAfterChatDeletion(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	fixture := newEfficacyFixture(t, "efficacy_enqueue_deleted_confirm")
+
+	sessionID := "claude-session-deleted-confirmation"
+	chatID := fixture.seedChat(t, sessionID, 1, 90*time.Minute)
+	fixture.observe(t, sessionID, "claude-code", time.Now().UTC().Add(-2*time.Hour))
+	first := fixture.firstPage(t, 50)
+	require.Equal(t, enqueueCounts{Scanned: 1, Units: 1, Confirmed: 1, Stamped: 1}, countsOf(first))
+
+	fixture.observe(t, sessionID, "claude-code", time.Now().UTC().Add(-time.Hour))
+	deleted, err := chatrepo.New(fixture.db).SoftDeleteChat(ctx, chatrepo.SoftDeleteChatParams{
+		ProjectID: fixture.projectID,
+		ID:        chatID,
+	})
+	require.NoError(t, err)
+	require.True(t, deleted.Deleted)
+
+	second := fixture.firstPage(t, 50)
+	require.Equal(t, enqueueCounts{Scanned: 1, Units: 1, Confirmed: 0, Stamped: 0}, countsOf(second))
+
+	remaining, err := repo.New(fixture.db).ListPendingSkillObservations(ctx, repo.ListPendingSkillObservationsParams{
+		ProjectID:   fixture.projectID,
+		BatchSize:   50,
+		AfterSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		AfterID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	require.Empty(t, remaining, "the deleted chat permanently retires the observation from the safety sweep")
+	projects, err := PendingWorkProjects(ctx, fixture.db, uuid.Nil, StaleReservationAfter, MaxSweepProjectPage)
+	require.NoError(t, err)
+	require.Empty(t, projects)
 }
 
 // The candidate scan and the insert are separated by the confirmation read, so
@@ -617,7 +697,7 @@ func TestEnqueuePageIgnoresUnreconciledActivations(t *testing.T) {
 
 	sessionID := "claude-session-unresolved"
 	fixture.seedChat(t, sessionID, 2, 90*time.Minute)
-	require.NoError(t, hooksrepo.New(fixture.db).InsertSkillObservation(ctx, hooksrepo.InsertSkillObservationParams{
+	_, err := hooksrepo.New(fixture.db).InsertSkillObservation(ctx, hooksrepo.InsertSkillObservationParams{
 		ProjectID:      fixture.projectID,
 		IdempotencyKey: conv.ToPGText(uuid.NewString()),
 		Provider:       "claude-code",
@@ -631,7 +711,8 @@ func TestEnqueuePageIgnoresUnreconciledActivations(t *testing.T) {
 		SourcePath:     pgtype.Text{String: "", Valid: false},
 		RawSha256:      conv.ToPGText(hex.EncodeToString([]byte("unresolved"))),
 		SeenAt:         conv.ToPGTimestamptz(time.Now().UTC().Add(-2 * time.Hour)),
-	}))
+	})
+	require.NoError(t, err)
 
 	result := fixture.firstPage(t, 50)
 	require.Equal(t, enqueueCounts{Scanned: 0, Units: 0, Confirmed: 0, Stamped: 0}, countsOf(result))

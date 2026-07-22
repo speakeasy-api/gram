@@ -99,7 +99,7 @@ func (f efficacyFixture) seedUnits(t *testing.T, skill capturedSkill, prefix str
 		sessionID := prefix + "-" + strconv.Itoa(i)
 		f.seedChat(t, sessionID, 1, 90*time.Minute)
 
-		require.NoError(t, queries.InsertSkillObservation(ctx, hooksrepo.InsertSkillObservationParams{
+		_, err := queries.InsertSkillObservation(ctx, hooksrepo.InsertSkillObservationParams{
 			ProjectID:      f.projectID,
 			IdempotencyKey: conv.ToPGText(uuid.NewString()),
 			Provider:       "claude-code",
@@ -113,7 +113,8 @@ func (f efficacyFixture) seedUnits(t *testing.T, skill capturedSkill, prefix str
 			SourcePath:     pgtype.Text{String: "", Valid: false},
 			RawSha256:      conv.ToPGText(skill.rawSha256),
 			SeenAt:         conv.ToPGTimestamptz(oldest.Add(time.Duration(i) * time.Minute)),
-		}))
+		})
+		require.NoError(t, err)
 	}
 }
 
@@ -303,14 +304,20 @@ func TestReserveResumesFromTheCursorItIsGivenAndStartsOverAtTheEnd(t *testing.T)
 	require.Len(t, queued, 3)
 	newest := queued[0]
 
-	// A walk that starts past the newest candidate reserves the one behind it,
-	// which is what a pass resuming a bounded walk does.
+	// A walk that starts past the newest candidate reserves the one behind it and
+	// reports only that examined row, not the unexamined tail of the fetched page.
 	resumed, next, err := Reserve(ctx, fixture.db, &stubFeatures{enabled: true}, fixture.projectID,
 		PendingCursor{ObservedAt: newest.ObservedAt.Time, ID: newest.ID}, 1)
 	require.NoError(t, err)
 	require.Len(t, resumed, 1)
 	require.Equal(t, queued[1].ID, resumed[0].ID, "a resumed walk starts strictly after the cursor it is given")
-	require.Equal(t, PendingCursor{}, next, "a walk that reached the end of the queue reports the head")
+	require.Equal(t, PendingCursor{ObservedAt: queued[1].ObservedAt.Time, ID: queued[1].ID}, next)
+
+	tail, next, err := Reserve(ctx, fixture.db, &stubFeatures{enabled: true}, fixture.projectID, next, 1)
+	require.NoError(t, err)
+	require.Len(t, tail, 1)
+	require.Equal(t, queued[2].ID, tail[0].ID, "the unexamined page tail is next")
+	require.Equal(t, PendingCursor{}, next, "a fully examined short page reports the head")
 
 	// A cursor past the tail is the case that would wedge a walk forever if it
 	// were kept: nothing is left after it, so the pass reports the head and the
@@ -324,9 +331,26 @@ func TestReserveResumesFromTheCursorItIsGivenAndStartsOverAtTheEnd(t *testing.T)
 
 	rest, next, err := Reserve(ctx, fixture.db, &stubFeatures{enabled: true}, fixture.projectID, next, MaxReservedClaimBatch)
 	require.NoError(t, err)
-	require.Len(t, rest, 2, "the walk starts over and reaches what the cursor had skipped")
+	require.Len(t, rest, 1, "the walk starts over and reaches what the original cursor skipped")
 	require.Equal(t, PendingCursor{}, next)
 	require.Empty(t, fixture.pendingEvaluations(t), "no candidate is left behind a cursor")
+}
+
+func TestReserveCursorStopsAtLastExaminedCandidateWhenBatchFillsMidPage(t *testing.T) {
+	t.Parallel()
+	fixture := newEfficacyFixture(t, "efficacy_reserve_mid_page_cursor")
+
+	skill := fixture.captureSkill(t, "efficacy-mid-page")
+	fixture.seedUnits(t, skill, "mid-page-session", int(PendingCandidatePage), time.Now().UTC().Add(-5*time.Hour))
+	fixture.enqueueSeeded(t, int(PendingCandidatePage))
+	queued := fixture.pendingEvaluations(t)
+	require.Len(t, queued, int(PendingCandidatePage))
+
+	const batchSize int32 = 10
+	reserved, next, err := Reserve(t.Context(), fixture.db, &stubFeatures{enabled: true}, fixture.projectID, PendingCursor{}, batchSize)
+	require.NoError(t, err)
+	require.Len(t, reserved, int(batchSize))
+	require.Equal(t, PendingCursor{ObservedAt: queued[batchSize-1].ObservedAt.Time, ID: queued[batchSize-1].ID}, next)
 }
 
 func TestReserveConcurrentReserversCannotExceedRemainingBurst(t *testing.T) {
@@ -585,6 +609,27 @@ func TestReserveSkipsEvaluationsOfADeletedChat(t *testing.T) {
 	require.Equal(t, "deleted-chat-session-0", reserved[0].SessionID)
 
 	require.Empty(t, fixture.pendingEvaluations(t), "the deleted chat's evaluation is no longer a candidate")
+	projects, err := PendingWorkProjects(ctx, fixture.db, uuid.Nil, StaleReservationAfter, MaxSweepProjectPage)
+	require.NoError(t, err)
+	require.Empty(t, projects, "a deleted chat's pending row does not keep waking the project")
+}
+
+func TestResetStaleReservationsRejectsNonPositiveDurations(t *testing.T) {
+	t.Parallel()
+	fixture := newEfficacyFixture(t, "skill_efficacy_reserve_stale_duration")
+	skill := fixture.captureSkill(t, "efficacy-stale-duration")
+	fixture.seedUnits(t, skill, "stale-duration-session", 1, time.Now().UTC().Add(-2*time.Hour))
+	fixture.enqueueSeeded(t, 1)
+	reserved, _, err := Reserve(t.Context(), fixture.db, &stubFeatures{enabled: true}, fixture.projectID, PendingCursor{}, 1)
+	require.NoError(t, err)
+	require.Len(t, reserved, 1)
+
+	for _, staleAfter := range []time.Duration{0, time.Nanosecond, -time.Second} {
+		reset, err := ResetStaleReservations(t.Context(), fixture.db, fixture.projectID, staleAfter)
+		require.Error(t, err)
+		require.Zero(t, reset)
+	}
+	require.Len(t, fixture.reservedEvaluations(t, 1), 1, "invalid durations leave the live reservation untouched")
 }
 
 func TestResetStaleReservationsFreesOnlyStaleRowsAndKeepsAttempts(t *testing.T) {

@@ -82,6 +82,20 @@ func (f failingSink) InsertSkillEfficacyScores(context.Context, []telemetryrepo.
 	return f.err
 }
 
+type invalidDevSink struct {
+	ScoreSink
+}
+
+func (s invalidDevSink) InsertSkillEfficacyScores(ctx context.Context, rows []telemetryrepo.SkillEfficacyScore) error {
+	if rows[0].Surface == SurfaceDev {
+		return fmt.Errorf("invalid dev score: %w", telemetryrepo.ErrInvalidSkillEfficacyScore)
+	}
+	if err := s.ScoreSink.InsertSkillEfficacyScores(ctx, rows); err != nil {
+		return fmt.Errorf("insert valid score: %w", err)
+	}
+	return nil
+}
+
 // crashingSink commits the score for real and then kills the pass's context, so
 // the mark that follows the insert fails exactly the way a crashed worker leaves
 // the row: score in ClickHouse, evaluation still reserved.
@@ -438,7 +452,7 @@ func TestPublishSkipsEvaluationWhoseChatWasDeleted(t *testing.T) {
 	_, stillReserved := h.reservedByID(t, evaluation.ID)
 	require.True(t, stillReserved, "publication invents no terminal state for the row")
 
-	reset, err := ResetStaleReservations(ctx, h.fixture.db, h.fixture.projectID, 0)
+	reset, err := ResetStaleReservations(ctx, h.fixture.db, h.fixture.projectID, time.Microsecond)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), reset)
 	require.Empty(t, h.fixture.pendingEvaluations(t), "the row returns to pending and stays ineligible")
@@ -662,7 +676,7 @@ func TestPublishClickHouseFailureRetriesUnderABoundedAttemptBudget(t *testing.T)
 	}
 
 	final, err := publisher.Publish(t.Context(), h.fixture.projectID, batch, nil)
-	require.ErrorIs(t, err, ErrRetryable)
+	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 1, Retryable: 0}, final)
 
 	_, ok := h.reservedByID(t, evaluation.ID)
@@ -677,6 +691,53 @@ func TestPublishClickHouseFailureRetriesUnderABoundedAttemptBudget(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 0, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0}, after)
 	require.Equal(t, MaxModelAttempts, h.judge.calls[SurfaceDev])
+}
+
+func TestPublishClickHouseConstraintFailureTerminatesOnlyInvalidRow(t *testing.T) {
+	t.Parallel()
+	h := newPublishHarness(t, "skill_efficacy_publish_sink_constraint")
+
+	invalid := h.reserve(t, "claude-session-sink-constraint", "claude-code")
+	healthy := h.reserve(t, uuid.NewString(), "assistants")
+	h.judge.results[SurfaceDev] = okVerdict()
+	h.judge.results[SurfaceAssistant] = okVerdict()
+
+	result, err := h.publisher(t, invalidDevSink{ScoreSink: h.scores}).Publish(
+		t.Context(), h.fixture.projectID, []uuid.UUID{invalid.ID, healthy.ID}, nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, PublishResult{Loaded: 2, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 1, Retryable: 0}, result)
+	require.Equal(t, 1, h.judge.calls[SurfaceDev])
+	require.Equal(t, 1, h.judge.calls[SurfaceAssistant])
+	require.Equal(t, []string{healthy.ID.String()}, h.publishedIDs(t, invalid, healthy))
+
+	_, stillReserved := h.reservedByID(t, invalid.ID)
+	require.False(t, stillReserved)
+}
+
+func TestPublishNormalizesJudgeClientOutputBeforeTheSink(t *testing.T) {
+	t.Parallel()
+	h := newPublishHarness(t, "efficacy_publish_normalize_boundary")
+
+	evaluation := h.reserve(t, "claude-session-normalize-boundary", "claude-code")
+	invalidConfidence := "invented"
+	h.judge.results[SurfaceDev] = JudgeResult{
+		Verdict: Verdict{
+			Score:           5,
+			Rationale:       strings.Repeat("é", maxRationaleRunes+1),
+			EstTurnsSaved:   new(-1.0),
+			EstMinutesSaved: nil,
+			ROIConfidence:   &invalidConfidence,
+			Flags:           []string{"invented", "harmful", "harmful"},
+		},
+		Model:         "test-judge-model",
+		PromptVersion: JudgePromptVersion,
+	}
+
+	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
+	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
 }
 
 // The attempt charge writes through a :one query, and a row another owner has
@@ -1041,20 +1102,14 @@ func TestPublishTranscriptIgnoresAnotherProjectsMessages(t *testing.T) {
 	require.Empty(t, got.Omitted, "a message that was never this project's is not an omission")
 }
 
-// The rendering budget is what normally stops the backwards walk, but a session
-// of very short messages fits thousands of them inside it — and every page costs
-// a count over the remaining window. maxTranscriptPages is the second stop, and
-// it costs the omission marker exactly what an unread row already costs it.
-func TestPublishBoundsPagesForAChatOfVeryShortMessages(t *testing.T) {
+func TestPublishLoadsEveryShortMessageThatFitsTheTranscriptBudget(t *testing.T) {
 	t.Parallel()
 	h := newPublishHarness(t, "skill_efficacy_publish_short_messages")
 
 	evaluation := h.reserve(t, uuid.NewString(), "claude-code")
 	h.judge.results[SurfaceDev] = okVerdict()
 
-	// Two pages past the bound: nothing here comes close to filling the
-	// rendering, so only the page bound can end the walk.
-	shortMessages := maxTranscriptPages*transcriptPageSize + 2*transcriptPageSize
+	const shortMessages = 1001
 	h.seedTranscriptMessages(t,
 		evaluation.ChatID,
 		uuid.NullUUID{UUID: h.fixture.projectID, Valid: true},
@@ -1075,14 +1130,13 @@ func TestPublishBoundsPagesForAChatOfVeryShortMessages(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 
-	require.Equal(t, maxTranscriptPages, chats.loads[evaluation.ChatID], "the walk stops at the page bound")
-	require.Equal(t, maxTranscriptPages*transcriptPageSize, chats.rows, "and never reads past it")
+	require.Equal(t, (total+transcriptPageSize-1)/transcriptPageSize, chats.loads[evaluation.ChatID])
+	require.Equal(t, total, chats.rows)
 
 	require.Len(t, h.judge.inputs, 1)
 	got := h.judge.inputs[0].Transcript
-	require.Len(t, got.Messages, chats.rows, "everything read fits the rendering, so nothing is trimmed")
-	require.Equal(t, fmt.Sprintf("[%d earlier messages omitted]", total-len(got.Messages)), got.Omitted,
-		"the rows never asked for are counted as omissions")
+	require.Len(t, got.Messages, total, "every message that fits is included")
+	require.Empty(t, got.Omitted)
 
 	// The end of the session is what the judge is here to read.
 	newest := got.Messages[len(got.Messages)-1]

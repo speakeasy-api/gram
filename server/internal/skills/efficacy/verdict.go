@@ -1,6 +1,7 @@
 package efficacy
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -26,8 +27,8 @@ var roiConfidenceValues = []string{"low", "med", "high"}
 var verdictFlags = []string{"ignored", "misapplied", "partially_followed", "harmful"}
 
 // Verdict is the judge's structured answer. Field names and shapes match
-// VerdictSchema, so the model's raw output unmarshals straight into it, and the
-// normalized value maps one-to-one onto skill_efficacy_scores
+// VerdictSchema; ParseVerdict validates the required shape before decoding it,
+// and the normalized value maps one-to-one onto skill_efficacy_scores
 // (server/clickhouse/schema.sql:943-950).
 type Verdict struct {
 	Score           float64  `json:"score"`
@@ -42,6 +43,32 @@ type Verdict struct {
 // Unparseable output is a model failure: the model returned something outside
 // the contract it was given, and a retry can produce a different answer.
 func ParseVerdict(raw string) (Verdict, error) {
+	required := map[string]bool{
+		"score":             false,
+		"rationale":         false,
+		"est_turns_saved":   true,
+		"est_minutes_saved": true,
+		"roi_confidence":    true,
+		"flags":             false,
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &fields); err != nil {
+		return Verdict{}, fmt.Errorf("parse efficacy verdict: %w: %w", ErrModelFailure, err)
+	}
+	for name, value := range fields {
+		if _, ok := required[name]; !ok {
+			return Verdict{}, fmt.Errorf("parse efficacy verdict: unknown field %q: %w", name, ErrModelFailure)
+		}
+		if !required[name] && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return Verdict{}, fmt.Errorf("parse efficacy verdict: field %q must not be null: %w", name, ErrModelFailure)
+		}
+	}
+	for name := range required {
+		if _, ok := fields[name]; !ok {
+			return Verdict{}, fmt.Errorf("parse efficacy verdict: missing field %q: %w", name, ErrModelFailure)
+		}
+	}
+
 	var v Verdict
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &v); err != nil {
 		return Verdict{}, fmt.Errorf("parse efficacy verdict: %w: %w", ErrModelFailure, err)

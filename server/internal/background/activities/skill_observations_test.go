@@ -63,7 +63,7 @@ func TestSkillObservationReconcilerSyncSessionVersionsInsertsBeforeMarkAndRetrie
 	version, err := skills.CaptureSkillContent(ctx, db, project.ID, content)
 	require.NoError(t, err)
 	rawHash := sha256.Sum256([]byte(content))
-	require.NoError(t, hooksrepo.New(db).InsertSkillObservation(ctx, hooksrepo.InsertSkillObservationParams{
+	_, err = hooksrepo.New(db).InsertSkillObservation(ctx, hooksrepo.InsertSkillObservationParams{
 		ProjectID:      project.ID,
 		IdempotencyKey: conv.ToPGText(uuid.NewString()),
 		Provider:       "assistants",
@@ -77,7 +77,8 @@ func TestSkillObservationReconcilerSyncSessionVersionsInsertsBeforeMarkAndRetrie
 		SourcePath:     pgtype.Text{},
 		RawSha256:      conv.ToPGText(hex.EncodeToString(rawHash[:])),
 		SeenAt:         conv.ToPGTimestamptz(time.Now().UTC()),
-	}))
+	})
+	require.NoError(t, err)
 	result, err := skills.ReconcileSkillObservations(ctx, db, project.ID, 10)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Processed)

@@ -124,14 +124,16 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, features FeatureChecker, pro
 
 	// The head of the queue can be entirely capped — one hot skill's backlog is
 	// enough — so the walk pages past it rather than reading a single fixed head.
-	// The cursor advances over every candidate the page held, admitted or not,
-	// which is what stops a capped skill starving the ones behind it.
+	// The cursor advances over every candidate examined, admitted or not, which
+	// stops a capped skill starving the ones behind it without skipping the tail
+	// of a page when the batch fills early.
 	resumed := cursor != fromHead
 	page := repo.ListPendingSkillEfficacyEvaluationsParams{
 		ProjectID:        projectID,
 		CursorObservedAt: pgtype.Timestamptz{Time: cursor.ObservedAt, InfinityModifier: pgtype.Finite, Valid: resumed},
 		CursorID:         uuid.NullUUID{UUID: cursor.ID, Valid: resumed},
 		PageSize:         PendingCandidatePage,
+		Inactivity:       pgtype.Interval{Microseconds: InactivityWindow.Microseconds(), Days: 0, Months: 0, Valid: true},
 	}
 	// The walk starts where the last pass stopped and reports where this one
 	// does. Reaching the end of the queue reports the head instead, so the next
@@ -150,11 +152,6 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, features FeatureChecker, pro
 			next = fromHead
 			break
 		}
-
-		last := candidates[len(candidates)-1]
-		page.CursorObservedAt = pgtype.Timestamptz{Time: last.ObservedAt.Time, InfinityModifier: pgtype.Finite, Valid: true}
-		page.CursorID = uuid.NullUUID{UUID: last.ID, Valid: true}
-		next = PendingCursor{ObservedAt: last.ObservedAt.Time, ID: last.ID}
 
 		// Spend is read once per grain: only the ids this page introduced are
 		// asked about, so a skill already walked keeps the counter the earlier
@@ -202,10 +199,13 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, features FeatureChecker, pro
 			}
 		}
 
+		examined := 0
 		for _, candidate := range candidates {
 			if orgRemaining <= 0 || len(ids) >= int(batchSize) {
 				break
 			}
+			examined++
+			next = PendingCursor{ObservedAt: candidate.ObservedAt.Time, ID: candidate.ID}
 
 			// New versions bypass the daily cap until their lifetime burst is spent,
 			// but those evaluations still count toward today's skill spend. Once the
@@ -226,11 +226,18 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, features FeatureChecker, pro
 			admitted = append(admitted, candidate)
 			ids = append(ids, candidate.ID)
 		}
+		if examined < len(candidates) {
+			break
+		}
 
 		if len(candidates) < int(PendingCandidatePage) {
 			next = fromHead
 			break
 		}
+
+		last := candidates[len(candidates)-1]
+		page.CursorObservedAt = pgtype.Timestamptz{Time: last.ObservedAt.Time, InfinityModifier: pgtype.Finite, Valid: true}
+		page.CursorID = uuid.NullUUID{UUID: last.ID, Valid: true}
 	}
 
 	if len(ids) == 0 {
@@ -323,6 +330,10 @@ func loadReserved(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, ba
 // re-opens the budget slot; attempts is preserved, so a unit that poisons the
 // judge still terminates at MaxModelAttempts.
 func ResetStaleReservations(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, staleAfter time.Duration) (int64, error) {
+	if staleAfter.Microseconds() <= 0 {
+		return 0, fmt.Errorf("reset stale skill efficacy reservations: stale duration must be positive")
+	}
+
 	reset, err := repo.New(db).ResetStaleSkillEfficacyReservations(ctx, repo.ResetStaleSkillEfficacyReservationsParams{
 		ProjectID:  projectID,
 		StaleAfter: pgtype.Interval{Microseconds: staleAfter.Microseconds(), Days: 0, Months: 0, Valid: true},

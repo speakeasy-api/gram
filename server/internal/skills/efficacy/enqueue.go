@@ -52,21 +52,22 @@ type EnqueuePageResult struct {
 //
 // Eligibility is not part of the scan: the chat id is derived from the session
 // id with the same mapping the capture paths write under, and the insert is
-// what rechecks that the project and chat are live, that the chat has a
-// transcript, and that it has gone quiet. An activation whose unit cannot be
-// enqueued is paged past — the cursor advances over every row read, scoreable
-// or not — so a head of abandoned sessions can never starve the activations
-// behind it, however many pages of them there are.
+// what rechecks that the project and chat are live and the transcript has gone
+// quiet. Confirmation and reservation also require the activation itself to be
+// quiet. An activation whose unit cannot be enqueued is paged past — the cursor
+// advances over every row read, scoreable or not — so a head of abandoned
+// sessions can never starve the activations behind it. Deleted-chat observations
+// are retired because they can never become scoreable.
 //
 // The organization's entitlement and its two off switches are checked before
 // anything is read: an organization no reservation can spend for gets no queue
 // built for it at all, rather than a backlog of pending rows nothing will ever
 // pick up.
 //
-// The insert is idempotent and its ON CONFLICT DO NOTHING returns nothing for a
-// unit that already exists, so it cannot prove the unit is there. The
-// confirmation read is the only thing that authorises the stamp — an activation
-// whose unit is absent stays unstamped and is retried by a later walk.
+// The insert is idempotent and refreshes a pending unit when its session resumes.
+// The confirmation read is the only thing that authorises the stamp — an
+// activation whose unit is absent or not yet quiet stays unstamped for a later
+// walk.
 func EnqueuePage(ctx context.Context, db *pgxpool.Pool, features FeatureChecker, projectID uuid.UUID, cursor EnqueueCursor, pageSize int32) (EnqueuePageResult, error) {
 	if pageSize <= 0 || pageSize > MaxEnqueuePageSize {
 		return EnqueuePageResult{}, fmt.Errorf("enqueue skill efficacy evaluations: page size must be between 1 and %d, got %d", MaxEnqueuePageSize, pageSize)
@@ -184,6 +185,7 @@ func enqueueCandidates(
 		SkillVersionIds: insert.SkillVersionIds,
 		UserIds:         insert.UserIds,
 		UserEmails:      insert.UserEmails,
+		Inactivity:      inactivity,
 	})
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("confirm skill efficacy evaluation units: %w", err)
@@ -200,12 +202,37 @@ func enqueueCandidates(
 		}] = struct{}{}
 	}
 
+	deletedChatIDs, err := queries.ListDeletedSkillEfficacyChatIDs(ctx, repo.ListDeletedSkillEfficacyChatIDsParams{
+		ProjectID: projectID,
+		ChatIds:   insert.ChatIds,
+	})
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("list deleted skill efficacy chats: %w", err)
+	}
+	deleted := make(map[uuid.UUID]struct{}, len(deletedChatIDs))
+	for _, id := range deletedChatIDs {
+		deleted[id] = struct{}{}
+	}
+
 	observationIDs := make([]uuid.UUID, 0, len(page))
+	retiredIDs := make([]uuid.UUID, 0, len(page))
 	for _, candidate := range candidates {
+		if _, ok := deleted[candidate.ChatID]; ok {
+			retiredIDs = append(retiredIDs, candidate.ObservationIDs...)
+			continue
+		}
 		if _, ok := present[candidate.key()]; !ok {
 			continue
 		}
 		observationIDs = append(observationIDs, candidate.ObservationIDs...)
+	}
+	if len(retiredIDs) > 0 {
+		if _, err := queries.RetireSkillObservationsForDeletedChats(ctx, repo.RetireSkillObservationsForDeletedChatsParams{
+			ProjectID:      projectID,
+			ObservationIds: retiredIDs,
+		}); err != nil {
+			return 0, 0, 0, fmt.Errorf("retire deleted-chat skill observations: %w", err)
+		}
 	}
 	if len(observationIDs) == 0 {
 		return len(candidates), len(present), 0, nil

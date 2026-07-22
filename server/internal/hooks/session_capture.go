@@ -208,16 +208,11 @@ func (s *Service) handleStop(ctx context.Context, ev *hookevents.Stop) (*gen.Cla
 	return makeHookResult(ev.RawEventType), nil
 }
 
-// handleSessionEnd finalizes the session by updating the timestamp. The end of
-// a session is an efficacy wake: the transcript behind any activation already
-// queued for this project may now go quiet and become scoreable. The project
-// comes from the normalized event context — resolved from the session's own
-// metadata, the same derivation the capture writes use — and is uuid.Nil for an
-// unattributed session, which wakes nothing.
-func (s *Service) handleSessionEnd(ctx context.Context, ev *hookevents.SessionEnd) (*gen.ClaudeHookResult, error) {
-	result := makeHookResult(ev.RawEventType)
-	s.signalSkillEfficacy(ctx, ev.Context.ProjectID)
-	return result, nil
+// handleSessionEnd returns the native hook response. Efficacy is woken by
+// durable observation and message writes rather than this event, which has no
+// durable transcript-completion barrier.
+func (s *Service) handleSessionEnd(_ context.Context, ev *hookevents.SessionEnd) (*gen.ClaudeHookResult, error) {
+	return makeHookResult(ev.RawEventType), nil
 }
 
 // handleNotification handles notification events (permission_prompt, idle_prompt, etc.)

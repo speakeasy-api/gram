@@ -31,9 +31,11 @@ type PendingWorkProject struct {
 // after the given one. The zero uuid starts at the head of the estate.
 //
 // Three things count as unfinished work, and a project holding any of them is
-// returned: an activation that was reconciled but never enqueued, an evaluation
-// still pending, and a reservation whose owner has been gone for staleAfter. The
-// last is what makes this a recovery pass rather than a discovery one — a
+// returned: a live project's activation that was reconciled but never enqueued,
+// a live pending evaluation, and a reservation whose owner has been gone for
+// staleAfter. Deleted-chat observations are retired during enqueue, while
+// deleted-chat pending evaluations are deliberately excluded. The last source
+// is what makes this a recovery pass rather than a discovery one — a
 // project whose only work is a crashed reservation would otherwise never be
 // visited again, since nothing left to enqueue or reserve would name it, and it
 // is the one the returned HasStale reports.
@@ -42,6 +44,9 @@ type PendingWorkProject struct {
 func PendingWorkProjects(ctx context.Context, db *pgxpool.Pool, after uuid.UUID, staleAfter time.Duration, pageLimit int32) ([]PendingWorkProject, error) {
 	if pageLimit <= 0 || pageLimit > MaxSweepProjectPage {
 		return nil, fmt.Errorf("list projects with pending skill efficacy work: page limit must be between 1 and %d, got %d", MaxSweepProjectPage, pageLimit)
+	}
+	if staleAfter.Microseconds() <= 0 {
+		return nil, fmt.Errorf("list projects with pending skill efficacy work: stale duration must be positive")
 	}
 
 	rows, err := repo.New(db).ListProjectsWithPendingSkillEfficacyWork(ctx, repo.ListProjectsWithPendingSkillEfficacyWorkParams{

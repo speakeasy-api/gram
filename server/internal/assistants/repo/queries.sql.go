@@ -2554,7 +2554,7 @@ func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckA
 	return items, nil
 }
 
-const recordAssistantSkillObservation = `-- name: RecordAssistantSkillObservation :exec
+const recordAssistantSkillObservation = `-- name: RecordAssistantSkillObservation :execrows
 WITH observed AS (
   SELECT clock_timestamp() AS seen_at
 )
@@ -2599,14 +2599,17 @@ type RecordAssistantSkillObservationParams struct {
 	SkillID        uuid.UUID
 }
 
-func (q *Queries) RecordAssistantSkillObservation(ctx context.Context, arg RecordAssistantSkillObservationParams) error {
-	_, err := q.db.Exec(ctx, recordAssistantSkillObservation,
+func (q *Queries) RecordAssistantSkillObservation(ctx context.Context, arg RecordAssistantSkillObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAssistantSkillObservation,
 		arg.SessionID,
 		arg.SkillVersionID,
 		arg.ProjectID,
 		arg.SkillID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const requeueStaleAssistantEvents = `-- name: RequeueStaleAssistantEvents :many

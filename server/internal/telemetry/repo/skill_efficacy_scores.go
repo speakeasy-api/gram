@@ -2,13 +2,17 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/ClickHouse/ch-go/proto"
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 )
+
+var ErrInvalidSkillEfficacyScore = errors.New("invalid skill efficacy score")
 
 type SkillEfficacyScore struct {
 	ID                 uuid.UUID
@@ -99,6 +103,10 @@ func (q *Queries) InsertSkillEfficacyScores(ctx context.Context, rows []SkillEff
 		return fmt.Errorf("building skill efficacy score insert: %w", err)
 	}
 	if err := q.conn.Exec(ctx, query, args...); err != nil {
+		var exception *clickhouse.Exception
+		if errors.As(err, &exception) && exception.Code == int32(proto.ErrViolatedConstraint) {
+			return fmt.Errorf("%w: %w", ErrInvalidSkillEfficacyScore, err)
+		}
 		return fmt.Errorf("inserting skill efficacy scores: %w", err)
 	}
 	return nil
