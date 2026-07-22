@@ -1889,7 +1889,24 @@ func (q *Queries) ListDeletedSkillEfficacyChatIDs(ctx context.Context, arg ListD
 }
 
 const listPendingSkillEfficacyEvaluations = `-- name: ListPendingSkillEfficacyEvaluations :many
-SELECT e.id, e.organization_id, e.project_id, e.surface, e.session_id, e.chat_id, e.skill_id, e.skill_version_id, e.canonical_sha256, e.observed_at, e.state, e.reserved_on, e.attempts, e.last_error, e.scored_at, e.created_at, e.updated_at
+SELECT
+  e.id,
+  e.organization_id,
+  e.project_id,
+  e.surface,
+  e.session_id,
+  e.chat_id,
+  e.skill_id,
+  e.skill_version_id,
+  e.canonical_sha256,
+  e.observed_at,
+  e.state,
+  e.reserved_on,
+  e.attempts,
+  e.last_error,
+  e.scored_at,
+  e.created_at,
+  e.updated_at
 FROM skill_efficacy_evaluations e
 JOIN projects p
   ON p.id = e.project_id
@@ -2893,7 +2910,24 @@ WHERE e.project_id = $1
     LIMIT $3
     FOR UPDATE SKIP LOCKED
   )
-RETURNING id, organization_id, project_id, surface, session_id, chat_id, skill_id, skill_version_id, canonical_sha256, observed_at, state, reserved_on, attempts, last_error, scored_at, created_at, updated_at
+RETURNING
+  e.id,
+  e.organization_id,
+  e.project_id,
+  e.surface,
+  e.session_id,
+  e.chat_id,
+  e.skill_id,
+  e.skill_version_id,
+  e.canonical_sha256,
+  e.observed_at,
+  e.state,
+  e.reserved_on,
+  e.attempts,
+  e.last_error,
+  e.scored_at,
+  e.created_at,
+  e.updated_at
 `
 
 type LoadReservedSkillEfficacyEvaluationsParams struct {
