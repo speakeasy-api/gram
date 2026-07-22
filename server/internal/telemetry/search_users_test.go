@@ -14,6 +14,7 @@ import (
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1213,52 +1214,49 @@ func TestSearchUsers_BasicMetricsOmitsBreakdowns(t *testing.T) {
 	userID := "basic-user-" + uuid.New().String()
 	chatID := uuid.New().String()
 
-	// A chat completion (tokens/cost/chat) plus a tool call and a hook row, so the
-	// full path would populate every breakdown — basic must still leave them empty.
+	// A chat completion (tokens/cost/chat) plus a tool call, so the full path would
+	// populate every breakdown — basic must still leave them empty.
 	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), chatID, 100, 50, 150, 1.5, "stop", "gpt-4", "openai", userID, "")
 	insertChatCompletionLogWithUser(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), chatID, 200, 100, 300, 2.0, "tool_calls", "gpt-4", "openai", userID, "")
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, userID, "")
 
+	// Telemetry writes use ClickHouse async inserts; drain the queue synchronously
+	// so the rows are deterministically visible (no polling — see the telemetry
+	// README).
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
-			Filter: &gen.SearchUsersFilter{
-				From: from,
-				To:   to,
-			},
-			UserType: "internal",
-			Limit:    100,
-			Sort:     "desc",
-			Metrics:  "basic",
-		})
-		if !assert.NoError(c, err) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
-		if !assert.Len(c, res.Users, 1) {
-			return
-		}
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+		Metrics:  "basic",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, res.Users, 1)
 
-		u := res.Users[0]
-		// Lean fields the enrollment list renders are computed.
-		assert.Equal(c, userID, u.UserID)
-		assert.Equal(c, int64(300), u.TotalInputTokens)  // 100 + 200
-		assert.Equal(c, int64(150), u.TotalOutputTokens) // 50 + 100
-		assert.NotEqual(c, "0", u.LastSeenUnixNano, "last activity should be populated")
+	u := res.Users[0]
+	// Lean fields the enrollment list renders are computed.
+	assert.Equal(t, userID, u.UserID)
+	assert.Equal(t, int64(300), u.TotalInputTokens)  // 100 + 200
+	assert.Equal(t, int64(150), u.TotalOutputTokens) // 50 + 100
+	// Last activity is the most recent inserted row (the -8m tool call).
+	assert.Equal(t, strconv.FormatInt(now.Add(-8*time.Minute).UnixNano(), 10), u.LastSeenUnixNano)
 
-		// Heavy aggregates are skipped under basic and left zero/empty.
-		assert.Equal(c, int64(0), u.TotalChats)
-		assert.Equal(c, int64(0), u.TotalChatRequests)
-		assert.Equal(c, int64(0), u.TotalTokens)
-		assert.Equal(c, int64(0), u.TotalToolCalls)
-		assert.Zero(c, u.TotalCost)
-		assert.Empty(c, u.Tools)
-		assert.Empty(c, u.HookSources)
-	}, 10*time.Second, 200*time.Millisecond)
+	// Heavy aggregates are skipped under basic and left zero/empty.
+	assert.Equal(t, int64(0), u.TotalChats)
+	assert.Equal(t, int64(0), u.TotalChatRequests)
+	assert.Equal(t, int64(0), u.TotalTokens)
+	assert.Equal(t, int64(0), u.TotalToolCalls)
+	assert.Zero(t, u.TotalCost)
+	assert.Empty(t, u.Tools)
 }
 
 func insertHookLogWithUser(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, userID, externalUserID, hookSource string, success bool) {
