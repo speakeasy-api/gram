@@ -38,6 +38,30 @@ type DeleteConfigRequestBody struct {
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 }
 
+// SetScheduleEnabledRequestBody is the type of the "aiIntegrations" service
+// "setScheduleEnabled" endpoint HTTP request body.
+type SetScheduleEnabledRequestBody struct {
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule string `form:"schedule" json:"schedule" xml:"schedule"`
+	// Whether the schedule should be polled.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+}
+
+// RetryScheduleRequestBody is the type of the "aiIntegrations" service
+// "retrySchedule" endpoint HTTP request body.
+type RetryScheduleRequestBody struct {
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule string `form:"schedule" json:"schedule" xml:"schedule"`
+}
+
 // GetConfigResponseBody is the type of the "aiIntegrations" service
 // "getConfig" endpoint HTTP response body.
 type GetConfigResponseBody struct {
@@ -126,6 +150,89 @@ type UpsertConfigResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// ISO 8601 timestamp of the most recent change. Omitted when no config is set.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListSchedulesResponseBody is the type of the "aiIntegrations" service
+// "listSchedules" endpoint HTTP response body.
+type ListSchedulesResponseBody struct {
+	// Organization the schedules belong to.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// AI provider identifier.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// Scheduler state for each of the provider's sync schedules.
+	Schedules []*AIIntegrationScheduleStateResponseBody `form:"schedules,omitempty" json:"schedules,omitempty" xml:"schedules,omitempty"`
+}
+
+// SetScheduleEnabledResponseBody is the type of the "aiIntegrations" service
+// "setScheduleEnabled" endpoint HTTP response body.
+type SetScheduleEnabledResponseBody struct {
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule *string `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
+	// Product-level identifier for the stream this schedule writes (e.g.
+	// cursor.usage, claude.chat.message). Omitted for legacy schedules with no
+	// registered stream.
+	Stream *string `form:"stream,omitempty" json:"stream,omitempty" xml:"stream,omitempty"`
+	// Whether the stream carries discrete events or aggregated metrics. Omitted
+	// for legacy schedules with no registered stream.
+	StreamKind *string `form:"stream_kind,omitempty" json:"stream_kind,omitempty" xml:"stream_kind,omitempty"`
+	// Whether the user has this schedule enabled. Disabled schedules are skipped
+	// by the poller until re-enabled.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Derived status for the schedule's latest poll state.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// ISO 8601 timestamp for the schedule's last successful poll. Omitted until a
+	// poll succeeds.
+	LastPollSuccessAt *string `form:"last_poll_success_at,omitempty" json:"last_poll_success_at,omitempty" xml:"last_poll_success_at,omitempty"`
+	// ISO 8601 timestamp for the schedule's latest failed poll. Omitted unless a
+	// poll has failed.
+	LastPollFailedAt *string `form:"last_poll_failed_at,omitempty" json:"last_poll_failed_at,omitempty" xml:"last_poll_failed_at,omitempty"`
+	// Stored error from the schedule's latest failed poll. Omitted unless the
+	// latest poll failed.
+	LastPollError *string `form:"last_poll_error,omitempty" json:"last_poll_error,omitempty" xml:"last_poll_error,omitempty"`
+	// ISO 8601 timestamp for the schedule's next scheduled poll.
+	NextPollAfter *string `form:"next_poll_after,omitempty" json:"next_poll_after,omitempty" xml:"next_poll_after,omitempty"`
+	// Number of consecutive failed polls. Resets to zero on success or retry.
+	ConsecutiveFailures *int `form:"consecutive_failures,omitempty" json:"consecutive_failures,omitempty" xml:"consecutive_failures,omitempty"`
+	// ISO 8601 timestamp when the scheduler auto-paused the schedule after
+	// repeated provider rejections. Omitted unless auto-paused.
+	AutoPausedAt *string `form:"auto_paused_at,omitempty" json:"auto_paused_at,omitempty" xml:"auto_paused_at,omitempty"`
+}
+
+// RetryScheduleResponseBody is the type of the "aiIntegrations" service
+// "retrySchedule" endpoint HTTP response body.
+type RetryScheduleResponseBody struct {
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule *string `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
+	// Product-level identifier for the stream this schedule writes (e.g.
+	// cursor.usage, claude.chat.message). Omitted for legacy schedules with no
+	// registered stream.
+	Stream *string `form:"stream,omitempty" json:"stream,omitempty" xml:"stream,omitempty"`
+	// Whether the stream carries discrete events or aggregated metrics. Omitted
+	// for legacy schedules with no registered stream.
+	StreamKind *string `form:"stream_kind,omitempty" json:"stream_kind,omitempty" xml:"stream_kind,omitempty"`
+	// Whether the user has this schedule enabled. Disabled schedules are skipped
+	// by the poller until re-enabled.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Derived status for the schedule's latest poll state.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// ISO 8601 timestamp for the schedule's last successful poll. Omitted until a
+	// poll succeeds.
+	LastPollSuccessAt *string `form:"last_poll_success_at,omitempty" json:"last_poll_success_at,omitempty" xml:"last_poll_success_at,omitempty"`
+	// ISO 8601 timestamp for the schedule's latest failed poll. Omitted unless a
+	// poll has failed.
+	LastPollFailedAt *string `form:"last_poll_failed_at,omitempty" json:"last_poll_failed_at,omitempty" xml:"last_poll_failed_at,omitempty"`
+	// Stored error from the schedule's latest failed poll. Omitted unless the
+	// latest poll failed.
+	LastPollError *string `form:"last_poll_error,omitempty" json:"last_poll_error,omitempty" xml:"last_poll_error,omitempty"`
+	// ISO 8601 timestamp for the schedule's next scheduled poll.
+	NextPollAfter *string `form:"next_poll_after,omitempty" json:"next_poll_after,omitempty" xml:"next_poll_after,omitempty"`
+	// Number of consecutive failed polls. Resets to zero on success or retry.
+	ConsecutiveFailures *int `form:"consecutive_failures,omitempty" json:"consecutive_failures,omitempty" xml:"consecutive_failures,omitempty"`
+	// ISO 8601 timestamp when the scheduler auto-paused the schedule after
+	// repeated provider rejections. Omitted unless auto-paused.
+	AutoPausedAt *string `form:"auto_paused_at,omitempty" json:"auto_paused_at,omitempty" xml:"auto_paused_at,omitempty"`
 }
 
 // GetConfigUnauthorizedResponseBody is the type of the "aiIntegrations"
@@ -683,6 +790,608 @@ type DeleteConfigGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListSchedulesUnauthorizedResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListSchedulesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSchedulesForbiddenResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "forbidden"
+// error.
+type ListSchedulesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSchedulesBadRequestResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "bad_request"
+// error.
+type ListSchedulesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSchedulesNotFoundResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "not_found"
+// error.
+type ListSchedulesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSchedulesConflictResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "conflict" error.
+type ListSchedulesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSchedulesUnsupportedMediaResponseBody is the type of the
+// "aiIntegrations" service "listSchedules" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSchedulesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSchedulesInvalidResponseBody is the type of the "aiIntegrations" service
+// "listSchedules" endpoint HTTP response body for the "invalid" error.
+type ListSchedulesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSchedulesInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "listSchedules" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSchedulesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSchedulesUnexpectedResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "unexpected"
+// error.
+type ListSchedulesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSchedulesGatewayErrorResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListSchedulesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetScheduleEnabledUnauthorizedResponseBody is the type of the
+// "aiIntegrations" service "setScheduleEnabled" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetScheduleEnabledUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetScheduleEnabledForbiddenResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the "forbidden"
+// error.
+type SetScheduleEnabledForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetScheduleEnabledBadRequestResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the
+// "bad_request" error.
+type SetScheduleEnabledBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetScheduleEnabledNotFoundResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the "not_found"
+// error.
+type SetScheduleEnabledNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetScheduleEnabledConflictResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the "conflict"
+// error.
+type SetScheduleEnabledConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetScheduleEnabledUnsupportedMediaResponseBody is the type of the
+// "aiIntegrations" service "setScheduleEnabled" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetScheduleEnabledUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetScheduleEnabledInvalidResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the "invalid"
+// error.
+type SetScheduleEnabledInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetScheduleEnabledInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "setScheduleEnabled" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetScheduleEnabledInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetScheduleEnabledUnexpectedResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the
+// "unexpected" error.
+type SetScheduleEnabledUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetScheduleEnabledGatewayErrorResponseBody is the type of the
+// "aiIntegrations" service "setScheduleEnabled" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetScheduleEnabledGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryScheduleUnauthorizedResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "unauthorized"
+// error.
+type RetryScheduleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryScheduleForbiddenResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "forbidden"
+// error.
+type RetryScheduleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryScheduleBadRequestResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "bad_request"
+// error.
+type RetryScheduleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryScheduleNotFoundResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "not_found"
+// error.
+type RetryScheduleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryScheduleConflictResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "conflict" error.
+type RetryScheduleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryScheduleUnsupportedMediaResponseBody is the type of the
+// "aiIntegrations" service "retrySchedule" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RetryScheduleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryScheduleInvalidResponseBody is the type of the "aiIntegrations" service
+// "retrySchedule" endpoint HTTP response body for the "invalid" error.
+type RetryScheduleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryScheduleInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "retrySchedule" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RetryScheduleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryScheduleUnexpectedResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "unexpected"
+// error.
+type RetryScheduleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RetryScheduleGatewayErrorResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "gateway_error"
+// error.
+type RetryScheduleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AIIntegrationScheduleStateResponseBody is used to define fields on response
+// body types.
+type AIIntegrationScheduleStateResponseBody struct {
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule *string `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
+	// Product-level identifier for the stream this schedule writes (e.g.
+	// cursor.usage, claude.chat.message). Omitted for legacy schedules with no
+	// registered stream.
+	Stream *string `form:"stream,omitempty" json:"stream,omitempty" xml:"stream,omitempty"`
+	// Whether the stream carries discrete events or aggregated metrics. Omitted
+	// for legacy schedules with no registered stream.
+	StreamKind *string `form:"stream_kind,omitempty" json:"stream_kind,omitempty" xml:"stream_kind,omitempty"`
+	// Whether the user has this schedule enabled. Disabled schedules are skipped
+	// by the poller until re-enabled.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Derived status for the schedule's latest poll state.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// ISO 8601 timestamp for the schedule's last successful poll. Omitted until a
+	// poll succeeds.
+	LastPollSuccessAt *string `form:"last_poll_success_at,omitempty" json:"last_poll_success_at,omitempty" xml:"last_poll_success_at,omitempty"`
+	// ISO 8601 timestamp for the schedule's latest failed poll. Omitted unless a
+	// poll has failed.
+	LastPollFailedAt *string `form:"last_poll_failed_at,omitempty" json:"last_poll_failed_at,omitempty" xml:"last_poll_failed_at,omitempty"`
+	// Stored error from the schedule's latest failed poll. Omitted unless the
+	// latest poll failed.
+	LastPollError *string `form:"last_poll_error,omitempty" json:"last_poll_error,omitempty" xml:"last_poll_error,omitempty"`
+	// ISO 8601 timestamp for the schedule's next scheduled poll.
+	NextPollAfter *string `form:"next_poll_after,omitempty" json:"next_poll_after,omitempty" xml:"next_poll_after,omitempty"`
+	// Number of consecutive failed polls. Resets to zero on success or retry.
+	ConsecutiveFailures *int `form:"consecutive_failures,omitempty" json:"consecutive_failures,omitempty" xml:"consecutive_failures,omitempty"`
+	// ISO 8601 timestamp when the scheduler auto-paused the schedule after
+	// repeated provider rejections. Omitted unless auto-paused.
+	AutoPausedAt *string `form:"auto_paused_at,omitempty" json:"auto_paused_at,omitempty" xml:"auto_paused_at,omitempty"`
+}
+
 // NewUpsertConfigRequestBody builds the HTTP request body from the payload of
 // the "upsertConfig" endpoint of the "aiIntegrations" service.
 func NewUpsertConfigRequestBody(p *aiintegrations.UpsertConfigPayload) *UpsertConfigRequestBody {
@@ -701,6 +1410,27 @@ func NewUpsertConfigRequestBody(p *aiintegrations.UpsertConfigPayload) *UpsertCo
 func NewDeleteConfigRequestBody(p *aiintegrations.DeleteConfigPayload) *DeleteConfigRequestBody {
 	body := &DeleteConfigRequestBody{
 		Provider: p.Provider,
+	}
+	return body
+}
+
+// NewSetScheduleEnabledRequestBody builds the HTTP request body from the
+// payload of the "setScheduleEnabled" endpoint of the "aiIntegrations" service.
+func NewSetScheduleEnabledRequestBody(p *aiintegrations.SetScheduleEnabledPayload) *SetScheduleEnabledRequestBody {
+	body := &SetScheduleEnabledRequestBody{
+		Provider: p.Provider,
+		Schedule: p.Schedule,
+		Enabled:  p.Enabled,
+	}
+	return body
+}
+
+// NewRetryScheduleRequestBody builds the HTTP request body from the payload of
+// the "retrySchedule" endpoint of the "aiIntegrations" service.
+func NewRetryScheduleRequestBody(p *aiintegrations.RetrySchedulePayload) *RetryScheduleRequestBody {
+	body := &RetryScheduleRequestBody{
+		Provider: p.Provider,
+		Schedule: p.Schedule,
 	}
 	return body
 }
@@ -1203,6 +1933,515 @@ func NewDeleteConfigGatewayError(body *DeleteConfigGatewayErrorResponseBody) *go
 	return v
 }
 
+// NewListSchedulesListAIIntegrationSchedulesResultOK builds a "aiIntegrations"
+// service "listSchedules" endpoint result from a HTTP "OK" response.
+func NewListSchedulesListAIIntegrationSchedulesResultOK(body *ListSchedulesResponseBody) *aiintegrations.ListAIIntegrationSchedulesResult {
+	v := &aiintegrations.ListAIIntegrationSchedulesResult{
+		OrganizationID: *body.OrganizationID,
+		Provider:       *body.Provider,
+	}
+	v.Schedules = make([]*aiintegrations.AIIntegrationScheduleState, len(body.Schedules))
+	for i, val := range body.Schedules {
+		if val == nil {
+			v.Schedules[i] = nil
+			continue
+		}
+		v.Schedules[i] = unmarshalAIIntegrationScheduleStateResponseBodyToAiintegrationsAIIntegrationScheduleState(val)
+	}
+
+	return v
+}
+
+// NewListSchedulesUnauthorized builds a aiIntegrations service listSchedules
+// endpoint unauthorized error.
+func NewListSchedulesUnauthorized(body *ListSchedulesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSchedulesForbidden builds a aiIntegrations service listSchedules
+// endpoint forbidden error.
+func NewListSchedulesForbidden(body *ListSchedulesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSchedulesBadRequest builds a aiIntegrations service listSchedules
+// endpoint bad_request error.
+func NewListSchedulesBadRequest(body *ListSchedulesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSchedulesNotFound builds a aiIntegrations service listSchedules
+// endpoint not_found error.
+func NewListSchedulesNotFound(body *ListSchedulesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSchedulesConflict builds a aiIntegrations service listSchedules
+// endpoint conflict error.
+func NewListSchedulesConflict(body *ListSchedulesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSchedulesUnsupportedMedia builds a aiIntegrations service
+// listSchedules endpoint unsupported_media error.
+func NewListSchedulesUnsupportedMedia(body *ListSchedulesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSchedulesInvalid builds a aiIntegrations service listSchedules
+// endpoint invalid error.
+func NewListSchedulesInvalid(body *ListSchedulesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSchedulesInvariantViolation builds a aiIntegrations service
+// listSchedules endpoint invariant_violation error.
+func NewListSchedulesInvariantViolation(body *ListSchedulesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSchedulesUnexpected builds a aiIntegrations service listSchedules
+// endpoint unexpected error.
+func NewListSchedulesUnexpected(body *ListSchedulesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSchedulesGatewayError builds a aiIntegrations service listSchedules
+// endpoint gateway_error error.
+func NewListSchedulesGatewayError(body *ListSchedulesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetScheduleEnabledAIIntegrationScheduleStateOK builds a "aiIntegrations"
+// service "setScheduleEnabled" endpoint result from a HTTP "OK" response.
+func NewSetScheduleEnabledAIIntegrationScheduleStateOK(body *SetScheduleEnabledResponseBody) *aiintegrations.AIIntegrationScheduleState {
+	v := &aiintegrations.AIIntegrationScheduleState{
+		Schedule:            *body.Schedule,
+		Stream:              body.Stream,
+		StreamKind:          body.StreamKind,
+		Enabled:             *body.Enabled,
+		Status:              *body.Status,
+		LastPollSuccessAt:   body.LastPollSuccessAt,
+		LastPollFailedAt:    body.LastPollFailedAt,
+		LastPollError:       body.LastPollError,
+		NextPollAfter:       body.NextPollAfter,
+		ConsecutiveFailures: *body.ConsecutiveFailures,
+		AutoPausedAt:        body.AutoPausedAt,
+	}
+
+	return v
+}
+
+// NewSetScheduleEnabledUnauthorized builds a aiIntegrations service
+// setScheduleEnabled endpoint unauthorized error.
+func NewSetScheduleEnabledUnauthorized(body *SetScheduleEnabledUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetScheduleEnabledForbidden builds a aiIntegrations service
+// setScheduleEnabled endpoint forbidden error.
+func NewSetScheduleEnabledForbidden(body *SetScheduleEnabledForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetScheduleEnabledBadRequest builds a aiIntegrations service
+// setScheduleEnabled endpoint bad_request error.
+func NewSetScheduleEnabledBadRequest(body *SetScheduleEnabledBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetScheduleEnabledNotFound builds a aiIntegrations service
+// setScheduleEnabled endpoint not_found error.
+func NewSetScheduleEnabledNotFound(body *SetScheduleEnabledNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetScheduleEnabledConflict builds a aiIntegrations service
+// setScheduleEnabled endpoint conflict error.
+func NewSetScheduleEnabledConflict(body *SetScheduleEnabledConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetScheduleEnabledUnsupportedMedia builds a aiIntegrations service
+// setScheduleEnabled endpoint unsupported_media error.
+func NewSetScheduleEnabledUnsupportedMedia(body *SetScheduleEnabledUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetScheduleEnabledInvalid builds a aiIntegrations service
+// setScheduleEnabled endpoint invalid error.
+func NewSetScheduleEnabledInvalid(body *SetScheduleEnabledInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetScheduleEnabledInvariantViolation builds a aiIntegrations service
+// setScheduleEnabled endpoint invariant_violation error.
+func NewSetScheduleEnabledInvariantViolation(body *SetScheduleEnabledInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetScheduleEnabledUnexpected builds a aiIntegrations service
+// setScheduleEnabled endpoint unexpected error.
+func NewSetScheduleEnabledUnexpected(body *SetScheduleEnabledUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetScheduleEnabledGatewayError builds a aiIntegrations service
+// setScheduleEnabled endpoint gateway_error error.
+func NewSetScheduleEnabledGatewayError(body *SetScheduleEnabledGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryScheduleAIIntegrationScheduleStateOK builds a "aiIntegrations"
+// service "retrySchedule" endpoint result from a HTTP "OK" response.
+func NewRetryScheduleAIIntegrationScheduleStateOK(body *RetryScheduleResponseBody) *aiintegrations.AIIntegrationScheduleState {
+	v := &aiintegrations.AIIntegrationScheduleState{
+		Schedule:            *body.Schedule,
+		Stream:              body.Stream,
+		StreamKind:          body.StreamKind,
+		Enabled:             *body.Enabled,
+		Status:              *body.Status,
+		LastPollSuccessAt:   body.LastPollSuccessAt,
+		LastPollFailedAt:    body.LastPollFailedAt,
+		LastPollError:       body.LastPollError,
+		NextPollAfter:       body.NextPollAfter,
+		ConsecutiveFailures: *body.ConsecutiveFailures,
+		AutoPausedAt:        body.AutoPausedAt,
+	}
+
+	return v
+}
+
+// NewRetryScheduleUnauthorized builds a aiIntegrations service retrySchedule
+// endpoint unauthorized error.
+func NewRetryScheduleUnauthorized(body *RetryScheduleUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryScheduleForbidden builds a aiIntegrations service retrySchedule
+// endpoint forbidden error.
+func NewRetryScheduleForbidden(body *RetryScheduleForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryScheduleBadRequest builds a aiIntegrations service retrySchedule
+// endpoint bad_request error.
+func NewRetryScheduleBadRequest(body *RetryScheduleBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryScheduleNotFound builds a aiIntegrations service retrySchedule
+// endpoint not_found error.
+func NewRetryScheduleNotFound(body *RetryScheduleNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryScheduleConflict builds a aiIntegrations service retrySchedule
+// endpoint conflict error.
+func NewRetryScheduleConflict(body *RetryScheduleConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryScheduleUnsupportedMedia builds a aiIntegrations service
+// retrySchedule endpoint unsupported_media error.
+func NewRetryScheduleUnsupportedMedia(body *RetryScheduleUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryScheduleInvalid builds a aiIntegrations service retrySchedule
+// endpoint invalid error.
+func NewRetryScheduleInvalid(body *RetryScheduleInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryScheduleInvariantViolation builds a aiIntegrations service
+// retrySchedule endpoint invariant_violation error.
+func NewRetryScheduleInvariantViolation(body *RetryScheduleInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryScheduleUnexpected builds a aiIntegrations service retrySchedule
+// endpoint unexpected error.
+func NewRetryScheduleUnexpected(body *RetryScheduleUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRetryScheduleGatewayError builds a aiIntegrations service retrySchedule
+// endpoint gateway_error error.
+func NewRetryScheduleGatewayError(body *RetryScheduleGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetConfigResponseBody runs the validations defined on
 // GetConfigResponseBody
 func ValidateGetConfigResponseBody(body *GetConfigResponseBody) (err error) {
@@ -1275,6 +2514,108 @@ func ValidateUpsertConfigResponseBody(body *UpsertConfigResponseBody) (err error
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListSchedulesResponseBody runs the validations defined on
+// ListSchedulesResponseBody
+func ValidateListSchedulesResponseBody(body *ListSchedulesResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.Schedules == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schedules", "body"))
+	}
+	for _, e := range body.Schedules {
+		if e != nil {
+			if err2 := ValidateAIIntegrationScheduleStateResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledResponseBody runs the validations defined on
+// SetScheduleEnabledResponseBody
+func ValidateSetScheduleEnabledResponseBody(body *SetScheduleEnabledResponseBody) (err error) {
+	if body.Schedule == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schedule", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ConsecutiveFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("consecutive_failures", "body"))
+	}
+	if body.StreamKind != nil {
+		if !(*body.StreamKind == "events" || *body.StreamKind == "metrics") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stream_kind", *body.StreamKind, []any{"events", "metrics"}))
+		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "success" || *body.Status == "failed" || *body.Status == "auto_paused" || *body.Status == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "success", "failed", "auto_paused", "disabled"}))
+		}
+	}
+	if body.LastPollSuccessAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_poll_success_at", *body.LastPollSuccessAt, goa.FormatDateTime))
+	}
+	if body.LastPollFailedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_poll_failed_at", *body.LastPollFailedAt, goa.FormatDateTime))
+	}
+	if body.NextPollAfter != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_poll_after", *body.NextPollAfter, goa.FormatDateTime))
+	}
+	if body.AutoPausedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auto_paused_at", *body.AutoPausedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRetryScheduleResponseBody runs the validations defined on
+// RetryScheduleResponseBody
+func ValidateRetryScheduleResponseBody(body *RetryScheduleResponseBody) (err error) {
+	if body.Schedule == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schedule", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ConsecutiveFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("consecutive_failures", "body"))
+	}
+	if body.StreamKind != nil {
+		if !(*body.StreamKind == "events" || *body.StreamKind == "metrics") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stream_kind", *body.StreamKind, []any{"events", "metrics"}))
+		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "success" || *body.Status == "failed" || *body.Status == "auto_paused" || *body.Status == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "success", "failed", "auto_paused", "disabled"}))
+		}
+	}
+	if body.LastPollSuccessAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_poll_success_at", *body.LastPollSuccessAt, goa.FormatDateTime))
+	}
+	if body.LastPollFailedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_poll_failed_at", *body.LastPollFailedAt, goa.FormatDateTime))
+	}
+	if body.NextPollAfter != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_poll_after", *body.NextPollAfter, goa.FormatDateTime))
+	}
+	if body.AutoPausedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auto_paused_at", *body.AutoPausedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -1995,6 +3336,766 @@ func ValidateDeleteConfigGatewayErrorResponseBody(body *DeleteConfigGatewayError
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSchedulesUnauthorizedResponseBody runs the validations defined
+// on listSchedules_unauthorized_response_body
+func ValidateListSchedulesUnauthorizedResponseBody(body *ListSchedulesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSchedulesForbiddenResponseBody runs the validations defined on
+// listSchedules_forbidden_response_body
+func ValidateListSchedulesForbiddenResponseBody(body *ListSchedulesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSchedulesBadRequestResponseBody runs the validations defined on
+// listSchedules_bad_request_response_body
+func ValidateListSchedulesBadRequestResponseBody(body *ListSchedulesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSchedulesNotFoundResponseBody runs the validations defined on
+// listSchedules_not_found_response_body
+func ValidateListSchedulesNotFoundResponseBody(body *ListSchedulesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSchedulesConflictResponseBody runs the validations defined on
+// listSchedules_conflict_response_body
+func ValidateListSchedulesConflictResponseBody(body *ListSchedulesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSchedulesUnsupportedMediaResponseBody runs the validations
+// defined on listSchedules_unsupported_media_response_body
+func ValidateListSchedulesUnsupportedMediaResponseBody(body *ListSchedulesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSchedulesInvalidResponseBody runs the validations defined on
+// listSchedules_invalid_response_body
+func ValidateListSchedulesInvalidResponseBody(body *ListSchedulesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSchedulesInvariantViolationResponseBody runs the validations
+// defined on listSchedules_invariant_violation_response_body
+func ValidateListSchedulesInvariantViolationResponseBody(body *ListSchedulesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSchedulesUnexpectedResponseBody runs the validations defined on
+// listSchedules_unexpected_response_body
+func ValidateListSchedulesUnexpectedResponseBody(body *ListSchedulesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSchedulesGatewayErrorResponseBody runs the validations defined
+// on listSchedules_gateway_error_response_body
+func ValidateListSchedulesGatewayErrorResponseBody(body *ListSchedulesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledUnauthorizedResponseBody runs the validations
+// defined on setScheduleEnabled_unauthorized_response_body
+func ValidateSetScheduleEnabledUnauthorizedResponseBody(body *SetScheduleEnabledUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledForbiddenResponseBody runs the validations defined
+// on setScheduleEnabled_forbidden_response_body
+func ValidateSetScheduleEnabledForbiddenResponseBody(body *SetScheduleEnabledForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledBadRequestResponseBody runs the validations
+// defined on setScheduleEnabled_bad_request_response_body
+func ValidateSetScheduleEnabledBadRequestResponseBody(body *SetScheduleEnabledBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledNotFoundResponseBody runs the validations defined
+// on setScheduleEnabled_not_found_response_body
+func ValidateSetScheduleEnabledNotFoundResponseBody(body *SetScheduleEnabledNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledConflictResponseBody runs the validations defined
+// on setScheduleEnabled_conflict_response_body
+func ValidateSetScheduleEnabledConflictResponseBody(body *SetScheduleEnabledConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledUnsupportedMediaResponseBody runs the validations
+// defined on setScheduleEnabled_unsupported_media_response_body
+func ValidateSetScheduleEnabledUnsupportedMediaResponseBody(body *SetScheduleEnabledUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledInvalidResponseBody runs the validations defined
+// on setScheduleEnabled_invalid_response_body
+func ValidateSetScheduleEnabledInvalidResponseBody(body *SetScheduleEnabledInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledInvariantViolationResponseBody runs the
+// validations defined on setScheduleEnabled_invariant_violation_response_body
+func ValidateSetScheduleEnabledInvariantViolationResponseBody(body *SetScheduleEnabledInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledUnexpectedResponseBody runs the validations
+// defined on setScheduleEnabled_unexpected_response_body
+func ValidateSetScheduleEnabledUnexpectedResponseBody(body *SetScheduleEnabledUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledGatewayErrorResponseBody runs the validations
+// defined on setScheduleEnabled_gateway_error_response_body
+func ValidateSetScheduleEnabledGatewayErrorResponseBody(body *SetScheduleEnabledGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryScheduleUnauthorizedResponseBody runs the validations defined
+// on retrySchedule_unauthorized_response_body
+func ValidateRetryScheduleUnauthorizedResponseBody(body *RetryScheduleUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryScheduleForbiddenResponseBody runs the validations defined on
+// retrySchedule_forbidden_response_body
+func ValidateRetryScheduleForbiddenResponseBody(body *RetryScheduleForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryScheduleBadRequestResponseBody runs the validations defined on
+// retrySchedule_bad_request_response_body
+func ValidateRetryScheduleBadRequestResponseBody(body *RetryScheduleBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryScheduleNotFoundResponseBody runs the validations defined on
+// retrySchedule_not_found_response_body
+func ValidateRetryScheduleNotFoundResponseBody(body *RetryScheduleNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryScheduleConflictResponseBody runs the validations defined on
+// retrySchedule_conflict_response_body
+func ValidateRetryScheduleConflictResponseBody(body *RetryScheduleConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryScheduleUnsupportedMediaResponseBody runs the validations
+// defined on retrySchedule_unsupported_media_response_body
+func ValidateRetryScheduleUnsupportedMediaResponseBody(body *RetryScheduleUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryScheduleInvalidResponseBody runs the validations defined on
+// retrySchedule_invalid_response_body
+func ValidateRetryScheduleInvalidResponseBody(body *RetryScheduleInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryScheduleInvariantViolationResponseBody runs the validations
+// defined on retrySchedule_invariant_violation_response_body
+func ValidateRetryScheduleInvariantViolationResponseBody(body *RetryScheduleInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryScheduleUnexpectedResponseBody runs the validations defined on
+// retrySchedule_unexpected_response_body
+func ValidateRetryScheduleUnexpectedResponseBody(body *RetryScheduleUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRetryScheduleGatewayErrorResponseBody runs the validations defined
+// on retrySchedule_gateway_error_response_body
+func ValidateRetryScheduleGatewayErrorResponseBody(body *RetryScheduleGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAIIntegrationScheduleStateResponseBody runs the validations defined
+// on AIIntegrationScheduleStateResponseBody
+func ValidateAIIntegrationScheduleStateResponseBody(body *AIIntegrationScheduleStateResponseBody) (err error) {
+	if body.Schedule == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schedule", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ConsecutiveFailures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("consecutive_failures", "body"))
+	}
+	if body.StreamKind != nil {
+		if !(*body.StreamKind == "events" || *body.StreamKind == "metrics") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stream_kind", *body.StreamKind, []any{"events", "metrics"}))
+		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "success" || *body.Status == "failed" || *body.Status == "auto_paused" || *body.Status == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "success", "failed", "auto_paused", "disabled"}))
+		}
+	}
+	if body.LastPollSuccessAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_poll_success_at", *body.LastPollSuccessAt, goa.FormatDateTime))
+	}
+	if body.LastPollFailedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_poll_failed_at", *body.LastPollFailedAt, goa.FormatDateTime))
+	}
+	if body.NextPollAfter != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_poll_after", *body.NextPollAfter, goa.FormatDateTime))
+	}
+	if body.AutoPausedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auto_paused_at", *body.AutoPausedAt, goa.FormatDateTime))
 	}
 	return
 }

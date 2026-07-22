@@ -4952,6 +4952,293 @@ paths:
             x-speakeasy-name-override: getConfig
             x-speakeasy-react-hook:
                 name: AIIntegrationConfig
+    /rpc/aiIntegrations.listSchedules:
+        get:
+            description: List the sync schedules and their scheduler state for a provider's org-wide AI integration config. Returns an empty list when no config is set.
+            operationId: listAIIntegrationSchedules
+            parameters:
+                - allowEmptyValue: true
+                  description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+                  in: query
+                  name: provider
+                  required: true
+                  schema:
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAIIntegrationSchedulesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listSchedules aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: listSchedules
+            x-speakeasy-react-hook:
+                name: AIIntegrationSchedules
+    /rpc/aiIntegrations.retrySchedule:
+        post:
+            description: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak. The scheduler picks it up on its next tick.
+            operationId: retryAIIntegrationSchedule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RetryScheduleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AIIntegrationScheduleState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: retrySchedule aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: retrySchedule
+            x-speakeasy-react-hook:
+                name: RetryAIIntegrationSchedule
+    /rpc/aiIntegrations.setScheduleEnabled:
+        post:
+            description: Enable or disable one sync schedule of a provider's org-wide AI integration config. Disabled schedules are skipped by the poller until re-enabled.
+            operationId: setAIIntegrationScheduleEnabled
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetScheduleEnabledRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AIIntegrationScheduleState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: setScheduleEnabled aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: setScheduleEnabled
+            x-speakeasy-react-hook:
+                name: SetAIIntegrationScheduleEnabled
     /rpc/aiIntegrations.upsertConfig:
         post:
             description: Create or update the org-wide AI integration config for a provider.
@@ -42479,6 +42766,62 @@ components:
                 - provider
                 - enabled
                 - has_api_key
+        AIIntegrationScheduleState:
+            type: object
+            properties:
+                auto_paused_at:
+                    type: string
+                    description: ISO 8601 timestamp when the scheduler auto-paused the schedule after repeated provider rejections. Omitted unless auto-paused.
+                    format: date-time
+                consecutive_failures:
+                    type: integer
+                    description: Number of consecutive failed polls. Resets to zero on success or retry.
+                    format: int64
+                enabled:
+                    type: boolean
+                    description: Whether the user has this schedule enabled. Disabled schedules are skipped by the poller until re-enabled.
+                last_poll_error:
+                    type: string
+                    description: Stored error from the schedule's latest failed poll. Omitted unless the latest poll failed.
+                last_poll_failed_at:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's latest failed poll. Omitted unless a poll has failed.
+                    format: date-time
+                last_poll_success_at:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's last successful poll. Omitted until a poll succeeds.
+                    format: date-time
+                next_poll_after:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's next scheduled poll.
+                    format: date-time
+                schedule:
+                    type: string
+                    description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
+                status:
+                    type: string
+                    description: Derived status for the schedule's latest poll state.
+                    enum:
+                        - pending
+                        - success
+                        - failed
+                        - auto_paused
+                        - disabled
+                stream:
+                    type: string
+                    description: Product-level identifier for the stream this schedule writes (e.g. cursor.usage, claude.chat.message). Omitted for legacy schedules with no registered stream.
+                stream_kind:
+                    type: string
+                    description: Whether the stream carries discrete events or aggregated metrics. Omitted for legacy schedules with no registered stream.
+                    enum:
+                        - events
+                        - metrics
+            description: Scheduler state for one sync schedule (stream) of a provider integration.
+            required:
+                - schedule
+                - enabled
+                - status
+                - consecutive_failures
         AccessMember:
             type: object
             properties:
@@ -49310,6 +49653,25 @@ components:
             required:
                 - client_name
                 - activity_count
+        ListAIIntegrationSchedulesResult:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization the schedules belong to.
+                provider:
+                    type: string
+                    description: AI provider identifier.
+                schedules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AIIntegrationScheduleState'
+                    description: Scheduler state for each of the provider's sync schedules.
+            description: Sync schedules for one provider integration. Empty when no config is set for the provider.
+            required:
+                - organization_id
+                - provider
+                - schedules
         ListAllowedOriginsResult:
             type: object
             properties:
@@ -53939,6 +54301,18 @@ components:
                 - type
                 - status_codes
                 - content_types
+        RetryScheduleRequestBody:
+            type: object
+            properties:
+                provider:
+                    type: string
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+                schedule:
+                    type: string
+                    description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
+            required:
+                - provider
+                - schedule
         RevokeAllRemoteSessionsResult:
             type: object
             properties:
@@ -56146,6 +56520,22 @@ components:
                     $ref: '#/components/schemas/Project'
             required:
                 - project
+        SetScheduleEnabledRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether the schedule should be polled.
+                provider:
+                    type: string
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+                schedule:
+                    type: string
+                    description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
+            required:
+                - provider
+                - schedule
+                - enabled
         SetSourceEnvironmentLinkRequestBody:
             type: object
             properties:

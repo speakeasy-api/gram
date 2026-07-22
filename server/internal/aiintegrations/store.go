@@ -54,6 +54,60 @@ const (
 	SyncKindTime = "time"
 )
 
+// Stream kinds classify what a schedule's stream carries: discrete events or
+// aggregated metrics.
+const (
+	StreamKindEvents  = "events"
+	StreamKindMetrics = "metrics"
+)
+
+// Stream identifiers are the product-level names for the data each sync
+// schedule imports. They are the stable, user-facing handle for a stream
+// (shown in the dashboard and returned by listSchedules) and are meant to
+// eventually tag the imported data itself. Dotted lowercase, named after the
+// product surface the data comes from rather than the provider API used to
+// fetch it.
+const (
+	StreamCursorUsage = "cursor.usage"
+	// The claude.chat.* streams all carry Claude Chat (claude.ai web and
+	// desktop) data — the Compliance and Admin Analytics APIs report on the
+	// Chat surface, not Claude API usage — so they share a chat namespace
+	// segment.
+	StreamClaudeChatMessage     = "claude.chat.message"
+	StreamClaudeChatUsageTokens = "claude.chat.usage.tokens"
+	StreamClaudeChatCostUSD     = "claude.chat.cost.usd"
+	StreamCodexCostUSD          = "codex.cost.usd"
+)
+
+// streamInfo names the product-level stream a schedule writes.
+type streamInfo struct {
+	name string
+	kind string
+}
+
+// streamForSchedule maps a sync schedule to its stream. The zero value marks
+// a schedule with no registered stream (e.g. an unknown legacy schedule);
+// callers omit stream metadata in that case.
+func streamForSchedule(schedule string) streamInfo {
+	switch schedule {
+	case ScheduleCursor:
+		// Cursor's Admin API serves aggregated per-user usage and spend
+		// records (tokens, cost) that land as usage metrics, not discrete
+		// activity events like Claude chat messages.
+		return streamInfo{name: StreamCursorUsage, kind: StreamKindMetrics}
+	case ScheduleAnthropicCompliance:
+		return streamInfo{name: StreamClaudeChatMessage, kind: StreamKindEvents}
+	case ScheduleAnthropicAnalyticsUsage:
+		return streamInfo{name: StreamClaudeChatUsageTokens, kind: StreamKindMetrics}
+	case ScheduleAnthropicAnalyticsCost:
+		return streamInfo{name: StreamClaudeChatCostUSD, kind: StreamKindMetrics}
+	case ScheduleCodexCompliance:
+		return streamInfo{name: StreamCodexCostUSD, kind: StreamKindMetrics}
+	default:
+		return streamInfo{name: "", kind: ""}
+	}
+}
+
 // syncSchedule pairs a schedule name with its checkpointing kind.
 type syncSchedule struct {
 	schedule string
@@ -167,9 +221,16 @@ type UsagePollCandidate struct {
 }
 
 type SyncSchedule struct {
-	ID       uuid.UUID
-	Schedule string
-	Kind     string
+	ID                  uuid.UUID
+	Schedule            string
+	Kind                string
+	NextPollAfter       time.Time
+	LastPollError       string
+	LastPollFailedAt    time.Time
+	LastPollSuccessAt   time.Time
+	ConsecutiveFailures int32
+	AutoPausedAt        time.Time
+	DisabledAt          time.Time
 }
 
 type UpsertResult struct {
@@ -314,6 +375,12 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		if sched.schedule == providerSched.schedule {
 			syncRow = r
 		}
+	}
+	// Saving the integration is the user's "try again" signal: lift any
+	// automatic pauses so schedules stopped over a rejected configuration
+	// start polling again with a fresh failure budget.
+	if err := q.ClearSyncSchedulePauses(ctx, row.ID); err != nil {
+		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to clear ai integration sync pauses")
 	}
 	if resetPollWatermarkAt != nil {
 		syncRow.PollWatermarkAt = conv.ToPGTimestamptz(*resetPollWatermarkAt)
@@ -465,12 +532,69 @@ func (s *Store) ListSyncSchedules(ctx context.Context, configID uuid.UUID) ([]Sy
 	schedules := make([]SyncSchedule, 0, len(rows))
 	for _, row := range rows {
 		schedules = append(schedules, SyncSchedule{
-			ID:       row.ID,
-			Schedule: row.Schedule,
-			Kind:     row.Kind,
+			ID:                  row.ID,
+			Schedule:            row.Schedule,
+			Kind:                row.Kind,
+			NextPollAfter:       row.NextPollAfter.Time,
+			LastPollError:       row.LastPollError.String,
+			LastPollFailedAt:    row.LastPollFailedAt.Time,
+			LastPollSuccessAt:   row.LastPollSuccessAt.Time,
+			ConsecutiveFailures: row.ConsecutiveFailures,
+			AutoPausedAt:        row.AutoPausedAt.Time,
+			DisabledAt:          row.DisabledAt.Time,
 		})
 	}
 	return schedules, nil
+}
+
+func syncScheduleFromModel(row repo.AiIntegrationSync) SyncSchedule {
+	return SyncSchedule{
+		ID:                  row.ID,
+		Schedule:            row.Schedule,
+		Kind:                row.Kind,
+		NextPollAfter:       row.NextPollAfter.Time,
+		LastPollError:       row.LastPollError.String,
+		LastPollFailedAt:    row.LastPollFailedAt.Time,
+		LastPollSuccessAt:   row.LastPollSuccessAt.Time,
+		ConsecutiveFailures: row.ConsecutiveFailures,
+		AutoPausedAt:        row.AutoPausedAt.Time,
+		DisabledAt:          row.DisabledAt.Time,
+	}
+}
+
+// setSyncScheduleDisabledWithTx records a user's explicit pause (or unpause)
+// of one sync schedule. Runs in the caller's transaction so the audit entry
+// commits atomically with the flag change.
+func (s *Store) setSyncScheduleDisabledWithTx(ctx context.Context, dbtx repo.DBTX, configID uuid.UUID, schedule string, disabled bool) (SyncSchedule, error) {
+	row, err := repo.New(dbtx).SetSyncScheduleDisabled(ctx, repo.SetSyncScheduleDisabledParams{
+		AiIntegrationConfigID: configID,
+		Schedule:              schedule,
+		Disabled:              disabled,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return SyncSchedule{}, oops.E(oops.CodeNotFound, err, "ai integration sync schedule not found")
+	case err != nil:
+		return SyncSchedule{}, oops.E(oops.CodeUnexpected, err, "failed to update ai integration sync schedule")
+	}
+	return syncScheduleFromModel(row), nil
+}
+
+// retrySyncScheduleWithTx makes one schedule due immediately, lifting any
+// automatic pause and resetting its failure streak. The scheduler picks it up
+// on its next tick.
+func (s *Store) retrySyncScheduleWithTx(ctx context.Context, dbtx repo.DBTX, configID uuid.UUID, schedule string) (SyncSchedule, error) {
+	row, err := repo.New(dbtx).RetrySyncSchedule(ctx, repo.RetrySyncScheduleParams{
+		AiIntegrationConfigID: configID,
+		Schedule:              schedule,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return SyncSchedule{}, oops.E(oops.CodeNotFound, err, "ai integration sync schedule not found")
+	case err != nil:
+		return SyncSchedule{}, oops.E(oops.CodeUnexpected, err, "failed to retry ai integration sync schedule")
+	}
+	return syncScheduleFromModel(row), nil
 }
 
 func (s *Store) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UUID) (Config, string, error) {
@@ -629,7 +753,18 @@ func (s *Store) RecordSchedulePollSuccess(ctx context.Context, configID uuid.UUI
 	return nil
 }
 
-func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, cause error) error {
+// AutoPauseAfterRejectedPolls is the consecutive-failure count at which a
+// schedule whose provider keeps rejecting the configuration (revoked api key,
+// missing api access) is automatically paused. Rejections are permanent until
+// the user fixes the integration, so a small threshold is enough; saving the
+// integration clears the pause and the failure streak.
+const AutoPauseAfterRejectedPolls = 3
+
+// RecordSchedulePollFailure records a final poll failure on a schedule. A
+// positive pauseAfter automatically pauses the schedule once its consecutive
+// failure count reaches that threshold; zero never pauses, for failures that
+// retrying at the normal cadence can plausibly fix.
+func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, cause error, pauseAfter int32) error {
 	var errStr string
 	if cause != nil {
 		errStr = cause.Error()
@@ -644,6 +779,7 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 		Schedule:              schedule,
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
+		PauseAfter:            pauseAfter,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration sync schedule poll failure")
 	}
@@ -651,7 +787,7 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 }
 
 func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, provider string, t time.Time, cause error) error {
-	return s.RecordSchedulePollFailure(ctx, configID, provider, t, cause)
+	return s.RecordSchedulePollFailure(ctx, configID, provider, t, cause, 0)
 }
 
 // epochTime is the never-synced watermark sentinel for time-kind schedules
