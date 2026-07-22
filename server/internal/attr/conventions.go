@@ -359,6 +359,20 @@ const (
 	// carried one; envelopes without it fall back to arrival time
 	// (canonicalEventTime), so a replayed row can also be now-stamped.
 	HookReplayedKey = attribute.Key("gram.hook.replayed")
+	// Device telemetry the speakeasy-hooks binary stamps on its requests via
+	// X-Gram-Device-* headers, lifted onto hook endpoint spans so hook issues
+	// can be diagnosed per platform, harness, and binary build. ElapsedMs is
+	// the on-device time from hook process start to the request leaving the
+	// machine — the binary's own overhead, measured on the device clock. On
+	// spool-drain replays (HookReplayedKey set) it is time into the drain run
+	// instead, and the harness attributes are absent.
+	HookDeviceOSKey             = attribute.Key("gram.hook.device.os")
+	HookDeviceArchKey           = attribute.Key("gram.hook.device.arch")
+	HookDeviceBinaryVersionKey  = attribute.Key("gram.hook.device.binary_version")
+	HookDeviceHarnessKey        = attribute.Key("gram.hook.device.harness")
+	HookDeviceHarnessVariantKey = attribute.Key("gram.hook.device.harness_variant")
+	HookDeviceHarnessVersionKey = attribute.Key("gram.hook.device.harness_version")
+	HookDeviceElapsedMsKey      = attribute.Key("gram.hook.device.elapsed_ms")
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
