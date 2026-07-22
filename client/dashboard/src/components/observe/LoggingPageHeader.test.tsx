@@ -25,6 +25,7 @@ describe("LoggingPageHeader", () => {
       screen.getByRole("button", { name: "About data retention" }),
     );
 
-    expect(await screen.findByText(LOG_DATA_RETENTION_MESSAGE)).toBeTruthy();
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toBe(LOG_DATA_RETENTION_MESSAGE);
   });
 });
