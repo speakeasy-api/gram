@@ -533,7 +533,7 @@ func newWorkerCommand() *cli.Command {
 			challengeLoggingEnabled := authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging))
 
 			// Create ClickHouse client and telemetry service for resolution events
-			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
+			chDB, chShutdown, err := newClickhouseClient(ctx, logger, tracerProvider, meterProvider, c)
 			if err != nil {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
