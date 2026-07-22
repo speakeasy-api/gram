@@ -100,6 +100,9 @@ export function PluginSkillsSection({
   const distribute = useDistributeSkillMutation();
   const undistribute = useUndistributeSkillMutation();
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  // Shared mutation observers only reflect their latest call, so a local flag
+  // covers the whole allSettled batch to keep the dialog locked until it ends.
+  const [isBatchAdding, setIsBatchAdding] = useState(false);
 
   const openAddSkillDialog = (open: boolean) => {
     setIsAddSkillOpen(open);
@@ -115,29 +118,44 @@ export function PluginSkillsSection({
   };
 
   const handleAddSkills = async () => {
-    if (selectedSkillIds.length === 0) return;
-    // allSettled + unconditional invalidation: some mutations in the batch
-    // may succeed even when others fail, and the cache must reflect what the
-    // server actually committed.
-    const results = await Promise.allSettled(
-      selectedSkillIds.map((skillId) =>
-        distribute.mutateAsync({
-          request: { distributeSkillRequestBody: { id: skillId, pluginId } },
-        }),
-      ),
-    );
-    await invalidateAllSkillDistributions(queryClient);
-    const firstFailure = results.find((result) => result.status === "rejected");
-    if (firstFailure) {
-      toast.error("Unable to add skill to plugin");
-      return;
+    if (selectedSkillIds.length === 0 || isBatchAdding) return;
+    setIsBatchAdding(true);
+    try {
+      // allSettled + unconditional invalidation: some mutations in the batch
+      // may succeed even when others fail, and the cache must reflect what the
+      // server actually committed.
+      const results = await Promise.allSettled(
+        selectedSkillIds.map((skillId) =>
+          distribute.mutateAsync({
+            request: { distributeSkillRequestBody: { id: skillId, pluginId } },
+          }),
+        ),
+      );
+      await invalidateAllSkillDistributions(queryClient);
+      const failedIds = selectedSkillIds.filter(
+        (_, index) => results[index]?.status === "rejected",
+      );
+      const addedCount = selectedSkillIds.length - failedIds.length;
+      if (failedIds.length === 0) {
+        setIsAddSkillOpen(false);
+        onMutated(
+          addedCount > 1
+            ? `${addedCount} skills added to plugin`
+            : "Skill added to plugin",
+        );
+        return;
+      }
+      // Keep only the failures selected so a retry doesn't re-add the skills
+      // the server already committed.
+      setSelectedSkillIds(failedIds);
+      toast.error(
+        addedCount > 0
+          ? `Added ${addedCount} skill${addedCount > 1 ? "s" : ""}, ${failedIds.length} failed`
+          : `Unable to add skill${failedIds.length > 1 ? "s" : ""} to plugin`,
+      );
+    } finally {
+      setIsBatchAdding(false);
     }
-    setIsAddSkillOpen(false);
-    onMutated(
-      selectedSkillIds.length > 1
-        ? `${selectedSkillIds.length} skills added to plugin`
-        : "Skill added to plugin",
-    );
   };
 
   const handleRemoveSkill = (distribution: SkillDistribution) => {
@@ -252,7 +270,7 @@ export function PluginSkillsSection({
             variant="secondary"
             size="sm"
             disabled={!isMembershipLoaded}
-            onClick={() => setIsAddSkillOpen(true)}
+            onClick={() => openAddSkillDialog(true)}
           >
             <Button.LeftIcon>
               <Icon name="plus" className="h-4 w-4" />
@@ -283,7 +301,7 @@ export function PluginSkillsSection({
                     key={skill.id}
                     skill={skill}
                     checked={selectedSkillIds.includes(skill.id)}
-                    disabled={distribute.isPending}
+                    disabled={isBatchAdding}
                     onToggle={() => toggleSkill(skill.id)}
                   />
                 ))}
@@ -306,7 +324,7 @@ export function PluginSkillsSection({
             <Button
               type="button"
               disabled={
-                distribute.isPending ||
+                isBatchAdding ||
                 isSkillListLoading ||
                 selectedSkillIds.length === 0
               }

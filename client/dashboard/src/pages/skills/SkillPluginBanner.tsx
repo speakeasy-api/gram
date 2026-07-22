@@ -103,6 +103,9 @@ export function SkillPluginBanner({
   const undistribute = useUndistributeSkillMutation();
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  // Shared mutation observers only reflect their latest call, so a local flag
+  // covers the whole allSettled batch to keep the controls locked until it ends.
+  const [isSaving, setIsSaving] = useState(false);
 
   // Sort+join so the effect only re-fires when membership actually changes,
   // not on every unrelated refetch.
@@ -136,8 +139,6 @@ export function SkillPluginBanner({
     distributions.some(
       (distribution) => !selectedIdSet.has(distribution.pluginId),
     );
-  const isSaving = distribute.isPending || undistribute.isPending;
-
   const togglePlugin = (pluginId: string) => {
     setSelectedPluginIds((prev) =>
       prev.includes(pluginId)
@@ -151,40 +152,47 @@ export function SkillPluginBanner({
     const toRemove = distributions.filter(
       (distribution) => !selectedIdSet.has(distribution.pluginId),
     );
-    if (toAdd.length === 0 && toRemove.length === 0) return;
-    // allSettled + unconditional invalidation: some mutations in the batch
-    // may succeed even when others fail, and the cache must reflect what the
-    // server actually committed.
-    const results = await Promise.allSettled([
-      ...toAdd.map((pluginId) =>
-        distribute.mutateAsync({
-          request: {
-            distributeSkillRequestBody: { id: skillId, pluginId },
-          },
-        }),
-      ),
-      ...toRemove.map((distribution) =>
-        undistribute.mutateAsync({
-          request: {
-            undistributeSkillRequestBody: {
-              id: skillId,
-              pluginId: distribution.pluginId,
+    if ((toAdd.length === 0 && toRemove.length === 0) || isSaving) return;
+    setIsSaving(true);
+    try {
+      // allSettled + unconditional invalidation: some mutations in the batch
+      // may succeed even when others fail, and the cache must reflect what the
+      // server actually committed.
+      const results = await Promise.allSettled([
+        ...toAdd.map((pluginId) =>
+          distribute.mutateAsync({
+            request: {
+              distributeSkillRequestBody: { id: skillId, pluginId },
             },
-          },
-        }),
-      ),
-    ]);
-    await invalidateAllSkillDistributions(queryClient);
-    const firstFailure = results.find((result) => result.status === "rejected");
-    if (firstFailure) {
-      toast.error(
-        firstFailure.reason instanceof Error
-          ? firstFailure.reason.message
-          : "Failed to update plugin distributions",
+          }),
+        ),
+        ...toRemove.map((distribution) =>
+          undistribute.mutateAsync({
+            request: {
+              undistributeSkillRequestBody: {
+                id: skillId,
+                pluginId: distribution.pluginId,
+              },
+            },
+          }),
+        ),
+      ]);
+      await invalidateAllSkillDistributions(queryClient);
+      const firstFailure = results.find(
+        (result) => result.status === "rejected",
       );
-      return;
+      if (firstFailure) {
+        toast.error(
+          firstFailure.reason instanceof Error
+            ? firstFailure.reason.message
+            : "Failed to update plugin distributions",
+        );
+        return;
+      }
+      toast.success(describeSaveResult(toAdd.length, toRemove.length));
+    } finally {
+      setIsSaving(false);
     }
-    toast.success(describeSaveResult(toAdd.length, toRemove.length));
   };
 
   const isBlocked = !skill.hasValidVersion;
