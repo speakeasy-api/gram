@@ -1275,7 +1275,24 @@ CROSS JOIN LATERAL (
 -- outlives both: a deletion after enqueue leaves a backlog whose subject is
 -- gone. The liveness recheck sits before paging so a deleted unit is never a
 -- candidate and never spends the organization's budget.
-SELECT e.*
+SELECT
+  e.id,
+  e.organization_id,
+  e.project_id,
+  e.surface,
+  e.session_id,
+  e.chat_id,
+  e.skill_id,
+  e.skill_version_id,
+  e.canonical_sha256,
+  e.observed_at,
+  e.state,
+  e.reserved_on,
+  e.attempts,
+  e.last_error,
+  e.scored_at,
+  e.created_at,
+  e.updated_at
 FROM skill_efficacy_evaluations e
 JOIN projects p
   ON p.id = e.project_id
@@ -1329,7 +1346,24 @@ WHERE e.project_id = @project_id
     LIMIT @batch_size
     FOR UPDATE SKIP LOCKED
   )
-RETURNING *;
+RETURNING
+  e.id,
+  e.organization_id,
+  e.project_id,
+  e.surface,
+  e.session_id,
+  e.chat_id,
+  e.skill_id,
+  e.skill_version_id,
+  e.canonical_sha256,
+  e.observed_at,
+  e.state,
+  e.reserved_on,
+  e.attempts,
+  e.last_error,
+  e.scored_at,
+  e.created_at,
+  e.updated_at;
 
 -- name: ResetStaleSkillEfficacyReservations :execrows
 -- Returns a crashed reservation to the queue. attempts is preserved so a
