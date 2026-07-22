@@ -1105,3 +1105,43 @@ COMMENT 'Risk findings event log: one row per detected secret or sensitive-data 
 CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_message_id ON risk_findings (chat_message_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (risk_policy_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;
+
+CREATE TABLE IF NOT EXISTS skill_efficacy_scores (
+    id UUID COMMENT 'Producer-supplied score identifier.',
+    created_at DateTime64(9) COMMENT 'Time the score was completed.' CODEC(DoubleDelta, ZSTD),
+    inserted_at DateTime64(9) DEFAULT now64(9) COMMENT 'Time the score was inserted.' CODEC(DoubleDelta, ZSTD),
+
+    organization_id String COMMENT 'Organization the score belongs to.' CODEC(ZSTD),
+    project_id String DEFAULT '' COMMENT 'Project the score belongs to when known.' CODEC(ZSTD),
+    session_id String COMMENT 'Scoring session identifier, using the hook session ID for dev and chat ID for assistant.' CODEC(ZSTD),
+
+    skill_id UUID COMMENT 'Evaluated skill identifier.',
+    skill_version_id UUID COMMENT 'Evaluated skill version identifier.',
+    canonical_sha256 String COMMENT 'Canonical SHA-256 digest of the evaluated skill.' CODEC(ZSTD),
+    surface LowCardinality(String) COMMENT 'Evaluation surface: dev | assistant.',
+
+    trace_id Nullable(FixedString(32)) COMMENT 'W3C trace ID for the evaluated session when available.',
+    gram_chat_id String DEFAULT '' COMMENT 'Gram chat identifier when available.' CODEC(ZSTD),
+
+    score Float64 COMMENT 'Skill efficacy score in the range 0.0 to 1.0.',
+    rationale String COMMENT 'Judge rationale for the score, capped at 200 characters.' CODEC(ZSTD),
+    est_turns_saved Nullable(Float64) COMMENT 'Estimated conversation turns saved.',
+    est_minutes_saved Nullable(Float64) COMMENT 'Estimated minutes saved.',
+    roi_confidence LowCardinality(Nullable(String)) COMMENT 'ROI estimate confidence when estimated: low | med | high.',
+    flags Array(LowCardinality(String)) COMMENT 'Assessment flags: ignored | misapplied | partially_followed | harmful.',
+    judge_model LowCardinality(String) COMMENT 'Model used to judge efficacy.',
+    judge_prompt_version LowCardinality(String) COMMENT 'Judge prompt version.',
+
+    CONSTRAINT score_valid CHECK isFinite(score) AND score >= 0 AND score <= 1,
+    CONSTRAINT rationale_valid CHECK lengthUTF8(rationale) <= 200,
+    CONSTRAINT est_turns_saved_valid CHECK isNull(est_turns_saved) OR (isFinite(est_turns_saved) AND est_turns_saved >= 0),
+    CONSTRAINT est_minutes_saved_valid CHECK isNull(est_minutes_saved) OR (isFinite(est_minutes_saved) AND est_minutes_saved >= 0),
+    CONSTRAINT surface_valid CHECK surface IN ('dev', 'assistant'),
+    CONSTRAINT roi_confidence_valid CHECK isNull(roi_confidence) OR roi_confidence IN ('low', 'med', 'high'),
+    CONSTRAINT flags_valid CHECK arrayAll(flag -> flag IN ('ignored', 'misapplied', 'partially_followed', 'harmful'), flags)
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (organization_id, project_id, skill_id, skill_version_id, created_at, id)
+TTL toDateTime(created_at) + INTERVAL 730 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Skill efficacy scores produced after scoring sessions complete.';
