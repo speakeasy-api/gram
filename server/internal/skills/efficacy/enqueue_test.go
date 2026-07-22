@@ -190,27 +190,31 @@ func (f efficacyFixture) pendingEvaluations(t *testing.T) []repo.SkillEfficacyEv
 	t.Helper()
 
 	queries := repo.New(f.db)
-	page := repo.ListPendingSkillEfficacyEvaluationsParams{
-		ProjectID:        f.projectID,
-		CursorObservedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		CursorID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		PageSize:         PendingCandidatePage,
-		Inactivity:       pgtype.Interval{Microseconds: InactivityWindow.Microseconds(), Days: 0, Months: 0, Valid: true},
-	}
-
 	var rows []repo.SkillEfficacyEvaluation
-	for {
-		batch, err := queries.ListPendingSkillEfficacyEvaluations(t.Context(), page)
-		require.NoError(t, err)
-		rows = append(rows, batch...)
-		if len(batch) < int(page.PageSize) {
-			return rows
+	for _, hasReservedSpend := range []bool{false, true} {
+		page := repo.ListPendingSkillEfficacyEvaluationsParams{
+			ProjectID:        f.projectID,
+			HasReservedSpend: hasReservedSpend,
+			CursorObservedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			CursorID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			PageSize:         PendingCandidatePage,
+			Inactivity:       pgtype.Interval{Microseconds: InactivityWindow.Microseconds(), Days: 0, Months: 0, Valid: true},
 		}
+		for {
+			batch, err := queries.ListPendingSkillEfficacyEvaluations(t.Context(), page)
+			require.NoError(t, err)
+			rows = append(rows, batch...)
+			if len(batch) < int(page.PageSize) {
+				break
+			}
 
-		last := batch[len(batch)-1]
-		page.CursorObservedAt = last.ObservedAt
-		page.CursorID = uuid.NullUUID{UUID: last.ID, Valid: true}
+			last := batch[len(batch)-1]
+			page.CursorObservedAt = last.ObservedAt
+			page.CursorID = uuid.NullUUID{UUID: last.ID, Valid: true}
+		}
 	}
+
+	return rows
 }
 
 // enqueueCounts is the part of a page result that does not depend on which

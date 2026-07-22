@@ -1226,8 +1226,7 @@ SELECT count(*) AS spend
 FROM skill_efficacy_evaluations e
 JOIN projects p ON p.organization_id = e.organization_id
 WHERE p.id = @project_id::uuid
-  AND e.reserved_on = @reserved_on::date
-  AND e.state IN ('reserved', 'scored');
+  AND e.reserved_on = @reserved_on::date;
 
 -- name: CountSkillEfficacySkillDailySpend :many
 SELECT e.skill_id, count(*) AS spend
@@ -1235,7 +1234,6 @@ FROM skill_efficacy_evaluations e
 WHERE e.project_id = @project_id
   AND e.skill_id = ANY(@skill_ids::uuid[])
   AND e.reserved_on = @reserved_on::date
-  AND e.state IN ('reserved', 'scored')
 GROUP BY e.skill_id;
 
 -- name: CountSkillEfficacyVersionLifetimeSpend :many
@@ -1252,7 +1250,7 @@ CROSS JOIN LATERAL (
     FROM skill_efficacy_evaluations e
     WHERE e.project_id = @project_id
       AND e.skill_version_id = v.skill_version_id
-      AND e.state IN ('reserved', 'scored')
+      AND e.reserved_on IS NOT NULL
     LIMIT @burst_cap::int
   ) spent
 ) capped;
@@ -1305,6 +1303,7 @@ JOIN chats c
   AND c.deleted IS FALSE
 WHERE e.project_id = @project_id
   AND e.state = 'pending'
+  AND (e.reserved_on IS NOT NULL) = @has_reserved_spend::boolean
   AND e.observed_at <= now() - @inactivity::interval
   AND NOT EXISTS (
     SELECT 1
@@ -1323,27 +1322,31 @@ LIMIT @page_size;
 -- name: ReserveSkillEfficacyEvaluations :execrows
 UPDATE skill_efficacy_evaluations
 SET state = 'reserved',
-    reserved_on = @reserved_on::date,
+    reserved_on = coalesce(reserved_on, @reserved_on::date),
+    claim_token = @claim_token::uuid,
     updated_at = clock_timestamp()
 WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[])
-  AND state = 'pending';
+  AND state = 'pending'
+  AND claim_token IS NULL
+  AND failed_at IS NULL;
 
 -- name: LoadReservedSkillEfficacyEvaluations :many
 -- Crash-recovery claim. Ownership is soft and time-bounded: a reserved row is
 -- owned while its updated_at is younger than @claim_lease, so a second claimer
 -- inside the lease selects nothing and the model call never has to hold a
--- transaction open. A null lease claims every reserved row committed before the
--- statement, which is the unleased read-back.
+-- transaction open.
 UPDATE skill_efficacy_evaluations e
-SET updated_at = clock_timestamp()
+SET claim_token = @claim_token::uuid,
+    updated_at = clock_timestamp()
 WHERE e.project_id = @project_id
   AND e.id IN (
     SELECT c.id
     FROM skill_efficacy_evaluations c
     WHERE c.project_id = @project_id
       AND c.state = 'reserved'
-      AND c.updated_at < now() - coalesce(sqlc.narg('claim_lease')::interval, interval '0')
+      AND c.updated_at < now() - @claim_lease::interval
+      AND c.updated_at >= now() - @recovery_after::interval
     ORDER BY c.observed_at DESC, c.id DESC
     LIMIT @batch_size
     FOR UPDATE SKIP LOCKED
@@ -1369,25 +1372,79 @@ RETURNING
   e.created_at,
   e.updated_at;
 
--- name: ResetStaleSkillEfficacyReservations :execrows
--- Returns a crashed reservation to the queue. attempts is preserved so a
--- poisonous unit still terminates at the attempt ceiling.
+-- name: ClaimLegacySkillEfficacyEvaluations :execrows
+-- Compatibility for workflow histories recorded before claim tokens existed.
 UPDATE skill_efficacy_evaluations
-SET state = 'pending',
-    reserved_on = NULL,
+SET claim_token = @claim_token::uuid,
     updated_at = clock_timestamp()
 WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
   AND state = 'reserved'
-  AND updated_at < now() - @stale_after::interval;
+  AND claim_token IS NULL;
+
+-- name: ClearSkillEfficacyClaimTokenFixture :execrows
+-- Test-only fixture for a reservation written before claim_token existed.
+UPDATE skill_efficacy_evaluations
+SET claim_token = NULL
+WHERE project_id = @project_id
+  AND id = @id
+  AND state = 'reserved';
+
+-- name: RecoverStaleSkillEfficacyReservations :one
+-- Bounded recovery for abandoned reservations. The row lock keeps concurrent
+-- sweepers disjoint; the ownership predicates fence a worker that raced the
+-- recovery. reserved_on is deliberately retained as immutable spend history.
+WITH stale AS (
+  SELECT c.id, c.claim_token, c.updated_at
+  FROM skill_efficacy_evaluations c
+  WHERE c.project_id = @project_id
+    AND c.state = 'reserved'
+    AND c.updated_at < now() - @stale_after::interval
+  ORDER BY c.updated_at, c.id
+  LIMIT @batch_size
+  FOR UPDATE SKIP LOCKED
+), recovered AS (
+  UPDATE skill_efficacy_evaluations e
+  SET attempts = e.attempts + 1,
+      last_error = @last_error,
+      state = CASE WHEN e.attempts + 1 >= @max_attempts::integer THEN 'failed' ELSE 'pending' END,
+      failed_at = CASE WHEN e.attempts + 1 >= @max_attempts::integer THEN clock_timestamp() ELSE e.failed_at END,
+      claim_token = NULL,
+      updated_at = clock_timestamp()
+  FROM stale s
+  WHERE e.project_id = @project_id
+    AND e.id = s.id
+    AND e.state = 'reserved'
+    AND e.claim_token IS NOT DISTINCT FROM s.claim_token
+    AND e.updated_at = s.updated_at
+  RETURNING e.state
+)
+SELECT
+  count(*) FILTER (WHERE state = 'pending') AS recovered,
+  count(*) FILTER (WHERE state = 'failed') AS dead_lettered
+FROM recovered;
 
 -- name: MarkSkillEfficacyEvaluationScored :execrows
 UPDATE skill_efficacy_evaluations
 SET state = 'scored',
     scored_at = clock_timestamp(),
+    claim_token = NULL,
     updated_at = clock_timestamp()
 WHERE project_id = @project_id
   AND id = @id
-  AND state = 'reserved';
+  AND state = 'reserved'
+  AND claim_token = @claim_token::uuid;
+
+-- name: RefreshSkillEfficacyEvaluationClaim :execrows
+-- Reassert ownership immediately before publishing the external score. The
+-- updated_at bump keeps lease claimers from rotating the token during the sink
+-- write and scored transition.
+UPDATE skill_efficacy_evaluations
+SET updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = @id
+  AND state = 'reserved'
+  AND claim_token = @claim_token::uuid;
 
 -- name: RecordSkillEfficacyEvaluationAttempt :one
 -- Model, sink, or row-validation failure. The row never returns to pending:
@@ -1396,22 +1453,29 @@ UPDATE skill_efficacy_evaluations
 SET attempts = attempts + 1,
     last_error = @last_error,
     state = CASE WHEN attempts + 1 >= @max_attempts::integer THEN 'failed' ELSE 'reserved' END,
+    failed_at = CASE WHEN attempts + 1 >= @max_attempts::integer THEN clock_timestamp() ELSE failed_at END,
+    claim_token = CASE WHEN attempts + 1 >= @max_attempts::integer THEN NULL ELSE claim_token END,
     updated_at = clock_timestamp()
 WHERE project_id = @project_id
   AND id = @id
   AND state = 'reserved'
-RETURNING state, attempts;
+  AND claim_token = @claim_token::uuid
+RETURNING state, attempts, failed_at;
+
+-- name: GetSkillEfficacyEvaluationState :one
+SELECT state, reserved_on, claim_token, attempts, last_error, scored_at, failed_at
+FROM skill_efficacy_evaluations
+WHERE project_id = @project_id
+  AND id = @id;
 
 -- name: GetSkillEfficacyJudgeInputs :many
 -- evaluation_created_at is the row's birth stamp, which no transition rewrites.
--- It is the publication guard's lower bound: reserved_on moves forward when a
--- stale reservation is reset and re-reserved on a later day, so a bound derived
--- from it can end up after a score an earlier pass already inserted.
+-- It is the publication guard's stable lower bound across ownership changes.
 --
 -- The project and chat liveness the reservation checked is rechecked here: a
 -- deletion that lands between reserving and publishing drops the row from this
 -- read, so the batch judges nothing and writes no score for it. The row stays
--- reserved and is later reset to pending, where the same guard keeps it out of
+-- reserved and is later recovered to pending, where the same guard keeps it out of
 -- every candidate page.
 SELECT
   e.id,
@@ -1444,6 +1508,7 @@ JOIN skill_versions sv
   AND sv.id = e.skill_version_id
 WHERE e.project_id = @project_id
   AND e.state = 'reserved'
+  AND e.claim_token = @claim_token::uuid
   AND e.id = ANY(@ids::uuid[])
 ORDER BY e.observed_at DESC, e.id DESC;
 

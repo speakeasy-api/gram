@@ -98,6 +98,31 @@ func (q *Queries) BackfillSkillObservationsForCapturedVersion(ctx context.Contex
 	return result.RowsAffected(), nil
 }
 
+const claimLegacySkillEfficacyEvaluations = `-- name: ClaimLegacySkillEfficacyEvaluations :execrows
+UPDATE skill_efficacy_evaluations
+SET claim_token = $1::uuid,
+    updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND id = ANY($3::uuid[])
+  AND state = 'reserved'
+  AND claim_token IS NULL
+`
+
+type ClaimLegacySkillEfficacyEvaluationsParams struct {
+	ClaimToken uuid.UUID
+	ProjectID  uuid.UUID
+	Ids        []uuid.UUID
+}
+
+// Compatibility for workflow histories recorded before claim tokens existed.
+func (q *Queries) ClaimLegacySkillEfficacyEvaluations(ctx context.Context, arg ClaimLegacySkillEfficacyEvaluationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimLegacySkillEfficacyEvaluations, arg.ClaimToken, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimPendingSkillObservations = `-- name: ClaimPendingSkillObservations :many
 SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at, reconcile_error_code, created_at
 FROM skill_observations
@@ -153,6 +178,28 @@ func (q *Queries) ClaimPendingSkillObservations(ctx context.Context, arg ClaimPe
 		return nil, err
 	}
 	return items, nil
+}
+
+const clearSkillEfficacyClaimTokenFixture = `-- name: ClearSkillEfficacyClaimTokenFixture :execrows
+UPDATE skill_efficacy_evaluations
+SET claim_token = NULL
+WHERE project_id = $1
+  AND id = $2
+  AND state = 'reserved'
+`
+
+type ClearSkillEfficacyClaimTokenFixtureParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+// Test-only fixture for a reservation written before claim_token existed.
+func (q *Queries) ClearSkillEfficacyClaimTokenFixture(ctx context.Context, arg ClearSkillEfficacyClaimTokenFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearSkillEfficacyClaimTokenFixture, arg.ProjectID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const completeSkillObservations = `-- name: CompleteSkillObservations :one
@@ -270,7 +317,6 @@ FROM skill_efficacy_evaluations e
 JOIN projects p ON p.organization_id = e.organization_id
 WHERE p.id = $1::uuid
   AND e.reserved_on = $2::date
-  AND e.state IN ('reserved', 'scored')
 `
 
 type CountSkillEfficacyOrgSpendForProjectParams struct {
@@ -293,7 +339,6 @@ FROM skill_efficacy_evaluations e
 WHERE e.project_id = $1
   AND e.skill_id = ANY($2::uuid[])
   AND e.reserved_on = $3::date
-  AND e.state IN ('reserved', 'scored')
 GROUP BY e.skill_id
 `
 
@@ -338,7 +383,7 @@ CROSS JOIN LATERAL (
     FROM skill_efficacy_evaluations e
     WHERE e.project_id = $2
       AND e.skill_version_id = v.skill_version_id
-      AND e.state IN ('reserved', 'scored')
+      AND e.reserved_on IS NOT NULL
     LIMIT $3::int
   ) spent
 ) capped
@@ -1241,6 +1286,43 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 	return i, err
 }
 
+const getSkillEfficacyEvaluationState = `-- name: GetSkillEfficacyEvaluationState :one
+SELECT state, reserved_on, claim_token, attempts, last_error, scored_at, failed_at
+FROM skill_efficacy_evaluations
+WHERE project_id = $1
+  AND id = $2
+`
+
+type GetSkillEfficacyEvaluationStateParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+type GetSkillEfficacyEvaluationStateRow struct {
+	State      string
+	ReservedOn pgtype.Date
+	ClaimToken uuid.NullUUID
+	Attempts   int32
+	LastError  pgtype.Text
+	ScoredAt   pgtype.Timestamptz
+	FailedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) GetSkillEfficacyEvaluationState(ctx context.Context, arg GetSkillEfficacyEvaluationStateParams) (GetSkillEfficacyEvaluationStateRow, error) {
+	row := q.db.QueryRow(ctx, getSkillEfficacyEvaluationState, arg.ProjectID, arg.ID)
+	var i GetSkillEfficacyEvaluationStateRow
+	err := row.Scan(
+		&i.State,
+		&i.ReservedOn,
+		&i.ClaimToken,
+		&i.Attempts,
+		&i.LastError,
+		&i.ScoredAt,
+		&i.FailedAt,
+	)
+	return i, err
+}
+
 const getSkillEfficacyJudgeInputs = `-- name: GetSkillEfficacyJudgeInputs :many
 SELECT
   e.id,
@@ -1273,13 +1355,15 @@ JOIN skill_versions sv
   AND sv.id = e.skill_version_id
 WHERE e.project_id = $1
   AND e.state = 'reserved'
-  AND e.id = ANY($2::uuid[])
+  AND e.claim_token = $2::uuid
+  AND e.id = ANY($3::uuid[])
 ORDER BY e.observed_at DESC, e.id DESC
 `
 
 type GetSkillEfficacyJudgeInputsParams struct {
-	ProjectID uuid.UUID
-	Ids       []uuid.UUID
+	ProjectID  uuid.UUID
+	ClaimToken uuid.UUID
+	Ids        []uuid.UUID
 }
 
 type GetSkillEfficacyJudgeInputsRow struct {
@@ -1300,17 +1384,15 @@ type GetSkillEfficacyJudgeInputsRow struct {
 }
 
 // evaluation_created_at is the row's birth stamp, which no transition rewrites.
-// It is the publication guard's lower bound: reserved_on moves forward when a
-// stale reservation is reset and re-reserved on a later day, so a bound derived
-// from it can end up after a score an earlier pass already inserted.
+// It is the publication guard's stable lower bound across ownership changes.
 //
 // The project and chat liveness the reservation checked is rechecked here: a
 // deletion that lands between reserving and publishing drops the row from this
 // read, so the batch judges nothing and writes no score for it. The row stays
-// reserved and is later reset to pending, where the same guard keeps it out of
+// reserved and is later recovered to pending, where the same guard keeps it out of
 // every candidate page.
 func (q *Queries) GetSkillEfficacyJudgeInputs(ctx context.Context, arg GetSkillEfficacyJudgeInputsParams) ([]GetSkillEfficacyJudgeInputsRow, error) {
-	rows, err := q.db.Query(ctx, getSkillEfficacyJudgeInputs, arg.ProjectID, arg.Ids)
+	rows, err := q.db.Query(ctx, getSkillEfficacyJudgeInputs, arg.ProjectID, arg.ClaimToken, arg.Ids)
 	if err != nil {
 		return nil, err
 	}
@@ -1919,24 +2001,26 @@ JOIN chats c
   AND c.deleted IS FALSE
 WHERE e.project_id = $1
   AND e.state = 'pending'
-  AND e.observed_at <= now() - $2::interval
+  AND (e.reserved_on IS NOT NULL) = $2::boolean
+  AND e.observed_at <= now() - $3::interval
   AND NOT EXISTS (
     SELECT 1
     FROM chat_messages cm
     WHERE cm.chat_id = c.id
       AND (cm.project_id IS NULL OR cm.project_id = p.id)
-      AND cm.created_at > now() - $2::interval
+      AND cm.created_at > now() - $3::interval
   )
   AND (
-    $3::timestamptz IS NULL
-    OR (e.observed_at, e.id) < ($3::timestamptz, $4::uuid)
+    $4::timestamptz IS NULL
+    OR (e.observed_at, e.id) < ($4::timestamptz, $5::uuid)
   )
 ORDER BY e.observed_at DESC, e.id DESC
-LIMIT $5
+LIMIT $6
 `
 
 type ListPendingSkillEfficacyEvaluationsParams struct {
 	ProjectID        uuid.UUID
+	HasReservedSpend bool
 	Inactivity       pgtype.Interval
 	CursorObservedAt pgtype.Timestamptz
 	CursorID         uuid.NullUUID
@@ -1963,6 +2047,7 @@ type ListPendingSkillEfficacyEvaluationsParams struct {
 func (q *Queries) ListPendingSkillEfficacyEvaluations(ctx context.Context, arg ListPendingSkillEfficacyEvaluationsParams) ([]SkillEfficacyEvaluation, error) {
 	rows, err := q.db.Query(ctx, listPendingSkillEfficacyEvaluations,
 		arg.ProjectID,
+		arg.HasReservedSpend,
 		arg.Inactivity,
 		arg.CursorObservedAt,
 		arg.CursorID,
@@ -2902,16 +2987,18 @@ func (q *Queries) ListUnknownSkillActivations(ctx context.Context, arg ListUnkno
 
 const loadReservedSkillEfficacyEvaluations = `-- name: LoadReservedSkillEfficacyEvaluations :many
 UPDATE skill_efficacy_evaluations e
-SET updated_at = clock_timestamp()
-WHERE e.project_id = $1
+SET claim_token = $1::uuid,
+    updated_at = clock_timestamp()
+WHERE e.project_id = $2
   AND e.id IN (
     SELECT c.id
     FROM skill_efficacy_evaluations c
-    WHERE c.project_id = $1
+    WHERE c.project_id = $2
       AND c.state = 'reserved'
-      AND c.updated_at < now() - coalesce($2::interval, interval '0')
+      AND c.updated_at < now() - $3::interval
+      AND c.updated_at >= now() - $4::interval
     ORDER BY c.observed_at DESC, c.id DESC
-    LIMIT $3
+    LIMIT $5
     FOR UPDATE SKIP LOCKED
   )
 RETURNING
@@ -2937,18 +3024,25 @@ RETURNING
 `
 
 type LoadReservedSkillEfficacyEvaluationsParams struct {
-	ProjectID  uuid.UUID
-	ClaimLease pgtype.Interval
-	BatchSize  int32
+	ClaimToken    uuid.UUID
+	ProjectID     uuid.UUID
+	ClaimLease    pgtype.Interval
+	RecoveryAfter pgtype.Interval
+	BatchSize     int32
 }
 
 // Crash-recovery claim. Ownership is soft and time-bounded: a reserved row is
 // owned while its updated_at is younger than @claim_lease, so a second claimer
 // inside the lease selects nothing and the model call never has to hold a
-// transaction open. A null lease claims every reserved row committed before the
-// statement, which is the unleased read-back.
+// transaction open.
 func (q *Queries) LoadReservedSkillEfficacyEvaluations(ctx context.Context, arg LoadReservedSkillEfficacyEvaluationsParams) ([]SkillEfficacyEvaluation, error) {
-	rows, err := q.db.Query(ctx, loadReservedSkillEfficacyEvaluations, arg.ProjectID, arg.ClaimLease, arg.BatchSize)
+	rows, err := q.db.Query(ctx, loadReservedSkillEfficacyEvaluations,
+		arg.ClaimToken,
+		arg.ProjectID,
+		arg.ClaimLease,
+		arg.RecoveryAfter,
+		arg.BatchSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -3038,19 +3132,22 @@ const markSkillEfficacyEvaluationScored = `-- name: MarkSkillEfficacyEvaluationS
 UPDATE skill_efficacy_evaluations
 SET state = 'scored',
     scored_at = clock_timestamp(),
+    claim_token = NULL,
     updated_at = clock_timestamp()
 WHERE project_id = $1
   AND id = $2
   AND state = 'reserved'
+  AND claim_token = $3::uuid
 `
 
 type MarkSkillEfficacyEvaluationScoredParams struct {
-	ProjectID uuid.UUID
-	ID        uuid.UUID
+	ProjectID  uuid.UUID
+	ID         uuid.UUID
+	ClaimToken uuid.UUID
 }
 
 func (q *Queries) MarkSkillEfficacyEvaluationScored(ctx context.Context, arg MarkSkillEfficacyEvaluationScoredParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markSkillEfficacyEvaluationScored, arg.ProjectID, arg.ID)
+	result, err := q.db.Exec(ctx, markSkillEfficacyEvaluationScored, arg.ProjectID, arg.ID, arg.ClaimToken)
 	if err != nil {
 		return 0, err
 	}
@@ -3143,11 +3240,14 @@ UPDATE skill_efficacy_evaluations
 SET attempts = attempts + 1,
     last_error = $1,
     state = CASE WHEN attempts + 1 >= $2::integer THEN 'failed' ELSE 'reserved' END,
+    failed_at = CASE WHEN attempts + 1 >= $2::integer THEN clock_timestamp() ELSE failed_at END,
+    claim_token = CASE WHEN attempts + 1 >= $2::integer THEN NULL ELSE claim_token END,
     updated_at = clock_timestamp()
 WHERE project_id = $3
   AND id = $4
   AND state = 'reserved'
-RETURNING state, attempts
+  AND claim_token = $5::uuid
+RETURNING state, attempts, failed_at
 `
 
 type RecordSkillEfficacyEvaluationAttemptParams struct {
@@ -3155,11 +3255,13 @@ type RecordSkillEfficacyEvaluationAttemptParams struct {
 	MaxAttempts int32
 	ProjectID   uuid.UUID
 	ID          uuid.UUID
+	ClaimToken  uuid.UUID
 }
 
 type RecordSkillEfficacyEvaluationAttemptRow struct {
 	State    string
 	Attempts int32
+	FailedAt pgtype.Timestamptz
 }
 
 // Model, sink, or row-validation failure. The row never returns to pending:
@@ -3170,55 +3272,127 @@ func (q *Queries) RecordSkillEfficacyEvaluationAttempt(ctx context.Context, arg 
 		arg.MaxAttempts,
 		arg.ProjectID,
 		arg.ID,
+		arg.ClaimToken,
 	)
 	var i RecordSkillEfficacyEvaluationAttemptRow
-	err := row.Scan(&i.State, &i.Attempts)
+	err := row.Scan(&i.State, &i.Attempts, &i.FailedAt)
 	return i, err
 }
 
-const reserveSkillEfficacyEvaluations = `-- name: ReserveSkillEfficacyEvaluations :execrows
-UPDATE skill_efficacy_evaluations
-SET state = 'reserved',
-    reserved_on = $1::date,
-    updated_at = clock_timestamp()
-WHERE project_id = $2
-  AND id = ANY($3::uuid[])
-  AND state = 'pending'
+const recoverStaleSkillEfficacyReservations = `-- name: RecoverStaleSkillEfficacyReservations :one
+WITH stale AS (
+  SELECT c.id, c.claim_token, c.updated_at
+  FROM skill_efficacy_evaluations c
+  WHERE c.project_id = $1
+    AND c.state = 'reserved'
+    AND c.updated_at < now() - $2::interval
+  ORDER BY c.updated_at, c.id
+  LIMIT $3
+  FOR UPDATE SKIP LOCKED
+), recovered AS (
+  UPDATE skill_efficacy_evaluations e
+  SET attempts = e.attempts + 1,
+      last_error = $4,
+      state = CASE WHEN e.attempts + 1 >= $5::integer THEN 'failed' ELSE 'pending' END,
+      failed_at = CASE WHEN e.attempts + 1 >= $5::integer THEN clock_timestamp() ELSE e.failed_at END,
+      claim_token = NULL,
+      updated_at = clock_timestamp()
+  FROM stale s
+  WHERE e.project_id = $1
+    AND e.id = s.id
+    AND e.state = 'reserved'
+    AND e.claim_token IS NOT DISTINCT FROM s.claim_token
+    AND e.updated_at = s.updated_at
+  RETURNING e.state
+)
+SELECT
+  count(*) FILTER (WHERE state = 'pending') AS recovered,
+  count(*) FILTER (WHERE state = 'failed') AS dead_lettered
+FROM recovered
 `
 
-type ReserveSkillEfficacyEvaluationsParams struct {
-	ReservedOn pgtype.Date
-	ProjectID  uuid.UUID
-	Ids        []uuid.UUID
+type RecoverStaleSkillEfficacyReservationsParams struct {
+	ProjectID   uuid.UUID
+	StaleAfter  pgtype.Interval
+	BatchSize   int32
+	LastError   pgtype.Text
+	MaxAttempts int32
 }
 
-func (q *Queries) ReserveSkillEfficacyEvaluations(ctx context.Context, arg ReserveSkillEfficacyEvaluationsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, reserveSkillEfficacyEvaluations, arg.ReservedOn, arg.ProjectID, arg.Ids)
+type RecoverStaleSkillEfficacyReservationsRow struct {
+	Recovered    int64
+	DeadLettered int64
+}
+
+// Bounded recovery for abandoned reservations. The row lock keeps concurrent
+// sweepers disjoint; the ownership predicates fence a worker that raced the
+// recovery. reserved_on is deliberately retained as immutable spend history.
+func (q *Queries) RecoverStaleSkillEfficacyReservations(ctx context.Context, arg RecoverStaleSkillEfficacyReservationsParams) (RecoverStaleSkillEfficacyReservationsRow, error) {
+	row := q.db.QueryRow(ctx, recoverStaleSkillEfficacyReservations,
+		arg.ProjectID,
+		arg.StaleAfter,
+		arg.BatchSize,
+		arg.LastError,
+		arg.MaxAttempts,
+	)
+	var i RecoverStaleSkillEfficacyReservationsRow
+	err := row.Scan(&i.Recovered, &i.DeadLettered)
+	return i, err
+}
+
+const refreshSkillEfficacyEvaluationClaim = `-- name: RefreshSkillEfficacyEvaluationClaim :execrows
+UPDATE skill_efficacy_evaluations
+SET updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = $2
+  AND state = 'reserved'
+  AND claim_token = $3::uuid
+`
+
+type RefreshSkillEfficacyEvaluationClaimParams struct {
+	ProjectID  uuid.UUID
+	ID         uuid.UUID
+	ClaimToken uuid.UUID
+}
+
+// Reassert ownership immediately before publishing the external score. The
+// updated_at bump keeps lease claimers from rotating the token during the sink
+// write and scored transition.
+func (q *Queries) RefreshSkillEfficacyEvaluationClaim(ctx context.Context, arg RefreshSkillEfficacyEvaluationClaimParams) (int64, error) {
+	result, err := q.db.Exec(ctx, refreshSkillEfficacyEvaluationClaim, arg.ProjectID, arg.ID, arg.ClaimToken)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const resetStaleSkillEfficacyReservations = `-- name: ResetStaleSkillEfficacyReservations :execrows
+const reserveSkillEfficacyEvaluations = `-- name: ReserveSkillEfficacyEvaluations :execrows
 UPDATE skill_efficacy_evaluations
-SET state = 'pending',
-    reserved_on = NULL,
+SET state = 'reserved',
+    reserved_on = coalesce(reserved_on, $1::date),
+    claim_token = $2::uuid,
     updated_at = clock_timestamp()
-WHERE project_id = $1
-  AND state = 'reserved'
-  AND updated_at < now() - $2::interval
+WHERE project_id = $3
+  AND id = ANY($4::uuid[])
+  AND state = 'pending'
+  AND claim_token IS NULL
+  AND failed_at IS NULL
 `
 
-type ResetStaleSkillEfficacyReservationsParams struct {
+type ReserveSkillEfficacyEvaluationsParams struct {
+	ReservedOn pgtype.Date
+	ClaimToken uuid.UUID
 	ProjectID  uuid.UUID
-	StaleAfter pgtype.Interval
+	Ids        []uuid.UUID
 }
 
-// Returns a crashed reservation to the queue. attempts is preserved so a
-// poisonous unit still terminates at the attempt ceiling.
-func (q *Queries) ResetStaleSkillEfficacyReservations(ctx context.Context, arg ResetStaleSkillEfficacyReservationsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, resetStaleSkillEfficacyReservations, arg.ProjectID, arg.StaleAfter)
+func (q *Queries) ReserveSkillEfficacyEvaluations(ctx context.Context, arg ReserveSkillEfficacyEvaluationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reserveSkillEfficacyEvaluations,
+		arg.ReservedOn,
+		arg.ClaimToken,
+		arg.ProjectID,
+		arg.Ids,
+	)
 	if err != nil {
 		return 0, err
 	}
