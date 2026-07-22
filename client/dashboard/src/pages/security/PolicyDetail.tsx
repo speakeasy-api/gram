@@ -95,10 +95,11 @@ import {
 import {
   ActionPicker,
   CustomizeRulesSheet,
-  DetectorCard,
   PolicyAudiencePicker,
   RuleSelectList,
 } from "./PolicyCenter";
+import { DetectorCard } from "./DetectorCard";
+import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
 import {
   ALL_CATEGORIES,
   CATEGORY_LEVEL_DETECTORS,
@@ -3663,6 +3664,13 @@ export function StandardPolicyEditor({
   // Toggle a whole built-in detector category (clears its per-rule disables).
   // Flag-only categories force the policy action to flag.
   const toggleCategory = (cat: RuleCategory, checked: boolean) => {
+    if (
+      checked &&
+      builtInRuleDisabledReason(cat, selectedCategories) !== undefined
+    ) {
+      return;
+    }
+
     const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
     const nextCats = new Set(selectedCategories);
     const nextDisabled = new Set(disabledRules);
@@ -3827,6 +3835,10 @@ export function StandardPolicyEditor({
                       category={cat}
                       selected={selectedCategories.has(cat)}
                       disabledRules={disabledRules}
+                      disabledReason={builtInRuleDisabledReason(
+                        cat,
+                        selectedCategories,
+                      )}
                       onToggle={(checked) => toggleCategory(cat, checked)}
                       onCustomize={() => setCustomizeCategory(cat)}
                     />
