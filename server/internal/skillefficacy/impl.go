@@ -145,6 +145,9 @@ func (s *Service) UpsertSettings(ctx context.Context, payload *gen.UpsertSetting
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := skillsrepo.New(dbtx)
+	if err := queries.LockOrganizationSkillEfficacyBudget(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock skill efficacy settings").LogError(ctx, logger)
+	}
 	var beforeSnapshot *audit.SkillEfficacySettingsSnapshot
 	before, err := queries.GetSkillEfficacySettingsForOrganization(ctx, authCtx.ActiveOrganizationID)
 	switch {

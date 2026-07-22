@@ -2945,6 +2945,17 @@ func (q *Queries) LoadReservedSkillEfficacyEvaluations(ctx context.Context, arg 
 	return items, nil
 }
 
+const lockOrganizationSkillEfficacyBudget = `-- name: LockOrganizationSkillEfficacyBudget :exec
+SELECT pg_advisory_xact_lock(hashtextextended('skill-efficacy:' || $1::text, 0))
+`
+
+// Settings updates share the reservation lock so their audit snapshot and the
+// sampling policy observed by reservations both describe committed state.
+func (q *Queries) LockOrganizationSkillEfficacyBudget(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockOrganizationSkillEfficacyBudget, organizationID)
+	return err
+}
+
 const lockProjectOrganizationSkillEfficacyBudget = `-- name: LockProjectOrganizationSkillEfficacyBudget :exec
 SELECT pg_advisory_xact_lock(hashtextextended('skill-efficacy:' || p.organization_id, 0))
 FROM projects p

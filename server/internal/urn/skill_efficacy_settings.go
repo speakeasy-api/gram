@@ -9,15 +9,10 @@ import (
 
 type SkillEfficacySettings struct {
 	ID string
-
-	checked bool
-	err     error
 }
 
 func NewSkillEfficacySettings(organizationID string) SkillEfficacySettings {
-	u := SkillEfficacySettings{ID: organizationID, checked: false, err: nil}
-	_ = u.validate()
-	return u
+	return SkillEfficacySettings{ID: organizationID}
 }
 
 func ParseSkillEfficacySettings(value string) (SkillEfficacySettings, error) {
@@ -34,7 +29,11 @@ func ParseSkillEfficacySettings(value string) (SkillEfficacySettings, error) {
 		return SkillEfficacySettings{}, fmt.Errorf("%w: expected skill_efficacy_settings urn (got: %q)", ErrInvalid, truncated)
 	}
 
-	return NewSkillEfficacySettings(parts[1]), nil
+	parsed := NewSkillEfficacySettings(parts[1])
+	if err := parsed.validate(); err != nil {
+		return SkillEfficacySettings{}, err
+	}
+	return parsed, nil
 }
 
 func (u SkillEfficacySettings) IsZero() bool {
@@ -117,17 +116,15 @@ func (u *SkillEfficacySettings) UnmarshalText(text []byte) error {
 	return nil
 }
 
-func (u *SkillEfficacySettings) validate() error {
-	if u.checked {
-		return u.err
-	}
-	u.checked = true
-
+func (u SkillEfficacySettings) validate() error {
 	switch {
 	case u.ID == "":
-		u.err = fmt.Errorf("%w: empty id", ErrInvalid)
+		return fmt.Errorf("%w: empty id", ErrInvalid)
+	case len(u.ID) > maxSegmentLength:
+		return fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxSegmentLength, len(u.ID))
 	case strings.Contains(u.ID, delimiter):
-		u.err = fmt.Errorf("%w: id contains delimiter", ErrInvalid)
+		return fmt.Errorf("%w: id contains delimiter", ErrInvalid)
+	default:
+		return nil
 	}
-	return u.err
 }

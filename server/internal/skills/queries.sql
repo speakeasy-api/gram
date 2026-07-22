@@ -1172,6 +1172,11 @@ SELECT pg_advisory_xact_lock(hashtextextended('skill-efficacy:' || p.organizatio
 FROM projects p
 WHERE p.id = @project_id::uuid;
 
+-- name: LockOrganizationSkillEfficacyBudget :exec
+-- Settings updates share the reservation lock so their audit snapshot and the
+-- sampling policy observed by reservations both describe committed state.
+SELECT pg_advisory_xact_lock(hashtextextended('skill-efficacy:' || @organization_id::text, 0));
+
 -- name: GetSkillEfficacySettingsForProject :one
 -- All-null settings columns mean the organization has no row, and Go applies
 -- the package defaults.
