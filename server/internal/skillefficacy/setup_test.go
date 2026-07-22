@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	pfrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/skillefficacy"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -47,6 +48,13 @@ type testInstance struct {
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	return newTestServiceWithInsights(t, telemetryrepo.New(chConn))
+}
+
+func newTestServiceWithInsights(t *testing.T, insights skillefficacy.InsightsReader) (context.Context, *testInstance) {
+	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -65,7 +73,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	return ctx, &testInstance{
-		service:  skillefficacy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger()),
+		service:  skillefficacy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), insights),
 		conn:     conn,
 		features: features,
 	}
@@ -91,6 +99,18 @@ func withGrant(t *testing.T, ctx context.Context, scope authz.Scope) context.Con
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	return authztest.WithExactGrants(t, ctx, authz.NewGrant(scope, authCtx.ActiveOrganizationID))
+}
+
+func withProjectGrants(t *testing.T, ctx context.Context, scopes ...authz.Scope) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	grants := make([]authz.Grant, 0, len(scopes))
+	for _, scope := range scopes {
+		grants = append(grants, authz.NewGrant(scope, authCtx.ProjectID.String()))
+	}
+	return authztest.WithExactGrants(t, ctx, grants...)
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

@@ -202,6 +202,55 @@ func TestQuerySkillInsightsAggregatesMappingsAndScoresWithoutUsage(t *testing.T)
 	require.EqualValues(t, 1, rows[0].PartiallyFollowedCount)
 }
 
+func TestListSkillEfficacyScoreSessionsReturnsActivationAndVerdict(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	queries := repo.New(conn)
+
+	orgID := uuid.NewString()
+	projectID := uuid.New()
+	activatedAt := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	score := efficacyScoreFixture(t, orgID, projectID.String(), activatedAt.Add(40*time.Minute))
+	score.SessionID = "scored-session-list"
+	score.Surface = "assistant"
+	score.GramChatID = uuid.NewString()
+	minutes := 7.0
+	score.EstMinutesSaved = &minutes
+	require.NoError(t, queries.InsertSkillSessionVersions(ctx, []repo.SkillSessionVersion{{
+		ID:              uuid.New(),
+		CreatedAt:       activatedAt,
+		SeenAt:          activatedAt,
+		OrganizationID:  orgID,
+		ProjectID:       projectID,
+		SessionID:       score.SessionID,
+		SkillID:         score.SkillID,
+		SkillVersionID:  score.SkillVersionID,
+		CanonicalSHA256: score.CanonicalSHA256,
+		Surface:         score.Surface,
+	}}))
+	require.NoError(t, queries.InsertSkillEfficacyScores(ctx, []repo.SkillEfficacyScore{score}))
+	testenv.FlushClickHouseAsyncInserts(t, conn)
+
+	rows, err := queries.ListSkillEfficacyScoreSessions(ctx, repo.ListSkillEfficacyScoreSessionsParams{
+		OrganizationID: orgID,
+		ProjectID:      projectID.String(),
+		SkillIDs:       []string{score.SkillID.String()},
+		From:           activatedAt.Add(-time.Hour),
+		To:             activatedAt.Add(time.Hour),
+		Limit:          100,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, score.ID.String(), rows[0].ID)
+	require.Equal(t, activatedAt, rows[0].ActivatedAt)
+	require.Equal(t, score.Rationale, rows[0].Rationale)
+	require.Equal(t, score.GramChatID, rows[0].GramChatID)
+	require.Equal(t, score.Flags, rows[0].Flags)
+}
+
 func TestInsertSkillEfficacyScores_ClassifiesConstraintViolations(t *testing.T) {
 	t.Parallel()
 

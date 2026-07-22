@@ -9,6 +9,7 @@ import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { Skill } from "@gram/client/models/components/skill.js";
+import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { type Column, Icon, Table } from "@speakeasy-api/moonshine";
 import { useRoutes } from "@/routes";
@@ -21,7 +22,12 @@ import {
   SKILL_SOURCE_OPTIONS,
 } from "./skill-badge-options";
 import { SkillClassificationBadge, SkillSourceBadge } from "./skill-badges";
-import { filterSkills, skillCountLabel } from "./skills-list-helpers";
+import {
+  filterSkills,
+  skillCountLabel,
+  type SkillSort,
+  sortSkills,
+} from "./skills-list-helpers";
 import { UnknownSkillActivationsSection } from "./UnknownSkillActivationsSection";
 import { useDrainSkillPages } from "./use-drain-skill-pages";
 
@@ -41,6 +47,21 @@ const FILTER_OPTIONS = {
 };
 
 const RESULT_PAGE_SIZE = 200;
+const INSIGHT_SORT_OPTIONS = [
+  { value: "updated", label: "Recently updated" },
+  { value: "activations", label: "Most activated" },
+  { value: "efficacy", label: "Highest efficacy" },
+  { value: "estimated_savings", label: "Most estimated savings" },
+];
+
+function formatEfficacy(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatSavings(minutes: number): string {
+  if (minutes < 60) return `${minutes.toFixed(minutes < 10 ? 1 : 0)} min`;
+  return `${(minutes / 60).toFixed(1)} hr`;
+}
 
 function noResultsMessage(
   draining: boolean,
@@ -58,6 +79,7 @@ export default function SkillsList(): JSX.Element {
   const navigate = useNavigate();
   const filters = useFilterState(SKILL_FILTERS);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SkillSort>("updated");
   const deferredSearch = useDeferredValue(search);
   const [dialogOpen, setDialogOpen] = useState(false);
   // Legacy deep links opened the skill as a sheet via ?skill=<id>; redirect
@@ -71,23 +93,43 @@ export default function SkillsList(): JSX.Element {
     () => query.data?.pages.flatMap((page) => page.result.skills) ?? [],
     [query.data?.pages],
   );
+  const insightsQuery = useSkillEfficacyInsights({}, undefined, {
+    throwOnError: false,
+    enabled: skills.length > 0,
+  });
+  const metricsBySkill = useMemo(
+    () =>
+      new Map(
+        insightsQuery.data?.insights.map((insight) => [
+          insight.skillId,
+          insight.metrics,
+        ]) ?? [],
+      ),
+    [insightsQuery.data?.insights],
+  );
   const active =
     deferredSearch.trim().length > 0 ||
     filters.values.sourceKind.length > 0 ||
     filters.values.classification.length > 0;
   const visibleSkills = useMemo(
     () =>
-      filterSkills(
-        skills,
-        deferredSearch,
-        filters.values.sourceKind,
-        filters.values.classification,
+      sortSkills(
+        filterSkills(
+          skills,
+          deferredSearch,
+          filters.values.sourceKind,
+          filters.values.classification,
+        ),
+        metricsBySkill,
+        sort,
       ),
     [
       deferredSearch,
       filters.values.classification,
       filters.values.sourceKind,
+      metricsBySkill,
       skills,
+      sort,
     ],
   );
 
@@ -150,8 +192,55 @@ export default function SkillsList(): JSX.Element {
     {
       key: "versions",
       header: "Versions",
-      width: "100px",
+      width: "90px",
       render: (skill) => <Type small>{skill.versionCount}</Type>,
+    },
+    {
+      key: "activations",
+      header: "Activations (30d)",
+      width: "130px",
+      render: (skill) => (
+        <Type small className="tabular-nums">
+          {metricsBySkill.get(skill.id)?.activations.toLocaleString() ??
+            (insightsQuery.data ? "0" : "-")}
+        </Type>
+      ),
+    },
+    {
+      key: "efficacy",
+      header: "Efficacy",
+      width: "110px",
+      render: (skill) => {
+        const efficacy = metricsBySkill.get(skill.id)?.efficacy;
+        return (
+          <Type
+            small
+            className="tabular-nums"
+            title={
+              efficacy
+                ? `${efficacy.scoredSessions.toLocaleString()} sampled sessions`
+                : "No sampled scores"
+            }
+          >
+            {efficacy ? formatEfficacy(efficacy.averageScore) : "-"}
+          </Type>
+        );
+      },
+    },
+    {
+      key: "estimatedSavings",
+      header: "Estimated savings",
+      width: "150px",
+      render: (skill) => {
+        const efficacy = metricsBySkill.get(skill.id)?.efficacy;
+        return (
+          <Type small className="tabular-nums">
+            {efficacy
+              ? formatSavings(efficacy.estimatedMinutesSavedTotal)
+              : "-"}
+          </Type>
+        );
+      },
     },
     {
       key: "updated",
@@ -244,9 +333,25 @@ export default function SkillsList(): JSX.Element {
                     }}
                   />
                   <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
+                  <Page.Toolbar.SortBy
+                    value={sort}
+                    onChange={(value) => {
+                      setSort(value as SkillSort);
+                      setDisplayCount(RESULT_PAGE_SIZE);
+                    }}
+                    options={INSIGHT_SORT_OPTIONS}
+                  />
                   <Page.Toolbar.Refresh
-                    onRefresh={() => void query.refetch()}
-                    isRefreshing={query.isFetching && !query.isFetchingNextPage}
+                    onRefresh={() => {
+                      void Promise.all([
+                        query.refetch(),
+                        insightsQuery.refetch(),
+                      ]);
+                    }}
+                    isRefreshing={
+                      (query.isFetching && !query.isFetchingNextPage) ||
+                      insightsQuery.isFetching
+                    }
                   />
                 </Page.Toolbar>
               )}
@@ -278,7 +383,7 @@ export default function SkillsList(): JSX.Element {
                     onRowClick={(skill) =>
                       void navigate(routes.skills.detail.href(skill.id))
                     }
-                    className="min-w-[900px]"
+                    className="min-w-[1100px]"
                     noResultsMessage={noResultsMessage(
                       draining,
                       active,

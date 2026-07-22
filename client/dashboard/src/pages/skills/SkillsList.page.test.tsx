@@ -57,6 +57,13 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
     refetch: vi.fn(),
   }),
 }));
+vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
+  useSkillEfficacyInsights: () => ({
+    data: { insights: [] },
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
   useUnknownSkillActivationsInfinite: (
     _request: unknown,
@@ -90,6 +97,7 @@ vi.mock("@/components/page-layout", () => {
   const Toolbar = Object.assign(Wrapper, {
     Search,
     Filters: () => null,
+    SortBy: () => null,
     Count: Wrapper,
     Refresh: () => null,
   });

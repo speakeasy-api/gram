@@ -21,6 +21,7 @@ type Server struct {
 	Mounts         []*MountPoint
 	GetSettings    http.Handler
 	UpsertSettings http.Handler
+	QueryInsights  http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,9 +53,11 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetSettings", "GET", "/rpc/skillEfficacy.getSettings"},
 			{"UpsertSettings", "POST", "/rpc/skillEfficacy.upsertSettings"},
+			{"QueryInsights", "GET", "/rpc/skillEfficacy.queryInsights"},
 		},
 		GetSettings:    NewGetSettingsHandler(e.GetSettings, mux, decoder, encoder, errhandler, formatter),
 		UpsertSettings: NewUpsertSettingsHandler(e.UpsertSettings, mux, decoder, encoder, errhandler, formatter),
+		QueryInsights:  NewQueryInsightsHandler(e.QueryInsights, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -65,6 +68,7 @@ func (s *Server) Service() string { return "skillEfficacy" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSettings = m(s.GetSettings)
 	s.UpsertSettings = m(s.UpsertSettings)
+	s.QueryInsights = m(s.QueryInsights)
 }
 
 // MethodNames returns the methods served.
@@ -74,6 +78,7 @@ func (s *Server) MethodNames() []string { return skillefficacy.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSettingsHandler(mux, h.GetSettings)
 	MountUpsertSettingsHandler(mux, h.UpsertSettings)
+	MountQueryInsightsHandler(mux, h.QueryInsights)
 }
 
 // Mount configures the mux to serve the skillEfficacy endpoints.
@@ -164,6 +169,59 @@ func NewUpsertSettingsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "upsertSettings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skillEfficacy")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountQueryInsightsHandler configures the mux to serve the "skillEfficacy"
+// service "queryInsights" endpoint.
+func MountQueryInsightsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skillEfficacy.queryInsights", f)
+}
+
+// NewQueryInsightsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "skillEfficacy" service "queryInsights" endpoint.
+func NewQueryInsightsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeQueryInsightsRequest(mux, decoder)
+		encodeResponse = EncodeQueryInsightsResponse(encoder)
+		encodeError    = EncodeQueryInsightsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "queryInsights")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "skillEfficacy")
 		payload, err := decodeRequest(r)
 		if err != nil {

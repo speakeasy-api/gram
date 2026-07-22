@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	skillefficacy "github.com/speakeasy-api/gram/server/gen/skill_efficacy"
 	goa "goa.design/goa/v3/pkg"
@@ -89,6 +90,85 @@ func BuildUpsertSettingsPayload(skillEfficacyUpsertSettingsBody string, skillEff
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildQueryInsightsPayload builds the payload for the skillEfficacy
+// queryInsights endpoint from CLI flags.
+func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillEfficacyQueryInsightsFrom string, skillEfficacyQueryInsightsTo string, skillEfficacyQueryInsightsIncludeVersions string, skillEfficacyQueryInsightsIncludeScoredSessions string, skillEfficacyQueryInsightsSessionToken string, skillEfficacyQueryInsightsProjectSlugInput string) (*skillefficacy.QueryInsightsPayload, error) {
+	var err error
+	var skillIds []string
+	{
+		if skillEfficacyQueryInsightsSkillIds != "" {
+			err = json.Unmarshal([]byte(skillEfficacyQueryInsightsSkillIds), &skillIds)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for skillIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
+			}
+		}
+	}
+	var from *string
+	{
+		if skillEfficacyQueryInsightsFrom != "" {
+			from = &skillEfficacyQueryInsightsFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if skillEfficacyQueryInsightsTo != "" {
+			to = &skillEfficacyQueryInsightsTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var includeVersions *bool
+	{
+		if skillEfficacyQueryInsightsIncludeVersions != "" {
+			var val bool
+			val, err = strconv.ParseBool(skillEfficacyQueryInsightsIncludeVersions)
+			includeVersions = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeVersions, must be BOOL")
+			}
+		}
+	}
+	var includeScoredSessions *bool
+	{
+		if skillEfficacyQueryInsightsIncludeScoredSessions != "" {
+			var val bool
+			val, err = strconv.ParseBool(skillEfficacyQueryInsightsIncludeScoredSessions)
+			includeScoredSessions = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeScoredSessions, must be BOOL")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if skillEfficacyQueryInsightsSessionToken != "" {
+			sessionToken = &skillEfficacyQueryInsightsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillEfficacyQueryInsightsProjectSlugInput != "" {
+			projectSlugInput = &skillEfficacyQueryInsightsProjectSlugInput
+		}
+	}
+	v := &skillefficacy.QueryInsightsPayload{}
+	v.SkillIds = skillIds
+	v.From = from
+	v.To = to
+	v.IncludeVersions = includeVersions
+	v.IncludeScoredSessions = includeScoredSessions
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

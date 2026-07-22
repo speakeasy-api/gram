@@ -46,6 +46,85 @@ type QuerySkillInsightsParams struct {
 	IntervalSeconds int64
 }
 
+type ListSkillEfficacyScoreSessionsParams struct {
+	OrganizationID string
+	ProjectID      string
+	SkillIDs       []string
+	From           time.Time
+	To             time.Time
+	Limit          uint64
+}
+
+type SkillEfficacyScoreSession struct {
+	ID                    string    `ch:"id"`
+	SkillID               string    `ch:"skill_id"`
+	SkillVersionID        string    `ch:"skill_version_id"`
+	Surface               string    `ch:"surface"`
+	ActivatedAt           time.Time `ch:"activated_at"`
+	ScoredAt              time.Time `ch:"scored_at"`
+	Score                 float64   `ch:"score"`
+	Rationale             string    `ch:"rationale"`
+	EstimatedTurnsSaved   *float64  `ch:"estimated_turns_saved"`
+	EstimatedMinutesSaved *float64  `ch:"estimated_minutes_saved"`
+	ROIConfidence         *string   `ch:"roi_confidence"`
+	Flags                 []string  `ch:"flags"`
+	GramChatID            string    `ch:"gram_chat_id"`
+}
+
+func (q *Queries) ListSkillEfficacyScoreSessions(ctx context.Context, arg ListSkillEfficacyScoreSessionsParams) ([]SkillEfficacyScoreSession, error) {
+	if arg.OrganizationID == "" || arg.ProjectID == "" || len(arg.SkillIDs) == 0 || !arg.From.Before(arg.To) || arg.Limit == 0 || arg.Limit > 100 {
+		return nil, fmt.Errorf("list skill efficacy score sessions: invalid scope, window, or limit")
+	}
+	mappings := sq.Select(
+		"toString(project_id) AS project_id", "session_id", "surface",
+		"toString(skill_id) AS skill_id", "toString(skill_version_id) AS skill_version_id",
+		"max(seen_at) AS activated_at",
+	).
+		From("skill_session_versions").
+		Where(squirrel.Eq{"organization_id": arg.OrganizationID}).
+		Where(squirrel.Eq{"project_id": arg.ProjectID}).
+		Where(squirrel.Eq{"toString(skill_id)": arg.SkillIDs}).
+		Where("seen_at >= ?", arg.From).
+		Where("seen_at <= ?", arg.To).
+		GroupBy("project_id", "session_id", "surface", "skill_id", "skill_version_id")
+	mappingSQL, mappingArgs, err := mappings.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building scored session mappings query: %w", err)
+	}
+	query, args, err := sq.Select(
+		"toString(e.id) AS id", "toString(e.skill_id) AS skill_id", "toString(e.skill_version_id) AS skill_version_id",
+		"e.surface AS surface", "m.activated_at AS activated_at", "e.created_at AS scored_at", "e.score AS score",
+		"e.rationale AS rationale", "e.est_turns_saved AS estimated_turns_saved", "e.est_minutes_saved AS estimated_minutes_saved",
+		"e.roi_confidence AS roi_confidence", "e.flags AS flags", "e.gram_chat_id AS gram_chat_id",
+	).
+		From("skill_efficacy_scores e").
+		Join("mappings m ON m.project_id = e.project_id AND m.session_id = e.session_id AND m.surface = e.surface AND m.skill_id = toString(e.skill_id) AND m.skill_version_id = toString(e.skill_version_id)").
+		Where(squirrel.Eq{"e.organization_id": arg.OrganizationID}).
+		Where(squirrel.Eq{"e.project_id": arg.ProjectID}).
+		Where(squirrel.Eq{"toString(e.skill_id)": arg.SkillIDs}).
+		OrderBy("e.created_at DESC", "e.id DESC").
+		Limit(arg.Limit).
+		Prefix("WITH mappings AS ("+mappingSQL+")", mappingArgs...).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building scored sessions query: %w", err)
+	}
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying scored sessions: %w", err)
+	}
+	defer rows.Close()
+	var result []SkillEfficacyScoreSession
+	for rows.Next() {
+		var row SkillEfficacyScoreSession
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning scored session: %w", err)
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
+}
+
 // SkillInsightBucket is one activation-time bucket for a skill version. Score
 // and ROI fields are sums plus sample counts so callers can combine buckets
 // without averaging averages.

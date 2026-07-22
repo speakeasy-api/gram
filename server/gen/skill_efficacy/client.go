@@ -17,13 +17,15 @@ import (
 type Client struct {
 	GetSettingsEndpoint    goa.Endpoint
 	UpsertSettingsEndpoint goa.Endpoint
+	QueryInsightsEndpoint  goa.Endpoint
 }
 
 // NewClient initializes a "skillEfficacy" service client given the endpoints.
-func NewClient(getSettings, upsertSettings goa.Endpoint) *Client {
+func NewClient(getSettings, upsertSettings, queryInsights goa.Endpoint) *Client {
 	return &Client{
 		GetSettingsEndpoint:    getSettings,
 		UpsertSettingsEndpoint: upsertSettings,
+		QueryInsightsEndpoint:  queryInsights,
 	}
 }
 
@@ -70,4 +72,27 @@ func (c *Client) UpsertSettings(ctx context.Context, p *UpsertSettingsPayload) (
 		return
 	}
 	return ires.(*SkillEfficacySettings), nil
+}
+
+// QueryInsights calls the "queryInsights" endpoint of the "skillEfficacy"
+// service.
+// QueryInsights may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) QueryInsights(ctx context.Context, p *QueryInsightsPayload) (res *SkillEfficacyInsightsResult, err error) {
+	var ires any
+	ires, err = c.QueryInsightsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SkillEfficacyInsightsResult), nil
 }

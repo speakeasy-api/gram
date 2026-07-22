@@ -31,6 +31,10 @@ import {
 import { EditSkillDetailsDialog } from "./EditSkillDetailsDialog";
 import { SkillDistributionsSection } from "./SkillDistributionsSection";
 import {
+  SKILL_INSIGHTS_SECTION_ID,
+  SkillInsightsSection,
+} from "./SkillInsightsSection";
+import {
   SKILL_ADOPTION_SECTION_ID,
   SKILL_TIMELINE_SECTION_ID,
   SkillActivitySections,
@@ -51,6 +55,7 @@ const SKILL_DANGER_SECTION_ID = "danger";
 
 const SKILL_SECTION_IDS: readonly string[] = [
   SKILL_ADOPTION_SECTION_ID,
+  SKILL_INSIGHTS_SECTION_ID,
   SKILL_MANIFEST_SECTION_ID,
   SKILL_FRONTMATTER_SECTION_ID,
   SKILL_DISTRIBUTIONS_SECTION_ID,
@@ -218,6 +223,8 @@ function SkillDetailSections({
       </SettingsSection>
 
       <SkillActivitySections data={skillQueryData} />
+
+      <SkillInsightsSection data={skillQueryData} />
 
       <SettingsSection id={SKILL_MANIFEST_SECTION_ID}>
         <SettingsSection.Header>

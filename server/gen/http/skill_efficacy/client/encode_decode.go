@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -488,4 +489,388 @@ func DecodeUpsertSettingsResponse(decoder func(*http.Response) goahttp.Decoder, 
 			return nil, goahttp.ErrInvalidResponse("skillEfficacy", "upsertSettings", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// BuildQueryInsightsRequest instantiates a HTTP request object with method and
+// path set to call the "skillEfficacy" service "queryInsights" endpoint
+func (c *Client) BuildQueryInsightsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: QueryInsightsSkillEfficacyPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skillEfficacy", "queryInsights", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeQueryInsightsRequest returns an encoder for requests sent to the
+// skillEfficacy queryInsights server.
+func EncodeQueryInsightsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skillefficacy.QueryInsightsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skillEfficacy", "queryInsights", "*skillefficacy.QueryInsightsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		for _, value := range p.SkillIds {
+			values.Add("skill_ids", value)
+		}
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		if p.IncludeVersions != nil {
+			values.Add("include_versions", fmt.Sprintf("%v", *p.IncludeVersions))
+		}
+		if p.IncludeScoredSessions != nil {
+			values.Add("include_scored_sessions", fmt.Sprintf("%v", *p.IncludeScoredSessions))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeQueryInsightsResponse returns a decoder for responses returned by the
+// skillEfficacy queryInsights endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeQueryInsightsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeQueryInsightsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body QueryInsightsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skillEfficacy", "queryInsights", err)
+			}
+			err = ValidateQueryInsightsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skillEfficacy", "queryInsights", err)
+			}
+			res := NewQueryInsightsSkillEfficacyInsightsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body QueryInsightsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skillEfficacy", "queryInsights", err)
+			}
+			err = ValidateQueryInsightsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skillEfficacy", "queryInsights", err)
+			}
+			return nil, NewQueryInsightsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body QueryInsightsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skillEfficacy", "queryInsights", err)
+			}
+			err = ValidateQueryInsightsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skillEfficacy", "queryInsights", err)
+			}
+			return nil, NewQueryInsightsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body QueryInsightsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skillEfficacy", "queryInsights", err)
+			}
+			err = ValidateQueryInsightsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skillEfficacy", "queryInsights", err)
+			}
+			return nil, NewQueryInsightsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body QueryInsightsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skillEfficacy", "queryInsights", err)
+			}
+			err = ValidateQueryInsightsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skillEfficacy", "queryInsights", err)
+			}
+			return nil, NewQueryInsightsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body QueryInsightsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skillEfficacy", "queryInsights", err)
+			}
+			err = ValidateQueryInsightsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skillEfficacy", "queryInsights", err)
+			}
+			return nil, NewQueryInsightsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body QueryInsightsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skillEfficacy", "queryInsights", err)
+			}
+			err = ValidateQueryInsightsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skillEfficacy", "queryInsights", err)
+			}
+			return nil, NewQueryInsightsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body QueryInsightsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skillEfficacy", "queryInsights", err)
+			}
+			err = ValidateQueryInsightsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skillEfficacy", "queryInsights", err)
+			}
+			return nil, NewQueryInsightsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body QueryInsightsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skillEfficacy", "queryInsights", err)
+				}
+				err = ValidateQueryInsightsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skillEfficacy", "queryInsights", err)
+				}
+				return nil, NewQueryInsightsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body QueryInsightsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skillEfficacy", "queryInsights", err)
+				}
+				err = ValidateQueryInsightsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skillEfficacy", "queryInsights", err)
+				}
+				return nil, NewQueryInsightsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skillEfficacy", "queryInsights", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body QueryInsightsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skillEfficacy", "queryInsights", err)
+			}
+			err = ValidateQueryInsightsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skillEfficacy", "queryInsights", err)
+			}
+			return nil, NewQueryInsightsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skillEfficacy", "queryInsights", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// unmarshalSkillEfficacyInsightResponseBodyToSkillefficacySkillEfficacyInsight
+// builds a value of type *skillefficacy.SkillEfficacyInsight from a value of
+// type *SkillEfficacyInsightResponseBody.
+func unmarshalSkillEfficacyInsightResponseBodyToSkillefficacySkillEfficacyInsight(v *SkillEfficacyInsightResponseBody) *skillefficacy.SkillEfficacyInsight {
+	res := &skillefficacy.SkillEfficacyInsight{
+		SkillID: *v.SkillID,
+	}
+	res.Metrics = unmarshalSkillInsightMetricsResponseBodyToSkillefficacySkillInsightMetrics(v.Metrics)
+	res.Versions = make([]*skillefficacy.SkillVersionInsight, len(v.Versions))
+	for i, val := range v.Versions {
+		if val == nil {
+			res.Versions[i] = nil
+			continue
+		}
+		res.Versions[i] = unmarshalSkillVersionInsightResponseBodyToSkillefficacySkillVersionInsight(val)
+	}
+
+	return res
+}
+
+// unmarshalSkillInsightMetricsResponseBodyToSkillefficacySkillInsightMetrics
+// builds a value of type *skillefficacy.SkillInsightMetrics from a value of
+// type *SkillInsightMetricsResponseBody.
+func unmarshalSkillInsightMetricsResponseBodyToSkillefficacySkillInsightMetrics(v *SkillInsightMetricsResponseBody) *skillefficacy.SkillInsightMetrics {
+	res := &skillefficacy.SkillInsightMetrics{
+		Activations:           *v.Activations,
+		ActivatedSessions:     *v.ActivatedSessions,
+		SessionCostUsd:        *v.SessionCostUsd,
+		AverageSessionCostUsd: v.AverageSessionCostUsd,
+	}
+	if v.Efficacy != nil {
+		res.Efficacy = unmarshalSkillEfficacyMetricsResponseBodyToSkillefficacySkillEfficacyMetrics(v.Efficacy)
+	}
+
+	return res
+}
+
+// unmarshalSkillEfficacyMetricsResponseBodyToSkillefficacySkillEfficacyMetrics
+// builds a value of type *skillefficacy.SkillEfficacyMetrics from a value of
+// type *SkillEfficacyMetricsResponseBody.
+func unmarshalSkillEfficacyMetricsResponseBodyToSkillefficacySkillEfficacyMetrics(v *SkillEfficacyMetricsResponseBody) *skillefficacy.SkillEfficacyMetrics {
+	if v == nil {
+		return nil
+	}
+	res := &skillefficacy.SkillEfficacyMetrics{
+		ScoredSessions:               *v.ScoredSessions,
+		AverageScore:                 *v.AverageScore,
+		EstimatedTurnsSavedTotal:     *v.EstimatedTurnsSavedTotal,
+		EstimatedTurnsSavedAverage:   v.EstimatedTurnsSavedAverage,
+		EstimatedTurnsSavedSamples:   *v.EstimatedTurnsSavedSamples,
+		EstimatedMinutesSavedTotal:   *v.EstimatedMinutesSavedTotal,
+		EstimatedMinutesSavedAverage: v.EstimatedMinutesSavedAverage,
+		EstimatedMinutesSavedSamples: *v.EstimatedMinutesSavedSamples,
+	}
+	res.RoiConfidenceCounts = make(map[string]uint64, len(v.RoiConfidenceCounts))
+	for key, val := range v.RoiConfidenceCounts {
+		tk := key
+		tv := val
+		res.RoiConfidenceCounts[tk] = tv
+	}
+	res.FlagCounts = make(map[string]uint64, len(v.FlagCounts))
+	for key, val := range v.FlagCounts {
+		tk := key
+		tv := val
+		res.FlagCounts[tk] = tv
+	}
+
+	return res
+}
+
+// unmarshalSkillVersionInsightResponseBodyToSkillefficacySkillVersionInsight
+// builds a value of type *skillefficacy.SkillVersionInsight from a value of
+// type *SkillVersionInsightResponseBody.
+func unmarshalSkillVersionInsightResponseBodyToSkillefficacySkillVersionInsight(v *SkillVersionInsightResponseBody) *skillefficacy.SkillVersionInsight {
+	res := &skillefficacy.SkillVersionInsight{
+		SkillVersionID: *v.SkillVersionID,
+	}
+	res.Metrics = unmarshalSkillInsightMetricsResponseBodyToSkillefficacySkillInsightMetrics(v.Metrics)
+	res.Trend = make([]*skillefficacy.SkillInsightPoint, len(v.Trend))
+	for i, val := range v.Trend {
+		if val == nil {
+			res.Trend[i] = nil
+			continue
+		}
+		res.Trend[i] = unmarshalSkillInsightPointResponseBodyToSkillefficacySkillInsightPoint(val)
+	}
+
+	return res
+}
+
+// unmarshalSkillInsightPointResponseBodyToSkillefficacySkillInsightPoint
+// builds a value of type *skillefficacy.SkillInsightPoint from a value of type
+// *SkillInsightPointResponseBody.
+func unmarshalSkillInsightPointResponseBodyToSkillefficacySkillInsightPoint(v *SkillInsightPointResponseBody) *skillefficacy.SkillInsightPoint {
+	res := &skillefficacy.SkillInsightPoint{
+		BucketStart:           *v.BucketStart,
+		Activations:           *v.Activations,
+		ActivatedSessions:     *v.ActivatedSessions,
+		SessionCostUsd:        *v.SessionCostUsd,
+		ScoredSessions:        *v.ScoredSessions,
+		AverageScore:          v.AverageScore,
+		EstimatedMinutesSaved: *v.EstimatedMinutesSaved,
+	}
+
+	return res
+}
+
+// unmarshalSkillEfficacyScoredSessionResponseBodyToSkillefficacySkillEfficacyScoredSession
+// builds a value of type *skillefficacy.SkillEfficacyScoredSession from a
+// value of type *SkillEfficacyScoredSessionResponseBody.
+func unmarshalSkillEfficacyScoredSessionResponseBodyToSkillefficacySkillEfficacyScoredSession(v *SkillEfficacyScoredSessionResponseBody) *skillefficacy.SkillEfficacyScoredSession {
+	res := &skillefficacy.SkillEfficacyScoredSession{
+		ID:                    *v.ID,
+		SkillID:               *v.SkillID,
+		SkillVersionID:        *v.SkillVersionID,
+		Surface:               *v.Surface,
+		ActivatedAt:           *v.ActivatedAt,
+		ScoredAt:              *v.ScoredAt,
+		Score:                 *v.Score,
+		Rationale:             *v.Rationale,
+		EstimatedTurnsSaved:   v.EstimatedTurnsSaved,
+		EstimatedMinutesSaved: v.EstimatedMinutesSaved,
+		RoiConfidence:         v.RoiConfidence,
+		GramChatID:            v.GramChatID,
+	}
+	res.Flags = make([]string, len(v.Flags))
+	for i, val := range v.Flags {
+		res.Flags[i] = val
+	}
+
+	return res
 }

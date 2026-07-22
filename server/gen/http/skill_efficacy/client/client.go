@@ -25,6 +25,10 @@ type Client struct {
 	// upsertSettings endpoint.
 	UpsertSettingsDoer goahttp.Doer
 
+	// QueryInsights Doer is the HTTP client used to make requests to the
+	// queryInsights endpoint.
+	QueryInsightsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -48,6 +52,7 @@ func NewClient(
 	return &Client{
 		GetSettingsDoer:     doer,
 		UpsertSettingsDoer:  doer,
+		QueryInsightsDoer:   doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -99,6 +104,30 @@ func (c *Client) UpsertSettings() goa.Endpoint {
 		resp, err := c.UpsertSettingsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skillEfficacy", "upsertSettings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// QueryInsights returns an endpoint that makes HTTP requests to the
+// skillEfficacy service queryInsights server.
+func (c *Client) QueryInsights() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeQueryInsightsRequest(c.encoder)
+		decodeResponse = DecodeQueryInsightsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildQueryInsightsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.QueryInsightsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skillEfficacy", "queryInsights", err)
 		}
 		return decodeResponse(resp)
 	}
