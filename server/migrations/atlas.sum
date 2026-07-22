@@ -1,4 +1,4 @@
-h1:6TGAKeZ7msdrtFsjx/WywarXpjyTcu6packL0IOq7y4=
+h1:VH0wfE39LfG10YEgqwSeGnuM7DvAfEJAX/z28fmYZYM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -291,3 +291,4 @@ h1:6TGAKeZ7msdrtFsjx/WywarXpjyTcu6packL0IOq7y4=
 20260722152825_remote-session-issuers-issuer-idx.sql h1:QCe0CiKPf003pUpVNbt51Vu5+z8xeyM8JFKWU53FP/g=
 20260722165353_skill-observations-metrics-sync.sql h1:XjGfajcAFeuuyOpMubKJAA2ZVpetF/x/HXAgnTooCm0=
 20260722165701_add-skill-efficacy-pipeline.sql h1:SWL2LPA0fHEdRohT2mYWmJZJMvB6sAdm2/KZZn7OqsU=
+20260722202600_skill-efficacy-reservation-recovery.sql h1:1hvuncx/1iqJ0CgsY+0KgCruSVKudb8PVmGlX+eajHE=
