@@ -649,3 +649,106 @@ func toolUsageTargetsByKey(rows []*gen.ToolUsageTargetSummary) map[string]*gen.T
 	}
 	return result
 }
+
+// insertHostedToolEventRow mirrors insertHostedToolEvent but takes an explicit
+// trace id (and allows an empty user email), so tests can build multi-row
+// traces that straddle a query window boundary.
+func insertHostedToolEventRow(t *testing.T, ctx context.Context, ti *testInstance, traceID string, timestamp time.Time, toolsetSlug, toolName, externalUserID string) {
+	t.Helper()
+
+	attrs := map[string]any{
+		"gram.event.source":              "hosted",
+		"gram.tool.name":                 toolName,
+		"gram.toolset.slug":              toolsetSlug,
+		"http.response.status_code":      200,
+		"http.server.request.duration":   0.05,
+		"gen_ai.tool.call.result":        `"ok"`,
+		"gen_ai.tool.call.id":            uuid.New().String(),
+		"gen_ai.conversation.id":         uuid.New().String(),
+		"gen_ai.response.finish_reasons": []string{"tool_calls"},
+	}
+	if externalUserID != "" {
+		// external_user_id is max()-merged in trace_summaries, so a value on
+		// any one row of the trace deterministically survives aggregation
+		// (unlike the any()-merged user_email).
+		attrs["gram.external_user.id"] = externalUserID
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
+	spanID := uuid.New().String()[:16]
+	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+		ID:                   uuid.New().String(),
+		TimeUnixNano:         timestamp.UnixNano(),
+		ObservedTimeUnixNano: timestamp.UnixNano(),
+		SeverityText:         nil,
+		Body:                 "hosted tool event",
+		TraceID:              &traceID,
+		SpanID:               &spanID,
+		Attributes:           string(attrsJSON),
+		ResourceAttributes:   "{}",
+		GramProjectID:        ti.projectID,
+		GramDeploymentID:     nil,
+		GramFunctionID:       nil,
+		GramURN:              "tools:http:gram:" + toolName,
+		ServiceName:          "gram-http-gateway",
+		ServiceVersion:       nil,
+		GramChatID:           nil,
+	})
+	require.NoError(t, err)
+}
+
+// TestGetToolUsageSummary_WindowBoundaryTraces pins the trace-window scan
+// semantics on trace_summaries (INC-417): the WHERE pre-filter added for
+// granule pruning carries slop on both bounds so the exact HAVING window
+// predicate still sees every row of boundary-straddling traces. A trace whose
+// first row precedes the window must stay excluded even though its later rows
+// land inside it, and a trace starting inside the window must keep aggregating
+// rows that land shortly after the window end.
+func TestGetToolUsageSummary_WindowBoundaryTraces(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	now := time.Now().UTC()
+	from := now.Add(-1 * time.Hour)
+
+	// Straddler: starts 10 minutes before the window, second row inside it.
+	// Without the pre-filter slop the early row would be cut by WHERE and the
+	// HAVING min() would wrongly see an in-window start.
+	straddlerTraceID := strings.ReplaceAll(uuid.New().String(), "-", "")
+	insertHostedToolEventRow(t, ctx, ti, straddlerTraceID, from.Add(-10*time.Minute), "straddle-set", "charge", "early-user")
+	insertHostedToolEventRow(t, ctx, ti, straddlerTraceID, from.Add(30*time.Minute), "straddle-set", "charge", "early-user")
+
+	// In-window trace whose second row lands after the window end (within the
+	// slop): the trace must be included AND the late row's user identity must
+	// still be aggregated.
+	inWindowTraceID := strings.ReplaceAll(uuid.New().String(), "-", "")
+	insertHostedToolEventRow(t, ctx, ti, inWindowTraceID, now.Add(-10*time.Minute), "inwindow-set", "refund", "")
+	insertHostedToolEventRow(t, ctx, ti, inWindowTraceID, now.Add(5*time.Minute), "inwindow-set", "refund", "late-user")
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+			From: from.Format(time.RFC3339),
+			To:   now.Format(time.RFC3339),
+		})
+		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
+			return
+		}
+		if !assert.NotNil(c, res) {
+			return
+		}
+
+		assert.Equal(c, int64(1), res.Totals.EventCount, "only the in-window trace counts")
+
+		targets := toolUsageTargetsByKey(res.Targets)
+		assert.Nil(c, targets["hosted_mcp_server:server:straddle-set"], "trace starting before the window must be excluded")
+		assert.NotNil(c, targets["hosted_mcp_server:server:inwindow-set"])
+
+		userKeys := make([]string, 0, len(res.Users))
+		for _, u := range res.Users {
+			userKeys = append(userKeys, u.UserKey)
+		}
+		assert.Contains(c, userKeys, "late-user", "rows landing after the window end (within slop) must still aggregate")
+	}, 10*time.Second, 200*time.Millisecond)
+}
