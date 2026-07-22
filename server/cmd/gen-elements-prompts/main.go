@@ -37,7 +37,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("format source: %v", err)
 	}
-	if err := os.WriteFile("elements_prompts_gen.go", formatted, 0o644); err != nil {
+	if err := os.WriteFile("elements_prompts_gen.go", formatted, 0o600); err != nil {
 		log.Fatalf("write output: %v", err)
 	}
 }
