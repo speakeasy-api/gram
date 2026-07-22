@@ -1,6 +1,8 @@
 package risk_test
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -11,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 func TestCreateRiskPolicy_Success(t *testing.T) {
@@ -175,4 +179,198 @@ func TestCreateRiskPolicy_DisabledDoesNotSignal(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, result.Enabled)
 	require.Empty(t, ti.signaler.calls) // should not signal when disabled
+}
+
+func TestCreateRiskPolicy_ShadowMCPAllowedURLsAreAtomic(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	lookupCalls := 0
+	ti.shadowMCPInventoryURLLookup = func(_ context.Context, _ uuid.UUID, canonicalURLs []string) ([]string, error) {
+		lookupCalls++
+		require.Equal(t, []string{
+			"https://github.example.com/mcp",
+			"https://linear.example.com/sse",
+		}, canonicalURLs)
+		return canonicalURLs, nil
+	}
+	name := "Shadow MCP Block"
+	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    &name,
+		Sources: []string{"shadow_mcp"},
+		Action:  "block",
+		ShadowMcpAllowedUrls: []string{
+			"HTTPS://GITHUB.EXAMPLE.COM:443/mcp?token=ignored",
+			"https://linear.example.com/sse",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, lookupCalls)
+	require.Equal(t, []string{
+		"https://github.example.com/mcp",
+		"https://linear.example.com/sse",
+	}, shadowMCPPolicyAllowedURLs(t, ctx, ti.conn, created.ID))
+}
+
+func TestCreateRiskPolicy_ShadowMCPAllowedURLsRequireCurrentProjectInventory(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	observedURL := "https://github.example.com/mcp"
+	lookupCalls := 0
+	ti.shadowMCPInventoryURLLookup = func(_ context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
+		lookupCalls++
+		require.Equal(t, *authCtx.ProjectID, projectID)
+		require.Equal(t, []string{observedURL}, canonicalURLs)
+		return canonicalURLs, nil
+	}
+
+	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 new("Observed Shadow MCP"),
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpAllowedUrls: []string{"HTTPS://GITHUB.EXAMPLE.COM:443/mcp?secret=ignored"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, lookupCalls)
+	require.Equal(t, []string{observedURL}, shadowMCPPolicyAllowedURLs(t, ctx, ti.conn, created.ID))
+}
+
+func TestCreateRiskPolicy_ShadowMCPUnobservedURLRejectedBeforeMutation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	lookupCalls := 0
+	reconcileCalls := 0
+	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, []string) ([]string, error) {
+		lookupCalls++
+		return nil, nil
+	}
+	ti.reconcileShadowMCPPolicyURLs = func(context.Context, riskrepo.DBTX, policybypass.ReconcilePolicyURLsInput) error {
+		reconcileCalls++
+		return nil
+	}
+	name := "Unobserved Shadow MCP"
+
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 &name,
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpAllowedUrls: []string{"https://unobserved.example.com/mcp"},
+	})
+	require.ErrorContains(t, err, "has not been observed in this project")
+	require.Equal(t, 1, lookupCalls)
+	require.Zero(t, reconcileCalls)
+	require.False(t, riskPolicyExistsByName(t, ctx, ti.conn, name))
+	require.Empty(t, ti.signaler.Calls())
+}
+
+func TestCreateRiskPolicy_ShadowMCPURLObservedOnlyByAnotherProjectRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	otherProjectID := uuid.New()
+	ti.shadowMCPInventoryURLLookup = func(_ context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
+		if projectID == otherProjectID {
+			return canonicalURLs, nil
+		}
+		return nil, nil
+	}
+
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 new("Cross Project Shadow MCP"),
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpAllowedUrls: []string{"https://other-project.example.com/mcp"},
+	})
+	require.ErrorContains(t, err, "has not been observed in this project")
+	require.NotEqual(t, otherProjectID, *authCtx.ProjectID)
+}
+
+func TestCreateRiskPolicy_ShadowMCPInventoryLookupFailureIsUnexpected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, []string) ([]string, error) {
+		return nil, errors.New("clickhouse unavailable")
+	}
+	name := "Inventory Failure Shadow MCP"
+
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 &name,
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpAllowedUrls: []string{"https://unavailable.example.com/mcp"},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	require.False(t, riskPolicyExistsByName(t, ctx, ti.conn, name))
+}
+
+func TestCreateRiskPolicy_ShadowMCPEmptyAllowedURLsSkipsInventoryLookup(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	ti.shadowMCPInventoryURLLookup = func(context.Context, uuid.UUID, []string) ([]string, error) {
+		return nil, errors.New("inventory lookup must not run")
+	}
+
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 new("Empty Shadow MCP"),
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpAllowedUrls: []string{},
+	})
+	require.NoError(t, err)
+}
+
+func TestCreateRiskPolicy_ShadowMCPReconcileFailureRollsBack(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	ti.reconcileShadowMCPPolicyURLs = func(context.Context, riskrepo.DBTX, policybypass.ReconcilePolicyURLsInput) error {
+		return errors.New("injected grant failure")
+	}
+	name := "Rolled Back Shadow MCP"
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 &name,
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpAllowedUrls: []string{"https://github.example.com/mcp"},
+	})
+	require.ErrorContains(t, errors.Unwrap(err), "injected grant failure")
+	require.False(t, riskPolicyExistsByName(t, ctx, ti.conn, name))
+}
+
+func TestCreateRiskPolicy_ShadowMCPAllowedURLsRejectInvalidState(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	name := "Shadow MCP Flag"
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 &name,
+		Sources:              []string{"shadow_mcp"},
+		Action:               "flag",
+		ShadowMcpAllowedUrls: []string{"https://github.example.com/mcp"},
+	})
+	require.ErrorContains(t, err, "shadow mcp allowed urls require an enabled blocking shadow mcp policy")
+	require.False(t, riskPolicyExistsByName(t, ctx, ti.conn, name))
+}
+
+func TestCreateRiskPolicy_ShadowMCPAllowedURLsRejectInvalidURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	name := "Shadow MCP Invalid URL"
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 &name,
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpAllowedUrls: []string{"not a shadow mcp url"},
+	})
+	require.ErrorContains(t, err, "invalid shadow mcp allowed urls")
+	require.False(t, riskPolicyExistsByName(t, ctx, ti.conn, name))
 }

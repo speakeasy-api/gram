@@ -124,6 +124,10 @@ export type UpdateRiskPolicyRequestBody = {
    */
   score?: number | undefined;
   /**
+   * Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
+   */
+  shadowMcpAllowedUrls?: Array<string> | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -166,6 +170,7 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   scope_exempt?: string | undefined;
   scope_include?: string | undefined;
   score?: number | undefined;
+  shadow_mcp_allowed_urls?: Array<string> | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -198,6 +203,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     scopeExempt: z.optional(z.string()),
     scopeInclude: z.optional(z.string()),
     score: z.optional(z.number()),
+    shadowMcpAllowedUrls: z.optional(z.array(z.string())),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
@@ -217,6 +223,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       promptInjectionRules: "prompt_injection_rules",
       scopeExempt: "scope_exempt",
       scopeInclude: "scope_include",
+      shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
       userMessage: "user_message",
     });
   }),
