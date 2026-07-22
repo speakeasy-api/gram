@@ -44,6 +44,41 @@ type HealthObservation struct {
 	CertificateExpiresAt *time.Time
 }
 
+// HealthIssueMessage renders a health issue as human-readable copy for
+// notifications. check_failed intentionally maps to the generic fallback:
+// callers should not notify customers about Gram-side check failures.
+func HealthIssueMessage(issue HealthIssue) string {
+	switch issue {
+	case HealthIssueDNSNotFound:
+		return "DNS records for the domain could not be found."
+	case HealthIssueDNSTargetMismatch:
+		return "The domain's DNS no longer resolves to Gram's endpoint."
+	case HealthIssueResourceMissing:
+		return "The routing configuration for the domain is missing."
+	case HealthIssueCertificateMissing:
+		return "The TLS certificate for the domain is missing."
+	case HealthIssueCertificateNotReady:
+		return "The TLS certificate for the domain is not ready."
+	case HealthIssueCertificateExpired:
+		return "The TLS certificate for the domain has expired."
+	case HealthIssueCertificateInvalid:
+		return "The TLS certificate does not match the domain or could not be read."
+	default:
+		return "The latest health check found a problem with the domain."
+	}
+}
+
+// ShouldNotifyUnhealthyTransition reports whether reconciling produced a
+// fresh healthy-to-unhealthy transition worth alerting the organization
+// about. check_failed transitions are excluded: they represent Gram-side
+// probe failures, not customer misconfiguration.
+func ShouldNotifyUnhealthyTransition(current, next HealthState) bool {
+	if next.Status != HealthStatusUnhealthy || current.Status == HealthStatusUnhealthy {
+		return false
+	}
+	return next.Issue != HealthIssueCheckFailed
+}
+
 func ReconcileHealthState(current HealthState, observation HealthObservation, checkedAt time.Time) HealthState {
 	checkedAt = checkedAt.UTC()
 	if current.CheckedAt != nil && !checkedAt.After(*current.CheckedAt) {

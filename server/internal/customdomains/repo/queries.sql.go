@@ -274,6 +274,19 @@ func (q *Queries) GetCustomDomainByOrganization(ctx context.Context, organizatio
 	return i, err
 }
 
+const getOrganizationSlugForHealthNotification = `-- name: GetOrganizationSlugForHealthNotification :one
+SELECT slug
+FROM organization_metadata
+WHERE id = $1
+`
+
+func (q *Queries) GetOrganizationSlugForHealthNotification(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getOrganizationSlugForHealthNotification, organizationID)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
+}
+
 const listActivatedCustomDomainsForHealthCheck = `-- name: ListActivatedCustomDomainsForHealthCheck :many
 SELECT id, organization_id
 FROM custom_domains
@@ -333,6 +346,45 @@ func (q *Queries) ListActiveCustomDomainNames(ctx context.Context) ([]string, er
 			return nil, err
 		}
 		items = append(items, domain)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationUsersForHealthNotification = `-- name: ListOrganizationUsersForHealthNotification :many
+SELECT users.id, users.email
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+ORDER BY users.email, users.id
+`
+
+type ListOrganizationUsersForHealthNotificationRow struct {
+	ID    string
+	Email string
+}
+
+// Candidate recipients for domain health alerts; callers filter this down to
+// organization admins via authz grants.
+func (q *Queries) ListOrganizationUsersForHealthNotification(ctx context.Context, organizationID string) ([]ListOrganizationUsersForHealthNotificationRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationUsersForHealthNotification, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationUsersForHealthNotificationRow
+	for rows.Next() {
+		var i ListOrganizationUsersForHealthNotificationRow
+		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

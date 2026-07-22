@@ -253,6 +253,11 @@ func newWorkerCommand() *cli.Command {
 			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
 		},
 		&cli.StringFlag{
+			Name:    "site-url",
+			Usage:   "The URL of the dashboard site, used to link from notification emails",
+			EnvVars: []string{"GRAM_SITE_URL"},
+		},
+		&cli.StringFlag{
 			Name:    "custom-domain-provisioner",
 			Usage:   "Kubernetes provisioner kind for custom domains: ingress or gateway (default: ingress)",
 			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_PROVISIONER"},
@@ -773,6 +778,14 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("load built-in exclusion library: %w", err)
 			}
 
+			var siteURL *url.URL
+			if raw := c.String("site-url"); raw != "" {
+				siteURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("failed to parse site url: %w", err)
+				}
+			}
+
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:                 guardianPolicy,
 				DB:                             db,
@@ -786,6 +799,7 @@ func newWorkerCommand() *cli.Command {
 				K8sClient:                      k8sClient,
 				DefaultCustomDomainProvisioner: k8s.ProvisionerKind(c.String("custom-domain-provisioner")),
 				ExpectedTargetCNAME:            c.String("custom-domain-cname"),
+				SiteURL:                        siteURL,
 				BillingTracker:                 billingTracker,
 				BillingRepository:              billingRepo,
 				RedisClient:                    redisClient,

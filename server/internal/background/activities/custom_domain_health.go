@@ -2,9 +2,12 @@ package activities
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -15,10 +18,12 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/dns"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 )
 
@@ -37,6 +42,8 @@ type CustomDomainHealth struct {
 	infrastructure CustomDomainInfrastructureChecker
 	resolver       dns.Resolver
 	expectedTarget string
+	emails         *email.Service
+	siteURL        *url.URL
 }
 
 type ListCustomDomainsForHealthCheckArgs struct {
@@ -55,13 +62,15 @@ type CheckCustomDomainHealthArgs struct {
 	CheckedAt      time.Time
 }
 
-func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string) *CustomDomainHealth {
+func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, emails *email.Service, siteURL *url.URL) *CustomDomainHealth {
 	return &CustomDomainHealth{
 		db:             db,
 		logger:         logger,
 		infrastructure: infrastructure,
 		resolver:       dns.NewNetResolver(),
 		expectedTarget: expectedTarget,
+		emails:         emails,
+		siteURL:        siteURL,
 	}
 }
 
@@ -150,6 +159,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		}
 	}
 
+	notifyIssue := customdomains.HealthIssue("")
 	if err := pgx.BeginFunc(ctx, c.db, func(tx pgx.Tx) error {
 		repository := customdomainsrepo.New(tx)
 		lockedDomain, err := repository.GetCustomDomainByIDAndOrganizationForHealthUpdate(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationForHealthUpdateParams{
@@ -167,6 +177,9 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 			observation.CertificateExpiresAt = current.CertificateExpiresAt
 		}
 		next := customdomains.ReconcileHealthState(current, observation, args.CheckedAt)
+		if customdomains.ShouldNotifyUnhealthyTransition(current, next) {
+			notifyIssue = next.Issue
+		}
 		_, err = repository.UpdateCustomDomainHealth(ctx, customdomainsrepo.UpdateCustomDomainHealthParams{
 			HealthStatus:         conv.ToPGText(string(next.Status)),
 			HealthIssue:          conv.ToPGTextEmpty(string(next.Issue)),
@@ -184,7 +197,77 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 	}); err != nil {
 		return fmt.Errorf("save custom domain health: %w", err)
 	}
+
+	if notifyIssue != "" {
+		c.notifyOrgAdminsBestEffort(ctx, args, domain.Domain, notifyIssue)
+	}
 	return nil
+}
+
+// notifyOrgAdminsBestEffort emails every organization admin about a fresh
+// unhealthy transition. Failures are logged and never returned: the health
+// row is the durable record, the email is advisory.
+func (c *CustomDomainHealth) notifyOrgAdminsBestEffort(ctx context.Context, args CheckCustomDomainHealthArgs, domain string, issue customdomains.HealthIssue) {
+	organizationID := args.OrganizationID
+	repository := customdomainsrepo.New(c.db)
+	logger := c.logger.With(attr.SlogOrganizationID(organizationID), attr.SlogURLDomain(domain))
+
+	users, err := repository.ListOrganizationUsersForHealthNotification(ctx, organizationID)
+	if err != nil {
+		logger.ErrorContext(ctx, "notify custom domain unhealthy: list candidate users", attr.SlogError(err))
+		return
+	}
+
+	domainLink := ""
+	if c.siteURL != nil {
+		domainLink = c.siteURL.String()
+		slug, err := repository.GetOrganizationSlugForHealthNotification(ctx, organizationID)
+		if err != nil {
+			logger.WarnContext(ctx, "notify custom domain unhealthy: get organization slug", attr.SlogError(err))
+		} else {
+			domainLink = c.siteURL.JoinPath(slug, "domains").String()
+		}
+	}
+
+	check := authz.Check{
+		Scope:        authz.ScopeOrgAdmin,
+		ResourceKind: "",
+		ResourceID:   organizationID,
+		Dimensions:   nil,
+	}
+	seen := make(map[string]struct{}, len(users))
+	for _, user := range users {
+		principals, err := authz.ResolveUserPrincipals(ctx, c.db, organizationID, user.ID)
+		if err != nil {
+			logger.ErrorContext(ctx, "notify custom domain unhealthy: resolve principals", attr.SlogError(err))
+			continue
+		}
+		grants, err := authz.LoadGrants(ctx, c.db, organizationID, principals)
+		if err != nil {
+			logger.ErrorContext(ctx, "notify custom domain unhealthy: load grants", attr.SlogError(err))
+			continue
+		}
+		if !authz.GrantsSatisfy(grants, check) {
+			continue
+		}
+		if _, ok := seen[user.Email]; ok {
+			continue
+		}
+		seen[user.Email] = struct{}{}
+		tmpl := email.CustomDomainUnhealthy{
+			Email:        user.Email,
+			Domain:       domain,
+			IssueMessage: customdomains.HealthIssueMessage(issue),
+			DomainLink:   domainLink,
+		}
+		// CheckedAt is pinned in the workflow's activity args, so retries of
+		// the same check produce the same key and Loops drops the duplicate.
+		// Hashed because Loops caps keys at 100 characters.
+		digest := sha256.Sum256(fmt.Appendf(nil, "custom-domain-unhealthy:%s:%d:%s", args.CustomDomainID, args.CheckedAt.UnixMicro(), user.Email))
+		if err := c.emails.SendIdempotent(ctx, user.Email, hex.EncodeToString(digest[:]), tmpl); err != nil {
+			logger.ErrorContext(ctx, "notify custom domain unhealthy: send email", attr.SlogError(err), attr.SlogAuthUserEmail(user.Email))
+		}
+	}
 }
 
 // FindOrphanResources flags Kubernetes resources labeled as gram-managed that

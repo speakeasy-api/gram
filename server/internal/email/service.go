@@ -43,6 +43,14 @@ func NewService(logger *slog.Logger, sender loops.Client) *Service {
 // it targets, so a misuse such as passing the wrong variable shape is a
 // compile-time error.
 func (s *Service) Send(ctx context.Context, recipient string, template Template) error {
+	return s.SendIdempotent(ctx, recipient, "", template)
+}
+
+// SendIdempotent is Send with a Loops idempotency key: retries of the same
+// logical send inside Loops's 24h dedup window are silently dropped. Keys are
+// capped at 100 characters by Loops — hash composite keys. An empty key
+// disables deduplication.
+func (s *Service) SendIdempotent(ctx context.Context, recipient string, idempotencyKey string, template Template) error {
 	if recipient == "" {
 		return ErrEmptyRecipient
 	}
@@ -57,6 +65,7 @@ func (s *Service) Send(ctx context.Context, recipient string, template Template)
 		Email:           recipient,
 		DataVariables:   template.Variables(),
 		AddToAudience:   template.AddToAudience(),
+		IdempotencyKey:  idempotencyKey,
 	}); err != nil {
 		return fmt.Errorf("send email %q: %w", id, err)
 	}
