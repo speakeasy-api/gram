@@ -431,12 +431,6 @@ func (s *Store) ensureActiveSyncSchedules(ctx context.Context) error {
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
 		q := repo.New(tx)
 		for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance} {
-			if err := q.AdoptLegacySyncSchedulesForProvider(ctx, repo.AdoptLegacySyncSchedulesForProviderParams{
-				Provider: provider,
-				Kind:     conv.ToPGText(providerSyncSchedule(provider).kind),
-			}); err != nil {
-				return fmt.Errorf("adopt legacy %s sync rows: %w", provider, err)
-			}
 			for _, sched := range syncSchedulesFor(provider) {
 				// Same initial watermark policy as upsertWithTx: epoch for
 				// time-kind schedules, now for cursor-kind ones.
