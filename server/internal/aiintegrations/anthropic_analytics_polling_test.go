@@ -280,6 +280,51 @@ func TestMaybeSyncAnthropicAnalyticsPullsOnlyUpToDataRefreshedAt(t *testing.T) {
 	require.Empty(t, state.LastPollError)
 }
 
+func TestMaybeSyncAnthropicAnalyticsEmptyDataRefreshedAtNoOps(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	// Anthropic reports no finalization watermark yet — e.g. an org with no
+	// Claude Chat analytics data. The sync must succeed as a no-op instead of
+	// failing on the unparseable empty data_refreshed_at.
+	var requests int
+	var mu sync.Mutex
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests++
+		mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data":              []any{},
+			"data_refreshed_at": "",
+			"has_more":          false,
+			"next_page":         "",
+			"organization_id":   "org_ext_1",
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	endTime := time.Now().UTC().Truncate(time.Second)
+	pollers := newTestAnalyticsPollers(t, store, server.URL)
+	cfg := createAnthropicComplianceConfig(t, ctx, conn, store, orgID)
+
+	pollers.syncBoth(t, ctx, cfg, endTime)
+
+	// Only the finality probes run; no window fetches happen.
+	mu.Lock()
+	require.Equal(t, 2, requests, "one probe per schedule, no window fetches")
+	mu.Unlock()
+
+	// The schedules stay never-synced so the next run with a real watermark
+	// performs the full initial lookback.
+	for _, schedule := range []string{ScheduleAnthropicAnalyticsUsage, ScheduleAnthropicAnalyticsCost} {
+		state, err := store.EnsureTimeSyncSchedule(ctx, cfg.ID, schedule)
+		require.NoError(t, err)
+		require.True(t, state.WatermarkAt.IsZero())
+		require.Empty(t, state.LastPollError)
+	}
+}
+
 func TestMaybeSyncAnthropicAnalyticsRecordsForbiddenAsFailure(t *testing.T) {
 	t.Parallel()
 
