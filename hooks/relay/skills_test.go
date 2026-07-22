@@ -317,11 +317,11 @@ func TestResolveActivatedSkillFollowsSymlinkedSkillDir(t *testing.T) {
 	require.True(t, resolved.captureReady)
 }
 
-func TestResolveActivatedSkillRejectsExternalManifestSymlink(t *testing.T) {
+func TestResolveActivatedSkillFollowsManifestSymlink(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	workspace := t.TempDir()
-	external := filepath.Join(t.TempDir(), "passwd")
-	require.NoError(t, os.WriteFile(external, []byte("sensitive"), 0o600))
+	external := filepath.Join(t.TempDir(), "guide.md")
+	require.NoError(t, os.WriteFile(external, []byte("shared guide body"), 0o644))
 	path := filepath.Join(workspace, ".cursor", "skills", "linked", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.Symlink(external, path))
@@ -330,11 +330,11 @@ func TestResolveActivatedSkillRejectsExternalManifestSymlink(t *testing.T) {
 	resolved := resolveActivatedSkill(event, activatedSkillPayload("linked"))
 
 	require.Equal(t, "linked", resolved.name)
-	require.Empty(t, resolved.sourceLevel)
-	require.Empty(t, resolved.sourcePath)
-	require.Empty(t, resolved.rawSHA256)
-	require.Empty(t, resolved.content)
-	require.False(t, resolved.captureReady)
+	require.Equal(t, "project", resolved.sourceLevel)
+	require.Equal(t, path, resolved.sourcePath)
+	require.Equal(t, "shared guide body", resolved.content)
+	require.Equal(t, sha256Hex([]byte("shared guide body")), resolved.rawSHA256)
+	require.True(t, resolved.captureReady)
 }
 
 func TestResolveActivatedSkillCursorPluginLegacyKey(t *testing.T) {
