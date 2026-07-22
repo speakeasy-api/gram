@@ -148,6 +148,9 @@ func (src *codexCostSource) UpperBound(ctx context.Context, endTime time.Time) (
 		if page.LastEndTime.IsZero() {
 			return time.Time{}, fmt.Errorf("codex compliance logs page had has_more without last_end_time")
 		}
+		if err := validateCodexLastEndTimeAdvanced(after, page.LastEndTime); err != nil {
+			return time.Time{}, err
+		}
 		after = page.LastEndTime
 	}
 }
@@ -191,6 +194,9 @@ func (src *codexCostSource) FetchPage(ctx context.Context, start, end time.Time,
 	if page.HasMore {
 		if page.LastEndTime.IsZero() {
 			return timewindowpoller.Page[[]codexapi.LogFile]{Payload: nil, NextPage: "", HasMore: false}, fmt.Errorf("codex compliance logs page had has_more without last_end_time")
+		}
+		if err := validateCodexLastEndTimeAdvanced(after, page.LastEndTime); err != nil {
+			return timewindowpoller.Page[[]codexapi.LogFile]{Payload: nil, NextPage: "", HasMore: false}, err
 		}
 		nextPage = page.LastEndTime.UTC().Format(time.RFC3339Nano)
 	}
@@ -284,6 +290,11 @@ func buildCodexCostLogParams(cfg Config, file codexapi.LogFile, body []byte) ([]
 }
 
 func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexCostEvent) (telemetry.LogParams, bool, error) {
+	eventID := strings.TrimSpace(event.EventID)
+	if eventID == "" {
+		return telemetry.LogParams{}, false, oops.E(oops.CodeUnexpected, nil, "codex compliance cost event missing event_id")
+	}
+
 	timestamp, err := event.TimestampTime()
 	if err != nil {
 		return telemetry.LogParams{}, false, oops.E(oops.CodeUnexpected, err, "parse codex compliance cost timestamp")
@@ -312,8 +323,8 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 		attr.GenAIProviderNameKey:     codexProviderOpenAI,
 		attr.AIIntegrationConfigIDKey: cfg.ID.String(),
 	}
-	addStringAttr(attrs, attr.CodexComplianceEventIDKey, event.EventID)
-	addStringAttr(attrs, attr.CodexComplianceEventHashKey, generateCodexCostEventHash(event))
+	addStringAttr(attrs, attr.CodexComplianceEventIDKey, eventID)
+	addStringAttr(attrs, attr.CodexComplianceEventHashKey, generateCodexCostEventHash(eventID))
 	addStringAttr(attrs, attr.CodexComplianceLogIDKey, file.ID)
 	addStringAttr(attrs, attr.CodexComplianceCostUnitKey, costUnit)
 	addStringAttr(attrs, attr.CodexComplianceClientKey, event.Payload.Client)
@@ -359,14 +370,20 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	}, true, nil
 }
 
-func generateCodexCostEventHash(event codexCostEvent) string {
-	eventID := strings.TrimSpace(event.EventID)
-	if eventID == "" {
-		return ""
+func validateCodexLastEndTimeAdvanced(after, lastEndTime time.Time) error {
+	if lastEndTime.After(after) {
+		return nil
 	}
+	return fmt.Errorf("codex compliance logs page last_end_time did not advance past after: last_end_time=%s after=%s",
+		lastEndTime.UTC().Format(time.RFC3339Nano),
+		after.UTC().Format(time.RFC3339Nano),
+	)
+}
+
+func generateCodexCostEventHash(eventID string) string {
 	return eventKey{
 		"cost",
-		eventID,
+		strings.TrimSpace(eventID),
 	}.hash()
 }
 

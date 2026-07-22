@@ -121,7 +121,7 @@ func TestCodexCostEventKeyGolden(t *testing.T) {
 
 	require.Equal(t,
 		"234e1992eb486518c57a9a433ca9d3fe05c8cf55f07c463be7a81a23223f087d",
-		generateCodexCostEventHash(event))
+		generateCodexCostEventHash(event.EventID))
 }
 
 func TestEventKeyPanicsOnUnsupportedFieldType(t *testing.T) {

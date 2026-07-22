@@ -83,6 +83,26 @@ func TestBuildCodexCostLogParamsRejectsSHAMismatch(t *testing.T) {
 	require.Contains(t, err.Error(), "sha256 mismatch")
 }
 
+func TestBuildCodexCostLogParamsRejectsMissingEventID(t *testing.T) {
+	t.Parallel()
+
+	cfg := codexCostConfig()
+	file := codexapi.LogFile{
+		ID:         "eclf_123",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 16, 0, 27, 13, 340496000, time.UTC),
+		FileName:   "COSTS_2026-07-16T00:27:13.340496+00:00.jsonl",
+		FileSize:   0,
+		FileSHA256: "",
+	}
+	body := []byte(`{"type":"COSTS","timestamp":"2026-07-15T22:59:59Z","payload":{"identity":{"email":"dev@example.com"},"measures":{"usage":{},"billing":[]}}}` + "\n")
+
+	_, err := buildCodexCostLogParams(cfg, file, body)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing event_id")
+}
+
 func TestCodexCostSourceUpperBoundReturnsStartWhenNoLogs(t *testing.T) {
 	t.Parallel()
 
@@ -165,6 +185,37 @@ func TestCodexCostPollerDoesNotAdvanceWatermarkWhenNoLogs(t *testing.T) {
 	require.Len(t, client.listParams, 1)
 }
 
+func TestCodexCostSourceUpperBoundRejectsNonAdvancingLastEndTime(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 7, 16, 10, 0, 0, 123456000, time.UTC)
+	cfg := codexCostConfig()
+	cfg.PollWatermarkAt = start
+	cfg.PollCheckpoint = timewindowpoller.CompletedCheckpoint(start)
+	client := &stubCodexComplianceClient{
+		listPages: []*codexapi.LogsPage{
+			{Data: nil, HasMore: true, LastEndTime: start},
+		},
+		listParams: nil,
+		downloads:  nil,
+	}
+	source := &codexCostSource{
+		client:      client,
+		cfg:         cfg,
+		principalID: "org-openai",
+		pageLimit:   codexCompliancePageLimit,
+		processPage: nil,
+		progress:    &CodexCostSyncProgress{},
+	}
+
+	_, err := source.UpperBound(t.Context(), start.Add(time.Hour))
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "last_end_time did not advance")
+	require.Len(t, client.listParams, 1)
+	require.Equal(t, start, client.listParams[0].After)
+}
+
 func TestCodexCostSourceFetchPageStopsAtWindowEnd(t *testing.T) {
 	t.Parallel()
 
@@ -194,6 +245,38 @@ func TestCodexCostSourceFetchPageStopsAtWindowEnd(t *testing.T) {
 	require.False(t, page.HasMore)
 	require.Empty(t, page.NextPage)
 	require.Equal(t, []codexapi.LogFile{inWindow}, page.Payload)
+}
+
+func TestCodexCostSourceFetchPageRejectsNonAdvancingLastEndTime(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 7, 16, 10, 0, 0, 123456000, time.UTC)
+	end := start.Add(time.Hour)
+	client := &stubCodexComplianceClient{
+		listPages: []*codexapi.LogsPage{
+			{Data: nil, HasMore: true, LastEndTime: start},
+		},
+		listParams: nil,
+		downloads:  nil,
+	}
+	source := &codexCostSource{
+		client:      client,
+		cfg:         codexCostConfig(),
+		principalID: "org-openai",
+		pageLimit:   codexCompliancePageLimit,
+		processPage: nil,
+		progress:    &CodexCostSyncProgress{},
+	}
+
+	page, err := source.FetchPage(t.Context(), start, end, "")
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "last_end_time did not advance")
+	require.False(t, page.HasMore)
+	require.Empty(t, page.NextPage)
+	require.Nil(t, page.Payload)
+	require.Len(t, client.listParams, 1)
+	require.Equal(t, start, client.listParams[0].After)
 }
 
 func codexCostConfig() Config {
