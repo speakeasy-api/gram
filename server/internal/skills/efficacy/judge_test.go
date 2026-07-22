@@ -68,7 +68,7 @@ func judgeResponse(text string) *openrouter.CompletionResponse {
 		StartTime:    time.Time{},
 		Message:      &msg,
 		MessageID:    "msg_test",
-		Model:        defaultJudgeModel,
+		Model:        JudgeModel,
 		Usage:        openrouter.Usage{PromptTokens: 120, CompletionTokens: 30, TotalTokens: 150, Cost: &cost},
 		FinishReason: nil,
 		ToolCalls:    nil,
@@ -130,7 +130,7 @@ func TestJudgeCallReturnsNormalizedVerdict(t *testing.T) {
 	require.NoError(t, err)
 	require.InDelta(t, 1.0, got.Verdict.Score, 0)
 	require.Equal(t, "linter ran first", got.Verdict.Rationale)
-	require.Equal(t, defaultJudgeModel, got.Model)
+	require.Equal(t, JudgeModel, got.Model)
 	require.Equal(t, JudgePromptVersion, got.PromptVersion)
 	client.AssertExpectations(t)
 }
