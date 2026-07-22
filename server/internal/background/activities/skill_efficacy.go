@@ -52,9 +52,8 @@ type LoadReservedSkillEfficacyEvaluationsParams struct {
 }
 
 // SkillEfficacyBatch is the set of evaluations a coordinator owns for one
-// publication pass. Only the ids cross the activity boundary: the rows they name
-// are re-read inside the publication under the same project scope, so a batch
-// that goes stale between activities cannot be acted on from a snapshot.
+// publication pass. Only identity and ownership cross the activity boundary:
+// the rows are re-read inside publication under the same project and claim.
 type SkillEfficacyBatch struct {
 	IDs        []uuid.UUID `json:"ids"`
 	ClaimToken uuid.UUID   `json:"claim_token"`

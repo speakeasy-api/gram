@@ -813,6 +813,19 @@ func TestPublishClaimsLegacyTokenlessReservation(t *testing.T) {
 	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
 }
 
+func TestPublishResolvesClaimDroppedByOldWorkflowWorker(t *testing.T) {
+	t.Parallel()
+	h := newPublishHarness(t, "skill_efficacy_publish_rolling_claim")
+
+	evaluation := h.reserve(t, "claude-session-rolling-claim", "claude-code")
+	h.judge.results[SurfaceDev] = okVerdict()
+
+	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, uuid.Nil, []uuid.UUID{evaluation.ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
+	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
+}
+
 // A recovered row can be re-reserved while its old publisher is still judging.
 // The old claim token must not publish or otherwise mutate the new owner's row.
 func TestPublishStaleClaimCannotPublishNewlyOwnedReservation(t *testing.T) {

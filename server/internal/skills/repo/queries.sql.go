@@ -3034,8 +3034,7 @@ type LoadReservedSkillEfficacyEvaluationsParams struct {
 // Crash-recovery claim. Ownership is soft and time-bounded: a reserved row is
 // owned while its updated_at is younger than @claim_lease, so a second claimer
 // inside the lease selects nothing and the model call never has to hold a
-// transaction open. A null lease claims every reserved row committed before the
-// statement, which is the unleased read-back.
+// transaction open.
 func (q *Queries) LoadReservedSkillEfficacyEvaluations(ctx context.Context, arg LoadReservedSkillEfficacyEvaluationsParams) ([]SkillEfficacyEvaluation, error) {
 	rows, err := q.db.Query(ctx, loadReservedSkillEfficacyEvaluations,
 		arg.ClaimToken,
@@ -3398,6 +3397,31 @@ func (q *Queries) ReserveSkillEfficacyEvaluations(ctx context.Context, arg Reser
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const resolveSkillEfficacyClaimToken = `-- name: ResolveSkillEfficacyClaimToken :one
+SELECT (array_agg(DISTINCT claim_token))[1]::uuid AS claim_token
+FROM skill_efficacy_evaluations
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+  AND state = 'reserved'
+  AND claim_token IS NOT NULL
+HAVING count(DISTINCT claim_token) = 1
+`
+
+type ResolveSkillEfficacyClaimTokenParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+// Rolling-deploy compatibility: an old workflow worker can drop the token a new
+// reservation activity returned. Resolve it only when every still-reserved row
+// has the same owner; mixed ownership remains fenced out.
+func (q *Queries) ResolveSkillEfficacyClaimToken(ctx context.Context, arg ResolveSkillEfficacyClaimTokenParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, resolveSkillEfficacyClaimToken, arg.ProjectID, arg.Ids)
+	var claim_token uuid.UUID
+	err := row.Scan(&claim_token)
+	return claim_token, err
 }
 
 const resolveSkillObservationVersions = `-- name: ResolveSkillObservationVersions :many

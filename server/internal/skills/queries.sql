@@ -1335,8 +1335,7 @@ WHERE project_id = @project_id
 -- Crash-recovery claim. Ownership is soft and time-bounded: a reserved row is
 -- owned while its updated_at is younger than @claim_lease, so a second claimer
 -- inside the lease selects nothing and the model call never has to hold a
--- transaction open. A null lease claims every reserved row committed before the
--- statement, which is the unleased read-back.
+-- transaction open.
 UPDATE skill_efficacy_evaluations e
 SET claim_token = @claim_token::uuid,
     updated_at = clock_timestamp()
@@ -1382,6 +1381,18 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[])
   AND state = 'reserved'
   AND claim_token IS NULL;
+
+-- name: ResolveSkillEfficacyClaimToken :one
+-- Rolling-deploy compatibility: an old workflow worker can drop the token a new
+-- reservation activity returned. Resolve it only when every still-reserved row
+-- has the same owner; mixed ownership remains fenced out.
+SELECT (array_agg(DISTINCT claim_token))[1]::uuid AS claim_token
+FROM skill_efficacy_evaluations
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
+  AND state = 'reserved'
+  AND claim_token IS NOT NULL
+HAVING count(DISTINCT claim_token) = 1;
 
 -- name: ClearSkillEfficacyClaimTokenFixture :execrows
 -- Test-only fixture for a reservation written before claim_token existed.
