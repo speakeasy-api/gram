@@ -47,6 +47,7 @@ func TestToolsForwardReadFiltersWithoutAuthOverrides(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}
 	var out bytes.Buffer
 
@@ -94,6 +95,7 @@ func TestToolsRejectInvalidLimits(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}
 	var out bytes.Buffer
 

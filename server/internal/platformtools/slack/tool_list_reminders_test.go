@@ -42,6 +42,7 @@ func TestListRemindersTool_CallsRemindersListWithUserToken(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"team_id":"T123"}`), io.Discard)
 	require.NoError(t, err)
 	require.Equal(t, "/reminders.list", requestPath)
