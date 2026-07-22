@@ -105,6 +105,9 @@ export function PluginSkillsSection({
   const [isBatchAdding, setIsBatchAdding] = useState(false);
 
   const openAddSkillDialog = (open: boolean) => {
+    // Closing mid-batch would hide in-flight requests and drop the
+    // failed-only retry selection.
+    if (!open && isBatchAdding) return;
     setIsAddSkillOpen(open);
     if (open) setSelectedSkillIds([]);
   };
@@ -316,7 +319,8 @@ export function PluginSkillsSection({
           <Dialog.Footer>
             <Button
               variant="secondary"
-              onClick={() => setIsAddSkillOpen(false)}
+              disabled={isBatchAdding}
+              onClick={() => openAddSkillDialog(false)}
               type="button"
             >
               Cancel
