@@ -17,7 +17,10 @@ export type ChatOwnerDisplay = {
 
 // Emails can differ only by casing between sources (WorkOS-synced members vs
 // provider-reported identities), so all email comparisons are case-insensitive.
-function emailsMatch(a: string | undefined, b: string | undefined): boolean {
+export function emailsMatch(
+  a: string | undefined,
+  b: string | undefined,
+): boolean {
   return !!a && !!b && a.toLowerCase() === b.toLowerCase();
 }
 
