@@ -315,6 +315,12 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			syncRow = r
 		}
 	}
+	// Saving the integration is the user's "try again" signal: lift any
+	// automatic pauses so schedules stopped over a rejected configuration
+	// start polling again with a fresh failure budget.
+	if err := q.ClearSyncSchedulePauses(ctx, row.ID); err != nil {
+		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to clear ai integration sync pauses")
+	}
 	if resetPollWatermarkAt != nil {
 		syncRow.PollWatermarkAt = conv.ToPGTimestamptz(*resetPollWatermarkAt)
 		syncRow.NextPollAfter = conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(pollIntervalForSchedule(providerSched.schedule)))
@@ -629,7 +635,18 @@ func (s *Store) RecordSchedulePollSuccess(ctx context.Context, configID uuid.UUI
 	return nil
 }
 
-func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, cause error) error {
+// AutoPauseAfterRejectedPolls is the consecutive-failure count at which a
+// schedule whose provider keeps rejecting the configuration (revoked api key,
+// missing api access) is automatically paused. Rejections are permanent until
+// the user fixes the integration, so a small threshold is enough; saving the
+// integration clears the pause and the failure streak.
+const AutoPauseAfterRejectedPolls = 3
+
+// RecordSchedulePollFailure records a final poll failure on a schedule. A
+// positive pauseAfter automatically pauses the schedule once its consecutive
+// failure count reaches that threshold; zero never pauses, for failures that
+// retrying at the normal cadence can plausibly fix.
+func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUID, schedule string, t time.Time, cause error, pauseAfter int32) error {
 	var errStr string
 	if cause != nil {
 		errStr = cause.Error()
@@ -644,6 +661,7 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 		Schedule:              schedule,
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(pollIntervalForSchedule(schedule))),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
+		PauseAfter:            pauseAfter,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration sync schedule poll failure")
 	}
@@ -651,7 +669,7 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 }
 
 func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, provider string, t time.Time, cause error) error {
-	return s.RecordSchedulePollFailure(ctx, configID, provider, t, cause)
+	return s.RecordSchedulePollFailure(ctx, configID, provider, t, cause, 0)
 }
 
 // epochTime is the never-synced watermark sentinel for time-kind schedules

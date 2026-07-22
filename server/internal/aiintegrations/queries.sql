@@ -157,6 +157,7 @@ SET poll_watermark_at = @poll_watermark_at,
     last_poll_failed_at = NULL,
     last_poll_success_at = NULL,
     consecutive_failures = 0,
+    auto_paused_at = NULL,
     last_cursor_id = NULL,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id
@@ -176,6 +177,7 @@ JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
+  AND s.auto_paused_at IS NULL
   AND s.next_poll_after <= @poll_due_before
 ORDER BY s.next_poll_after ASC, c.organization_id ASC, s.schedule ASC
 LIMIT @limit_count;
@@ -261,6 +263,7 @@ SET poll_watermark_at = @poll_watermark_at,
     last_poll_failed_at = NULL,
     last_poll_success_at = clock_timestamp(),
     consecutive_failures = 0,
+    auto_paused_at = NULL,
     last_cursor_id = @last_cursor_id,
     updated_at = clock_timestamp()
 WHERE id = @sync_id;
@@ -272,15 +275,34 @@ SET last_cursor_id = @last_cursor_id,
 WHERE ai_integration_config_id = @ai_integration_config_id
   AND schedule = @schedule;
 
+-- RecordUsagePollFailure increments the schedule's consecutive failure count
+-- and, when pause_after is positive and the new count reaches it, pauses the
+-- schedule so candidate selection stops re-enqueueing it. Callers pass a zero
+-- pause_after for failures that should never pause (e.g. transient errors).
 -- name: RecordUsagePollFailure :exec
 UPDATE ai_integration_syncs
 SET next_poll_after = @next_poll_after,
     last_poll_error = @last_poll_error,
     last_poll_failed_at = clock_timestamp(),
     consecutive_failures = consecutive_failures + 1,
+    auto_paused_at = CASE
+      WHEN @pause_after::int > 0 AND consecutive_failures + 1 >= @pause_after::int
+      THEN clock_timestamp()
+      ELSE auto_paused_at
+    END,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id
   AND schedule = @schedule;
+
+-- ClearSyncSchedulePauses lifts any automatic pause on all of a config's
+-- schedules and resets their failure streaks. Runs whenever the user saves
+-- the integration so a fixed configuration starts polling again.
+-- name: ClearSyncSchedulePauses :exec
+UPDATE ai_integration_syncs
+SET auto_paused_at = NULL,
+    consecutive_failures = 0,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = @ai_integration_config_id;
 
 -- name: AdvanceWatermark :exec
 UPDATE ai_integration_syncs
@@ -300,6 +322,7 @@ SET next_poll_after = @next_poll_after,
     last_poll_failed_at = NULL,
     last_poll_success_at = clock_timestamp(),
     consecutive_failures = 0,
+    auto_paused_at = NULL,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id
   AND schedule = @schedule;

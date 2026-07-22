@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -138,7 +139,12 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 			recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cancel()
 
-			if recordErr := p.integrations.RecordSchedulePollFailure(recordCtx, cfg.ID, schedule, endTime, err); recordErr != nil {
+			// Provider rejections are permanent until the user fixes the
+			// integration, so after a few of them in a row the schedule is
+			// auto-paused instead of re-enqueued forever. Retryable failures
+			// never pause: they keep the schedule's normal cadence.
+			pauseAfter := conv.Ternary[int32](nonRetryable, aiintegrations.AutoPauseAfterRejectedPolls, 0)
+			if recordErr := p.integrations.RecordSchedulePollFailure(recordCtx, cfg.ID, schedule, endTime, err, pauseAfter); recordErr != nil {
 				err = errors.Join(err, fmt.Errorf("record ai integration schedule failure: %w", recordErr))
 			}
 		}

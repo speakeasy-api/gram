@@ -195,6 +195,91 @@ func TestUpsertWithTxRejectsCodexPathLikeOrganizationID(t *testing.T) {
 	}))
 }
 
+func TestRecordSchedulePollFailureAutoPausesAfterThreshold(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	cause := errors.New("anthropic compliance organization not found or compliance api access not enabled")
+	for range AutoPauseAfterRejectedPolls - 1 {
+		require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, time.Now(), cause, AutoPauseAfterRejectedPolls))
+	}
+
+	// One failure short of the threshold the schedule is still polled.
+	candidates := listCandidateSchedules(t, ctx, store)
+	require.Contains(t, candidates, ScheduleAnthropicCompliance)
+
+	require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, time.Now(), cause, AutoPauseAfterRejectedPolls))
+
+	// The paused schedule disappears from candidate selection while the
+	// config's other schedules keep polling.
+	candidates = listCandidateSchedules(t, ctx, store)
+	require.NotContains(t, candidates, ScheduleAnthropicCompliance)
+	require.Contains(t, candidates, ScheduleAnthropicAnalyticsUsage)
+	require.Contains(t, candidates, ScheduleAnthropicAnalyticsCost)
+}
+
+func TestRecordSchedulePollFailureWithoutPauseThresholdNeverPauses(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	// Retryable failures pass a zero threshold and must never pause, no
+	// matter how long the streak gets.
+	for range AutoPauseAfterRejectedPolls + 2 {
+		require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, time.Now(), errors.New("transient provider error"), 0))
+	}
+
+	require.Contains(t, listCandidateSchedules(t, ctx, store), ScheduleAnthropicCompliance)
+}
+
+func TestUpsertWithTxClearsAutoPause(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+
+	cause := errors.New("anthropic compliance rejected the configured api key")
+	for range AutoPauseAfterRejectedPolls {
+		require.NoError(t, store.RecordSchedulePollFailure(ctx, created.Config.ID, ScheduleAnthropicCompliance, time.Now(), cause, AutoPauseAfterRejectedPolls))
+	}
+	require.NotContains(t, listCandidateSchedules(t, ctx, store), ScheduleAnthropicCompliance)
+
+	// Saving the integration (settings-only update, same config generation)
+	// lifts the pause and resets the failure streak.
+	updated := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "", false, true, &extOrgID, nil)
+	require.Equal(t, created.Config.ID, updated.Config.ID)
+
+	require.Contains(t, listCandidateSchedules(t, ctx, store), ScheduleAnthropicCompliance)
+
+	cfg, _, err := store.loadForOrgAndProviderRow(ctx, orgID, ProviderAnthropicCompliance)
+	require.NoError(t, err)
+	require.Equal(t, int32(0), cfg.ConsecutiveFailures)
+}
+
+// listCandidateSchedules returns the schedules of every currently due poll
+// candidate, keyed for membership assertions.
+func listCandidateSchedules(t *testing.T, ctx context.Context, store *Store) map[string]bool {
+	t.Helper()
+
+	candidates, err := store.ListUsagePollCandidates(ctx, time.Now().Add(24*time.Hour), 100)
+	require.NoError(t, err)
+
+	schedules := make(map[string]bool, len(candidates))
+	for _, candidate := range candidates {
+		schedules[candidate.Schedule] = true
+	}
+	return schedules
+}
+
 func upsertConfigWithTx(
 	t *testing.T,
 	ctx context.Context,
