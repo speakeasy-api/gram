@@ -1834,6 +1834,20 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
   CONSTRAINT chat_messages_seq_key UNIQUE (seq)
+) WITH (
+  -- Insert-heavy like risk_results, but also update-heavy: risk_analyzed_at
+  -- is set on every message after analysis, so dead tuples accumulate too.
+  -- With the global 0.2 scale factor a table this size tolerates >1.4M dead
+  -- tuples before autovacuum runs, leaving a large fraction of pages not
+  -- all-visible (observed: 76% visible) and pushing the planner off
+  -- index-only scans for project-wide counts onto full seq scans.
+  --
+  -- Fixed insert threshold keeps the vacuum cadence constant as the table
+  -- grows; the tighter dead-tuple scale factor covers the update churn.
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_vacuum_insert_scale_factor = 0,
+  autovacuum_vacuum_insert_threshold = 250000,
+  autovacuum_vacuum_cost_limit = 2000
 );
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
