@@ -151,6 +151,14 @@ type ListSessionsParams struct {
 	Limit            int
 }
 
+// UsesSummaryPath reports whether the requested window is wide enough to be
+// served from chat_session_summaries instead of the raw telemetry_logs scan.
+// Exposed so callers (the service-layer query span) can label which path a
+// request routed to without duplicating the threshold comparison.
+func (p ListSessionsParams) UsesSummaryPath() bool {
+	return p.TimeEnd-p.TimeStart >= SessionSummaryMinWindow.Nanoseconds()
+}
+
 type SessionSummary struct {
 	GramChatID        string  `ch:"gram_chat_id"`
 	ProjectID         string  `ch:"project_id"`
@@ -330,7 +338,7 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 	if len(arg.ProjectIDs) == 0 {
 		return nil, nil
 	}
-	if arg.TimeEnd-arg.TimeStart >= SessionSummaryMinWindow.Nanoseconds() {
+	if arg.UsesSummaryPath() {
 		return q.listSessionsFromSummaries(ctx, arg)
 	}
 	return q.listSessionsFromRawLogs(ctx, arg)
@@ -391,7 +399,7 @@ func (q *Queries) listSessionsFromRawLogs(ctx context.Context, arg ListSessionsP
 		return nil, fmt.Errorf("building list sessions query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(chQueryContext(ctx), query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +495,7 @@ func (q *Queries) listSessionsFromSummaries(ctx context.Context, arg ListSession
 		return nil, fmt.Errorf("building list sessions summary query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(chQueryContext(ctx), query, args...)
 	if err != nil {
 		return nil, err
 	}
