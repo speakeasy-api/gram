@@ -41,7 +41,7 @@ describe("DetectorCard", () => {
     expect(onToggle).toHaveBeenCalledWith(true);
   });
 
-  it("puts only a disabled switch inside a focusable tooltip trigger", async () => {
+  it("shows a disabled switch reason only when its tooltip trigger is hovered", async () => {
     const reason = "Turn off other built-in rules to select Shadow MCP.";
     renderCard({ disabledReason: reason });
 
@@ -59,8 +59,14 @@ describe("DetectorCard", () => {
     expect(trigger?.children.length).toBe(1);
     expect(trigger?.firstElementChild).toBe(toggle);
 
-    fireEvent.focus(trigger!);
+    const card = trigger?.parentElement;
+    expect(card).not.toBeNull();
+
+    fireEvent.pointerMove(card!, { pointerType: "mouse" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    fireEvent.pointerMove(trigger!, { pointerType: "mouse" });
     const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip.textContent).toContain(reason);
+    expect(tooltip.textContent).toBe(reason);
   });
 });
