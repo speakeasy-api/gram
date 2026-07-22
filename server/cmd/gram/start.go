@@ -476,11 +476,6 @@ func newStartCommand() *cli.Command {
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
 
-			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider)
-			if err != nil {
-				return err
-			}
-
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -516,6 +511,11 @@ func newStartCommand() *cli.Command {
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
+			}
+
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
+			if err != nil {
+				return err
 			}
 
 			pylonClient, err := pylon.NewPylon(logger, c.String("pylon-verification-secret"))
@@ -678,7 +678,7 @@ func newStartCommand() *cli.Command {
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
-			telemLogger, shutdown := newTelemetryLogger(ctx, logger, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled)
+			telemLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
@@ -731,7 +731,7 @@ func newStartCommand() *cli.Command {
 			}
 			accessStore := accesscontrol.NewRedisStore(cache.NewRedisCacheAdapter(redisClient), accesscontrol.AlphaTTL)
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
-			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore)
+			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore, serverURL)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, slackClient)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
@@ -775,7 +775,6 @@ func newStartCommand() *cli.Command {
 				meterProvider,
 				guardianPolicy,
 				authzEngine,
-				shadowMCPClient,
 				posthogClient,
 				telemLogger,
 				billingRepo,
@@ -973,6 +972,9 @@ func newStartCommand() *cli.Command {
 				)
 			})
 			mux.Use(middleware.RouteLabelerMiddleware)
+			// Must stay below otelhttp: it stamps attributes onto the span
+			// otelhttp opened for the request.
+			mux.Use(middleware.HookDeviceTelemetry)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 			mux.Use(middleware.NewRecovery(logger))
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
@@ -1045,7 +1047,6 @@ func newStartCommand() *cli.Command {
 				policyBypass,
 				shadowMCPClient,
 				chatWriter,
-				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
 			))

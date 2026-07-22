@@ -2,6 +2,8 @@ package aiintegrations
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -14,6 +16,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/ai_integrations"
 	srv "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/server"
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -43,7 +46,7 @@ var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
 type ConfigPoller interface {
-	Poll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error
+	Poll(ctx context.Context, organizationSlug string, syncID uuid.UUID) error
 }
 
 func NewService(
@@ -268,6 +271,240 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 	return nil
 }
 
+func (s *Service) ListSchedules(ctx context.Context, payload *gen.ListSchedulesPayload) (*gen.ListAIIntegrationSchedulesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	provider, err := normalizeProvider(payload.Provider)
+	if err != nil {
+		return nil, err
+	}
+
+	_, row, err := s.store.loadForOrgAndProviderRow(ctx, authCtx.ActiveOrganizationID, provider)
+	if err != nil {
+		return nil, err
+	}
+	result := &gen.ListAIIntegrationSchedulesResult{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Provider:       provider,
+		Schedules:      []*gen.AIIntegrationScheduleState{},
+	}
+	if row == nil {
+		return result, nil
+	}
+
+	schedules, err := s.store.ListSyncSchedules(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	// Present schedules in registry order so the dashboard renders a stable,
+	// meaningful sequence; unknown (e.g. legacy) schedules follow.
+	byName := make(map[string]SyncSchedule, len(schedules))
+	for _, schedule := range schedules {
+		byName[schedule.Schedule] = schedule
+	}
+	for _, sched := range syncSchedulesFor(provider) {
+		if schedule, ok := byName[sched.schedule]; ok {
+			result.Schedules = append(result.Schedules, scheduleView(schedule))
+			delete(byName, sched.schedule)
+		}
+	}
+	for _, schedule := range schedules {
+		if _, ok := byName[schedule.Schedule]; ok {
+			result.Schedules = append(result.Schedules, scheduleView(schedule))
+		}
+	}
+	return result, nil
+}
+
+func (s *Service) SetScheduleEnabled(ctx context.Context, payload *gen.SetScheduleEnabledPayload) (*gen.AIIntegrationScheduleState, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	provider, schedule, cfg, row, err := s.resolveScheduleTarget(ctx, authCtx.ActiveOrganizationID, payload.Provider, payload.Schedule)
+	if err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	updated, err := s.store.setSyncScheduleDisabledWithTx(ctx, dbtx, row.ID, schedule, !payload.Enabled)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.audit.LogAIIntegrationUpdateSchedule(ctx, dbtx, audit.LogAIIntegrationUpdateScheduleEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        cfg.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		ConfigURN:        urn.NewAIIntegrationConfig(row.ID),
+		Provider:         provider,
+		Schedule:         schedule,
+		Enabled:          payload.Enabled,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log ai integration schedule update").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit ai integration schedule update").LogError(ctx, logger)
+	}
+
+	return scheduleView(updated), nil
+}
+
+func (s *Service) RetrySchedule(ctx context.Context, payload *gen.RetrySchedulePayload) (*gen.AIIntegrationScheduleState, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	provider, schedule, cfg, row, err := s.resolveScheduleTarget(ctx, authCtx.ActiveOrganizationID, payload.Provider, payload.Schedule)
+	if err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	updated, err := s.store.retrySyncScheduleWithTx(ctx, dbtx, row.ID, schedule)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.audit.LogAIIntegrationRetrySchedule(ctx, dbtx, audit.LogAIIntegrationRetryScheduleEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        cfg.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		ConfigURN:        urn.NewAIIntegrationConfig(row.ID),
+		Provider:         provider,
+		Schedule:         schedule,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log ai integration schedule retry").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit ai integration schedule retry").LogError(ctx, logger)
+	}
+
+	return scheduleView(updated), nil
+}
+
+// resolveScheduleTarget validates a provider/schedule pair and loads the
+// org's config for it. Both schedule mutations share this preamble.
+func (s *Service) resolveScheduleTarget(ctx context.Context, orgID string, rawProvider string, rawSchedule string) (string, string, Config, *repo.GetConfigByOrgAndProviderRow, error) {
+	provider, err := normalizeProvider(rawProvider)
+	if err != nil {
+		return "", "", Config{}, nil, err
+	}
+
+	schedule := strings.ToLower(strings.TrimSpace(rawSchedule))
+	if !scheduleBelongsToProvider(provider, schedule) {
+		return "", "", Config{}, nil, oops.E(oops.CodeInvalid, nil, "unknown schedule %q for provider %s", rawSchedule, provider)
+	}
+
+	cfg, row, err := s.store.loadForOrgAndProviderRow(ctx, orgID, provider)
+	if err != nil {
+		return "", "", Config{}, nil, err
+	}
+	if row == nil {
+		return "", "", Config{}, nil, oops.E(oops.CodeNotFound, nil, "no ai integration config for provider %s", provider)
+	}
+	return provider, schedule, cfg, row, nil
+}
+
+func scheduleBelongsToProvider(provider string, schedule string) bool {
+	for _, sched := range syncSchedulesFor(provider) {
+		if sched.schedule == schedule {
+			return true
+		}
+	}
+	return false
+}
+
+func scheduleView(schedule SyncSchedule) *gen.AIIntegrationScheduleState {
+	var lastPollSuccessAt *string
+	if !schedule.LastPollSuccessAt.IsZero() {
+		formatted := schedule.LastPollSuccessAt.Format(time.RFC3339)
+		lastPollSuccessAt = &formatted
+	}
+	var lastPollFailedAt *string
+	if !schedule.LastPollFailedAt.IsZero() {
+		formatted := schedule.LastPollFailedAt.Format(time.RFC3339)
+		lastPollFailedAt = &formatted
+	}
+	var lastPollError *string
+	if schedule.LastPollError != "" {
+		lastPollError = &schedule.LastPollError
+	}
+	var nextPollAfter *string
+	if !schedule.NextPollAfter.IsZero() {
+		formatted := schedule.NextPollAfter.Format(time.RFC3339)
+		nextPollAfter = &formatted
+	}
+	var autoPausedAt *string
+	if !schedule.AutoPausedAt.IsZero() {
+		formatted := schedule.AutoPausedAt.Format(time.RFC3339)
+		autoPausedAt = &formatted
+	}
+	stream := streamForSchedule(schedule.Schedule)
+	return &gen.AIIntegrationScheduleState{
+		Schedule:            schedule.Schedule,
+		Stream:              conv.PtrEmpty(stream.name),
+		StreamKind:          conv.PtrEmpty(stream.kind),
+		Enabled:             schedule.DisabledAt.IsZero(),
+		Status:              deriveScheduleStatus(schedule),
+		LastPollSuccessAt:   lastPollSuccessAt,
+		LastPollFailedAt:    lastPollFailedAt,
+		LastPollError:       lastPollError,
+		NextPollAfter:       nextPollAfter,
+		ConsecutiveFailures: int(schedule.ConsecutiveFailures),
+		AutoPausedAt:        autoPausedAt,
+	}
+}
+
+func deriveScheduleStatus(schedule SyncSchedule) string {
+	switch {
+	case !schedule.DisabledAt.IsZero():
+		return "disabled"
+	case !schedule.AutoPausedAt.IsZero():
+		return "auto_paused"
+	case schedule.LastPollError != "" || !schedule.LastPollFailedAt.IsZero():
+		return "failed"
+	case !schedule.LastPollSuccessAt.IsZero():
+		return "success"
+	default:
+		return "pending"
+	}
+}
+
 func snapshotFromConfig(cfg Config) audit.AIIntegrationSnapshot {
 	return audit.AIIntegrationSnapshot{
 		Provider:    cfg.Provider,
@@ -282,8 +519,36 @@ func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, c
 	if s.configPoller == nil {
 		return nil
 	}
-	if err := s.configPoller.Poll(ctx, organizationSlug, configID, provider); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "start ai integration usage poll")
+
+	schedules, err := s.store.ListSyncSchedules(ctx, configID)
+	if err != nil {
+		return err
+	}
+	syncIDsBySchedule := make(map[string]uuid.UUID, len(schedules))
+	disabledBySchedule := make(map[string]bool, len(schedules))
+	for _, syncSchedule := range schedules {
+		syncIDsBySchedule[syncSchedule.Schedule] = syncSchedule.ID
+		disabledBySchedule[syncSchedule.Schedule] = !syncSchedule.DisabledAt.IsZero()
+	}
+
+	var startErr error
+	for _, syncSchedule := range syncSchedulesFor(provider) {
+		if disabledBySchedule[syncSchedule.schedule] {
+			// The user explicitly paused this schedule; a config save must not
+			// restart it.
+			continue
+		}
+		syncID, ok := syncIDsBySchedule[syncSchedule.schedule]
+		if !ok {
+			startErr = errors.Join(startErr, fmt.Errorf("missing %s sync schedule", syncSchedule.schedule))
+			continue
+		}
+		if err := s.configPoller.Poll(ctx, organizationSlug, syncID); err != nil {
+			startErr = errors.Join(startErr, fmt.Errorf("start %s schedule: %w", syncSchedule.schedule, err))
+		}
+	}
+	if startErr != nil {
+		return oops.E(oops.CodeUnexpected, startErr, "start ai integration sync schedules")
 	}
 	return nil
 }

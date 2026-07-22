@@ -68,7 +68,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # glibc + libstdc++/libgcc (the `cc` variant), which the grpcio/protobuf C
 # extensions pulled in by gram-infra need. Runs as the built-in `nonroot` user
 # (uid 65532). Pinned by digest for reproducible, tamper-evident builds.
-FROM gcr.io/distroless/cc-debian12:nonroot@sha256:b0ae8e989418b458e0f25489bc3be523718938a2b70864cc0f6a00af1ddbd985
+FROM gcr.io/distroless/cc-debian12:nonroot@sha256:66aa873a4a14fb164aa01296058efd8253744606d72715e45acface073359faa
 
 # Bring the standalone interpreter and the resolved virtualenv over from the
 # builder, at the SAME paths they were created on so the venv's interpreter

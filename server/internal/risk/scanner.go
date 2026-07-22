@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
+	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
@@ -178,6 +179,7 @@ type Scanner struct {
 	flags             feature.Provider            // nil disables prompt_based enforcement
 	metrics           *scannerMetrics
 	celEng            *celenv.Engine
+	recommended       ra.RecommendedSet
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
@@ -207,6 +209,10 @@ func NewScanner(
 	if err := gitleaksScanner.Prime(); err != nil {
 		return nil, fmt.Errorf("prime gitleaks scanner: %w", err)
 	}
+	recommended, err := ra.CompileRecommended(celEng)
+	if err != nil {
+		return nil, fmt.Errorf("compile recommended scopes version %d: %w", recommendedscopes.Version, err)
+	}
 
 	return &Scanner{
 		logger:            logger.With(attr.SlogComponent("risk-scanner")),
@@ -221,6 +227,7 @@ func NewScanner(
 		flags:             flags,
 		metrics:           newScannerMetrics(meterProvider, logger),
 		celEng:            celEng,
+		recommended:       recommended,
 	}, nil
 }
 
@@ -295,6 +302,15 @@ func (s *Scanner) ScanForEnforcement(
 		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
 	}
 
+	// Same once-per-scan resolution for the recommended-scopes flag: category
+	// detection scopes compose only when the project has opted in.
+	recommendedScopesOn := false
+	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
+		return inMessageScope(p)
+	}) {
+		recommendedScopesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagRiskRecommendedScopes)
+	}
+
 	// Fan out across policies. The first goroutine that finds a match returns
 	// errMatchFound, which causes errgroup to cancel its context - sibling
 	// goroutines stop their in-flight Presidio HTTP calls early instead of
@@ -320,7 +336,7 @@ func (s *Scanner) ScanForEnforcement(
 		}
 
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn)
+			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, recommendedScopesOn)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -447,7 +463,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call - its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool, recommendedScopesOn bool) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -469,6 +485,10 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 	if messageType == message.ToolRequest && toolName != "" {
 		// In realtime a tool-request's text carries the call arguments (the same
 		// body the judge sees), so it doubles as the tool_args source.
+		// Realtime receives one tool call at a time, unlike batch's multi-call
+		// transcript rows; recommended CEL over tool_calls therefore evaluates
+		// against this single call. That can scan more than batch for unusual
+		// mixed-call transcripts, which is the accepted fail-closed asymmetry.
 		view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
 	}
 
@@ -482,8 +502,16 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 	if !app.Includes(view) || app.Exempts(view) {
 		return nil, nil
 	}
+	specified, err := ra.CompileDetectionScopes(eng, ra.DetectionScopesFromConfig(policy.AnalyzerConfig))
+	if err != nil {
+		return nil, fmt.Errorf("compile detection scopes: %w", err)
+	}
+	categoryScope := ra.NewCategoryScope(app, s.recommended, specified, recommendedScopesOn)
 
 	if policy.PolicyType == ra.PolicyTypePromptBased {
+		if !categoryScope.SourceInScope(view, promptpolicy.Source) {
+			return nil, nil
+		}
 		return s.scanPromptPolicy(ctx, policy, userID, text, messageType, toolName, promptPoliciesOn), nil
 	}
 
@@ -518,13 +546,16 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 	}
 
 	for _, source := range policy.Sources {
+		if !categoryScope.SourceInScope(view, source) {
+			continue
+		}
 		switch source {
 		case ra.SourceGitleaks:
 			gitleaksFindings, err := s.scanGitleaks(ctx, text)
 			if err != nil {
 				return nil, fmt.Errorf("gitleaks scan: %w", err)
 			}
-			findings := filter(gitleaksFindings)
+			findings := categoryScope.FilterFindings(view, filter(gitleaksFindings))
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:          policy.Action,
@@ -555,7 +586,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 				return nil, fmt.Errorf("presidio scan: %w", err)
 			}
 			if len(batchResults) > 0 {
-				filtered := filter(batchResults[0])
+				filtered := categoryScope.FilterFindings(view, filter(batchResults[0]))
 				if len(filtered) > 0 {
 					f := filtered[0]
 					return &ScanResult{
@@ -578,7 +609,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
-			findings = filter(findings)
+			findings = categoryScope.FilterFindings(view, filter(findings))
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:          policy.Action,

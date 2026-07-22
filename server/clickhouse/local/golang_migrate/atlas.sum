@@ -1,4 +1,4 @@
-h1:EFn+oyUYJgk+PMGTV4EJ9Ik5o4RidvA3ccDH0jUq7q4=
+h1:R1nbsuWfmiH7zoI87kwJ7fJA70PqKVc0fCs/pmiAi4M=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -68,3 +68,4 @@ h1:EFn+oyUYJgk+PMGTV4EJ9Ik5o4RidvA3ccDH0jUq7q4=
 20260720185505_attribute-metrics-hook-hostname.up.sql h1:Ggjec/JEHOOMKS9zMX+djrpEBfSvKxfJlTuVbdCFyKg=
 20260720233842_claude-chat-usage-cost-metrics.up.sql h1:TtR9XV8rHMzy6dWfU4sjSWf5x0E+YGgDo7Nf8JoiHeI=
 20260721110206_add-skill-efficacy-scores.up.sql h1:yLULRRhE+zNj3CegTohy2vsBNPAJUx62UFD8hStRhB0=
+20260721203204_chat-session-summaries.up.sql h1:fOP1yfsSpEdQckBZzIvJUW8R43K+AkQ293thLiUMldo=

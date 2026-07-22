@@ -772,6 +772,189 @@ FROM telemetry_logs
 WHERE chat_id != ''
 GROUP BY gram_project_id, chat_id, time_bucket, hook_source;
 
+CREATE TABLE IF NOT EXISTS chat_session_summaries (
+    -- Key cols. Hour buckets (not chat-only keying) so the sessions list can
+    -- aggregate only the buckets inside the requested time window, matching the
+    -- raw query's in-window semantics to ~1h at the window edges. Reads filter
+    -- by (project, time range) then GROUP BY chat_id, merging a chat's buckets.
+    gram_project_id UUID,
+    time_bucket DateTime('UTC'),
+    chat_id String,
+
+    -- Display cols. max() so '' always loses to a non-empty value during part
+    -- merges (any() could persist an empty sibling; see trace_summaries).
+    session_user_email SimpleAggregateFunction(max, String),
+    session_hook_source SimpleAggregateFunction(max, String),
+    -- Latest non-empty effective model by event time.
+    session_model AggregateFunction(argMaxIf, String, Int64, UInt8),
+
+    -- Aggregates
+    start_time_unix_nano SimpleAggregateFunction(min, Int64),
+    end_time_unix_nano SimpleAggregateFunction(max, Int64),
+    -- Exact distinct counts: per-chat states stay small (one entry per
+    -- turn/tool call), so uniqExact costs little here and keeps parity with
+    -- the raw sessions query.
+    message_count AggregateFunction(uniqExactIf, String, UInt8),
+    tool_call_count AggregateFunction(uniqExactIf, String, UInt8),
+    -- Failed tool calls; the session status is derived at read time as
+    -- sum > 0 ? error : success.
+    failed_tool_call_count SimpleAggregateFunction(sum, UInt64),
+    total_input_tokens SimpleAggregateFunction(sum, Int64),
+    total_output_tokens SimpleAggregateFunction(sum, Int64),
+    total_tokens SimpleAggregateFunction(sum, Int64),
+    cache_read_input_tokens SimpleAggregateFunction(sum, Int64),
+    cache_creation_input_tokens SimpleAggregateFunction(sum, Int64),
+    total_cost SimpleAggregateFunction(sum, Float64),
+
+    -- Filter-support cols: the distinct values each session filter dimension
+    -- takes across the bucket's rows. ListSessions matches a chat when ANY of
+    -- its rows carries a requested value (HAVING countIf > 0 on the raw path),
+    -- which arrayExists/hasAny answers over these merged arrays. '' entries are
+    -- kept: the "(unset)" bucket means no non-empty value on any row, checked
+    -- as NOT arrayExists(x -> x != ''). Merges union via groupUniqArrayArray.
+    department_names SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    job_titles SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    employee_types SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    division_names SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    cost_center_names SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    -- The email dimension's row expression falls back to the device hostname
+    -- when a row carries no email (company-credential sessions emit no user
+    -- identity), mirroring the "email" entry in the dimension registry.
+    emails SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    hostnames SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    models SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    hook_sources SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    account_types SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    providers SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    billing_modes SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    roles SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    groups SimpleAggregateFunction(groupUniqArrayArray, Array(String)),
+    -- Claude attribution values are matched as a single api_request-row tuple
+    -- (query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name) so
+    -- drilling from the aggregate cost table finds chats with a row matching
+    -- the same tuple (see applySessionFilters' co-located predicates).
+    attribution_tuples SimpleAggregateFunction(groupUniqArrayArray, Array(Tuple(query_source String, skill_name String, agent_name String, mcp_server_name String, mcp_tool_name String)))
+) ENGINE = AggregatingMergeTree
+ORDER BY (gram_project_id, time_bucket, chat_id)
+TTL time_bucket + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Per-chat hourly session summaries powering the org-scoped sessions list (telemetry.listSessions) without scanning raw telemetry_logs';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS chat_session_summaries_mv TO chat_session_summaries AS
+-- Provenance-first ingestion, identical to attribute_metrics_summaries_mv:
+-- Claude OTEL api_request rows for usage, tool_result rows for tool calls,
+-- Codex/Cursor/Claude-Chat usage rows, and Codex/Cursor completed tool-call
+-- hook rows. Keep the predicates in sync with the session* constants in
+-- server/internal/telemetry/repo/sessions.go and with
+-- attribute_metrics_summaries_mv above.
+WITH
+    -- Cutoff separates live MV ingestion from the one-time historical
+    -- backfill runbook
+    -- (clickhouse/local/backfill/20260721220000_backfill-chat-session-summaries.sql,
+    -- executed out-of-band after this cutoff has passed, covering event times
+    -- before it). Must be a whole-hour boundary so time_bucket partitions
+    -- cleanly between the two writers, and is kept tight — hours, not days —
+    -- so the backfill can run and the dashboard read path can cut over ASAP
+    -- (INC-417). If the deploy misses the cutoff, do NOT edit this value in
+    -- place: the runbook's preflight derives the effective boundary from the
+    -- MV's actual creation time and repairs the partial buckets below it.
+    toUnixTimestamp64Nano(toDateTime64('2026-07-21 22:00:00', 9, 'UTC')) AS chat_session_cutoff_unix_nano,
+    (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
+    (
+        is_claude_otel_row
+        AND chat_id != ''
+        AND toString(attributes.prompt.id) != ''
+        AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
+    ) AS is_claude_api_request,
+    (
+        is_claude_otel_row
+        AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
+    ) AS is_claude_tool_result,
+    (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+    (
+        hook_source IN ('codex', 'cursor')
+        AND toString(attributes.gram.tool.name) != ''
+        AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
+        AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
+    ) AS is_agent_tool_call,
+    (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
+    (is_claude_api_request OR is_agent_usage_row) AS is_usage_row,
+    -- A counted tool call that failed: Claude tool_result rows carry
+    -- success="false", Codex/Cursor hook rows report PostToolUseFailure or an
+    -- HTTP error status.
+    (
+        (is_claude_tool_result AND toString(attributes.success) = 'false')
+        OR (is_agent_tool_call AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
+    ) AS is_failed_tool_call,
+    multiIf(
+        toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
+        toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
+        toString(id)
+    ) AS tool_call_dedup_id,
+    -- One distinct message per Claude api_request turn (prompt.id); generic
+    -- rows key off gen_ai.response.id.
+    if(is_claude_api_request, toString(attributes.prompt.id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+    -- Per-row effective model: Claude api_request rows put it on
+    -- attributes.model / gen_ai.request.model, everyone else on
+    -- gen_ai.response.model.
+    multiIf(
+        is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
+        is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
+        toString(attributes.gen_ai.response.model)
+    ) AS effective_model
+SELECT
+    gram_project_id,
+    -- Force UTC so bucket boundaries never shift with the server timezone.
+    toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS time_bucket,
+    chat_id,
+
+    max(user_email) AS session_user_email,
+    max(hook_source) AS session_hook_source,
+    argMaxIfState(effective_model, time_unix_nano, effective_model != '') AS session_model,
+
+    min(time_unix_nano) AS start_time_unix_nano,
+    max(time_unix_nano) AS end_time_unix_nano,
+    uniqExactIfState(session_message_id, session_message_id != '') AS message_count,
+    uniqExactIfState(tool_call_dedup_id, is_counted_tool_call) AS tool_call_count,
+    countIf(is_failed_tool_call) AS failed_tool_call_count,
+
+    -- Token/cost measures mirror attribute_metrics_summaries_mv exactly:
+    -- Claude api_request rows carry usage on flat attributes, generic usage
+    -- rows under gen_ai.usage.*; total_tokens is input + output + cache
+    -- WRITES (no cache reads).
+    sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
+    sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
+    sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
+    sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
+    sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS cache_creation_input_tokens,
+    sumIf(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_usage_row) AS total_cost,
+
+    -- Filter-support arrays: raw-path row expressions from the dimension
+    -- registry (server/internal/telemetry/repo/dimensions.go), deduplicated
+    -- per bucket.
+    groupUniqArray(toString(attributes.user.attributes.department_name)) AS department_names,
+    groupUniqArray(toString(attributes.user.attributes.job_title)) AS job_titles,
+    groupUniqArray(toString(attributes.user.attributes.employee_type)) AS employee_types,
+    groupUniqArray(toString(attributes.user.attributes.division_name)) AS division_names,
+    groupUniqArray(toString(attributes.user.attributes.cost_center_name)) AS cost_center_names,
+    groupUniqArray(if(user_email != '', user_email, toString(attributes.gram.hook.hostname))) AS emails,
+    groupUniqArray(toString(attributes.gram.hook.hostname)) AS hostnames,
+    groupUniqArray(effective_model) AS models,
+    groupUniqArray(hook_source) AS hook_sources,
+    groupUniqArray(account_type) AS account_types,
+    groupUniqArray(provider) AS providers,
+    groupUniqArray(billing_mode) AS billing_modes,
+    groupUniqArrayArray(arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))) AS roles,
+    groupUniqArrayArray(arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))) AS groups,
+    -- Attribution values only exist meaningfully on api_request rows; the If
+    -- guard keeps other rows from contributing an all-empty tuple.
+    groupUniqArrayIf(tuple(toString(attributes.query_source), toString(attributes.skill.name), toString(attributes.agent.name), toString(attributes.mcp_server.name), toString(attributes.mcp_tool.name)), is_claude_api_request) AS attribution_tuples
+FROM telemetry_logs
+WHERE time_unix_nano >= chat_session_cutoff_unix_nano
+  AND chat_id != ''
+  AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
+GROUP BY gram_project_id, time_bucket, chat_id;
+
 CREATE TABLE IF NOT EXISTS attribute_keys (
     gram_project_id UUID,
     attribute_key String,

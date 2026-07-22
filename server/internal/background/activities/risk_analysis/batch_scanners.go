@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, outOfPolicyScope []bool) ([][]scanners.Finding, error) {
+func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
@@ -55,8 +55,10 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	if sources.Has(SourcePresidio) {
 		wg.Go(func() {
-			findings, err := a.scanPresidio(ctx, args, requestID, messages, contents)
-			presidioFindings = findings
+			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
+			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePresidio, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
+			findings, err := a.scanPresidio(ctx, args, requestID, subMessages, subContents)
+			presidioFindings = scatterFindings(n, indices, findings)
 			if err != nil {
 				presidioErr = err
 			}
@@ -65,7 +67,10 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	if sources.Has(SourcePromptInjection) {
 		wg.Go(func() {
-			promptInjectionFindings = a.scanPromptInjection(ctx, args, requestID, messages, contents)
+			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
+			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
+			findings := a.scanPromptInjection(ctx, args, requestID, subMessages, subContents)
+			promptInjectionFindings = scatterFindings(n, indices, findings)
 		})
 	}
 
@@ -117,7 +122,9 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	// bypassing the message-type filter and CEL scope that shape `messages`.
 
 	return mergeFindings(mergeFindingsInput{
-		outOfPolicyScope:        outOfPolicyScope,
+		orgID:                   args.OrganizationID,
+		metrics:                 a.metrics,
+		masks:                   masks,
 		exclusions:              exclusions,
 		builtinEnabled:          args.BuiltinPresetsEnabled,
 		builtinPresets:          a.builtinPresets,
@@ -128,11 +135,13 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		cliDestructiveFindings:  cliDestructiveFindings,
 		promptInjectionFindings: promptInjectionFindings,
 		customFindings:          customFindings,
-	}), nil
+	}, ctx), nil
 }
 
 type mergeFindingsInput struct {
-	outOfPolicyScope        []bool
+	orgID                   string
+	metrics                 *riskMetrics
+	masks                   CategoryScopeMasks
 	exclusions              ExclusionSet
 	builtinEnabled          bool
 	builtinPresets          *presetlib.Library
@@ -145,12 +154,9 @@ type mergeFindingsInput struct {
 	customFindings          [][]scanners.Finding
 }
 
-func mergeFindings(in mergeFindingsInput) [][]scanners.Finding {
+func mergeFindings(in mergeFindingsInput, ctx context.Context) [][]scanners.Finding {
 	merged := make([][]scanners.Finding, len(in.gitleaksFindings))
 	for i := range merged {
-		if len(in.outOfPolicyScope) > 0 && in.outOfPolicyScope[i] {
-			continue
-		}
 		combined := concatFindings(
 			in.gitleaksFindings[i],
 			in.presidioFindings[i],
@@ -160,6 +166,7 @@ func mergeFindings(in mergeFindingsInput) [][]scanners.Finding {
 			in.promptInjectionFindings[i],
 			in.customFindings[i],
 		)
+		combined = filterByCategoryScopes(ctx, in.orgID, in.metrics, in.masks, i, combined)
 		if !in.exclusions.Empty() {
 			combined = in.exclusions.FilterFindings(combined)
 		}
@@ -171,10 +178,28 @@ func mergeFindings(in mergeFindingsInput) [][]scanners.Finding {
 	return merged
 }
 
+func filterByCategoryScopes(ctx context.Context, orgID string, metrics *riskMetrics, masks CategoryScopeMasks, i int, in []scanners.Finding) []scanners.Finding {
+	if len(in) == 0 {
+		return in
+	}
+	out := make([]scanners.Finding, 0, len(in))
+	for _, finding := range in {
+		cat := categoryForFinding(finding)
+		if masks.InScope(i, cat) {
+			out = append(out, finding)
+			continue
+		}
+		if len(masks.policyOut) == 0 || !masks.policyOut[i] {
+			metrics.RecordRecommendedScopeSuppressed(ctx, orgID, cat)
+		}
+	}
+	return out
+}
+
 func messageContents(messages []batchMessage) []string {
 	contents := make([]string, len(messages))
 	for i, msg := range messages {
-		contents[i] = msg.Content
+		contents[i] = msg.scanSurface()
 	}
 	return contents
 }
@@ -189,16 +214,4 @@ func concatFindings(groups ...[]scanners.Finding) []scanners.Finding {
 		out = append(out, group...)
 	}
 	return out
-}
-
-func (a *AnalyzeBatch) scopeExclusions(_ context.Context, scope CompiledScope, messages []batchMessage) []bool {
-	if !scope.Active() {
-		return []bool{}
-	}
-	excluded := make([]bool, len(messages))
-	for i, msg := range messages {
-		view := batchMessageView(msg)
-		excluded[i] = !scope.Includes(view) || scope.Exempts(view)
-	}
-	return excluded
 }

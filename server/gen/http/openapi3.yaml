@@ -4861,12 +4861,12 @@ paths:
             operationId: getAIIntegrationConfig
             parameters:
                 - allowEmptyValue: true
-                  description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+                  description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
                   in: query
                   name: provider
                   required: true
                   schema:
-                    description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -4952,6 +4952,293 @@ paths:
             x-speakeasy-name-override: getConfig
             x-speakeasy-react-hook:
                 name: AIIntegrationConfig
+    /rpc/aiIntegrations.listSchedules:
+        get:
+            description: List the sync schedules and their scheduler state for a provider's org-wide AI integration config. Returns an empty list when no config is set.
+            operationId: listAIIntegrationSchedules
+            parameters:
+                - allowEmptyValue: true
+                  description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+                  in: query
+                  name: provider
+                  required: true
+                  schema:
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAIIntegrationSchedulesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listSchedules aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: listSchedules
+            x-speakeasy-react-hook:
+                name: AIIntegrationSchedules
+    /rpc/aiIntegrations.retrySchedule:
+        post:
+            description: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak. The scheduler picks it up on its next tick.
+            operationId: retryAIIntegrationSchedule
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RetryScheduleRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AIIntegrationScheduleState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: retrySchedule aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: retrySchedule
+            x-speakeasy-react-hook:
+                name: RetryAIIntegrationSchedule
+    /rpc/aiIntegrations.setScheduleEnabled:
+        post:
+            description: Enable or disable one sync schedule of a provider's org-wide AI integration config. Disabled schedules are skipped by the poller until re-enabled.
+            operationId: setAIIntegrationScheduleEnabled
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetScheduleEnabledRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AIIntegrationScheduleState'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: setScheduleEnabled aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: setScheduleEnabled
+            x-speakeasy-react-hook:
+                name: SetAIIntegrationScheduleEnabled
     /rpc/aiIntegrations.upsertConfig:
         post:
             description: Create or update the org-wide AI integration config for a provider.
@@ -8482,11 +8769,11 @@ paths:
             operationId: listChats
             parameters:
                 - allowEmptyValue: true
-                  description: Search query (searches chat ID, user ID, and title)
+                  description: Search query (searches chat ID, user ID, user name, and title)
                   in: query
                   name: search
                   schema:
-                    description: Search query (searches chat ID, user ID, and title)
+                    description: Search query (searches chat ID, user ID, user name, and title)
                     type: string
                 - allowEmptyValue: true
                   description: Filter by external user ID
@@ -18948,6 +19235,113 @@ paths:
             x-speakeasy-name-override: getDeletePreflight
             x-speakeasy-react-hook:
                 name: OrganizationRemoteSessionIssuerDeletePreflight
+    /rpc/organizationRemoteSessionIssuers.getMigratePreflight:
+        get:
+            description: 'Authoritative impact summary for migrating a remote_session_issuer''s clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.'
+            operationId: getOrganizationRemoteSessionIssuerMigratePreflight
+            parameters:
+                - allowEmptyValue: true
+                  description: The remote_session_issuer to migrate away from.
+                  in: query
+                  name: source_id
+                  required: true
+                  schema:
+                    description: The remote_session_issuer to migrate away from.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The remote_session_issuer to migrate onto.
+                  in: query
+                  name: target_id
+                  required: true
+                  schema:
+                    description: The remote_session_issuer to migrate onto.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationIssuerMigratePreflight'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: getIssuerMigratePreflight organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: getMigratePreflight
+            x-speakeasy-react-hook:
+                name: OrganizationRemoteSessionIssuerMigratePreflight
     /rpc/organizationRemoteSessionIssuers.list:
         get:
             description: List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
@@ -19060,6 +19454,101 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: OrganizationRemoteSessionIssuers
+    /rpc/organizationRemoteSessionIssuers.migrate:
+        post:
+            description: 'Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller''s organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.'
+            operationId: migrateOrganizationRemoteSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MigrateIssuerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MigrateOrganizationRemoteSessionIssuerResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: migrateIssuer organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: migrate
+            x-speakeasy-react-hook:
+                name: MigrateOrganizationRemoteSessionIssuer
     /rpc/organizationRemoteSessionIssuers.move:
         post:
             description: 'Re-scope a remote_session_issuer in the caller''s organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.'
@@ -42229,7 +42718,7 @@ components:
                     description: Whether the provider integration is active.
                 external_organization_id:
                     type: string
-                    description: Provider organization identifier. Required for anthropic_compliance; omitted for providers that do not need one.
+                    description: Provider organization identifier. Required for anthropic_compliance and codex_compliance; omitted for providers that do not need one.
                 has_api_key:
                     type: boolean
                     description: Whether an API key is currently stored. The key itself is never returned.
@@ -42266,7 +42755,7 @@ components:
                     description: Project used as the telemetry write target. Omitted when no config is set.
                 provider:
                     type: string
-                    description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
                 updated_at:
                     type: string
                     description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
@@ -42277,6 +42766,62 @@ components:
                 - provider
                 - enabled
                 - has_api_key
+        AIIntegrationScheduleState:
+            type: object
+            properties:
+                auto_paused_at:
+                    type: string
+                    description: ISO 8601 timestamp when the scheduler auto-paused the schedule after repeated provider rejections. Omitted unless auto-paused.
+                    format: date-time
+                consecutive_failures:
+                    type: integer
+                    description: Number of consecutive failed polls. Resets to zero on success or retry.
+                    format: int64
+                enabled:
+                    type: boolean
+                    description: Whether the user has this schedule enabled. Disabled schedules are skipped by the poller until re-enabled.
+                last_poll_error:
+                    type: string
+                    description: Stored error from the schedule's latest failed poll. Omitted unless the latest poll failed.
+                last_poll_failed_at:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's latest failed poll. Omitted unless a poll has failed.
+                    format: date-time
+                last_poll_success_at:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's last successful poll. Omitted until a poll succeeds.
+                    format: date-time
+                next_poll_after:
+                    type: string
+                    description: ISO 8601 timestamp for the schedule's next scheduled poll.
+                    format: date-time
+                schedule:
+                    type: string
+                    description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
+                status:
+                    type: string
+                    description: Derived status for the schedule's latest poll state.
+                    enum:
+                        - pending
+                        - success
+                        - failed
+                        - auto_paused
+                        - disabled
+                stream:
+                    type: string
+                    description: Product-level identifier for the stream this schedule writes (e.g. cursor.usage, claude.chat.message). Omitted for legacy schedules with no registered stream.
+                stream_kind:
+                    type: string
+                    description: Whether the stream carries discrete events or aggregated metrics. Omitted for legacy schedules with no registered stream.
+                    enum:
+                        - events
+                        - metrics
+            description: Scheduler state for one sync schedule (stream) of a provider integration.
+            required:
+                - schedule
+                - enabled
+                - status
+                - consecutive_failures
         AccessMember:
             type: object
             properties:
@@ -43757,6 +44302,12 @@ components:
                     description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
                 agent_usage:
                     $ref: '#/components/schemas/AgentUsage'
+                assistant_id:
+                    type: string
+                    description: The ID of the assistant that produced this chat, if any
+                assistant_name:
+                    type: string
+                    description: The name of the assistant that produced this chat, if any
                 created_at:
                     type: string
                     description: When the chat was created.
@@ -43914,6 +44465,12 @@ components:
                 account_type:
                     type: string
                     description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
+                assistant_id:
+                    type: string
+                    description: The ID of the assistant that produced this chat, if any
+                assistant_name:
+                    type: string
+                    description: The name of the assistant that produced this chat, if any
                 created_at:
                     type: string
                     description: When the chat was created.
@@ -45364,6 +45921,11 @@ components:
                     items:
                         type: string
                     description: 'Custom detection rule ids to attach as detectors: a match produces a finding.'
+                detection_scopes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskDetectionScope'
+                    description: Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Empty/omitted = all recommendations apply unchanged.
                 disabled_rules:
                     type: array
                     items:
@@ -45987,7 +46549,7 @@ components:
             properties:
                 provider:
                     type: string
-                    description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
             required:
                 - provider
         DeleteGlobalToolVariationForm:
@@ -49091,6 +49653,25 @@ components:
             required:
                 - client_name
                 - activity_count
+        ListAIIntegrationSchedulesResult:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization the schedules belong to.
+                provider:
+                    type: string
+                    description: AI provider identifier.
+                schedules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AIIntegrationScheduleState'
+                    description: Scheduler state for each of the provider's sync schedules.
+            description: Sync schedules for one provider integration. Empty when no config is set for the provider.
+            required:
+                - organization_id
+                - provider
+                - schedules
         ListAllowedOriginsResult:
             type: object
             properties:
@@ -50833,6 +51414,20 @@ components:
                 - target_label
                 - total_tool_calls
                 - recent_tool_calls
+        MigrateIssuerRequestBody:
+            type: object
+            properties:
+                source_id:
+                    type: string
+                    description: The remote_session_issuer to migrate away from; soft-deleted on success.
+                    format: uuid
+                target_id:
+                    type: string
+                    description: The remote_session_issuer to migrate onto; survives and adopts the source's clients.
+                    format: uuid
+            required:
+                - source_id
+                - target_id
         MigrateLegacyGramRegistrationsForm:
             type: object
             properties:
@@ -50858,6 +51453,23 @@ components:
             description: Result of a legacy gram registration migration.
             required:
                 - migrated_count
+        MigrateOrganizationRemoteSessionIssuerResult:
+            type: object
+            properties:
+                clients_migrated:
+                    type: integer
+                    description: Number of remote_session_clients re-pointed from the source issuer to the target issuer. Zero when the source had no active clients.
+                    format: int64
+                issuer:
+                    $ref: '#/components/schemas/RemoteSessionIssuer'
+                source_deleted:
+                    type: boolean
+                    description: TRUE when the source issuer was soft-deleted.
+            description: 'Outcome of consolidating a source remote_session_issuer onto a target issuer: the surviving target issuer, how many clients were re-pointed, and whether the source was soft-deleted.'
+            required:
+                - issuer
+                - clients_migrated
+                - source_deleted
         MintUserSessionRequestBody:
             type: object
             properties:
@@ -51659,6 +52271,44 @@ components:
             required:
                 - client_count
                 - mcp_server_names
+        OrganizationIssuerMigratePreflight:
+            type: object
+            properties:
+                can_migrate:
+                    type: boolean
+                    description: 'TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.'
+                client_count:
+                    type: integer
+                    description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
+                    format: int64
+                conflicting_mcp_server_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+                endpoint_mismatches:
+                    type: array
+                    items:
+                        type: string
+                    description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.
+                mcp_server_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Display names of MCP servers attached to the source issuer's clients.
+                warnings:
+                    type: array
+                    items:
+                        type: string
+                    description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+            description: 'Authoritative impact summary for migrating a remote_session_issuer''s clients onto another issuer: how many clients move, which MCP servers are affected, and every blocker that would make the migration fail.'
+            required:
+                - client_count
+                - mcp_server_names
+                - endpoint_mismatches
+                - conflicting_mcp_server_names
+                - warnings
+                - can_migrate
         OrganizationMcpServer:
             type: object
             properties:
@@ -53651,6 +54301,18 @@ components:
                 - type
                 - status_codes
                 - content_types
+        RetryScheduleRequestBody:
+            type: object
+            properties:
+                provider:
+                    type: string
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+                schedule:
+                    type: string
+                    description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
+            required:
+                - provider
+                - schedule
         RevokeAllRemoteSessionsResult:
             type: object
             properties:
@@ -53705,9 +54367,14 @@ components:
                     items:
                         $ref: '#/components/schemas/RiskCategoryDefinition'
                     description: Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.
+                recommended_scopes_version:
+                    type: integer
+                    description: Version of the recommended-scope registry; bumps when any recommendation changes.
+                    format: int64
             description: Canonical risk category definitions used to classify findings, in classification-priority order. Consumers should iterate in order and pick the first match.
             required:
                 - categories
+                - recommended_scopes_version
         RiskCategoryDefinition:
             type: object
             properties:
@@ -53723,6 +54390,18 @@ components:
                 label:
                     type: string
                     description: Human-readable category label for UI rendering.
+                recommended_scope_applicable:
+                    type: boolean
+                    description: False when the category is session-scoped and message scoping does not apply (e.g. account_identity).
+                recommended_scope_exempt:
+                    type: string
+                    description: Centrally recommended CEL exemption predicate; empty = no exemption.
+                recommended_scope_include:
+                    type: string
+                    description: Centrally recommended CEL scope predicate for this category; empty = no include restriction.
+                recommended_scope_rationale:
+                    type: string
+                    description: User-facing explanation of the recommended scope and the consequences of disabling it. Empty when the category has no recommendation.
                 rule_id_prefix:
                     type: string
                     description: When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').
@@ -53743,6 +54422,10 @@ components:
                 - source
                 - rule_ids
                 - rule_id_prefix
+                - recommended_scope_include
+                - recommended_scope_exempt
+                - recommended_scope_rationale
+                - recommended_scope_applicable
         RiskChatSummary:
             type: object
             properties:
@@ -53816,6 +54499,20 @@ components:
                 - severity
                 - created_at
                 - updated_at
+        RiskDetectionScope:
+            type: object
+            properties:
+                category:
+                    type: string
+                    description: Risk category key this detection scope applies to.
+                scope_exempt:
+                    type: string
+                    description: 'CEL exemption predicate: the category skips a message when this boolean expression is true. Empty means no exemption.'
+                scope_include:
+                    type: string
+                    description: 'CEL scope predicate: the category detects on a message only when this boolean expression is true. Empty means every message surface is included.'
+            required:
+                - category
         RiskExclusion:
             type: object
             properties:
@@ -54025,6 +54722,11 @@ components:
                     items:
                         type: string
                     description: 'Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.'
+                detection_scopes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskDetectionScope'
+                    description: Per-category detection scopes specified for this policy. The scan surface merges these with the recommended scopes, the specified scope winning on category conflict. Empty means every recommendation applies unchanged.
                 disabled_rules:
                     type: array
                     items:
@@ -55818,6 +56520,22 @@ components:
                     $ref: '#/components/schemas/Project'
             required:
                 - project
+        SetScheduleEnabledRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether the schedule should be polled.
+                provider:
+                    type: string
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+                schedule:
+                    type: string
+                    description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
+            required:
+                - provider
+                - schedule
+                - enabled
         SetSourceEnvironmentLinkRequestBody:
             type: object
             properties:
@@ -59457,6 +60175,11 @@ components:
                     items:
                         type: string
                     description: 'Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.'
+                detection_scopes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskDetectionScope'
+                    description: Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Omit to preserve the current value; send empty to clear.
                 disabled_rules:
                     type: array
                     items:
@@ -60040,10 +60763,10 @@ components:
                     description: Whether the integration should be active.
                 external_organization_id:
                     type: string
-                    description: Provider organization identifier. Required for anthropic_compliance.
+                    description: Provider organization identifier. Required for anthropic_compliance and codex_compliance.
                 provider:
                     type: string
-                    description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
             required:
                 - provider
                 - api_key

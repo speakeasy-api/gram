@@ -1,3 +1,4 @@
+import celExamples from "./cel-examples.json";
 import {
   DETECTION_RULES,
   POLICY_MESSAGE_TYPE_META,
@@ -205,47 +206,16 @@ export function policyMessageTypesForForm(
   );
 }
 
-export function policyMessageTypesForPayload(
-  selectedMessageTypes: Set<PolicyMessageType>,
-): PolicyMessageType[] {
-  const orderedTypes = ALL_POLICY_MESSAGE_TYPES.filter((type) =>
-    selectedMessageTypes.has(type),
-  );
-  if (orderedTypes.length === ALL_POLICY_MESSAGE_TYPES.length) {
-    return [];
-  }
-  return orderedTypes;
-}
-
 /** Example scope CEL snippets offered beneath the include field — narrow a
- *  policy to a subset of messages. */
-export const SCOPE_INCLUDE_CEL_EXAMPLES: { label: string; expr: string }[] = [
-  {
-    label: "Only a GitHub server",
-    expr: 'tools.exists(t, t.server.matchExact("github"))',
-  },
-  {
-    label: "Production prompts",
-    expr: 'prompt.matchText("production")',
-  },
-  {
-    label: "Delete-style tools",
-    expr: 'tools.exists(t, t.function.matchGlob("*delete*"))',
-  },
-];
+ *  policy to a subset of messages. Lives in cel-examples.json so the celenv
+ *  Go test compile-checks every snippet against the real engine. */
+export const SCOPE_INCLUDE_CEL_EXAMPLES: { label: string; expr: string }[] =
+  celExamples.scope_include;
 
 /** Example scope CEL snippets offered beneath the exempt field — take matching
  *  messages out of the policy entirely (an allowlist). */
-export const SCOPE_EXEMPT_CEL_EXAMPLES: { label: string; expr: string }[] = [
-  {
-    label: "Read-only tools",
-    expr: 'tools.exists(t, t.function.matchGlob("*get*") || t.function.matchGlob("*list*"))',
-  },
-  {
-    label: "A safelisted server",
-    expr: 'tools.exists(t, t.server.matchExact("internal-docs"))',
-  },
-];
+export const SCOPE_EXEMPT_CEL_EXAMPLES: { label: string; expr: string }[] =
+  celExamples.scope_exempt;
 
 export const ACTION_OPTIONS: {
   value: PolicyAction;

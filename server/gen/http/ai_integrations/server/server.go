@@ -18,10 +18,13 @@ import (
 
 // Server lists the aiIntegrations service endpoint HTTP handlers.
 type Server struct {
-	Mounts       []*MountPoint
-	GetConfig    http.Handler
-	UpsertConfig http.Handler
-	DeleteConfig http.Handler
+	Mounts             []*MountPoint
+	GetConfig          http.Handler
+	UpsertConfig       http.Handler
+	DeleteConfig       http.Handler
+	ListSchedules      http.Handler
+	SetScheduleEnabled http.Handler
+	RetrySchedule      http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -54,10 +57,16 @@ func New(
 			{"GetConfig", "GET", "/rpc/aiIntegrations.getConfig"},
 			{"UpsertConfig", "POST", "/rpc/aiIntegrations.upsertConfig"},
 			{"DeleteConfig", "POST", "/rpc/aiIntegrations.deleteConfig"},
+			{"ListSchedules", "GET", "/rpc/aiIntegrations.listSchedules"},
+			{"SetScheduleEnabled", "POST", "/rpc/aiIntegrations.setScheduleEnabled"},
+			{"RetrySchedule", "POST", "/rpc/aiIntegrations.retrySchedule"},
 		},
-		GetConfig:    NewGetConfigHandler(e.GetConfig, mux, decoder, encoder, errhandler, formatter),
-		UpsertConfig: NewUpsertConfigHandler(e.UpsertConfig, mux, decoder, encoder, errhandler, formatter),
-		DeleteConfig: NewDeleteConfigHandler(e.DeleteConfig, mux, decoder, encoder, errhandler, formatter),
+		GetConfig:          NewGetConfigHandler(e.GetConfig, mux, decoder, encoder, errhandler, formatter),
+		UpsertConfig:       NewUpsertConfigHandler(e.UpsertConfig, mux, decoder, encoder, errhandler, formatter),
+		DeleteConfig:       NewDeleteConfigHandler(e.DeleteConfig, mux, decoder, encoder, errhandler, formatter),
+		ListSchedules:      NewListSchedulesHandler(e.ListSchedules, mux, decoder, encoder, errhandler, formatter),
+		SetScheduleEnabled: NewSetScheduleEnabledHandler(e.SetScheduleEnabled, mux, decoder, encoder, errhandler, formatter),
+		RetrySchedule:      NewRetryScheduleHandler(e.RetrySchedule, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -69,6 +78,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetConfig = m(s.GetConfig)
 	s.UpsertConfig = m(s.UpsertConfig)
 	s.DeleteConfig = m(s.DeleteConfig)
+	s.ListSchedules = m(s.ListSchedules)
+	s.SetScheduleEnabled = m(s.SetScheduleEnabled)
+	s.RetrySchedule = m(s.RetrySchedule)
 }
 
 // MethodNames returns the methods served.
@@ -79,6 +91,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetConfigHandler(mux, h.GetConfig)
 	MountUpsertConfigHandler(mux, h.UpsertConfig)
 	MountDeleteConfigHandler(mux, h.DeleteConfig)
+	MountListSchedulesHandler(mux, h.ListSchedules)
+	MountSetScheduleEnabledHandler(mux, h.SetScheduleEnabled)
+	MountRetryScheduleHandler(mux, h.RetrySchedule)
 }
 
 // Mount configures the mux to serve the aiIntegrations endpoints.
@@ -222,6 +237,165 @@ func NewDeleteConfigHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteConfig")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListSchedulesHandler configures the mux to serve the "aiIntegrations"
+// service "listSchedules" endpoint.
+func MountListSchedulesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/aiIntegrations.listSchedules", f)
+}
+
+// NewListSchedulesHandler creates a HTTP handler which loads the HTTP request
+// and calls the "aiIntegrations" service "listSchedules" endpoint.
+func NewListSchedulesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListSchedulesRequest(mux, decoder)
+		encodeResponse = EncodeListSchedulesResponse(encoder)
+		encodeError    = EncodeListSchedulesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listSchedules")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetScheduleEnabledHandler configures the mux to serve the
+// "aiIntegrations" service "setScheduleEnabled" endpoint.
+func MountSetScheduleEnabledHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/aiIntegrations.setScheduleEnabled", f)
+}
+
+// NewSetScheduleEnabledHandler creates a HTTP handler which loads the HTTP
+// request and calls the "aiIntegrations" service "setScheduleEnabled" endpoint.
+func NewSetScheduleEnabledHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetScheduleEnabledRequest(mux, decoder)
+		encodeResponse = EncodeSetScheduleEnabledResponse(encoder)
+		encodeError    = EncodeSetScheduleEnabledError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setScheduleEnabled")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRetryScheduleHandler configures the mux to serve the "aiIntegrations"
+// service "retrySchedule" endpoint.
+func MountRetryScheduleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/aiIntegrations.retrySchedule", f)
+}
+
+// NewRetryScheduleHandler creates a HTTP handler which loads the HTTP request
+// and calls the "aiIntegrations" service "retrySchedule" endpoint.
+func NewRetryScheduleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRetryScheduleRequest(mux, decoder)
+		encodeResponse = EncodeRetryScheduleResponse(encoder)
+		encodeError    = EncodeRetryScheduleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "retrySchedule")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
 		payload, err := decodeRequest(r)
 		if err != nil {
