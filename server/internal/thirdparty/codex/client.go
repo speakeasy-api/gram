@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -21,10 +22,13 @@ const (
 	maxHTTPErrorMessage = 1000
 )
 
+var externalOrganizationIDPattern = regexp.MustCompile(`^org-[A-Za-z0-9_-]+$`)
+
 type Client struct {
-	httpClient *guardian.HTTPClient
-	baseURL    string
-	apiKey     string
+	httpClient             *guardian.HTTPClient
+	baseURL                string
+	apiKey                 string
+	externalOrganizationID string
 }
 
 type Option func(*Client)
@@ -51,14 +55,15 @@ func WithAPIKey(apiKey string) Option {
 	}
 }
 
-func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
+func New(guardianPolicy *guardian.Policy, externalOrganizationID string, opts ...Option) *Client {
 	if guardianPolicy == nil {
 		panic("codex compliance client requires guardian policy")
 	}
 	c := &Client{
-		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
-		baseURL:    defaultBaseURL,
-		apiKey:     "",
+		httpClient:             guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
+		baseURL:                defaultBaseURL,
+		apiKey:                 "",
+		externalOrganizationID: strings.TrimSpace(externalOrganizationID),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -67,10 +72,9 @@ func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
 }
 
 type ListLogsParams struct {
-	PrincipalID string
-	EventType   string
-	After       time.Time
-	Limit       int
+	EventType string
+	After     time.Time
+	Limit     int
 }
 
 type LogsPage struct {
@@ -89,7 +93,7 @@ type LogFile struct {
 }
 
 func (c *Client) ListLogs(ctx context.Context, params ListLogsParams) (*LogsPage, error) {
-	endpoint, err := c.endpoint(params.PrincipalID, "logs")
+	endpoint, err := c.endpoint("logs")
 	if err != nil {
 		return nil, err
 	}
@@ -112,11 +116,12 @@ func (c *Client) ListLogs(ctx context.Context, params ListLogsParams) (*LogsPage
 	return &page, nil
 }
 
-func (c *Client) DownloadLog(ctx context.Context, principalID, logID string) ([]byte, error) {
-	if strings.TrimSpace(logID) == "" {
-		return nil, fmt.Errorf("codex compliance log id is required")
+func (c *Client) DownloadLog(ctx context.Context, logID string) ([]byte, error) {
+	logID, err := validateCodexPathID("codex compliance log id", logID)
+	if err != nil {
+		return nil, err
 	}
-	endpoint, err := c.endpoint(principalID, "logs", logID)
+	endpoint, err := c.endpoint("logs", logID)
 	if err != nil {
 		return nil, err
 	}
@@ -166,21 +171,34 @@ func (c *Client) doJSON(ctx context.Context, endpoint *url.URL, out any) error {
 	return nil
 }
 
-func (c *Client) endpoint(principalID string, parts ...string) (*url.URL, error) {
-	principalID = strings.TrimSpace(principalID)
-	if principalID == "" {
-		return nil, fmt.Errorf("codex compliance principal id is required")
+func (c *Client) endpoint(parts ...string) (*url.URL, error) {
+	if !externalOrganizationIDPattern.MatchString(c.externalOrganizationID) {
+		return nil, fmt.Errorf("codex compliance external organization id must be an OpenAI organization ID starting with org-")
 	}
 	base, err := url.Parse(c.baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse codex compliance base url: %w", err)
 	}
-	segment := "workspaces"
-	if strings.HasPrefix(principalID, "org-") {
-		segment = "organizations"
+	path := []string{"organizations", c.externalOrganizationID}
+	for _, part := range parts {
+		part, err := validateCodexPathID("codex compliance path id", part)
+		if err != nil {
+			return nil, err
+		}
+		path = append(path, part)
 	}
-	path := append([]string{segment, principalID}, parts...)
 	return base.JoinPath(path...), nil
+}
+
+func validateCodexPathID(name, value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", fmt.Errorf("%s is required", name)
+	}
+	if value == "." || value == ".." || strings.ContainsAny(value, `/\`) {
+		return "", fmt.Errorf("%s must be a single path segment", name)
+	}
+	return value, nil
 }
 
 func (c *Client) setHeaders(req *http.Request) {

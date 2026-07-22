@@ -48,12 +48,11 @@ func TestListLogsSendsAuthAndFilters(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithAPIKey("codex-key"))
+	client := New(testGuardianPolicy(t), "org-123", WithBaseURL(server.URL), WithAPIKey("codex-key"))
 	page, err := client.ListLogs(t.Context(), ListLogsParams{
-		PrincipalID: "org-123",
-		EventType:   "COSTS",
-		After:       time.Date(2026, 7, 16, 0, 0, 0, 123456789, time.UTC),
-		Limit:       100,
+		EventType: "COSTS",
+		After:     time.Date(2026, 7, 16, 0, 0, 0, 123456789, time.UTC),
+		Limit:     100,
 	})
 	require.NoError(t, err)
 	require.True(t, page.HasMore)
@@ -63,20 +62,18 @@ func TestListLogsSendsAuthAndFilters(t *testing.T) {
 	require.Equal(t, time.Date(2026, 7, 16, 1, 0, 0, 123456000, time.UTC), page.LastEndTime)
 }
 
-func TestListLogsUsesWorkspaceSegmentForNonOrgPrincipal(t *testing.T) {
+func TestListLogsRejectsInvalidExternalOrganizationID(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/workspaces/ws_123/logs" {
-			t.Errorf("expected path /workspaces/ws_123/logs, got %s", r.URL.Path)
-		}
-		_, _ = w.Write([]byte(`{"data": [], "has_more": false}`))
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("request should not be sent for invalid external organization id")
 	}))
 	t.Cleanup(server.Close)
 
-	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithAPIKey("codex-key"))
-	_, err := client.ListLogs(t.Context(), ListLogsParams{PrincipalID: "ws_123"})
-	require.NoError(t, err)
+	client := New(testGuardianPolicy(t), "org-123/../other", WithBaseURL(server.URL), WithAPIKey("codex-key"))
+	_, err := client.ListLogs(t.Context(), ListLogsParams{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "external organization id")
 }
 
 func TestDownloadLogReturnsBody(t *testing.T) {
@@ -93,10 +90,24 @@ func TestDownloadLogReturnsBody(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithAPIKey("codex-key"))
-	body, err := client.DownloadLog(t.Context(), "org-123", "eclf_123")
+	client := New(testGuardianPolicy(t), "org-123", WithBaseURL(server.URL), WithAPIKey("codex-key"))
+	body, err := client.DownloadLog(t.Context(), "eclf_123")
 	require.NoError(t, err)
 	require.JSONEq(t, `{"type":"COSTS"}`, string(body))
+}
+
+func TestDownloadLogRejectsInvalidLogID(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("request should not be sent for invalid log id")
+	}))
+	t.Cleanup(server.Close)
+
+	client := New(testGuardianPolicy(t), "org-123", WithBaseURL(server.URL), WithAPIKey("codex-key"))
+	_, err := client.DownloadLog(t.Context(), "../eclf_123")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "single path segment")
 }
 
 func TestDownloadLogRejectsOversizedBody(t *testing.T) {
@@ -107,8 +118,8 @@ func TestDownloadLogRejectsOversizedBody(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithAPIKey("codex-key"))
-	_, err := client.DownloadLog(t.Context(), "org-123", "eclf_123")
+	client := New(testGuardianPolicy(t), "org-123", WithBaseURL(server.URL), WithAPIKey("codex-key"))
+	_, err := client.DownloadLog(t.Context(), "eclf_123")
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "exceeds")
@@ -122,8 +133,8 @@ func TestListLogsReturnsHTTPError(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithAPIKey("bad-key"))
-	_, err := client.ListLogs(t.Context(), ListLogsParams{PrincipalID: "org-123"})
+	client := New(testGuardianPolicy(t), "org-123", WithBaseURL(server.URL), WithAPIKey("bad-key"))
+	_, err := client.ListLogs(t.Context(), ListLogsParams{})
 
 	var httpErr *HTTPError
 	require.ErrorAs(t, err, &httpErr)

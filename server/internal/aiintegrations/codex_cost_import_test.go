@@ -121,7 +121,6 @@ func TestCodexCostSourceUpperBoundReturnsStartWhenNoLogs(t *testing.T) {
 	source := &codexCostSource{
 		client:      client,
 		cfg:         cfg,
-		principalID: "org-openai",
 		pageLimit:   codexCompliancePageLimit,
 		processPage: nil,
 		progress:    &CodexCostSyncProgress{},
@@ -150,10 +149,9 @@ func TestCodexCostPollerDoesNotAdvanceWatermarkWhenNoLogs(t *testing.T) {
 		downloads:  nil,
 	}
 	source := &codexCostSource{
-		client:      client,
-		cfg:         cfg,
-		principalID: "org-openai",
-		pageLimit:   codexCompliancePageLimit,
+		client:    client,
+		cfg:       cfg,
+		pageLimit: codexCompliancePageLimit,
 		processPage: func(context.Context, []telemetry.LogParams) error {
 			return fmt.Errorf("process page should not be called")
 		},
@@ -202,7 +200,6 @@ func TestCodexCostSourceUpperBoundRejectsNonAdvancingLastEndTime(t *testing.T) {
 	source := &codexCostSource{
 		client:      client,
 		cfg:         cfg,
-		principalID: "org-openai",
 		pageLimit:   codexCompliancePageLimit,
 		processPage: nil,
 		progress:    &CodexCostSyncProgress{},
@@ -233,7 +230,6 @@ func TestCodexCostSourceFetchPageStopsAtWindowEnd(t *testing.T) {
 	source := &codexCostSource{
 		client:      client,
 		cfg:         codexCostConfig(),
-		principalID: "org-openai",
 		pageLimit:   codexCompliancePageLimit,
 		processPage: nil,
 		progress:    &CodexCostSyncProgress{},
@@ -262,7 +258,6 @@ func TestCodexCostSourceFetchPageRejectsNonAdvancingLastEndTime(t *testing.T) {
 	source := &codexCostSource{
 		client:      client,
 		cfg:         codexCostConfig(),
-		principalID: "org-openai",
 		pageLimit:   codexCompliancePageLimit,
 		processPage: nil,
 		progress:    &CodexCostSyncProgress{},
@@ -320,7 +315,7 @@ func (c *stubCodexComplianceClient) ListLogs(_ context.Context, params codexapi.
 	return page, nil
 }
 
-func (c *stubCodexComplianceClient) DownloadLog(_ context.Context, _ string, logID string) ([]byte, error) {
+func (c *stubCodexComplianceClient) DownloadLog(_ context.Context, logID string) ([]byte, error) {
 	body, ok := c.downloads[logID]
 	if !ok {
 		return nil, fmt.Errorf("unexpected codex download log call for %s", logID)

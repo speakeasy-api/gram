@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -26,6 +27,8 @@ const (
 	ProviderAnthropicCompliance = "anthropic_compliance"
 	ProviderCodexCompliance     = "codex_compliance"
 )
+
+var codexExternalOrganizationIDPattern = regexp.MustCompile(`^org-[A-Za-z0-9_-]+$`)
 
 // Sync schedules name the independent polling pipelines a config can run,
 // each with its own ai_integration_syncs row (cadence, checkpoint, failure
@@ -230,8 +233,12 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	if providerRequiresExternalOrganizationID(provider) && externalOrganizationID == nil {
 		return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id is required for %s", provider)
 	}
-	if provider == ProviderCodexCompliance && externalOrganizationID != nil && !strings.HasPrefix(*externalOrganizationID, "org-") {
-		return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id must be an OpenAI organization ID starting with org- for %s", provider)
+	if provider == ProviderCodexCompliance && externalOrganizationID != nil {
+		trimmedExternalOrganizationID := strings.TrimSpace(*externalOrganizationID)
+		if !codexExternalOrganizationIDPattern.MatchString(trimmedExternalOrganizationID) {
+			return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id must be an OpenAI organization ID starting with org- for %s", provider)
+		}
+		externalOrganizationID = &trimmedExternalOrganizationID
 	}
 
 	q := repo.New(dbtx)

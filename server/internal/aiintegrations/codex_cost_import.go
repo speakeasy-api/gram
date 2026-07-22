@@ -34,7 +34,7 @@ const (
 
 type codexComplianceClient interface {
 	ListLogs(ctx context.Context, params codexapi.ListLogsParams) (*codexapi.LogsPage, error)
-	DownloadLog(ctx context.Context, principalID, logID string) ([]byte, error)
+	DownloadLog(ctx context.Context, logID string) ([]byte, error)
 }
 
 type CodexCostImportService struct {
@@ -80,9 +80,8 @@ func (s *CodexCostImportService) SyncCodexCosts(ctx context.Context, cfg Config,
 	}
 
 	source := &codexCostSource{
-		client:      codexapi.New(s.guardianPolicy, codexapi.WithAPIKey(cfg.APIKey)),
+		client:      codexapi.New(s.guardianPolicy, *cfg.ExternalOrganizationID, codexapi.WithAPIKey(cfg.APIKey)),
 		cfg:         cfg,
-		principalID: *cfg.ExternalOrganizationID,
 		pageLimit:   codexCompliancePageLimit,
 		processPage: s.telemetryLogger.LogBulk,
 		progress:    progress,
@@ -117,7 +116,6 @@ func (s *CodexCostImportService) SyncCodexCosts(ctx context.Context, cfg Config,
 type codexCostSource struct {
 	client      codexComplianceClient
 	cfg         Config
-	principalID string
 	pageLimit   int
 	processPage func(ctx context.Context, payload []telemetry.LogParams) error
 	progress    *CodexCostSyncProgress
@@ -128,10 +126,9 @@ func (src *codexCostSource) UpperBound(ctx context.Context, endTime time.Time) (
 	watermark := time.Time{}
 	for {
 		page, err := src.client.ListLogs(ctx, codexapi.ListLogsParams{
-			PrincipalID: src.principalID,
-			EventType:   codexComplianceCostsEventType,
-			After:       after,
-			Limit:       src.pageLimit,
+			EventType: codexComplianceCostsEventType,
+			After:     after,
+			Limit:     src.pageLimit,
 		})
 		if err != nil {
 			return time.Time{}, err //nolint:wrapcheck // Preserve HTTPError classification upstream.
@@ -166,10 +163,9 @@ func (src *codexCostSource) FetchPage(ctx context.Context, start, end time.Time,
 	}
 
 	page, err := src.client.ListLogs(ctx, codexapi.ListLogsParams{
-		PrincipalID: src.principalID,
-		EventType:   codexComplianceCostsEventType,
-		After:       after,
-		Limit:       src.pageLimit,
+		EventType: codexComplianceCostsEventType,
+		After:     after,
+		Limit:     src.pageLimit,
 	})
 	if err != nil {
 		return timewindowpoller.Page[[]codexapi.LogFile]{Payload: nil, NextPage: "", HasMore: false}, err //nolint:wrapcheck // Preserve HTTPError classification upstream.
@@ -210,7 +206,7 @@ func (src *codexCostSource) FetchPage(ctx context.Context, start, end time.Time,
 func (src *codexCostSource) ProcessPage(ctx context.Context, files []codexapi.LogFile) error {
 	logParams := make([]telemetry.LogParams, 0)
 	for _, file := range files {
-		body, err := src.client.DownloadLog(ctx, src.principalID, file.ID)
+		body, err := src.client.DownloadLog(ctx, file.ID)
 		if err != nil {
 			return err //nolint:wrapcheck // Preserve HTTPError classification upstream.
 		}

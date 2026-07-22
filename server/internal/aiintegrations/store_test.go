@@ -183,6 +183,18 @@ func TestUpsertWithTxRequiresCodexOrganizationID(t *testing.T) {
 	}))
 }
 
+func TestUpsertWithTxRejectsCodexPathLikeOrganizationID(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	externalOrgID := "org-openai/../other"
+	require.Error(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderCodexCompliance, "codex-key", true, true, &externalOrgID, nil, nil)
+		return err
+	}))
+}
+
 func upsertConfigWithTx(
 	t *testing.T,
 	ctx context.Context,
