@@ -863,7 +863,17 @@ WHERE id = ANY(@message_ids::uuid[])
 -- the latest preceding user request and the latest tool result strictly after
 -- that request. chat_messages_chat_id_created_at_idx supports both reverse
 -- time probes; seq deterministically orders equal timestamps.
-SELECT cm.id, cm.role, cm.content, cm.tool_calls,
+--
+-- created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
+-- the batch's own time range, keeping that query on the telemetry table's
+-- time-ordered primary key instead of scanning the full retention window.
+--
+-- source names the agent that recorded the message (Codex, Cursor, the ingest
+-- adapter, ...). The shadow-MCP scanner attributes its provenance-resolution
+-- metric to it, which is the one attribution available when the call resolved
+-- to no telemetry row at all — precisely the population that metric exists to
+-- measure.
+SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
   COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id,
   COALESCE(prior_user_request.content, '')::TEXT AS prior_user_request,
   COALESCE(recent_tool.content, '')::TEXT AS recent_untrusted_content

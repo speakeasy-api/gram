@@ -1351,17 +1351,36 @@ func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedact
 	}
 }
 
-// redactMatch encodes a match value as `<redacted len=N sha=XXXXXXXX>`,
-// except for shadow_mcp and account_identity findings whose match passes
-// through verbatim: an MCP server URL or an account email IS the report, not
-// a secret. A nil/empty match collapses to `<redacted len=0>` without a sha
-// component so the absence of a finding payload is distinguishable from a
-// real hash.
+// RedactMatchAll encodes a match value as `<redacted len=N sha=XXXXXXXX>`,
+// redacting every source with no passthrough. An empty match collapses to
+// `<redacted len=0>` without a sha component so the absence of a finding payload
+// is distinguishable from a real hash.
 //
-// The hash is salted by orgID with a NUL separator so two different orgs
-// holding the same secret produce different fingerprints — defense in depth
-// against any future surface that crosses an org boundary. Within an org the
-// fingerprint stays deterministic so agents can still dedupe.
+// The hash is salted by orgID with a NUL separator so two different orgs holding
+// the same secret produce different fingerprints — defense in depth against any
+// future surface that crosses an org boundary. Within an org the fingerprint
+// stays deterministic so agents can still dedupe.
+//
+// This is the canonical redaction for the ClickHouse analytics store
+// (match_redacted), where no source may store plaintext. The API-facing
+// redactMatch wraps it for its non-passthrough sources, and the risk_findings
+// backfill (server/cmd/tools/migrations) calls it directly, so the two never
+// drift in salt layout, prefix, or sha truncation.
+func RedactMatchAll(match string, orgID string) string {
+	if match == "" {
+		return "<redacted len=0>"
+	}
+	var buf []byte
+	buf = append(buf, orgID...)
+	buf = append(buf, 0x00)
+	buf = append(buf, match...)
+	sum := sha256.Sum256(buf)
+	return fmt.Sprintf("<redacted len=%d sha=%s>", len(match), hex.EncodeToString(sum[:4]))
+}
+
+// redactMatch is the API-facing redaction: like RedactMatchAll, except
+// shadow_mcp and account_identity findings pass through verbatim — an MCP server
+// URL or an account email IS the report, not a secret.
 func redactMatch(source string, match *string, orgID string) string {
 	if match == nil || *match == "" {
 		return "<redacted len=0>"
@@ -1369,22 +1388,7 @@ func redactMatch(source string, match *string, orgID string) string {
 	if source == shadowmcp.SourceShadowMCP || source == ra.SourceAccountIdentity {
 		return *match
 	}
-	return fingerprintRedactedMatch(orgID, *match)
-}
-
-// fingerprintRedactedMatch encodes match as `<redacted len=N sha=XXXXXXXX>`.
-// Unlike redactMatch it applies to every source with no shadow_mcp/
-// account_identity passthrough, so the ClickHouse writer can store a display
-// string without ever persisting a plaintext match or PII. The hash is salted
-// by orgID with a NUL separator so two orgs holding the same secret produce
-// different fingerprints, while staying deterministic within an org.
-func fingerprintRedactedMatch(orgID, match string) string {
-	var buf []byte
-	buf = append(buf, orgID...)
-	buf = append(buf, 0x00)
-	buf = append(buf, match...)
-	sum := sha256.Sum256(buf)
-	return fmt.Sprintf("<redacted len=%d sha=%s>", len(match), hex.EncodeToString(sum[:4]))
+	return RedactMatchAll(*match, orgID)
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {

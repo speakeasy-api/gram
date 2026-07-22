@@ -200,6 +200,7 @@ func handleResourcesRead(
 		SystemEnv:  systemConfig,
 		OAuthToken: "", // Resources do not support OAuth tokens for external MCP
 		GramEmail:  "",
+		GramChatID: payload.chatID,
 	}, plan, logAttrs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").LogError(ctx, logger)

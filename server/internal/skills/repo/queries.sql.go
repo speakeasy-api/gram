@@ -99,7 +99,7 @@ func (q *Queries) BackfillSkillObservationsForCapturedVersion(ctx context.Contex
 }
 
 const claimPendingSkillObservations = `-- name: ClaimPendingSkillObservations :many
-SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, reconcile_error_code, created_at
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at, reconcile_error_code, created_at
 FROM skill_observations
 WHERE project_id = $1
   AND reconciled_at IS NULL
@@ -140,6 +140,8 @@ func (q *Queries) ClaimPendingSkillObservations(ctx context.Context, arg ClaimPe
 			&i.SkillID,
 			&i.SkillVersionID,
 			&i.ReconciledAt,
+			&i.MetricsSyncedAt,
+			&i.EfficacyEnqueuedAt,
 			&i.ReconcileErrorCode,
 			&i.CreatedAt,
 		); err != nil {
@@ -260,6 +262,121 @@ func (q *Queries) CompleteSkillObservations(ctx context.Context, arg CompleteSki
 	var seen_count int64
 	err := row.Scan(&seen_count)
 	return seen_count, err
+}
+
+const countSkillEfficacyOrgSpendForProject = `-- name: CountSkillEfficacyOrgSpendForProject :one
+SELECT count(*) AS spend
+FROM skill_efficacy_evaluations e
+JOIN projects p ON p.organization_id = e.organization_id
+WHERE p.id = $1::uuid
+  AND e.reserved_on = $2::date
+  AND e.state IN ('reserved', 'scored')
+`
+
+type CountSkillEfficacyOrgSpendForProjectParams struct {
+	ProjectID  uuid.UUID
+	ReservedOn pgtype.Date
+}
+
+// Org-grained spend for the day, entered through the project: counts every
+// project in the organization.
+func (q *Queries) CountSkillEfficacyOrgSpendForProject(ctx context.Context, arg CountSkillEfficacyOrgSpendForProjectParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSkillEfficacyOrgSpendForProject, arg.ProjectID, arg.ReservedOn)
+	var spend int64
+	err := row.Scan(&spend)
+	return spend, err
+}
+
+const countSkillEfficacySkillDailySpend = `-- name: CountSkillEfficacySkillDailySpend :many
+SELECT e.skill_id, count(*) AS spend
+FROM skill_efficacy_evaluations e
+WHERE e.project_id = $1
+  AND e.skill_id = ANY($2::uuid[])
+  AND e.reserved_on = $3::date
+  AND e.state IN ('reserved', 'scored')
+GROUP BY e.skill_id
+`
+
+type CountSkillEfficacySkillDailySpendParams struct {
+	ProjectID  uuid.UUID
+	SkillIds   []uuid.UUID
+	ReservedOn pgtype.Date
+}
+
+type CountSkillEfficacySkillDailySpendRow struct {
+	SkillID uuid.UUID
+	Spend   int64
+}
+
+func (q *Queries) CountSkillEfficacySkillDailySpend(ctx context.Context, arg CountSkillEfficacySkillDailySpendParams) ([]CountSkillEfficacySkillDailySpendRow, error) {
+	rows, err := q.db.Query(ctx, countSkillEfficacySkillDailySpend, arg.ProjectID, arg.SkillIds, arg.ReservedOn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountSkillEfficacySkillDailySpendRow
+	for rows.Next() {
+		var i CountSkillEfficacySkillDailySpendRow
+		if err := rows.Scan(&i.SkillID, &i.Spend); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countSkillEfficacyVersionLifetimeSpend = `-- name: CountSkillEfficacyVersionLifetimeSpend :many
+SELECT v.skill_version_id::uuid AS skill_version_id, capped.spend
+FROM unnest($1::uuid[]) AS v(skill_version_id)
+CROSS JOIN LATERAL (
+  SELECT count(*) AS spend
+  FROM (
+    SELECT 1
+    FROM skill_efficacy_evaluations e
+    WHERE e.project_id = $2
+      AND e.skill_version_id = v.skill_version_id
+      AND e.state IN ('reserved', 'scored')
+    LIMIT $3::int
+  ) spent
+) capped
+`
+
+type CountSkillEfficacyVersionLifetimeSpendParams struct {
+	SkillVersionIds []uuid.UUID
+	ProjectID       uuid.UUID
+	BurstCap        int32
+}
+
+type CountSkillEfficacyVersionLifetimeSpendRow struct {
+	SkillVersionID uuid.UUID
+	Spend          int64
+}
+
+// Lifetime spend per requested version, counted no further than @burst_cap.
+// The count is only ever subtracted from that cap, so rows past it cannot
+// change the answer and each version's scan stops as soon as the cap is
+// reached. Every requested version comes back, a version with no spend as 0.
+func (q *Queries) CountSkillEfficacyVersionLifetimeSpend(ctx context.Context, arg CountSkillEfficacyVersionLifetimeSpendParams) ([]CountSkillEfficacyVersionLifetimeSpendRow, error) {
+	rows, err := q.db.Query(ctx, countSkillEfficacyVersionLifetimeSpend, arg.SkillVersionIds, arg.ProjectID, arg.BurstCap)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountSkillEfficacyVersionLifetimeSpendRow
+	for rows.Next() {
+		var i CountSkillEfficacyVersionLifetimeSpendRow
+		if err := rows.Scan(&i.SkillVersionID, &i.Spend); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const createCapturedSkill = `-- name: CreateCapturedSkill :one
@@ -604,6 +721,137 @@ type DeleteSkillVersionOriginParams struct {
 
 func (q *Queries) DeleteSkillVersionOrigin(ctx context.Context, arg DeleteSkillVersionOriginParams) error {
 	_, err := q.db.Exec(ctx, deleteSkillVersionOrigin, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
+	return err
+}
+
+const enqueueSkillEfficacyEvaluations = `-- name: EnqueueSkillEfficacyEvaluations :exec
+WITH input_units AS (
+  SELECT
+    unnest($1::text[]) AS session_id,
+    unnest($2::text[]) AS surface,
+    unnest($3::uuid[]) AS chat_id,
+    unnest($4::uuid[]) AS skill_id,
+    unnest($5::uuid[]) AS skill_version_id,
+    unnest($6::text[]) AS canonical_sha256,
+    unnest($7::timestamptz[]) AS observed_at,
+    unnest($8::text[]) AS user_id,
+    unnest($9::text[]) AS user_email
+), actor_bound_units AS (
+  SELECT
+    p.organization_id,
+    p.id AS project_id,
+    unit.surface,
+    unit.session_id,
+    unit.chat_id,
+    unit.skill_id,
+    unit.skill_version_id,
+    unit.canonical_sha256,
+    unit.observed_at
+  FROM input_units unit
+  JOIN projects p
+    ON p.id = $10::uuid
+    AND p.deleted IS FALSE
+  JOIN chats c
+    ON c.id = unit.chat_id
+    AND c.project_id = p.id
+    AND c.deleted IS FALSE
+    AND (
+      unit.surface = 'assistant'
+      OR (unit.user_id <> '' AND c.user_id = unit.user_id)
+      OR (unit.user_email <> '' AND c.external_user_id = unit.user_email)
+    )
+  WHERE EXISTS (
+      SELECT 1
+      FROM chat_messages cm
+      WHERE cm.chat_id = c.id
+        AND (cm.project_id IS NULL OR cm.project_id = p.id)
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM chat_messages cm
+      WHERE cm.chat_id = c.id
+        AND (cm.project_id IS NULL OR cm.project_id = p.id)
+        AND cm.created_at > now() - $11::interval
+    )
+), deduplicated_units AS (
+  SELECT DISTINCT ON (project_id, session_id, skill_version_id, surface) organization_id, project_id, surface, session_id, chat_id, skill_id, skill_version_id, canonical_sha256, observed_at
+  FROM actor_bound_units
+  ORDER BY project_id, session_id, skill_version_id, surface, observed_at DESC
+)
+INSERT INTO skill_efficacy_evaluations (
+  organization_id,
+  project_id,
+  surface,
+  session_id,
+  chat_id,
+  skill_id,
+  skill_version_id,
+  canonical_sha256,
+  observed_at
+)
+SELECT
+  unit.organization_id,
+  unit.project_id,
+  unit.surface,
+  unit.session_id,
+  unit.chat_id,
+  unit.skill_id,
+  unit.skill_version_id,
+  unit.canonical_sha256,
+  unit.observed_at
+FROM deduplicated_units unit
+ON CONFLICT (project_id, session_id, skill_version_id, surface) DO UPDATE
+SET observed_at = GREATEST(skill_efficacy_evaluations.observed_at, excluded.observed_at),
+    updated_at = clock_timestamp()
+WHERE skill_efficacy_evaluations.state = 'pending'
+`
+
+type EnqueueSkillEfficacyEvaluationsParams struct {
+	SessionIds       []string
+	Surfaces         []string
+	ChatIds          []uuid.UUID
+	SkillIds         []uuid.UUID
+	SkillVersionIds  []uuid.UUID
+	CanonicalSha256s []string
+	ObservedAts      []pgtype.Timestamptz
+	UserIds          []string
+	UserEmails       []string
+	ProjectID        uuid.UUID
+	Inactivity       pgtype.Interval
+}
+
+// Idempotent enqueue of one evaluation per scoring unit, and the only place a
+// unit's eligibility is decided. A unit is written when its project and chat are
+// live and the visible transcript is quiet. Confirmation and reservation also
+// require the activation itself to be quiet. A conflict refreshes a pending
+// unit's observed_at so a resumed session must become quiet again before
+// reservation. The stamp is authorised by ListSkillEfficacyEvaluationUnits
+// rather than the write count because terminal units also absorb later
+// activations of the same scoring unit.
+//
+// A dev unit is admitted only when the activation's actor is the chat's actor —
+// its user id against chats.user_id or its email against chats.external_user_id,
+// the columns the capture path writes those two values to. A dev session id is
+// client-supplied, so without that binding an activation could name any chat in
+// the project and have that chat's transcript scored. An activation carrying no
+// actor at all matches nothing and is refused. The assistant surface is exempt:
+// its session ids are server-generated and its activations carry no actor.
+// Deduplication happens after actor binding so user-id and email observations
+// can both confirm without targeting the same upsert row twice.
+func (q *Queries) EnqueueSkillEfficacyEvaluations(ctx context.Context, arg EnqueueSkillEfficacyEvaluationsParams) error {
+	_, err := q.db.Exec(ctx, enqueueSkillEfficacyEvaluations,
+		arg.SessionIds,
+		arg.Surfaces,
+		arg.ChatIds,
+		arg.SkillIds,
+		arg.SkillVersionIds,
+		arg.CanonicalSha256s,
+		arg.ObservedAts,
+		arg.UserIds,
+		arg.UserEmails,
+		arg.ProjectID,
+		arg.Inactivity,
+	)
 	return err
 }
 
@@ -989,6 +1237,166 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 		&i.LatestVersionID,
 		&i.VersionCount,
 		&i.AssistantCount,
+	)
+	return i, err
+}
+
+const getSkillEfficacyJudgeInputs = `-- name: GetSkillEfficacyJudgeInputs :many
+SELECT
+  e.id,
+  e.organization_id,
+  e.surface,
+  e.session_id,
+  e.chat_id,
+  e.skill_id,
+  e.skill_version_id,
+  e.canonical_sha256,
+  e.observed_at,
+  e.reserved_on,
+  e.created_at AS evaluation_created_at,
+  e.attempts,
+  s.name AS skill_name,
+  sv.content AS skill_content
+FROM skill_efficacy_evaluations e
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.deleted IS FALSE
+JOIN chats c
+  ON c.project_id = e.project_id
+  AND c.id = e.chat_id
+  AND c.deleted IS FALSE
+JOIN skills s
+  ON s.project_id = e.project_id
+  AND s.id = e.skill_id
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = e.skill_version_id
+WHERE e.project_id = $1
+  AND e.state = 'reserved'
+  AND e.id = ANY($2::uuid[])
+ORDER BY e.observed_at DESC, e.id DESC
+`
+
+type GetSkillEfficacyJudgeInputsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+type GetSkillEfficacyJudgeInputsRow struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	Surface             string
+	SessionID           string
+	ChatID              uuid.UUID
+	SkillID             uuid.UUID
+	SkillVersionID      uuid.UUID
+	CanonicalSha256     string
+	ObservedAt          pgtype.Timestamptz
+	ReservedOn          pgtype.Date
+	EvaluationCreatedAt pgtype.Timestamptz
+	Attempts            int32
+	SkillName           string
+	SkillContent        string
+}
+
+// evaluation_created_at is the row's birth stamp, which no transition rewrites.
+// It is the publication guard's lower bound: reserved_on moves forward when a
+// stale reservation is reset and re-reserved on a later day, so a bound derived
+// from it can end up after a score an earlier pass already inserted.
+//
+// The project and chat liveness the reservation checked is rechecked here: a
+// deletion that lands between reserving and publishing drops the row from this
+// read, so the batch judges nothing and writes no score for it. The row stays
+// reserved and is later reset to pending, where the same guard keeps it out of
+// every candidate page.
+func (q *Queries) GetSkillEfficacyJudgeInputs(ctx context.Context, arg GetSkillEfficacyJudgeInputsParams) ([]GetSkillEfficacyJudgeInputsRow, error) {
+	rows, err := q.db.Query(ctx, getSkillEfficacyJudgeInputs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSkillEfficacyJudgeInputsRow
+	for rows.Next() {
+		var i GetSkillEfficacyJudgeInputsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Surface,
+			&i.SessionID,
+			&i.ChatID,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.CanonicalSha256,
+			&i.ObservedAt,
+			&i.ReservedOn,
+			&i.EvaluationCreatedAt,
+			&i.Attempts,
+			&i.SkillName,
+			&i.SkillContent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSkillEfficacySettingsForOrganization = `-- name: GetSkillEfficacySettingsForOrganization :one
+SELECT organization_id, enabled, per_skill_daily_cap, org_daily_cap, new_version_burst, created_at, updated_at
+FROM skill_efficacy_settings
+WHERE organization_id = $1
+`
+
+func (q *Queries) GetSkillEfficacySettingsForOrganization(ctx context.Context, organizationID string) (SkillEfficacySetting, error) {
+	row := q.db.QueryRow(ctx, getSkillEfficacySettingsForOrganization, organizationID)
+	var i SkillEfficacySetting
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Enabled,
+		&i.PerSkillDailyCap,
+		&i.OrgDailyCap,
+		&i.NewVersionBurst,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSkillEfficacySettingsForProject = `-- name: GetSkillEfficacySettingsForProject :one
+SELECT
+  p.organization_id,
+  s.enabled,
+  s.per_skill_daily_cap,
+  s.org_daily_cap,
+  s.new_version_burst
+FROM projects p
+LEFT JOIN skill_efficacy_settings s ON s.organization_id = p.organization_id
+WHERE p.id = $1::uuid
+  AND p.deleted IS FALSE
+`
+
+type GetSkillEfficacySettingsForProjectRow struct {
+	OrganizationID   string
+	Enabled          pgtype.Bool
+	PerSkillDailyCap pgtype.Int4
+	OrgDailyCap      pgtype.Int4
+	NewVersionBurst  pgtype.Int4
+}
+
+// All-null settings columns mean the organization has no row, and Go applies
+// the package defaults.
+func (q *Queries) GetSkillEfficacySettingsForProject(ctx context.Context, projectID uuid.UUID) (GetSkillEfficacySettingsForProjectRow, error) {
+	row := q.db.QueryRow(ctx, getSkillEfficacySettingsForProject, projectID)
+	var i GetSkillEfficacySettingsForProjectRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Enabled,
+		&i.PerSkillDailyCap,
+		&i.OrgDailyCap,
+		&i.NewVersionBurst,
 	)
 	return i, err
 }
@@ -1447,25 +1855,543 @@ func (q *Queries) ListActiveSkillDistributions(ctx context.Context, arg ListActi
 	return items, nil
 }
 
-const listProjectsWithPendingSkillObservations = `-- name: ListProjectsWithPendingSkillObservations :many
+const listDeletedSkillEfficacyChatIDs = `-- name: ListDeletedSkillEfficacyChatIDs :many
+SELECT id
+FROM chats
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+  AND deleted IS TRUE
+`
+
+type ListDeletedSkillEfficacyChatIDsParams struct {
+	ProjectID uuid.UUID
+	ChatIds   []uuid.UUID
+}
+
+func (q *Queries) ListDeletedSkillEfficacyChatIDs(ctx context.Context, arg ListDeletedSkillEfficacyChatIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDeletedSkillEfficacyChatIDs, arg.ProjectID, arg.ChatIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingSkillEfficacyEvaluations = `-- name: ListPendingSkillEfficacyEvaluations :many
+SELECT e.id, e.organization_id, e.project_id, e.surface, e.session_id, e.chat_id, e.skill_id, e.skill_version_id, e.canonical_sha256, e.observed_at, e.state, e.reserved_on, e.attempts, e.last_error, e.scored_at, e.created_at, e.updated_at
+FROM skill_efficacy_evaluations e
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.deleted IS FALSE
+JOIN chats c
+  ON c.project_id = e.project_id
+  AND c.id = e.chat_id
+  AND c.deleted IS FALSE
+WHERE e.project_id = $1
+  AND e.state = 'pending'
+  AND e.observed_at <= now() - $2::interval
+  AND NOT EXISTS (
+    SELECT 1
+    FROM chat_messages cm
+    WHERE cm.chat_id = c.id
+      AND (cm.project_id IS NULL OR cm.project_id = p.id)
+      AND cm.created_at > now() - $2::interval
+  )
+  AND (
+    $3::timestamptz IS NULL
+    OR (e.observed_at, e.id) < ($3::timestamptz, $4::uuid)
+  )
+ORDER BY e.observed_at DESC, e.id DESC
+LIMIT $5
+`
+
+type ListPendingSkillEfficacyEvaluationsParams struct {
+	ProjectID        uuid.UUID
+	Inactivity       pgtype.Interval
+	CursorObservedAt pgtype.Timestamptz
+	CursorID         uuid.NullUUID
+	PageSize         int32
+}
+
+// Recent-first keyset page over a project's pending evaluations, ordered on the
+// unique (observed_at, id) key. A null cursor starts at the head of the queue;
+// a caller pages by handing back the last row it saw. That is what lets a
+// reservation walk past candidates its caps have exhausted instead of stalling
+// on the same head every pass.
+//
+// No row lock is taken. pending -> reserved is written only by the reservation
+// pass, and every such pass holds the same per-organization advisory lock for
+// its whole transaction, so a candidate read here cannot leave pending
+// underneath it. A row arriving at pending concurrently — an insert, or a stale
+// reservation reset — only ever adds work, and the reserving UPDATE still
+// guards on state = 'pending'.
+//
+// Enqueue only ever admits a live project and a live chat, but the queue
+// outlives both: a deletion after enqueue leaves a backlog whose subject is
+// gone. The liveness recheck sits before paging so a deleted unit is never a
+// candidate and never spends the organization's budget.
+func (q *Queries) ListPendingSkillEfficacyEvaluations(ctx context.Context, arg ListPendingSkillEfficacyEvaluationsParams) ([]SkillEfficacyEvaluation, error) {
+	rows, err := q.db.Query(ctx, listPendingSkillEfficacyEvaluations,
+		arg.ProjectID,
+		arg.Inactivity,
+		arg.CursorObservedAt,
+		arg.CursorID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillEfficacyEvaluation
+	for rows.Next() {
+		var i SkillEfficacyEvaluation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Surface,
+			&i.SessionID,
+			&i.ChatID,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.CanonicalSha256,
+			&i.ObservedAt,
+			&i.State,
+			&i.ReservedOn,
+			&i.Attempts,
+			&i.LastError,
+			&i.ScoredAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingSkillObservations = `-- name: ListPendingSkillObservations :many
+SELECT
+  so.id,
+  so.session_id::text AS session_id,
+  COALESCE(so.user_id, '')::text AS user_id,
+  COALESCE(so.user_email, '')::text AS user_email,
+  so.seen_at,
+  so.skill_id::uuid AS skill_id,
+  so.skill_version_id::uuid AS skill_version_id,
+  sv.canonical_sha256,
+  -- Surface mirrors ListPendingSkillSessionVersions: assistant/assistants
+  -- producers map to assistant, every supported dev producer maps to dev.
+  CASE WHEN so.provider IN ('assistant', 'assistants') THEN 'assistant' ELSE 'dev' END::text AS surface
+FROM skill_observations so
+JOIN skills s
+  ON s.project_id = so.project_id
+  AND s.id = so.skill_id
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = so.skill_version_id
+WHERE so.project_id = $1
+  AND so.reconciled_at IS NOT NULL
+  AND so.efficacy_enqueued_at IS NULL
+  AND so.session_id IS NOT NULL
+  AND so.skill_version_id IS NOT NULL
+  AND (
+    $2::timestamptz IS NULL
+    OR (so.seen_at, so.id) > ($2::timestamptz, $3::uuid)
+  )
+ORDER BY so.seen_at, so.id
+LIMIT $4
+`
+
+type ListPendingSkillObservationsParams struct {
+	ProjectID   uuid.UUID
+	AfterSeenAt pgtype.Timestamptz
+	AfterID     uuid.NullUUID
+	BatchSize   int32
+}
+
+type ListPendingSkillObservationsRow struct {
+	ID              uuid.UUID
+	SessionID       string
+	UserID          string
+	UserEmail       string
+	SeenAt          pgtype.Timestamptz
+	SkillID         uuid.UUID
+	SkillVersionID  uuid.UUID
+	CanonicalSha256 string
+	Surface         string
+}
+
+// One keyset page of activations still awaiting efficacy enqueue, ordered on
+// the unique (seen_at, id) key so the caller can page through the whole pending
+// set inside a single pass.
+//
+// The predicate is the activation's own — reconciled, unstamped, carrying the
+// session and skill version a scoring unit needs. Chat resolution is not part
+// of it: the chat id is derived from the session id in Go and the insert
+// rechecks the chat, so an activation whose chat is missing, empty or still
+// live costs one page slot and is then paged past. Nothing can sit at the head
+// of the queue and starve the scoreable activations behind it.
+//
+// The actor columns ride along because the session id is client-supplied on the
+// dev surface: the insert binds a dev unit to a chat only when the activation's
+// own actor matches that chat's, so an activation naming someone else's session
+// can never associate their transcript.
+func (q *Queries) ListPendingSkillObservations(ctx context.Context, arg ListPendingSkillObservationsParams) ([]ListPendingSkillObservationsRow, error) {
+	rows, err := q.db.Query(ctx, listPendingSkillObservations,
+		arg.ProjectID,
+		arg.AfterSeenAt,
+		arg.AfterID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingSkillObservationsRow
+	for rows.Next() {
+		var i ListPendingSkillObservationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.UserID,
+			&i.UserEmail,
+			&i.SeenAt,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.CanonicalSha256,
+			&i.Surface,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingSkillSessionVersions = `-- name: ListPendingSkillSessionVersions :many
+SELECT
+  so.id,
+  so.created_at,
+  so.seen_at,
+  p.organization_id,
+  so.project_id,
+  so.session_id::text AS session_id,
+  so.skill_id::uuid AS skill_id,
+  so.skill_version_id::uuid AS skill_version_id,
+  sv.canonical_sha256,
+  -- Surface is part of the attribution join contract: assistant/assistants
+  -- producers map to assistant, and every supported dev producer maps to dev.
+  CASE WHEN so.provider IN ('assistant', 'assistants') THEN 'assistant' ELSE 'dev' END::text AS surface
+FROM skill_observations so
+JOIN projects p ON p.id = so.project_id
+JOIN skills s
+  ON s.project_id = so.project_id
+  AND s.id = so.skill_id
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = so.skill_version_id
+WHERE so.project_id = $1
+  AND so.reconciled_at IS NOT NULL
+  AND so.metrics_synced_at IS NULL
+  AND so.session_id IS NOT NULL
+  AND so.skill_id IS NOT NULL
+  AND so.skill_version_id IS NOT NULL
+ORDER BY so.seen_at, so.id
+LIMIT $2
+`
+
+type ListPendingSkillSessionVersionsParams struct {
+	ProjectID uuid.UUID
+	BatchSize int32
+}
+
+type ListPendingSkillSessionVersionsRow struct {
+	ID              uuid.UUID
+	CreatedAt       pgtype.Timestamptz
+	SeenAt          pgtype.Timestamptz
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	SessionID       string
+	SkillID         uuid.UUID
+	SkillVersionID  uuid.UUID
+	CanonicalSha256 string
+	Surface         string
+}
+
+func (q *Queries) ListPendingSkillSessionVersions(ctx context.Context, arg ListPendingSkillSessionVersionsParams) ([]ListPendingSkillSessionVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listPendingSkillSessionVersions, arg.ProjectID, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingSkillSessionVersionsRow
+	for rows.Next() {
+		var i ListPendingSkillSessionVersionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.SeenAt,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.SessionID,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.CanonicalSha256,
+			&i.Surface,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsWithPendingSkillEfficacyWork = `-- name: ListProjectsWithPendingSkillEfficacyWork :many
 WITH RECURSIVE pending_projects AS (
   (
-    SELECT so.project_id, 1 AS sequence
-    FROM skill_observations so
-    WHERE so.reconciled_at IS NULL
-      AND so.project_id > $2
-    ORDER BY so.project_id
+    SELECT candidate.project_id, 1 AS sequence
+    FROM (
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
+        WHERE so.reconciled_at IS NOT NULL
+          AND so.efficacy_enqueued_at IS NULL
+          AND so.session_id IS NOT NULL
+          AND so.skill_version_id IS NOT NULL
+          AND so.project_id > $3
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT e.project_id
+        FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
+        JOIN chats c
+          ON c.project_id = e.project_id
+          AND c.id = e.chat_id
+          AND c.deleted IS FALSE
+        WHERE e.state = 'pending'
+          AND e.project_id > $3
+        ORDER BY e.project_id
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT e.project_id
+        FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
+        WHERE e.state = 'reserved'
+          AND e.updated_at < now() - $1::interval
+          AND e.project_id > $3
+        ORDER BY e.project_id
+        LIMIT 1
+      )
+    ) candidate
+    ORDER BY candidate.project_id
     LIMIT 1
   )
   UNION ALL
   SELECT next_project.project_id, current_project.sequence + 1
   FROM pending_projects current_project
   CROSS JOIN LATERAL (
-    SELECT so.project_id
-    FROM skill_observations so
-    WHERE so.reconciled_at IS NULL
-      AND so.project_id > current_project.project_id
-    ORDER BY so.project_id
+    SELECT candidate.project_id
+    FROM (
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
+        WHERE so.reconciled_at IS NOT NULL
+          AND so.efficacy_enqueued_at IS NULL
+          AND so.session_id IS NOT NULL
+          AND so.skill_version_id IS NOT NULL
+          AND so.project_id > current_project.project_id
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT e.project_id
+        FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
+        JOIN chats c
+          ON c.project_id = e.project_id
+          AND c.id = e.chat_id
+          AND c.deleted IS FALSE
+        WHERE e.state = 'pending'
+          AND e.project_id > current_project.project_id
+        ORDER BY e.project_id
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT e.project_id
+        FROM skill_efficacy_evaluations e
+        JOIN projects p
+          ON p.id = e.project_id
+          AND p.deleted IS FALSE
+        WHERE e.state = 'reserved'
+          AND e.updated_at < now() - $1::interval
+          AND e.project_id > current_project.project_id
+        ORDER BY e.project_id
+        LIMIT 1
+      )
+    ) candidate
+    ORDER BY candidate.project_id
+    LIMIT 1
+  ) next_project
+  WHERE current_project.sequence < $2
+)
+SELECT
+  pending_projects.project_id,
+  EXISTS (
+    SELECT 1
+    FROM skill_efficacy_evaluations e
+    WHERE e.project_id = pending_projects.project_id
+      AND e.state = 'reserved'
+      AND e.updated_at < now() - $1::interval
+  ) AS has_stale
+FROM pending_projects
+ORDER BY sequence
+LIMIT $2
+`
+
+type ListProjectsWithPendingSkillEfficacyWorkParams struct {
+	StaleAfter    pgtype.Interval
+	PageLimit     int32
+	ProjectCursor uuid.UUID
+}
+
+type ListProjectsWithPendingSkillEfficacyWorkRow struct {
+	ProjectID uuid.UUID
+	HasStale  bool
+}
+
+// Projects holding efficacy work the pipeline has not finished: activations
+// reconciled but never enqueued, evaluations still pending, or reservations
+// whose owner is gone. Each source is walked one project at a time and the
+// recursion merges them, so a page costs the page size rather than the size of
+// the backlog behind it.
+// has_stale says which of the three sources named the project, to the only
+// resolution the sweep acts on: it resets reservations, and every project it
+// visits would otherwise pay for a reset that matches no row. One index probe
+// per returned project answers it, against one blind UPDATE per project.
+func (q *Queries) ListProjectsWithPendingSkillEfficacyWork(ctx context.Context, arg ListProjectsWithPendingSkillEfficacyWorkParams) ([]ListProjectsWithPendingSkillEfficacyWorkRow, error) {
+	rows, err := q.db.Query(ctx, listProjectsWithPendingSkillEfficacyWork, arg.StaleAfter, arg.PageLimit, arg.ProjectCursor)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProjectsWithPendingSkillEfficacyWorkRow
+	for rows.Next() {
+		var i ListProjectsWithPendingSkillEfficacyWorkRow
+		if err := rows.Scan(&i.ProjectID, &i.HasStale); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsWithPendingSkillObservations = `-- name: ListProjectsWithPendingSkillObservations :many
+WITH RECURSIVE pending_projects AS (
+  (
+    SELECT candidate.project_id, 1 AS sequence
+    FROM (
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        WHERE so.reconciled_at IS NULL
+          AND so.project_id > $2
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
+        WHERE so.reconciled_at IS NOT NULL
+          AND so.metrics_synced_at IS NULL
+          AND so.session_id IS NOT NULL
+          AND so.skill_version_id IS NOT NULL
+          AND so.project_id > $2
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+    ) candidate
+    ORDER BY candidate.project_id
+    LIMIT 1
+  )
+  UNION ALL
+  SELECT next_project.project_id, current_project.sequence + 1
+  FROM pending_projects current_project
+  CROSS JOIN LATERAL (
+    SELECT candidate.project_id
+    FROM (
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        WHERE so.reconciled_at IS NULL
+          AND so.project_id > current_project.project_id
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT so.project_id
+        FROM skill_observations so
+        JOIN projects p
+          ON p.id = so.project_id
+          AND p.deleted IS FALSE
+        WHERE so.reconciled_at IS NOT NULL
+          AND so.metrics_synced_at IS NULL
+          AND so.session_id IS NOT NULL
+          AND so.skill_version_id IS NOT NULL
+          AND so.project_id > current_project.project_id
+        ORDER BY so.project_id
+        LIMIT 1
+      )
+    ) candidate
+    ORDER BY candidate.project_id
     LIMIT 1
   ) next_project
   WHERE current_project.sequence < $1
@@ -1542,6 +2468,117 @@ func (q *Queries) ListSkillDistributionTargetVersions(ctx context.Context, arg L
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillEfficacyEvaluationUnits = `-- name: ListSkillEfficacyEvaluationUnits :many
+SELECT
+  unit.session_id::text AS session_id,
+  unit.surface::text AS surface,
+  unit.skill_version_id::uuid AS skill_version_id,
+  unit.user_id::text AS user_id,
+  unit.user_email::text AS user_email
+FROM (
+  SELECT
+    unnest($1::text[]) AS session_id,
+    unnest($2::text[]) AS surface,
+    unnest($3::uuid[]) AS skill_version_id,
+    unnest($4::text[]) AS user_id,
+    unnest($5::text[]) AS user_email
+) unit
+JOIN skill_efficacy_evaluations e
+  ON e.project_id = $6
+  AND e.session_id = unit.session_id
+  AND e.surface = unit.surface
+  AND e.skill_version_id = unit.skill_version_id
+JOIN projects p
+  ON p.id = e.project_id
+  AND p.deleted IS FALSE
+JOIN chats c
+  ON c.id = e.chat_id
+  AND c.project_id = p.id
+  AND c.deleted IS FALSE
+  AND (
+    unit.surface = 'assistant'
+    OR (unit.user_id <> '' AND c.user_id = unit.user_id)
+    OR (unit.user_email <> '' AND c.external_user_id = unit.user_email)
+  )
+WHERE e.state IN ('scored', 'failed')
+   OR (
+     e.state = 'pending'
+     AND e.observed_at <= now() - $7::interval
+     AND NOT EXISTS (
+       SELECT 1
+       FROM chat_messages cm
+       WHERE cm.chat_id = c.id
+         AND (cm.project_id IS NULL OR cm.project_id = p.id)
+         AND cm.created_at > now() - $7::interval
+     )
+   )
+`
+
+type ListSkillEfficacyEvaluationUnitsParams struct {
+	SessionIds      []string
+	Surfaces        []string
+	SkillVersionIds []uuid.UUID
+	UserIds         []string
+	UserEmails      []string
+	ProjectID       uuid.UUID
+	Inactivity      pgtype.Interval
+}
+
+type ListSkillEfficacyEvaluationUnitsRow struct {
+	SessionID      string
+	Surface        string
+	SkillVersionID uuid.UUID
+	UserID         string
+	UserEmail      string
+}
+
+// Confirmation read: the only thing that may authorise stamping
+// skill_observations.efficacy_enqueued_at. Units absent here were not enqueued
+// and must stay unstamped so a later pass retries them.
+// The per-column unnest expands the arrays in lockstep, one row per unit,
+// and the join probes skill_efficacy_evaluations on its unique key instead of
+// scanning the project's evaluation history.
+//
+// It repeats the insert's actor binding against the evaluation's chat and
+// echoes the actor back, so a caller stamps only the activations whose own
+// actor matched. A dev activation naming someone else's session finds their
+// evaluation on the unique key but not through the binding, so it is refused
+// for good rather than absorbed into a unit that is not its own — and the
+// rightful owner's activations for that same session confirm regardless.
+func (q *Queries) ListSkillEfficacyEvaluationUnits(ctx context.Context, arg ListSkillEfficacyEvaluationUnitsParams) ([]ListSkillEfficacyEvaluationUnitsRow, error) {
+	rows, err := q.db.Query(ctx, listSkillEfficacyEvaluationUnits,
+		arg.SessionIds,
+		arg.Surfaces,
+		arg.SkillVersionIds,
+		arg.UserIds,
+		arg.UserEmails,
+		arg.ProjectID,
+		arg.Inactivity,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillEfficacyEvaluationUnitsRow
+	for rows.Next() {
+		var i ListSkillEfficacyEvaluationUnitsRow
+		if err := rows.Scan(
+			&i.SessionID,
+			&i.Surface,
+			&i.SkillVersionID,
+			&i.UserID,
+			&i.UserEmail,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1771,7 +2808,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 }
 
 const listUnknownSkillActivations = `-- name: ListUnknownSkillActivations :many
-SELECT so.id, so.project_id, so.idempotency_key, so.provider, so.user_id, so.user_email, so.hostname, so.session_id, so.skill_name, so.source, so.source_level, so.source_path, so.raw_sha256, so.seen_at, so.skill_id, so.skill_version_id, so.reconciled_at, so.reconcile_error_code, so.created_at
+SELECT so.id, so.project_id, so.idempotency_key, so.provider, so.user_id, so.user_email, so.hostname, so.session_id, so.skill_name, so.source, so.source_level, so.source_path, so.raw_sha256, so.seen_at, so.skill_id, so.skill_version_id, so.reconciled_at, so.metrics_synced_at, so.efficacy_enqueued_at, so.reconcile_error_code, so.created_at
 FROM skill_observations so
 WHERE so.project_id = $1
   AND so.skill_id IS NULL
@@ -1827,6 +2864,8 @@ func (q *Queries) ListUnknownSkillActivations(ctx context.Context, arg ListUnkno
 			&i.SkillID,
 			&i.SkillVersionID,
 			&i.ReconciledAt,
+			&i.MetricsSyncedAt,
+			&i.EfficacyEnqueuedAt,
 			&i.ReconcileErrorCode,
 			&i.CreatedAt,
 		); err != nil {
@@ -1838,6 +2877,96 @@ func (q *Queries) ListUnknownSkillActivations(ctx context.Context, arg ListUnkno
 		return nil, err
 	}
 	return items, nil
+}
+
+const loadReservedSkillEfficacyEvaluations = `-- name: LoadReservedSkillEfficacyEvaluations :many
+UPDATE skill_efficacy_evaluations e
+SET updated_at = clock_timestamp()
+WHERE e.project_id = $1
+  AND e.id IN (
+    SELECT c.id
+    FROM skill_efficacy_evaluations c
+    WHERE c.project_id = $1
+      AND c.state = 'reserved'
+      AND c.updated_at < now() - coalesce($2::interval, interval '0')
+    ORDER BY c.observed_at DESC, c.id DESC
+    LIMIT $3
+    FOR UPDATE SKIP LOCKED
+  )
+RETURNING id, organization_id, project_id, surface, session_id, chat_id, skill_id, skill_version_id, canonical_sha256, observed_at, state, reserved_on, attempts, last_error, scored_at, created_at, updated_at
+`
+
+type LoadReservedSkillEfficacyEvaluationsParams struct {
+	ProjectID  uuid.UUID
+	ClaimLease pgtype.Interval
+	BatchSize  int32
+}
+
+// Crash-recovery claim. Ownership is soft and time-bounded: a reserved row is
+// owned while its updated_at is younger than @claim_lease, so a second claimer
+// inside the lease selects nothing and the model call never has to hold a
+// transaction open. A null lease claims every reserved row committed before the
+// statement, which is the unleased read-back.
+func (q *Queries) LoadReservedSkillEfficacyEvaluations(ctx context.Context, arg LoadReservedSkillEfficacyEvaluationsParams) ([]SkillEfficacyEvaluation, error) {
+	rows, err := q.db.Query(ctx, loadReservedSkillEfficacyEvaluations, arg.ProjectID, arg.ClaimLease, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillEfficacyEvaluation
+	for rows.Next() {
+		var i SkillEfficacyEvaluation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Surface,
+			&i.SessionID,
+			&i.ChatID,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.CanonicalSha256,
+			&i.ObservedAt,
+			&i.State,
+			&i.ReservedOn,
+			&i.Attempts,
+			&i.LastError,
+			&i.ScoredAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockOrganizationSkillEfficacyBudget = `-- name: LockOrganizationSkillEfficacyBudget :exec
+SELECT pg_advisory_xact_lock(hashtextextended('skill-efficacy:' || $1::text, 0))
+`
+
+// Settings updates share the reservation lock so their audit snapshot and the
+// sampling policy observed by reservations both describe committed state.
+func (q *Queries) LockOrganizationSkillEfficacyBudget(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockOrganizationSkillEfficacyBudget, organizationID)
+	return err
+}
+
+const lockProjectOrganizationSkillEfficacyBudget = `-- name: LockProjectOrganizationSkillEfficacyBudget :exec
+SELECT pg_advisory_xact_lock(hashtextextended('skill-efficacy:' || p.organization_id, 0))
+FROM projects p
+WHERE p.id = $1::uuid
+`
+
+// First statement of the reservation transaction: serialises counting and
+// reserving per organization, entered through the project, and held to commit.
+func (q *Queries) LockProjectOrganizationSkillEfficacyBudget(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockProjectOrganizationSkillEfficacyBudget, projectID)
+	return err
 }
 
 const lockSkillName = `-- name: LockSkillName :exec
@@ -1861,6 +2990,72 @@ SELECT pg_advisory_xact_lock(hashtextextended('skill-observations:' || ($1::uuid
 func (q *Queries) LockSkillObservationReconciliation(ctx context.Context, projectID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, lockSkillObservationReconciliation, projectID)
 	return err
+}
+
+const markSkillEfficacyEvaluationScored = `-- name: MarkSkillEfficacyEvaluationScored :execrows
+UPDATE skill_efficacy_evaluations
+SET state = 'scored',
+    scored_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = $2
+  AND state = 'reserved'
+`
+
+type MarkSkillEfficacyEvaluationScoredParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) MarkSkillEfficacyEvaluationScored(ctx context.Context, arg MarkSkillEfficacyEvaluationScoredParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markSkillEfficacyEvaluationScored, arg.ProjectID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markSkillObservationsEfficacyEnqueued = `-- name: MarkSkillObservationsEfficacyEnqueued :execrows
+UPDATE skill_observations
+SET efficacy_enqueued_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+  AND efficacy_enqueued_at IS NULL
+`
+
+type MarkSkillObservationsEfficacyEnqueuedParams struct {
+	ProjectID      uuid.UUID
+	ObservationIds []uuid.UUID
+}
+
+func (q *Queries) MarkSkillObservationsEfficacyEnqueued(ctx context.Context, arg MarkSkillObservationsEfficacyEnqueuedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markSkillObservationsEfficacyEnqueued, arg.ProjectID, arg.ObservationIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markSkillSessionVersionsSynced = `-- name: MarkSkillSessionVersionsSynced :execrows
+UPDATE skill_observations
+SET metrics_synced_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+  AND reconciled_at IS NOT NULL
+  AND metrics_synced_at IS NULL
+`
+
+type MarkSkillSessionVersionsSyncedParams struct {
+	ProjectID      uuid.UUID
+	ObservationIds []uuid.UUID
+}
+
+func (q *Queries) MarkSkillSessionVersionsSynced(ctx context.Context, arg MarkSkillSessionVersionsSyncedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markSkillSessionVersionsSynced, arg.ProjectID, arg.ObservationIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const promoteObservedSkillToManual = `-- name: PromoteObservedSkillToManual :one
@@ -1899,6 +3094,93 @@ func (q *Queries) PromoteObservedSkillToManual(ctx context.Context, arg PromoteO
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const recordSkillEfficacyEvaluationAttempt = `-- name: RecordSkillEfficacyEvaluationAttempt :one
+UPDATE skill_efficacy_evaluations
+SET attempts = attempts + 1,
+    last_error = $1,
+    state = CASE WHEN attempts + 1 >= $2::integer THEN 'failed' ELSE 'reserved' END,
+    updated_at = clock_timestamp()
+WHERE project_id = $3
+  AND id = $4
+  AND state = 'reserved'
+RETURNING state, attempts
+`
+
+type RecordSkillEfficacyEvaluationAttemptParams struct {
+	LastError   pgtype.Text
+	MaxAttempts int32
+	ProjectID   uuid.UUID
+	ID          uuid.UUID
+}
+
+type RecordSkillEfficacyEvaluationAttemptRow struct {
+	State    string
+	Attempts int32
+}
+
+// Model, sink, or row-validation failure. The row never returns to pending:
+// that would free the budget and let a second reservation re-spend the same unit.
+func (q *Queries) RecordSkillEfficacyEvaluationAttempt(ctx context.Context, arg RecordSkillEfficacyEvaluationAttemptParams) (RecordSkillEfficacyEvaluationAttemptRow, error) {
+	row := q.db.QueryRow(ctx, recordSkillEfficacyEvaluationAttempt,
+		arg.LastError,
+		arg.MaxAttempts,
+		arg.ProjectID,
+		arg.ID,
+	)
+	var i RecordSkillEfficacyEvaluationAttemptRow
+	err := row.Scan(&i.State, &i.Attempts)
+	return i, err
+}
+
+const reserveSkillEfficacyEvaluations = `-- name: ReserveSkillEfficacyEvaluations :execrows
+UPDATE skill_efficacy_evaluations
+SET state = 'reserved',
+    reserved_on = $1::date,
+    updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND id = ANY($3::uuid[])
+  AND state = 'pending'
+`
+
+type ReserveSkillEfficacyEvaluationsParams struct {
+	ReservedOn pgtype.Date
+	ProjectID  uuid.UUID
+	Ids        []uuid.UUID
+}
+
+func (q *Queries) ReserveSkillEfficacyEvaluations(ctx context.Context, arg ReserveSkillEfficacyEvaluationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reserveSkillEfficacyEvaluations, arg.ReservedOn, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const resetStaleSkillEfficacyReservations = `-- name: ResetStaleSkillEfficacyReservations :execrows
+UPDATE skill_efficacy_evaluations
+SET state = 'pending',
+    reserved_on = NULL,
+    updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND state = 'reserved'
+  AND updated_at < now() - $2::interval
+`
+
+type ResetStaleSkillEfficacyReservationsParams struct {
+	ProjectID  uuid.UUID
+	StaleAfter pgtype.Interval
+}
+
+// Returns a crashed reservation to the queue. attempts is preserved so a
+// poisonous unit still terminates at the attempt ceiling.
+func (q *Queries) ResetStaleSkillEfficacyReservations(ctx context.Context, arg ResetStaleSkillEfficacyReservationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, resetStaleSkillEfficacyReservations, arg.ProjectID, arg.StaleAfter)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const resolveSkillObservationVersions = `-- name: ResolveSkillObservationVersions :many
@@ -1949,6 +3231,30 @@ func (q *Queries) ResolveSkillObservationVersions(ctx context.Context, arg Resol
 		return nil, err
 	}
 	return items, nil
+}
+
+const retireSkillObservationsForDeletedChats = `-- name: RetireSkillObservationsForDeletedChats :execrows
+UPDATE skill_observations
+SET efficacy_enqueued_at = clock_timestamp()
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+  AND efficacy_enqueued_at IS NULL
+`
+
+type RetireSkillObservationsForDeletedChatsParams struct {
+	ProjectID      uuid.UUID
+	ObservationIds []uuid.UUID
+}
+
+// A deleted chat can never become scoreable. Marking only observations Go
+// associated with confirmed deleted chat ids removes them from the safety sweep
+// without retiring missing chats whose transcript may still arrive late.
+func (q *Queries) RetireSkillObservationsForDeletedChats(ctx context.Context, arg RetireSkillObservationsForDeletedChatsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retireSkillObservationsForDeletedChats, arg.ProjectID, arg.ObservationIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeActiveSkillDistribution = `-- name: RevokeActiveSkillDistribution :one
@@ -2244,6 +3550,122 @@ func (q *Queries) UpdateSkillDistribution(ctx context.Context, arg UpdateSkillDi
 		&i.Channel,
 		&i.CreatedByUserID,
 		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertSkillEfficacySettingsForOrganization = `-- name: UpsertSkillEfficacySettingsForOrganization :one
+INSERT INTO skill_efficacy_settings (
+  organization_id,
+  enabled,
+  per_skill_daily_cap,
+  org_daily_cap,
+  new_version_burst
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET enabled = excluded.enabled,
+    per_skill_daily_cap = excluded.per_skill_daily_cap,
+    org_daily_cap = excluded.org_daily_cap,
+    new_version_burst = excluded.new_version_burst,
+    updated_at = clock_timestamp()
+RETURNING organization_id, enabled, per_skill_daily_cap, org_daily_cap, new_version_burst, created_at, updated_at
+`
+
+type UpsertSkillEfficacySettingsForOrganizationParams struct {
+	OrganizationID   string
+	Enabled          bool
+	PerSkillDailyCap int32
+	OrgDailyCap      int32
+	NewVersionBurst  int32
+}
+
+func (q *Queries) UpsertSkillEfficacySettingsForOrganization(ctx context.Context, arg UpsertSkillEfficacySettingsForOrganizationParams) (SkillEfficacySetting, error) {
+	row := q.db.QueryRow(ctx, upsertSkillEfficacySettingsForOrganization,
+		arg.OrganizationID,
+		arg.Enabled,
+		arg.PerSkillDailyCap,
+		arg.OrgDailyCap,
+		arg.NewVersionBurst,
+	)
+	var i SkillEfficacySetting
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Enabled,
+		&i.PerSkillDailyCap,
+		&i.OrgDailyCap,
+		&i.NewVersionBurst,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertSkillEfficacySettingsForProject = `-- name: UpsertSkillEfficacySettingsForProject :one
+INSERT INTO skill_efficacy_settings (
+  organization_id,
+  enabled,
+  per_skill_daily_cap,
+  org_daily_cap,
+  new_version_burst
+)
+SELECT
+  p.organization_id,
+  $1::boolean,
+  $2::integer,
+  $3::integer,
+  $4::integer
+FROM projects p
+WHERE p.id = $5::uuid
+  AND p.deleted IS FALSE
+ON CONFLICT (organization_id) DO UPDATE
+SET enabled = excluded.enabled,
+    per_skill_daily_cap = excluded.per_skill_daily_cap,
+    org_daily_cap = excluded.org_daily_cap,
+    new_version_burst = excluded.new_version_burst,
+    updated_at = clock_timestamp()
+RETURNING organization_id, enabled, per_skill_daily_cap, org_daily_cap, new_version_burst, created_at, updated_at
+`
+
+type UpsertSkillEfficacySettingsForProjectParams struct {
+	Enabled          bool
+	PerSkillDailyCap int32
+	OrgDailyCap      int32
+	NewVersionBurst  int32
+	ProjectID        uuid.UUID
+}
+
+// Writes the organization's efficacy budget, entered through the project: the
+// organization is derived from a live project, so a deleted or unknown project
+// writes nothing.
+//
+// No serving path calls this: the pipeline only reads settings, and every
+// organization runs on the defaults until a budget is written for it. It is the
+// write the budget tests exercise the read against, so the stored and defaulted
+// shapes are both covered.
+func (q *Queries) UpsertSkillEfficacySettingsForProject(ctx context.Context, arg UpsertSkillEfficacySettingsForProjectParams) (SkillEfficacySetting, error) {
+	row := q.db.QueryRow(ctx, upsertSkillEfficacySettingsForProject,
+		arg.Enabled,
+		arg.PerSkillDailyCap,
+		arg.OrgDailyCap,
+		arg.NewVersionBurst,
+		arg.ProjectID,
+	)
+	var i SkillEfficacySetting
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Enabled,
+		&i.PerSkillDailyCap,
+		&i.OrgDailyCap,
+		&i.NewVersionBurst,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

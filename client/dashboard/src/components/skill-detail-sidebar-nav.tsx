@@ -16,6 +16,7 @@ import {
   SKILL_MANIFEST_SECTION_ID,
   SKILL_VERSIONS_SECTION_ID,
 } from "@/pages/skills/SkillDetail";
+import { SKILL_INSIGHTS_SECTION_ID } from "@/pages/skills/SkillInsightsSection";
 import {
   SkillClassificationBadge,
   SkillSourceBadge,
@@ -28,6 +29,7 @@ import {
   Activity,
   Braces,
   ChartNoAxesColumn,
+  ChartSpline,
   FileText,
   History,
   Puzzle,
@@ -88,6 +90,7 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
       true,
     ),
     sectionItem(SKILL_TIMELINE_SECTION_ID, "Activation timeline", Activity),
+    sectionItem(SKILL_INSIGHTS_SECTION_ID, "Insights", ChartSpline),
     sectionItem(SKILL_MANIFEST_SECTION_ID, "SKILL.md", FileText),
     ...(hasFrontmatter
       ? [sectionItem(SKILL_FRONTMATTER_SECTION_ID, "Frontmatter", Braces)]

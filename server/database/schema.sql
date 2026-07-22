@@ -357,6 +357,8 @@ CREATE TABLE IF NOT EXISTS skill_observations (
   skill_id uuid,
   skill_version_id uuid,
   reconciled_at timestamptz,
+  metrics_synced_at timestamptz,
+  efficacy_enqueued_at timestamptz,
   reconcile_error_code TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
@@ -381,6 +383,14 @@ WHERE raw_sha256 IS NOT NULL;
 CREATE INDEX IF NOT EXISTS skill_observations_pending_reconciliation_idx
 ON skill_observations (project_id, seen_at, id)
 WHERE reconciled_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_pending_metrics_sync_idx
+ON skill_observations (project_id, seen_at, id)
+WHERE reconciled_at IS NOT NULL AND metrics_synced_at IS NULL AND session_id IS NOT NULL AND skill_version_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_pending_efficacy_idx
+ON skill_observations (project_id, seen_at, id)
+WHERE reconciled_at IS NOT NULL AND efficacy_enqueued_at IS NULL AND session_id IS NOT NULL AND skill_version_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_id_seen_at_idx
 ON skill_observations (project_id, skill_id, seen_at DESC)
@@ -465,6 +475,75 @@ CREATE TABLE IF NOT EXISTS skill_sync_receipts (
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_skill_id_skill_version_id_idx ON skill_sync_receipts (skill_id, skill_version_id);
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_skill_version_id_idx ON skill_sync_receipts (project_id, skill_version_id);
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_user_id_hostname_provider_idx ON skill_sync_receipts (project_id, user_id, hostname, provider, skill_id);
+
+CREATE TABLE IF NOT EXISTS skill_efficacy_settings (
+  organization_id TEXT NOT NULL,
+  enabled boolean NOT NULL,
+  per_skill_daily_cap integer NOT NULL,
+  org_daily_cap integer NOT NULL,
+  new_version_burst integer NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_efficacy_settings_pkey PRIMARY KEY (organization_id),
+  CONSTRAINT skill_efficacy_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT skill_efficacy_settings_caps_check CHECK (per_skill_daily_cap >= 0 AND org_daily_cap >= 0 AND new_version_burst >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS skill_efficacy_evaluations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  surface TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  chat_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  skill_version_id uuid NOT NULL,
+  canonical_sha256 TEXT NOT NULL,
+  observed_at timestamptz NOT NULL,
+
+  state TEXT NOT NULL DEFAULT 'pending',
+  reserved_on date,
+  attempts integer NOT NULL DEFAULT 0,
+  last_error TEXT,
+  scored_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_efficacy_evaluations_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_efficacy_evaluations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT skill_efficacy_evaluations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_efficacy_evaluations_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_efficacy_evaluations_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_efficacy_evaluations_scoring_unit_key
+ON skill_efficacy_evaluations (project_id, session_id, skill_version_id, surface);
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_pending_idx
+ON skill_efficacy_evaluations (project_id, observed_at DESC, id DESC)
+WHERE state = 'pending';
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_organization_id_idx
+ON skill_efficacy_evaluations (organization_id);
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_org_spend_idx
+ON skill_efficacy_evaluations (organization_id, reserved_on)
+WHERE state IN ('reserved', 'scored');
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_skill_spend_idx
+ON skill_efficacy_evaluations (skill_id, reserved_on)
+WHERE state IN ('reserved', 'scored');
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_version_lifetime_spend_idx
+ON skill_efficacy_evaluations (skill_version_id)
+WHERE state IN ('reserved', 'scored');
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_stale_reserved_idx
+ON skill_efficacy_evaluations (updated_at)
+WHERE state = 'reserved';
 
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -915,6 +994,12 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
   -- IP addresses or CIDR ranges allowed to access this domain. Empty array = unrestricted.
   ip_allowlist TEXT[] NOT NULL DEFAULT '{}',
+  health_status TEXT,
+  health_issue TEXT,
+  health_checked_at timestamptz,
+  unhealthy_since timestamptz,
+  certificate_expires_at timestamptz,
+  consecutive_failures INTEGER CONSTRAINT custom_domains_consecutive_failures_check CHECK (consecutive_failures >= 0),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1199,6 +1284,16 @@ WHERE deleted IS FALSE AND project_id IS NULL AND organization_id IS NULL;
 
 CREATE INDEX IF NOT EXISTS remote_session_issuers_organization_id_idx
 ON remote_session_issuers (organization_id)
+WHERE deleted IS FALSE;
+
+-- Backs resolving an issuer by its upstream URL, where the URL equality is the
+-- selective predicate and the tenancy tier is applied as a filter on top.
+-- Deliberately NOT unique: a project, an organization and a platform issuer may
+-- all legitimately point at the same authorization server, and a customer may
+-- keep a private duplicate carrying its own client setup documentation. Do not
+-- convert this to a unique index.
+CREATE INDEX IF NOT EXISTS remote_session_issuers_issuer_idx
+ON remote_session_issuers (issuer)
 WHERE deleted IS FALSE;
 
 -- Remote Session Clients are records of Gram's client registrations with
@@ -1834,6 +1929,20 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
   CONSTRAINT chat_messages_seq_key UNIQUE (seq)
+) WITH (
+  -- Insert-heavy like risk_results, but also update-heavy: risk_analyzed_at
+  -- is set on every message after analysis, so dead tuples accumulate too.
+  -- With the global 0.2 scale factor a table this size tolerates >1.4M dead
+  -- tuples before autovacuum runs, leaving a large fraction of pages not
+  -- all-visible (observed: 76% visible) and pushing the planner off
+  -- index-only scans for project-wide counts onto full seq scans.
+  --
+  -- Fixed insert threshold keeps the vacuum cadence constant as the table
+  -- grows; the tighter dead-tuple scale factor covers the update churn.
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_vacuum_insert_scale_factor = 0,
+  autovacuum_vacuum_insert_threshold = 250000,
+  autovacuum_vacuum_cost_limit = 2000
 );
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
@@ -2101,6 +2210,11 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key
 ON users (email);
+
+-- Serves case-insensitive email lookups (matching on lower(email), e.g. for
+-- connected-user resolution), which the raw-column users_email_key cannot.
+CREATE INDEX IF NOT EXISTS users_email_lower_idx
+ON users (lower(email));
 
 -- user_accounts is the registry of external AI provider accounts (Claude today;
 -- other providers in the future) observed for a Gram organization, each linked to
@@ -2999,20 +3113,28 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ai_integration_config_id uuid NOT NULL,
   -- Discriminator for the sync pipeline (e.g. 'cursor', 'anthropic_compliance',
-  -- 'anthropic_analytics_usage'). Nullable during the expand-contract
-  -- transition; workers label active configs' rows lazily and a later contract
-  -- migration enforces NOT NULL.
-  schedule TEXT NULL,
-  -- How the schedule checkpoints progress: 'cursor' or 'time'. Nullable during
-  -- the expand-contract transition, same as schedule.
-  kind TEXT NULL,
+  -- 'anthropic_analytics_usage').
+  schedule TEXT NOT NULL,
+  -- How the schedule checkpoints progress: 'cursor' or 'time'.
+  kind TEXT NOT NULL,
   poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  poll_checkpoint TEXT,
   last_cursor_id TEXT,
   next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_poll_error TEXT,
   last_poll_failed_at timestamptz,
   last_poll_success_at timestamptz,
   consecutive_failures integer NOT NULL DEFAULT 0,
+  -- Set when the scheduler stops polling this schedule because the provider
+  -- repeatedly rejected the configuration (e.g. a revoked api key). Paused
+  -- schedules are skipped by candidate selection until the user updates the
+  -- integration, which resets the sync state and clears this.
+  auto_paused_at timestamptz,
+  -- Set when a user explicitly pauses this schedule from the dashboard.
+  -- Deliberately separate from auto_paused_at so "you paused this" and "we
+  -- paused this over a rejected configuration" stay distinguishable. Only the
+  -- user re-enabling the schedule clears it; config saves do not.
+  disabled_at timestamptz,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
 
   CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
@@ -3884,6 +4006,18 @@ ON risk_results (project_id, chat_message_id);
 
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
+WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
+
+-- Open-findings reads that join risk_policies (CountFindings*,
+-- ListRiskResultsByProjectFound) filter on the same open-findings predicate
+-- but need risk_policy_id, which _project_found_idx lacks — and the planner
+-- overestimates the predicate's row count ~5x (it multiplies the
+-- found/excluded_at/false_positive_at selectivities as if independent), which
+-- priced the resulting bitmap heap scan above a parallel seq scan of the
+-- whole table. Keying on risk_policy_id makes the policy-join count an
+-- index-only scan, which stays cheap no matter how far off the estimate is.
+CREATE INDEX IF NOT EXISTS risk_results_project_open_policy_idx
+ON risk_results (project_id, risk_policy_id)
 WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
 
 -- Serves the risk overview window scan (GetRiskOverviewCounts): counts every

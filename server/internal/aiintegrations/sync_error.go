@@ -133,3 +133,21 @@ func (p CursorUsageSyncProgress) String() string {
 		p.WindowStart.Format(time.RFC3339Nano), p.WindowEnd.Format(time.RFC3339Nano), p.UsagePages, p.UsageEvents,
 	)
 }
+
+// CodexCostSyncProgress records how far a Codex cost compliance import run
+// got before it stopped.
+type CodexCostSyncProgress struct {
+	WindowStart       time.Time `json:"window_start"`
+	LogPages          int       `json:"log_pages"`
+	LogFiles          int       `json:"log_files"`
+	CostEvents        int       `json:"cost_events"`
+	CostEventsWritten int       `json:"cost_events_written"`
+	WatermarkReached  time.Time `json:"watermark_reached"`
+}
+
+func (p CodexCostSyncProgress) String() string {
+	return fmt.Sprintf(
+		"window_start=%s log_pages=%d log_files=%d cost_events=%d cost_events_written=%d watermark_reached=%s",
+		p.WindowStart.Format(time.RFC3339Nano), p.LogPages, p.LogFiles, p.CostEvents, p.CostEventsWritten, p.WatermarkReached.Format(time.RFC3339Nano),
+	)
+}

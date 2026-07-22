@@ -21,3 +21,18 @@ func UpsertConfigAiIntegrationsPath() string {
 func DeleteConfigAiIntegrationsPath() string {
 	return "/rpc/aiIntegrations.deleteConfig"
 }
+
+// ListSchedulesAiIntegrationsPath returns the URL path to the aiIntegrations service listSchedules HTTP endpoint.
+func ListSchedulesAiIntegrationsPath() string {
+	return "/rpc/aiIntegrations.listSchedules"
+}
+
+// SetScheduleEnabledAiIntegrationsPath returns the URL path to the aiIntegrations service setScheduleEnabled HTTP endpoint.
+func SetScheduleEnabledAiIntegrationsPath() string {
+	return "/rpc/aiIntegrations.setScheduleEnabled"
+}
+
+// RetryScheduleAiIntegrationsPath returns the URL path to the aiIntegrations service retrySchedule HTTP endpoint.
+func RetryScheduleAiIntegrationsPath() string {
+	return "/rpc/aiIntegrations.retrySchedule"
+}

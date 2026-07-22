@@ -493,8 +493,10 @@ func decodeShadowMCPInventoryUserCursor(cursor string) (shadowMCPInventoryUserCu
 }
 
 // UpsertShadowMCPInventoryURLs merges the given rows with any existing
-// inventory rows and writes them using a server-side async insert
-// (fire-and-forget), same as InsertTelemetryLogs.
+// inventory rows (one batched lookup per project) and writes them with a
+// synchronous insert: the read-merge-write depends on previously written rows
+// being visible, so the insert must not be deferred by ClickHouse async
+// insert buffering.
 func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []UpsertShadowMCPInventoryURLParams) error {
 	if len(args) == 0 {
 		return nil
@@ -562,26 +564,37 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 		return nil
 	}
 
+	// Fetch existing rows with one batched lookup per project instead of one
+	// point-SELECT per URL — the sequential per-URL reads dominated the
+	// upsert's latency for inventories with many servers (DNO-606).
+	urlsByProject := make(map[string][]string)
 	for _, upsert := range upserts {
-		existing, err := q.getShadowMCPInventoryURL(ctx, upsert.GramProjectID, upsert.CanonicalServerURL)
+		urlsByProject[upsert.GramProjectID] = append(urlsByProject[upsert.GramProjectID], upsert.CanonicalServerURL)
+	}
+	for projectID, urls := range urlsByProject {
+		existingByURL, err := q.listShadowMCPInventoryURLRowsByURLs(ctx, projectID, urls)
 		if err != nil {
 			return err
 		}
-		if existing == nil {
-			continue
-		}
-		upsert.ServerNameOverride = existing.ServerNameOverride
-		if upsert.URLHost == "" {
-			upsert.URLHost = existing.URLHost
-		}
-		if upsert.ServerName == "" {
-			upsert.ServerName = existing.ServerName
-		}
-		if existing.FirstSeen.Before(upsert.FirstSeen) {
-			upsert.FirstSeen = existing.FirstSeen
-		}
-		if existing.LastSeen.After(upsert.LastSeen) {
-			upsert.LastSeen = existing.LastSeen
+		for _, url := range urls {
+			existing, ok := existingByURL[url]
+			if !ok {
+				continue
+			}
+			upsert := upserts[projectID+"\x00"+url]
+			upsert.ServerNameOverride = existing.ServerNameOverride
+			if upsert.URLHost == "" {
+				upsert.URLHost = existing.URLHost
+			}
+			if upsert.ServerName == "" {
+				upsert.ServerName = existing.ServerName
+			}
+			if existing.FirstSeen.Before(upsert.FirstSeen) {
+				upsert.FirstSeen = existing.FirstSeen
+			}
+			if existing.LastSeen.After(upsert.LastSeen) {
+				upsert.LastSeen = existing.LastSeen
+			}
 		}
 	}
 
@@ -709,6 +722,54 @@ func (q *Queries) ListShadowMCPInventoryURLsBySlugHash(ctx context.Context, arg 
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating shadow mcp inventory slug hash lookup rows: %w", err)
+	}
+
+	return result, nil
+}
+
+// listShadowMCPInventoryURLRowsByURLs fetches the existing inventory rows for
+// a set of canonical URLs within one project in a single query, keyed by
+// canonical URL. Batch counterpart of getShadowMCPInventoryURL for the upsert
+// merge path.
+func (q *Queries) listShadowMCPInventoryURLRowsByURLs(ctx context.Context, projectID string, canonicalURLs []string) (map[string]*ShadowMCPInventoryURLRow, error) {
+	if len(canonicalURLs) == 0 {
+		return map[string]*ShadowMCPInventoryURLRow{}, nil
+	}
+
+	sb := sq.Select(
+		"canonical_server_url",
+		"max(url_host) AS url_host",
+		"argMaxIf(server_name, updated_at, server_name != '') AS server_name",
+		"argMax(server_name_override, updated_at) AS server_name_override",
+		"min(first_seen) AS first_seen",
+		"max(last_seen) AS last_seen",
+	).
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", projectID).
+		Where(squirrel.Eq{"canonical_server_url": canonicalURLs}).
+		GroupBy("gram_project_id", "canonical_server_url")
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory url batch lookup query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory url batch lookup: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string]*ShadowMCPInventoryURLRow, len(canonicalURLs))
+	for rows.Next() {
+		var row ShadowMCPInventoryURLRow
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory url batch lookup row: %w", err)
+		}
+		result[row.CanonicalServerURL] = &row
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory url batch lookup rows: %w", err)
 	}
 
 	return result, nil

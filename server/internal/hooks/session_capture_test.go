@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -11,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -234,4 +236,38 @@ func TestClaudeStopBackfillsLatestUserPromptID(t *testing.T) {
 	require.Equal(t, wantPromptID, msgs[0].MessageID.String)
 	require.Equal(t, "assistant", msgs[1].Role)
 	require.False(t, msgs[1].MessageID.Valid)
+}
+
+func TestClaudeSessionEndDoesNotWakeBeforeTranscriptPersistence(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	projectID := uuid.New()
+
+	unattributed, err := ti.service.handleSessionEnd(ctx, hookevents.NewSessionEnd(
+		hookevents.Event{
+			Provider: "claude", Type: "", RawEventType: "SessionEnd", Timestamp: time.Now(),
+			AuthContext: nil, ConversationID: "unattributed", Raw: nil,
+			Context: hookevents.EventContext{
+				OrganizationID: "", ProjectID: uuid.Nil, User: hookevents.User{ID: "", Email: ""},
+			},
+		},
+		hookevents.SessionEndParams{Reason: "clear"},
+	))
+	require.NoError(t, err)
+	require.NotNil(t, unattributed)
+	require.Empty(t, ti.efficacySignals.signaled(), "a session with no project wakes nothing")
+
+	resolved, err := ti.service.handleSessionEnd(ctx, hookevents.NewSessionEnd(
+		hookevents.Event{
+			Provider: "claude", Type: "", RawEventType: "SessionEnd", Timestamp: time.Now(),
+			AuthContext: nil, ConversationID: "resolved", Raw: nil,
+			Context: hookevents.EventContext{
+				OrganizationID: "org", ProjectID: projectID, User: hookevents.User{ID: "", Email: ""},
+			},
+		},
+		hookevents.SessionEndParams{Reason: "exit"},
+	))
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	require.Empty(t, ti.efficacySignals.signaled(), "durable observations, messages, and the sweep provide later wakes")
 }

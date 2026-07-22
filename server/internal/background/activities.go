@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -122,6 +123,7 @@ type Activities struct {
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
 	pluginPublisher                 *activities.PluginPublisher
+	skillEfficacyScorer             *activities.SkillEfficacyScorer
 }
 
 func NewActivities(
@@ -231,7 +233,7 @@ func NewActivities(
 		analyzeBatch:                    analyzeBatch,
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
-		skillObservationReconciler:      activities.NewSkillObservationReconciler(db),
+		skillObservationReconciler:      activities.NewSkillObservationReconciler(db, telemetryRepo),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
@@ -253,6 +255,15 @@ func NewActivities(
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
+		// The judge draws on the same per-(org, model) bucket and the same
+		// completion client as every other platform judge, so efficacy scoring
+		// cannot outspend the org's key behind their backs.
+		skillEfficacyScorer: activities.NewSkillEfficacyScorer(
+			db,
+			productFeatures,
+			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter)),
+			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
+		),
 	}
 }
 
@@ -328,8 +339,8 @@ func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input acti
 	return candidates, nil
 }
 
-func (a *Activities) PollAIData(ctx context.Context, configID string) error {
-	return a.pollAIData.Do(ctx, configID)
+func (a *Activities) PollAIData(ctx context.Context, input string) error {
+	return a.pollAIData.Do(ctx, input)
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {
@@ -463,6 +474,14 @@ func (a *Activities) ReconcileSkillObservations(ctx context.Context, input activ
 	result, err := a.skillObservationReconciler.Reconcile(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("reconcile skill observations: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) SyncSkillSessionVersions(ctx context.Context, input activities.SyncSkillSessionVersionsParams) (*activities.SyncSkillSessionVersionsResult, error) {
+	result, err := a.skillObservationReconciler.SyncSessionVersions(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("sync skill session versions: %w", err)
 	}
 	return result, nil
 }

@@ -31,7 +31,7 @@ import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/clie
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -50,6 +50,7 @@ import {
   parseScopes,
   pickPreferredAuthMethod,
 } from "./issuerFormUtils";
+import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 
@@ -408,11 +409,6 @@ export function AttachRemoteIdentityProviderSheet({
   });
 
   const submitting = attachMutation.isPending;
-  const submitError = attachMutation.error
-    ? attachMutation.error instanceof Error && attachMutation.error.message
-      ? attachMutation.error.message
-      : "An unexpected error occurred. Please try again."
-    : null;
   const { reset: resetAttachMutation } = attachMutation;
 
   // Reset transient state whenever the sheet is reopened. The target slug
@@ -711,11 +707,7 @@ export function AttachRemoteIdentityProviderSheet({
             </Stack>
           )}
 
-          {submitError && (
-            <Alert variant="error" dismissible={false}>
-              {submitError}
-            </Alert>
-          )}
+          <IdentityProviderAttachmentErrorAlert error={attachMutation.error} />
         </div>
 
         <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">

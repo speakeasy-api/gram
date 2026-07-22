@@ -311,14 +311,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
 			}
 
-			// ClickHouse risk_findings writer (shadow path). Only connect when
-			// the kill switch is off so a disabled deployment does not require
-			// ClickHouse reachability.
+			// ClickHouse risk_findings writer (sole write path). Only connect
+			// when the kill switch is off so a disabled deployment does not
+			// require ClickHouse reachability.
 			//
-			// A ClickHouse connect/ping failure must NOT abort streams: this is a
-			// shadow writer, and taking the process down would also kill the
-			// BigQuery finding path and every other receiver. Degrade instead —
-			// log the failure and disable only the ClickHouse receiver.
+			// A ClickHouse connect/ping failure must NOT abort streams: taking
+			// the process down would also kill every other receiver. Degrade
+			// instead — log the failure and disable only the ClickHouse
+			// receiver.
 			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
 			var chConn clickhouse.Conn
 			if enableCHRiskWrites {

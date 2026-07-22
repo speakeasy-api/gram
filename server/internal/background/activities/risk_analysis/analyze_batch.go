@@ -69,7 +69,7 @@ func NewAnalyzeBatch(
 	piiScanner PIIScanner,
 	promptInjectionScanner *promptinjection.Scanner,
 	shadowMCPClient *shadowmcp.Client,
-	mcpMatchLookup MCPMatchLookup,
+	mcpProvenanceLookup MCPProvenanceLookup,
 	judge promptpolicy.Evaluator,
 	flags feature.Provider,
 	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
@@ -94,15 +94,17 @@ func NewAnalyzeBatch(
 		return nil, fmt.Errorf("compile recommended scopes version %d: %w", recommendedscopes.Version, err)
 	}
 
+	metrics := newRiskMetrics(meterProvider, logger)
+
 	return &AnalyzeBatch{
 		logger:                 logger,
 		tracer:                 tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
-		metrics:                newRiskMetrics(meterProvider, logger),
+		metrics:                metrics,
 		db:                     db,
 		gitleaksScanner:        gitleaks.NewScanner(),
 		piiScanner:             piiScanner,
 		promptInjectionScanner: promptInjectionScanner,
-		shadowMCPScanner:       shadowmcpscan.NewScanner(logger, shadowMCPClient, mcpMatchLookup),
+		shadowMCPScanner:       shadowmcpscan.NewScanner(logger, shadowMCPClient, shadowMCPClient, mcpProvenanceLookup, metrics),
 		judge:                  judge,
 		flags:                  flags,
 		presidioPub:            presidioPub,

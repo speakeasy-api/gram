@@ -32,6 +32,7 @@ func TestRememberTool_RequiresAssistantPrincipal(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"content":"hello"}`), &bytes.Buffer{})
 	require.Error(t, err)
 
@@ -74,6 +75,7 @@ func TestRememberTool_DelegatesAndShapesResponse(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"content":"recall this","tags":["a","b"]}`), &out)
 	require.NoError(t, err)
 
@@ -113,6 +115,7 @@ func TestRememberTool_PropagatesServiceError(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"content":"x"}`), &bytes.Buffer{})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "boom")

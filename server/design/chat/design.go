@@ -21,7 +21,7 @@ var _ = Service("chat", func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
-			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
+			Attribute("search", String, "Search query (searches chat ID, user ID, user name, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
 			Attribute("source", String, "Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.")
 			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
@@ -332,6 +332,8 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("title", String, "The title of the chat")
 	Attribute("user_id", String, "The ID of the user who created the chat")
 	Attribute("external_user_id", String, "The ID of the external user who created the chat")
+	Attribute("assistant_id", String, "The ID of the assistant that produced this chat, if any")
+	Attribute("assistant_name", String, "The name of the assistant that produced this chat, if any")
 	Attribute("num_messages", Int, "The number of messages in the chat")
 	Attribute("source", String, "The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)")
 	Attribute("created_at", String, func() {

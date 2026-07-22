@@ -6,6 +6,7 @@ import {
 } from "@gram/client/react-query/riskListCustomDetectionRules.js";
 import { useRiskUpdateCustomDetectionRuleMutation } from "@gram/client/react-query/riskUpdateCustomDetectionRule.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import celExamples from "./cel-examples.json";
 import { DETECTION_RULES, type RuleCategory } from "./policy-data";
 
@@ -57,7 +58,7 @@ const CATEGORY_RULE_DESCRIPTION: Record<RuleCategory, string> = {
   prompt_policy:
     "Natural-language guardrail evaluated by the policy judge against agent activity.",
   prompt_injection:
-    "Hybrid detector that combines classifier scoring with regex and keyword heuristics to flag attempts to override the agent's instructions.",
+    "LLM judge that semantically evaluates messages for attempts to override the agent's instructions, in user prompts or smuggled through tool outputs.",
   off_policy:
     "Classifier-backed detector for requests that fall outside the organization's acceptable-use policy.",
   shadow_mcp:
@@ -66,8 +67,7 @@ const CATEGORY_RULE_DESCRIPTION: Record<RuleCategory, string> = {
     "Flags tool calls whose Speakeasy tool definition is annotated as destructive. Requires Speakeasy hooks and Speakeasy-issued tool metadata.",
   cli_destructive:
     "Pattern detector for destructive shell, git, database, and cloud CLI invocations passed through tool arguments.",
-  account_identity:
-    "Flags sessions authenticated with a personal AI account or an email domain outside the policy's approved list, using the account attribution captured by session ingest.",
+  account_identity: `Flags sessions authenticated with a personal AI account or an email domain outside the policy's approved list, using the account attribution captured by session ingest. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
   custom:
     "Organization-defined regex pattern. Matches anywhere in the scanned payload.",
 };

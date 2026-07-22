@@ -93,11 +93,14 @@ func (q *Queries) InsertPromotedTelemetryLogs(ctx context.Context, args []Insert
 }
 
 func (q *Queries) insertTelemetryLogsInto(ctx context.Context, table string, args []InsertTelemetryLogParams) error {
+	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
+	return q.insertTelemetryLogsIntoContext(ctx, table, args)
+}
+
+func (q *Queries) insertTelemetryLogsIntoContext(ctx context.Context, table string, args []InsertTelemetryLogParams) error {
 	if len(args) == 0 {
 		return nil
 	}
-
-	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
 
 	builder := sq.Insert(table).
 		Columns(

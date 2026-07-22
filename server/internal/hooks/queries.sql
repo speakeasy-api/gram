@@ -15,7 +15,7 @@ RETURNING *;
 DELETE FROM hooks_server_name_overrides
 WHERE id = $1 AND project_id = $2;
 
--- name: InsertSkillObservation :exec
+-- name: InsertSkillObservation :execrows
 INSERT INTO skill_observations (
     project_id
   , idempotency_key

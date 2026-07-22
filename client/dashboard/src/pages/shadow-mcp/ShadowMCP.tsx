@@ -1,8 +1,12 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import type { ShadowMCPPolicy } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
 import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInventoryTable";
 import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
-import { shadowMCPPolicyState } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
+import {
+  eligibleShadowMCPAllowRulePolicies,
+  shadowMCPPolicyState,
+} from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
@@ -41,10 +45,8 @@ export default function ShadowMCP(): JSX.Element {
   const policyState = policiesQuery.isError
     ? "unavailable"
     : shadowMCPPolicyState(policiesQuery.data?.policies);
-  const shadowMCPPolicies =
-    policiesQuery.data?.policies.filter(
-      (policy) => policy.enabled && policy.sources.includes("shadow_mcp"),
-    ) ?? [];
+  const shadowMCPPolicies: ShadowMCPPolicy[] =
+    eligibleShadowMCPAllowRulePolicies(policiesQuery.data?.policies);
 
   return (
     <Page>

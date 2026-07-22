@@ -2,6 +2,7 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { describe, expect, it } from "vitest";
 import {
+  eligibleShadowMCPAllowRulePolicies,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusDescription,
   shadowMCPPolicyState,
@@ -48,6 +49,29 @@ function server(
     ...overrides,
   };
 }
+
+describe("eligibleShadowMCPAllowRulePolicies", () => {
+  it("returns only enabled blocking Shadow MCP policies", () => {
+    const policies = [
+      policy({ action: "block", id: "eligible" }),
+      policy({ action: "flag", id: "flag" }),
+      policy({ action: "block", enabled: false, id: "disabled" }),
+      policy({
+        action: "block",
+        id: "other-source",
+        sources: ["prompt_injection"],
+      }),
+    ];
+
+    expect(
+      eligibleShadowMCPAllowRulePolicies(policies).map((item) => item.id),
+    ).toEqual(["eligible"]);
+  });
+
+  it("returns an empty list while policies are unavailable", () => {
+    expect(eligibleShadowMCPAllowRulePolicies(undefined)).toEqual([]);
+  });
+});
 
 describe("shadowMCPPolicyState", () => {
   it("prioritizes blocking policies over flagging policies", () => {

@@ -40,6 +40,7 @@ func TestGetReminderTool_CallsRemindersInfoWithUserToken(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"reminder":"Rm12345678"}`), io.Discard)
 	require.NoError(t, err)
 	require.Equal(t, "/reminders.info", requestPath)

@@ -53,15 +53,18 @@ type AiIntegrationSync struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
-	Schedule              pgtype.Text
-	Kind                  pgtype.Text
+	Schedule              string
+	Kind                  string
 	PollWatermarkAt       pgtype.Timestamptz
+	PollCheckpoint        pgtype.Text
 	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
 	LastPollError         pgtype.Text
 	LastPollFailedAt      pgtype.Timestamptz
 	LastPollSuccessAt     pgtype.Timestamptz
 	ConsecutiveFailures   int32
+	AutoPausedAt          pgtype.Timestamptz
+	DisabledAt            pgtype.Timestamptz
 	ID                    uuid.UUID
 }
 
@@ -383,19 +386,25 @@ type ChatUserFeedback struct {
 }
 
 type CustomDomain struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	Domain          string
-	Verified        bool
-	Activated       bool
-	IngressName     pgtype.Text
-	CertSecretName  pgtype.Text
-	ProvisionerKind string
-	IpAllowlist     []string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	ID                   uuid.UUID
+	OrganizationID       string
+	Domain               string
+	Verified             bool
+	Activated            bool
+	IngressName          pgtype.Text
+	CertSecretName       pgtype.Text
+	ProvisionerKind      string
+	IpAllowlist          []string
+	HealthStatus         pgtype.Text
+	HealthIssue          pgtype.Text
+	HealthCheckedAt      pgtype.Timestamptz
+	UnhealthySince       pgtype.Timestamptz
+	CertificateExpiresAt pgtype.Timestamptz
+	ConsecutiveFailures  pgtype.Int4
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
 
 type Deployment struct {
@@ -1661,6 +1670,36 @@ type SkillDistribution struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type SkillEfficacyEvaluation struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Surface         string
+	SessionID       string
+	ChatID          uuid.UUID
+	SkillID         uuid.UUID
+	SkillVersionID  uuid.UUID
+	CanonicalSha256 string
+	ObservedAt      pgtype.Timestamptz
+	State           string
+	ReservedOn      pgtype.Date
+	Attempts        int32
+	LastError       pgtype.Text
+	ScoredAt        pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type SkillEfficacySetting struct {
+	OrganizationID   string
+	Enabled          bool
+	PerSkillDailyCap int32
+	OrgDailyCap      int32
+	NewVersionBurst  int32
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
 type SkillObservation struct {
 	ID                 uuid.UUID
 	ProjectID          uuid.UUID
@@ -1679,6 +1718,8 @@ type SkillObservation struct {
 	SkillID            uuid.NullUUID
 	SkillVersionID     uuid.NullUUID
 	ReconciledAt       pgtype.Timestamptz
+	MetricsSyncedAt    pgtype.Timestamptz
+	EfficacyEnqueuedAt pgtype.Timestamptz
 	ReconcileErrorCode pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 }

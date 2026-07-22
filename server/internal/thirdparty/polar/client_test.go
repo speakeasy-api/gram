@@ -20,6 +20,15 @@ func TestCatalog_IsTopUpProductID(t *testing.T) {
 	require.False(t, c.IsTopUpProductID(""))
 }
 
+func TestIsPolarMeteredModelUsageExcludesPlatformInference(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, isPolarMeteredModelUsage(billing.ModelUsageSourceGram))
+	require.False(t, isPolarMeteredModelUsage(billing.ModelUsageSourceRiskAnalysis))
+	require.False(t, isPolarMeteredModelUsage(billing.ModelUsageSourceSkillEfficacy))
+	require.True(t, isPolarMeteredModelUsage(billing.ModelUsageSourcePlayground))
+}
+
 func TestToolCallUsageMetadata_OmitsEmptyOptionalStringDimensions(t *testing.T) {
 	t.Parallel()
 
