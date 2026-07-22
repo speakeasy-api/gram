@@ -178,6 +178,7 @@ WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
   AND s.auto_paused_at IS NULL
+  AND s.disabled_at IS NULL
   AND s.next_poll_after <= @poll_due_before
 ORDER BY s.next_poll_after ASC, c.organization_id ASC, s.schedule ASC
 LIMIT @limit_count;
@@ -328,10 +329,49 @@ WHERE ai_integration_config_id = @ai_integration_config_id
   AND schedule = @schedule;
 
 -- name: ListSyncSchedules :many
-SELECT id, schedule, kind
+SELECT
+    id
+  , schedule
+  , kind
+  , next_poll_after
+  , last_poll_error
+  , last_poll_failed_at
+  , last_poll_success_at
+  , consecutive_failures
+  , auto_paused_at
+  , disabled_at
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = @ai_integration_config_id
 ORDER BY schedule;
+
+-- SetSyncScheduleDisabled records a user's explicit pause (or unpause) of one
+-- sync schedule. Distinct from auto_paused_at: only the user flips this flag.
+-- Re-enabling leaves next_poll_after untouched — a stale value is already due,
+-- so candidate selection picks the schedule up on the next scheduler tick.
+-- name: SetSyncScheduleDisabled :one
+UPDATE ai_integration_syncs
+SET disabled_at = CASE WHEN @disabled::bool THEN clock_timestamp() ELSE NULL END,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = @ai_integration_config_id
+  AND schedule = @schedule
+RETURNING *;
+
+-- RetrySyncSchedule makes one schedule due immediately, lifting any automatic
+-- pause and clearing its failure state so candidate selection re-enqueues it
+-- on the next scheduler tick. The stored error is cleared deliberately — the
+-- user acknowledged it by retrying, and a failing poll re-records it. A
+-- user-disabled schedule stays disabled.
+-- name: RetrySyncSchedule :one
+UPDATE ai_integration_syncs
+SET next_poll_after = clock_timestamp(),
+    auto_paused_at = NULL,
+    consecutive_failures = 0,
+    last_poll_error = NULL,
+    last_poll_failed_at = NULL,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = @ai_integration_config_id
+  AND schedule = @schedule
+RETURNING *;
 
 -- name: CountSyncRowsForTest :one
 SELECT count(*)

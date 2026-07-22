@@ -75,6 +75,9 @@ trackedFiles:
   src/funcs/agentListSyncedUsers.ts: {}
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
   src/funcs/aiIntegrationsGetConfig.ts: {}
+  src/funcs/aiIntegrationsListSchedules.ts: {}
+  src/funcs/aiIntegrationsRetrySchedule.ts: {}
+  src/funcs/aiIntegrationsSetScheduleEnabled.ts: {}
   src/funcs/aiIntegrationsUpsertConfig.ts: {}
   src/funcs/assetsCreateSignedChatAttachmentURL.ts: {}
   src/funcs/assetsFetchOpenAPIv3FromURL.ts: {}
@@ -477,6 +480,7 @@ trackedFiles:
   src/models/components/agentplugin.ts: {}
   src/models/components/agentusage.ts: {}
   src/models/components/aiintegrationconfig.ts: {}
+  src/models/components/aiintegrationschedulestate.ts: {}
   src/models/components/allowedorigin.ts: {}
   src/models/components/approveshadowmcpapprovalrequestform.ts: {}
   src/models/components/archiveskillrequestbody.ts: {}
@@ -670,6 +674,7 @@ trackedFiles:
   src/models/components/integrationentry.ts: {}
   src/models/components/integrationversion.ts: {}
   src/models/components/key.ts: {}
+  src/models/components/listaiintegrationschedulesresult.ts: {}
   src/models/components/listallowedoriginsresult.ts: {}
   src/models/components/listassetsresult.ts: {}
   src/models/components/listassistantmemoriesresult.ts: {}
@@ -874,6 +879,7 @@ trackedFiles:
   src/models/components/resource.ts: {}
   src/models/components/resourceentry.ts: {}
   src/models/components/responsefilter.ts: {}
+  src/models/components/retryschedulerequestbody.ts: {}
   src/models/components/revokeallremotesessionsresult.ts: {}
   src/models/components/riskblock.ts: {}
   src/models/components/riskcategoriesresult.ts: {}
@@ -941,6 +947,7 @@ trackedFiles:
   src/models/components/setpluginassignmentsresponsebody.ts: {}
   src/models/components/setproductfeaturerequestbody.ts: {}
   src/models/components/setprojectlogoresult.ts: {}
+  src/models/components/setscheduleenabledrequestbody.ts: {}
   src/models/components/setsourceenvironmentlinkrequestbody.ts: {}
   src/models/components/settoolsetenvironmentlinkrequestbody.ts: {}
   src/models/components/settoolvariationsgrouprequestbody.ts: {}
@@ -1296,6 +1303,7 @@ trackedFiles:
   src/models/operations/hooksnumbermetrics.ts: {}
   src/models/operations/ingesthookevent.ts: {}
   src/models/operations/integrationsnumberget.ts: {}
+  src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listallowedorigins.ts: {}
   src/models/operations/listapikeys.ts: {}
   src/models/operations/listassets.ts: {}
@@ -1411,6 +1419,7 @@ trackedFiles:
   src/models/operations/resolvechallenge.ts: {}
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
   src/models/operations/resumetriggerinstance.ts: {}
+  src/models/operations/retryaiintegrationschedule.ts: {}
   src/models/operations/revokeallorganizationremotesessionclientsessions.ts: {}
   src/models/operations/revokeapikey.ts: {}
   src/models/operations/revokechatsession.ts: {}
@@ -1436,6 +1445,7 @@ trackedFiles:
   src/models/operations/serveimage.ts: {}
   src/models/operations/serveopenapiv3.ts: {}
   src/models/operations/sessioninfo.ts: {}
+  src/models/operations/setaiintegrationscheduleenabled.ts: {}
   src/models/operations/setbillingmetadata.ts: {}
   src/models/operations/setchatpinned.ts: {}
   src/models/operations/setmcpmetadata.ts: {}
@@ -1520,6 +1530,8 @@ trackedFiles:
   src/react-query/agentPlugins.ts: {}
   src/react-query/aiIntegrationConfig.core.ts: {}
   src/react-query/aiIntegrationConfig.ts: {}
+  src/react-query/aiIntegrationSchedules.core.ts: {}
+  src/react-query/aiIntegrationSchedules.ts: {}
   src/react-query/approveShadowMCPApprovalRequest.ts: {}
   src/react-query/archiveSkill.ts: {}
   src/react-query/assistantMemoriesDelete.ts: {}
@@ -1897,6 +1909,7 @@ trackedFiles:
   src/react-query/resolveChallenge.ts: {}
   src/react-query/resolveShadowMCPInventoryRequest.ts: {}
   src/react-query/resumeTrigger.ts: {}
+  src/react-query/retryAIIntegrationSchedule.ts: {}
   src/react-query/revokeAPIKey.ts: {}
   src/react-query/revokeAllOrganizationRemoteSessionClientSessions.ts: {}
   src/react-query/revokeInvite.ts: {}
@@ -1991,6 +2004,7 @@ trackedFiles:
   src/react-query/serveOpenAPIv3.ts: {}
   src/react-query/sessionInfo.core.ts: {}
   src/react-query/sessionInfo.ts: {}
+  src/react-query/setAIIntegrationScheduleEnabled.ts: {}
   src/react-query/setBillingMetadata.ts: {}
   src/react-query/setModelProviderKeyEnabled.ts: {}
   src/react-query/setPluginAssignments.ts: {}
@@ -4386,6 +4400,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listAIIntegrationSchedules:
+    speakeasy-default-list-AI-integration-schedules:
+      parameters:
+        query:
+          provider: "<value>"
+      responses:
+        "200":
+          application/json: {"organization_id": "<id>", "provider": "<value>", "schedules": [{"consecutive_failures": 72320, "enabled": false, "schedule": "<value>", "status": "failed"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listAPIKeys:
     speakeasy-default-list-API-keys:
       responses:
@@ -5608,6 +5634,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  retryAIIntegrationSchedule:
+    speakeasy-default-retry-AI-integration-schedule:
+      requestBody:
+        application/json: {"provider": "<value>", "schedule": "<value>"}
+      responses:
+        "200":
+          application/json: {"consecutive_failures": 149614, "enabled": false, "schedule": "<value>", "status": "failed"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   revokeAPIKey:
     speakeasy-default-revoke-API-key:
       parameters:
@@ -5897,6 +5934,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  setAIIntegrationScheduleEnabled:
+    speakeasy-default-set-AI-integration-schedule-enabled:
+      requestBody:
+        application/json: {"enabled": false, "provider": "<value>", "schedule": "<value>"}
+      responses:
+        "200":
+          application/json: {"consecutive_failures": 333520, "enabled": true, "schedule": "<value>", "status": "pending"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   setBillingMetadata:
     speakeasy-default-set-billing-metadata:
       requestBody:

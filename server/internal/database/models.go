@@ -64,6 +64,7 @@ type AiIntegrationSync struct {
 	LastPollSuccessAt     pgtype.Timestamptz
 	ConsecutiveFailures   int32
 	AutoPausedAt          pgtype.Timestamptz
+	DisabledAt            pgtype.Timestamptz
 	ID                    uuid.UUID
 }
 

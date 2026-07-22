@@ -23,6 +23,15 @@ type Service interface {
 	UpsertConfig(context.Context, *UpsertConfigPayload) (res *AIIntegrationConfig, err error)
 	// Delete the org-wide AI integration config for a provider.
 	DeleteConfig(context.Context, *DeleteConfigPayload) (err error)
+	// List the sync schedules and their scheduler state for a provider's org-wide
+	// AI integration config. Returns an empty list when no config is set.
+	ListSchedules(context.Context, *ListSchedulesPayload) (res *ListAIIntegrationSchedulesResult, err error)
+	// Enable or disable one sync schedule of a provider's org-wide AI integration
+	// config. Disabled schedules are skipped by the poller until re-enabled.
+	SetScheduleEnabled(context.Context, *SetScheduleEnabledPayload) (res *AIIntegrationScheduleState, err error)
+	// Make one sync schedule due immediately, lifting any automatic pause and
+	// resetting its failure streak. The scheduler picks it up on its next tick.
+	RetrySchedule(context.Context, *RetrySchedulePayload) (res *AIIntegrationScheduleState, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -45,7 +54,7 @@ const ServiceName = "aiIntegrations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"getConfig", "upsertConfig", "deleteConfig"}
+var MethodNames = [6]string{"getConfig", "upsertConfig", "deleteConfig", "listSchedules", "setScheduleEnabled", "retrySchedule"}
 
 // AIIntegrationConfig is the result type of the aiIntegrations service
 // getConfig method.
@@ -92,6 +101,42 @@ type AIIntegrationConfig struct {
 	UpdatedAt *string
 }
 
+// AIIntegrationScheduleState is the result type of the aiIntegrations service
+// setScheduleEnabled method.
+type AIIntegrationScheduleState struct {
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule string
+	// Product-level identifier for the stream this schedule writes (e.g.
+	// cursor.usage, claude.chat.message). Omitted for legacy schedules with no
+	// registered stream.
+	Stream *string
+	// Whether the stream carries discrete events or aggregated metrics. Omitted
+	// for legacy schedules with no registered stream.
+	StreamKind *string
+	// Whether the user has this schedule enabled. Disabled schedules are skipped
+	// by the poller until re-enabled.
+	Enabled bool
+	// Derived status for the schedule's latest poll state.
+	Status string
+	// ISO 8601 timestamp for the schedule's last successful poll. Omitted until a
+	// poll succeeds.
+	LastPollSuccessAt *string
+	// ISO 8601 timestamp for the schedule's latest failed poll. Omitted unless a
+	// poll has failed.
+	LastPollFailedAt *string
+	// Stored error from the schedule's latest failed poll. Omitted unless the
+	// latest poll failed.
+	LastPollError *string
+	// ISO 8601 timestamp for the schedule's next scheduled poll.
+	NextPollAfter *string
+	// Number of consecutive failed polls. Resets to zero on success or retry.
+	ConsecutiveFailures int
+	// ISO 8601 timestamp when the scheduler auto-paused the schedule after
+	// repeated provider rejections. Omitted unless auto-paused.
+	AutoPausedAt *string
+}
+
 // DeleteConfigPayload is the payload type of the aiIntegrations service
 // deleteConfig method.
 type DeleteConfigPayload struct {
@@ -110,6 +155,55 @@ type GetConfigPayload struct {
 	// AI provider identifier. Supported values include cursor,
 	// anthropic_compliance, and codex_compliance.
 	Provider string
+}
+
+// ListAIIntegrationSchedulesResult is the result type of the aiIntegrations
+// service listSchedules method.
+type ListAIIntegrationSchedulesResult struct {
+	// Organization the schedules belong to.
+	OrganizationID string
+	// AI provider identifier.
+	Provider string
+	// Scheduler state for each of the provider's sync schedules.
+	Schedules []*AIIntegrationScheduleState
+}
+
+// ListSchedulesPayload is the payload type of the aiIntegrations service
+// listSchedules method.
+type ListSchedulesPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
+	Provider string
+}
+
+// RetrySchedulePayload is the payload type of the aiIntegrations service
+// retrySchedule method.
+type RetrySchedulePayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
+	Provider string
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule string
+}
+
+// SetScheduleEnabledPayload is the payload type of the aiIntegrations service
+// setScheduleEnabled method.
+type SetScheduleEnabledPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
+	Provider string
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule string
+	// Whether the schedule should be polled.
+	Enabled bool
 }
 
 // UpsertConfigPayload is the payload type of the aiIntegrations service

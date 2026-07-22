@@ -39,6 +39,42 @@ var Config = Type("AIIntegrationConfig", func() {
 	})
 })
 
+var ScheduleState = Type("AIIntegrationScheduleState", func() {
+	Description("Scheduler state for one sync schedule (stream) of a provider integration.")
+	Required("schedule", "enabled", "status", "consecutive_failures")
+	Attribute("schedule", String, "Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).")
+	Attribute("stream", String, "Product-level identifier for the stream this schedule writes (e.g. cursor.usage, claude.chat.message). Omitted for legacy schedules with no registered stream.")
+	Attribute("stream_kind", String, "Whether the stream carries discrete events or aggregated metrics. Omitted for legacy schedules with no registered stream.", func() {
+		Enum("events", "metrics")
+	})
+	Attribute("enabled", Boolean, "Whether the user has this schedule enabled. Disabled schedules are skipped by the poller until re-enabled.")
+	Attribute("status", String, "Derived status for the schedule's latest poll state.", func() {
+		Enum("pending", "success", "failed", "auto_paused", "disabled")
+	})
+	Attribute("last_poll_success_at", String, "ISO 8601 timestamp for the schedule's last successful poll. Omitted until a poll succeeds.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_poll_failed_at", String, "ISO 8601 timestamp for the schedule's latest failed poll. Omitted unless a poll has failed.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_poll_error", String, "Stored error from the schedule's latest failed poll. Omitted unless the latest poll failed.")
+	Attribute("next_poll_after", String, "ISO 8601 timestamp for the schedule's next scheduled poll.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("consecutive_failures", Int, "Number of consecutive failed polls. Resets to zero on success or retry.")
+	Attribute("auto_paused_at", String, "ISO 8601 timestamp when the scheduler auto-paused the schedule after repeated provider rejections. Omitted unless auto-paused.", func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListSchedulesResult = Type("ListAIIntegrationSchedulesResult", func() {
+	Description("Sync schedules for one provider integration. Empty when no config is set for the provider.")
+	Required("organization_id", "provider", "schedules")
+	Attribute("organization_id", String, "Organization the schedules belong to.")
+	Attribute("provider", String, "AI provider identifier.")
+	Attribute("schedules", ArrayOf(ScheduleState), "Scheduler state for each of the provider's sync schedules.")
+})
+
 var _ = Service("aiIntegrations", func() {
 	Description("Manage organization-level AI provider integrations.")
 
@@ -134,5 +170,96 @@ var _ = Service("aiIntegrations", func() {
 		Meta("openapi:operationId", "deleteAIIntegrationConfig")
 		Meta("openapi:extension:x-speakeasy-name-override", "deleteConfig")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteAIIntegrationConfig"}`)
+	})
+
+	Method("listSchedules", func() {
+		Description("List the sync schedules and their scheduler state for a provider's org-wide AI integration config. Returns an empty list when no config is set.")
+
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.")
+			Required("provider")
+		})
+
+		Result(ListSchedulesResult)
+
+		HTTP(func() {
+			GET("/rpc/aiIntegrations.listSchedules")
+			Param("provider")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAIIntegrationSchedules")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSchedules")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIIntegrationSchedules"}`)
+	})
+
+	Method("setScheduleEnabled", func() {
+		Description("Enable or disable one sync schedule of a provider's org-wide AI integration config. Disabled schedules are skipped by the poller until re-enabled.")
+
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.")
+			Attribute("schedule", String, "Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).")
+			Attribute("enabled", Boolean, "Whether the schedule should be polled.")
+			Required("provider", "schedule", "enabled")
+		})
+
+		Result(ScheduleState)
+
+		HTTP(func() {
+			POST("/rpc/aiIntegrations.setScheduleEnabled")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setAIIntegrationScheduleEnabled")
+		Meta("openapi:extension:x-speakeasy-name-override", "setScheduleEnabled")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetAIIntegrationScheduleEnabled"}`)
+	})
+
+	Method("retrySchedule", func() {
+		Description("Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak. The scheduler picks it up on its next tick.")
+
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.")
+			Attribute("schedule", String, "Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).")
+			Required("provider", "schedule")
+		})
+
+		Result(ScheduleState)
+
+		HTTP(func() {
+			POST("/rpc/aiIntegrations.retrySchedule")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "retryAIIntegrationSchedule")
+		Meta("openapi:extension:x-speakeasy-name-override", "retrySchedule")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RetryAIIntegrationSchedule"}`)
 	})
 })

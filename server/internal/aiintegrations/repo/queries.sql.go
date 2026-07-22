@@ -154,12 +154,12 @@ WITH inserted AS (
     , $5
   )
   ON CONFLICT (ai_integration_config_id, schedule) DO UPDATE SET updated_at = ai_integration_syncs.updated_at
-  RETURNING created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, auto_paused_at, id
+  RETURNING created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, auto_paused_at, disabled_at, id
 )
-SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, auto_paused_at, id
+SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, auto_paused_at, disabled_at, id
 FROM inserted
 UNION ALL
-SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, auto_paused_at, id
+SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, auto_paused_at, disabled_at, id
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = $1
   AND schedule = $2
@@ -189,6 +189,7 @@ type EnsureSyncRow struct {
 	LastPollSuccessAt     pgtype.Timestamptz
 	ConsecutiveFailures   int32
 	AutoPausedAt          pgtype.Timestamptz
+	DisabledAt            pgtype.Timestamptz
 	ID                    uuid.UUID
 }
 
@@ -216,6 +217,7 @@ func (q *Queries) EnsureSync(ctx context.Context, arg EnsureSyncParams) (EnsureS
 		&i.LastPollSuccessAt,
 		&i.ConsecutiveFailures,
 		&i.AutoPausedAt,
+		&i.DisabledAt,
 		&i.ID,
 	)
 	return i, err
@@ -740,16 +742,33 @@ func (q *Queries) ListEnabledConfigsByProvider(ctx context.Context, provider str
 }
 
 const listSyncSchedules = `-- name: ListSyncSchedules :many
-SELECT id, schedule, kind
+SELECT
+    id
+  , schedule
+  , kind
+  , next_poll_after
+  , last_poll_error
+  , last_poll_failed_at
+  , last_poll_success_at
+  , consecutive_failures
+  , auto_paused_at
+  , disabled_at
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = $1
 ORDER BY schedule
 `
 
 type ListSyncSchedulesRow struct {
-	ID       uuid.UUID
-	Schedule string
-	Kind     string
+	ID                  uuid.UUID
+	Schedule            string
+	Kind                string
+	NextPollAfter       pgtype.Timestamptz
+	LastPollError       pgtype.Text
+	LastPollFailedAt    pgtype.Timestamptz
+	LastPollSuccessAt   pgtype.Timestamptz
+	ConsecutiveFailures int32
+	AutoPausedAt        pgtype.Timestamptz
+	DisabledAt          pgtype.Timestamptz
 }
 
 func (q *Queries) ListSyncSchedules(ctx context.Context, aiIntegrationConfigID uuid.UUID) ([]ListSyncSchedulesRow, error) {
@@ -761,7 +780,18 @@ func (q *Queries) ListSyncSchedules(ctx context.Context, aiIntegrationConfigID u
 	var items []ListSyncSchedulesRow
 	for rows.Next() {
 		var i ListSyncSchedulesRow
-		if err := rows.Scan(&i.ID, &i.Schedule, &i.Kind); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Schedule,
+			&i.Kind,
+			&i.NextPollAfter,
+			&i.LastPollError,
+			&i.LastPollFailedAt,
+			&i.LastPollSuccessAt,
+			&i.ConsecutiveFailures,
+			&i.AutoPausedAt,
+			&i.DisabledAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -787,6 +817,7 @@ WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
   AND s.auto_paused_at IS NULL
+  AND s.disabled_at IS NULL
   AND s.next_poll_after <= $1
 ORDER BY s.next_poll_after ASC, c.organization_id ASC, s.schedule ASC
 LIMIT $2
@@ -963,6 +994,96 @@ func (q *Queries) ResetUsagePollState(ctx context.Context, arg ResetUsagePollSta
 		arg.Schedule,
 	)
 	return err
+}
+
+const retrySyncSchedule = `-- name: RetrySyncSchedule :one
+UPDATE ai_integration_syncs
+SET next_poll_after = clock_timestamp(),
+    auto_paused_at = NULL,
+    consecutive_failures = 0,
+    last_poll_error = NULL,
+    last_poll_failed_at = NULL,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = $1
+  AND schedule = $2
+RETURNING created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, auto_paused_at, disabled_at, id
+`
+
+type RetrySyncScheduleParams struct {
+	AiIntegrationConfigID uuid.UUID
+	Schedule              string
+}
+
+// RetrySyncSchedule makes one schedule due immediately, lifting any automatic
+// pause and clearing its failure state so candidate selection re-enqueues it
+// on the next scheduler tick. The stored error is cleared deliberately — the
+// user acknowledged it by retrying, and a failing poll re-records it. A
+// user-disabled schedule stays disabled.
+func (q *Queries) RetrySyncSchedule(ctx context.Context, arg RetrySyncScheduleParams) (AiIntegrationSync, error) {
+	row := q.db.QueryRow(ctx, retrySyncSchedule, arg.AiIntegrationConfigID, arg.Schedule)
+	var i AiIntegrationSync
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AiIntegrationConfigID,
+		&i.Schedule,
+		&i.Kind,
+		&i.PollWatermarkAt,
+		&i.PollCheckpoint,
+		&i.LastCursorID,
+		&i.NextPollAfter,
+		&i.LastPollError,
+		&i.LastPollFailedAt,
+		&i.LastPollSuccessAt,
+		&i.ConsecutiveFailures,
+		&i.AutoPausedAt,
+		&i.DisabledAt,
+		&i.ID,
+	)
+	return i, err
+}
+
+const setSyncScheduleDisabled = `-- name: SetSyncScheduleDisabled :one
+UPDATE ai_integration_syncs
+SET disabled_at = CASE WHEN $1::bool THEN clock_timestamp() ELSE NULL END,
+    updated_at = clock_timestamp()
+WHERE ai_integration_config_id = $2
+  AND schedule = $3
+RETURNING created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, auto_paused_at, disabled_at, id
+`
+
+type SetSyncScheduleDisabledParams struct {
+	Disabled              bool
+	AiIntegrationConfigID uuid.UUID
+	Schedule              string
+}
+
+// SetSyncScheduleDisabled records a user's explicit pause (or unpause) of one
+// sync schedule. Distinct from auto_paused_at: only the user flips this flag.
+// Re-enabling leaves next_poll_after untouched — a stale value is already due,
+// so candidate selection picks the schedule up on the next scheduler tick.
+func (q *Queries) SetSyncScheduleDisabled(ctx context.Context, arg SetSyncScheduleDisabledParams) (AiIntegrationSync, error) {
+	row := q.db.QueryRow(ctx, setSyncScheduleDisabled, arg.Disabled, arg.AiIntegrationConfigID, arg.Schedule)
+	var i AiIntegrationSync
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AiIntegrationConfigID,
+		&i.Schedule,
+		&i.Kind,
+		&i.PollWatermarkAt,
+		&i.PollCheckpoint,
+		&i.LastCursorID,
+		&i.NextPollAfter,
+		&i.LastPollError,
+		&i.LastPollFailedAt,
+		&i.LastPollSuccessAt,
+		&i.ConsecutiveFailures,
+		&i.AutoPausedAt,
+		&i.DisabledAt,
+		&i.ID,
+	)
+	return i, err
 }
 
 const softDeleteConfig = `-- name: SoftDeleteConfig :exec
