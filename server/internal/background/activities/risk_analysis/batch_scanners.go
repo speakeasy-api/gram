@@ -189,9 +189,7 @@ func filterByCategoryScopes(ctx context.Context, orgID string, metrics *riskMetr
 			out = append(out, finding)
 			continue
 		}
-		if len(masks.policyOut) == 0 || !masks.policyOut[i] {
-			metrics.RecordRecommendedScopeSuppressed(ctx, orgID, cat)
-		}
+		metrics.RecordRecommendedScopeSuppressed(ctx, orgID, cat)
 	}
 	return out
 }

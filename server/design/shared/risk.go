@@ -138,9 +138,6 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("detection_scopes", ArrayOf(RiskDetectionScope), "Per-category detection scopes specified for this policy. The scan surface merges these with the recommended scopes, the specified scope winning on category conflict. Empty means every recommendation applies unchanged.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
-	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.")
-	Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.")
-	Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
 	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).", func() {
 		RiskPolicyActionEnum()

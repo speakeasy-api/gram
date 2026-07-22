@@ -1,12 +1,24 @@
 package risk_analysis
 
 import (
+	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/message"
 )
+
+func TestParseRecordedToolCallsMalformedFallback(t *testing.T) {
+	t.Parallel()
+
+	calls := parseRecordedToolCalls(context.Background(), slog.New(slog.DiscardHandler), []byte(`rm -rf /tmp/x`)) //nolint:forbidigo // same-package test import-cycles with testenv
+
+	require.Len(t, calls, 1)
+	require.Equal(t, malformedToolCallsName, calls[0].Function.Name)
+	require.Equal(t, `rm -rf /tmp/x`, calls[0].Function.Arguments)
+}
 
 func TestScanSurfaceIncludesToolRequestArgs(t *testing.T) {
 	t.Parallel()

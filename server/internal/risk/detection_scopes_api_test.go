@@ -49,7 +49,7 @@ func TestListRiskCategoriesRecommendedScopes(t *testing.T) {
 	require.NotNil(t, custom)
 	require.Empty(t, custom.RecommendedScopeInclude)
 	require.Empty(t, custom.RecommendedScopeExempt)
-	require.Empty(t, custom.RecommendedScopeRationale)
+	require.NotEmpty(t, custom.RecommendedScopeRationale)
 	require.True(t, custom.RecommendedScopeApplicable)
 
 	accountIdentity := byKey[string(categories.CategoryAccountIdentity)]
@@ -148,9 +148,6 @@ func TestRiskPolicyDetectionScopesValidation(t *testing.T) {
 		{"unknown category", []*types.RiskDetectionScope{
 			{Category: "not_a_category", ScopeInclude: nil, ScopeExempt: nil},
 		}},
-		{"custom self-scopes", []*types.RiskDetectionScope{
-			{Category: string(categories.CategoryCustom), ScopeInclude: nil, ScopeExempt: nil},
-		}},
 		{"session-scoped category", []*types.RiskDetectionScope{
 			{Category: string(categories.CategoryAccountIdentity), ScopeInclude: nil, ScopeExempt: nil},
 		}},
@@ -181,6 +178,44 @@ func TestRiskPolicyDetectionScopesValidation(t *testing.T) {
 		DetectionScopes: []*types.RiskDetectionScope{
 			{Category: "not_a_category", ScopeInclude: nil, ScopeExempt: nil},
 		},
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestRiskPolicyRejectsLegacyScopeFields(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	_, err := ti.service.CreateRiskPolicy(ctx, &risk.CreateRiskPolicyPayload{
+		Name:         new("Legacy Message Types"),
+		MessageTypes: []string{"user_message"},
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	_, err = ti.service.CreateRiskPolicy(ctx, &risk.CreateRiskPolicyPayload{
+		Name:         new("Legacy Scope Include"),
+		ScopeInclude: new(`kind == "user_message"`),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	// Empty values are how older clients said "no restriction"; they stay accepted.
+	created, err := ti.service.CreateRiskPolicy(ctx, &risk.CreateRiskPolicyPayload{
+		Name:         new("Legacy Empty Values"),
+		MessageTypes: []string{},
+		ScopeInclude: new(""),
+		ScopeExempt:  new(""),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateRiskPolicy(ctx, &risk.UpdateRiskPolicyPayload{
+		ID:          created.ID,
+		Name:        created.Name,
+		ScopeExempt: new(`content.matchText("x")`),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }

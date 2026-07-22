@@ -91,7 +91,7 @@ export type CreateRiskPolicyRequestBody = {
    */
   enabled?: boolean | undefined;
   /**
-   * Message types this policy applies to. When empty or omitted, the policy scans all supported types.
+   * Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.
    */
   messageTypes?: Array<string> | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
@@ -120,11 +120,11 @@ export type CreateRiskPolicyRequestBody = {
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
-   * CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.
+   * Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.
    */
   scopeExempt?: string | undefined;
   /**
-   * CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.
+   * Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.
    */
   scopeInclude?: string | undefined;
   /**

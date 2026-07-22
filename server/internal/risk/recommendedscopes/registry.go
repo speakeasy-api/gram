@@ -1,8 +1,9 @@
 // Package recommendedscopes contains the centrally-maintained detection scope
-// registry for built-in risk categories.
+// registry for risk categories.
 //
-// Custom rules are intentionally absent from this registry: they self-scope via
-// their CEL detection_expr.
+// Custom rules carry an intentionally empty recommendation: they self-scope via
+// their CEL detection_expr, and the registry entry exists so policies can
+// specify a per-policy detection scope for them.
 package recommendedscopes
 
 import (
@@ -12,7 +13,7 @@ import (
 )
 
 // Version is surfaced via API and metrics so behavior changes are attributable.
-const Version = 2
+const Version = 3
 
 // assistantExempt drops the agent's own free text from scanning: risky content
 // reaching the assistant enters via an already-scanned surface (user input,
@@ -116,6 +117,13 @@ var registry = []Recommendation{
 		ScopeInclude: `kind == "tool_request"`,
 		ScopeExempt:  "",
 		Rationale:    "Destructive CLI detection only ever fires on tool calls; this formalizes existing scanner behavior and lets the pipeline skip other messages.",
+		Applicable:   true,
+	},
+	{
+		Category:     categories.CategoryCustom,
+		ScopeInclude: "",
+		ScopeExempt:  "",
+		Rationale:    "Custom rules self-scope via their detection expression, so no surfaces are excluded by default; specify a detection scope to additionally gate which surfaces they run on.",
 		Applicable:   true,
 	},
 	{

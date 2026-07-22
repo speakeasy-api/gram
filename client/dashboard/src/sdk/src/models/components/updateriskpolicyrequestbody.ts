@@ -87,7 +87,7 @@ export type UpdateRiskPolicyRequestBody = {
    */
   id: string;
   /**
-   * Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.
+   * Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.
    */
   messageTypes?: Array<string> | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
@@ -112,11 +112,11 @@ export type UpdateRiskPolicyRequestBody = {
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
-   * CEL exemption predicate. Omit to preserve the current value; send empty to clear.
+   * Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.
    */
   scopeExempt?: string | undefined;
   /**
-   * CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
+   * Deprecated: replaced by per-category detection_scopes. Requests carrying a non-empty value are rejected.
    */
   scopeInclude?: string | undefined;
   /**

@@ -22,14 +22,6 @@ import (
 // disabled rules.
 func seedAccountIdentityPolicy(t *testing.T, conn *pgxpool.Pool, td testData, approvedDomains []string, disabledRules []string) (uuid.UUID, int64) {
 	t.Helper()
-	return seedAccountIdentityPolicyScoped(t, conn, td, approvedDomains, disabledRules, "")
-}
-
-// seedAccountIdentityPolicyScoped additionally sets a CEL scope_exempt
-// predicate, for tests proving that message scoping does not suppress the
-// session-scoped findings.
-func seedAccountIdentityPolicyScoped(t *testing.T, conn *pgxpool.Pool, td testData, approvedDomains []string, disabledRules []string, scopeExempt string) (uuid.UUID, int64) {
-	t.Helper()
 
 	analyzerConfig, err := risk_analysis.WithApprovedEmailDomains(nil, approvedDomains)
 	require.NoError(t, err)
@@ -44,7 +36,6 @@ func seedAccountIdentityPolicyScoped(t *testing.T, conn *pgxpool.Pool, td testDa
 		Sources:        []string{"account_identity"},
 		AnalyzerConfig: analyzerConfig,
 		DisabledRules:  disabledRules,
-		ScopeExempt:    pgtype.Text{String: scopeExempt, Valid: scopeExempt != ""},
 		Enabled:        true,
 		Action:         "flag",
 		AudienceType:   "everyone",
@@ -152,7 +143,7 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool) *risk_anal
 	return ab
 }
 
-func runAccountIdentityBatch(t *testing.T, ab *risk_analysis.AnalyzeBatch, td testData, policyID uuid.UUID, policyVersion int64, messageIDs []uuid.UUID, messageTypes ...string) {
+func runAccountIdentityBatch(t *testing.T, ab *risk_analysis.AnalyzeBatch, td testData, policyID uuid.UUID, policyVersion int64, messageIDs []uuid.UUID) {
 	t.Helper()
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestActivityEnvironment()
@@ -165,7 +156,6 @@ func runAccountIdentityBatch(t *testing.T, ab *risk_analysis.AnalyzeBatch, td te
 		PolicyVersion:  policyVersion,
 		MessageIDs:     messageIDs,
 		Sources:        []string{"account_identity"},
-		MessageTypes:   messageTypes,
 	})
 	require.NoError(t, err)
 }
@@ -409,46 +399,6 @@ func TestAnalyzeBatch_AccountIdentityDisabledRuleFiltered(t *testing.T) {
 	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID})
 
 	require.Empty(t, accountIdentityFindings(t, conn, td, policyID))
-}
-
-func TestAnalyzeBatch_AccountIdentityBypassesMessageTypeFilter(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	policyID, policyVersion := seedAccountIdentityPolicy(t, conn, td, nil, nil)
-
-	// The batch carries only user messages while the policy is scoped to tool
-	// requests: every message is filtered out of the content pipeline, but the
-	// session-scoped identity check must still evaluate and flag the chat.
-	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
-	msgID := seedChatMessage(t, conn, td, chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn)
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID}, "tool_request")
-
-	findings := accountIdentityFindings(t, conn, td, policyID)
-	require.Len(t, findings, 1)
-	assert.Equal(t, "identity.personal_account", findings[0].RuleID.String)
-	assert.Equal(t, msgID, findings[0].ChatMessageID)
-}
-
-func TestAnalyzeBatch_AccountIdentityBypassesCELScope(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-	// scope_exempt=true exempts every message from the content pipeline; the
-	// session-scoped identity check is deliberately not subject to it.
-	policyID, policyVersion := seedAccountIdentityPolicyScoped(t, conn, td, nil, nil, "true")
-
-	chatID := seedAccountChat(t, conn, td, "personal", "jane@gmail.com")
-	msgID := seedChatMessage(t, conn, td, chatID)
-
-	ab := newAccountIdentityAnalyzeBatch(t, conn)
-	runAccountIdentityBatch(t, ab, td, policyID, policyVersion, []uuid.UUID{msgID})
-
-	findings := accountIdentityFindings(t, conn, td, policyID)
-	require.Len(t, findings, 1)
-	assert.Equal(t, "identity.personal_account", findings[0].RuleID.String)
 }
 
 func TestAnalyzeBatch_AccountIdentityHonorsExclusions(t *testing.T) {

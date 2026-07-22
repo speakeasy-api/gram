@@ -14121,7 +14121,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    suggest-custom-detection-rule: Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.`)
 	fmt.Fprintln(os.Stderr, `    suggest-exclusion: Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.`)
 	fmt.Fprintln(os.Stderr, `    test-detection-rule: Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.`)
-	fmt.Fprintln(os.Stderr, `    evaluate-prompt-guardrail: Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation; message-type scoping and CEL scope predicates are both applied.`)
+	fmt.Fprintln(os.Stderr, `    evaluate-prompt-guardrail: Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + effective detection scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation, applying the supplied scope predicates.`)
 	fmt.Fprintln(os.Stderr, `    save-risk-eval-review: Record (or replace) the current reviewer's ground-truth verdict for one chat session under a prompt-based policy. This is the durable regression set the eval workbench scores the live guardrail against. Upserts: a reviewer has at most one verdict per session per policy.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-eval-reviews: List the active regression set for a prompt-based policy: every reviewer's current ground-truth verdicts.`)
 	fmt.Fprintln(os.Stderr, `    delete-risk-eval-review: Remove the current reviewer's verdict for one session (the toggle-off path). A reviewer can only clear their own verdict.`)
@@ -15102,7 +15102,7 @@ func riskEvaluatePromptGuardrailUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation; message-type scoping and CEL scope predicates are both applied.`)
+	fmt.Fprintln(os.Stderr, `Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + effective detection scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation, applying the supplied scope predicates.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -15112,7 +15112,7 @@ func riskEvaluatePromptGuardrailUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk evaluate-prompt-guardrail --body '{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"prompt\": \"aa\",\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk evaluate-prompt-guardrail --body '{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"prompt\": \"aa\",\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskSaveRiskEvalReviewUsage() {

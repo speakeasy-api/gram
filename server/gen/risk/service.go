@@ -135,12 +135,11 @@ type Service interface {
 	TestDetectionRule(context.Context, *TestDetectionRulePayload) (res *TestDetectionRuleResult, err error)
 	// Replay a prompt_based guardrail against a single chat session and return the
 	// LLM judge's per-message verdict. The guardrail (prompt + judge config +
-	// message-type scope + CEL scope) is passed inline so the policy-eval
-	// workbench can evaluate an unsaved draft before a policy exists. This path is
-	// read-only: it never writes risk_results, publishes to the outbox, or
-	// enforces. It exists purely to tune a guardrail against real transcripts.
-	// Judges only the chat's latest generation; message-type scoping and CEL scope
-	// predicates are both applied.
+	// effective detection scope) is passed inline so the policy-eval workbench can
+	// evaluate an unsaved draft before a policy exists. This path is read-only: it
+	// never writes risk_results, publishes to the outbox, or enforces. It exists
+	// purely to tune a guardrail against real transcripts. Judges only the chat's
+	// latest generation, applying the supplied scope predicates.
 	EvaluatePromptGuardrail(context.Context, *EvaluatePromptGuardrailPayload) (res *PromptGuardrailEvalResult, err error)
 	// Record (or replace) the current reviewer's ground-truth verdict for one chat
 	// session under a prompt-based policy. This is the durable regression set the
@@ -326,15 +325,14 @@ type CreateRiskPolicyPayload struct {
 	DisabledRules []string
 	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string
-	// Message types this policy applies to. When empty or omitted, the policy
-	// scans all supported types.
+	// Deprecated: replaced by per-category detection_scopes. Requests carrying a
+	// non-empty value are rejected.
 	MessageTypes []string
-	// CEL scope predicate: the policy evaluates a message only when this boolean
-	// expression is true (in addition to message_types). Omit/empty means all
-	// messages are in scope.
+	// Deprecated: replaced by per-category detection_scopes. Requests carrying a
+	// non-empty value are rejected.
 	ScopeInclude *string
-	// CEL exemption predicate: the policy is skipped for a message when this
-	// boolean expression is true. Omit/empty means no inline exemption.
+	// Deprecated: replaced by per-category detection_scopes. Requests carrying a
+	// non-empty value are rejected.
 	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
@@ -440,16 +438,12 @@ type EvaluatePromptGuardrailPayload struct {
 	// Optional per-policy LLM-judge model configuration. Omit for the default
 	// judge model.
 	ModelConfig *types.RiskPolicyModelConfig
-	// Message types to judge (user_message, assistant_message, tool_request,
-	// tool_response), matching a policy's message_types. When empty or omitted,
-	// judges all supported types.
-	MessageTypes []string
 	// CEL scope predicate: the replay judges a message only when this boolean
-	// expression is true (in addition to message_types). Omit/empty means all
-	// messages are in scope.
+	// expression is true. Pass the guardrail's effective prompt_policy detection
+	// scope. Omit/empty means all messages are in scope.
 	ScopeInclude *string
 	// CEL exemption predicate: the replay skips a message when this boolean
-	// expression is true. Omit/empty means no inline exemption.
+	// expression is true. Omit/empty means no exemption.
 	ScopeExempt *string
 }
 
@@ -1281,14 +1275,14 @@ type UpdateRiskPolicyPayload struct {
 	// Custom detection rule ids to attach as detectors: a match produces a
 	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string
-	// Message types this policy applies to. Omit to preserve the current
-	// selection; send an empty array to apply to all types.
+	// Deprecated: replaced by per-category detection_scopes. Requests carrying a
+	// non-empty value are rejected.
 	MessageTypes []string
-	// CEL scope predicate (in addition to message_types). Omit to preserve the
-	// current value; send empty to clear.
+	// Deprecated: replaced by per-category detection_scopes. Requests carrying a
+	// non-empty value are rejected.
 	ScopeInclude *string
-	// CEL exemption predicate. Omit to preserve the current value; send empty to
-	// clear.
+	// Deprecated: replaced by per-category detection_scopes. Requests carrying a
+	// non-empty value are rejected.
 	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool

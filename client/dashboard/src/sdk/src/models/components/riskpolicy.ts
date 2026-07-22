@@ -99,10 +99,6 @@ export type RiskPolicy = {
    * The risk policy ID.
    */
   id: string;
-  /**
-   * Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.
-   */
-  messageTypes?: Array<string> | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name.
@@ -136,14 +132,6 @@ export type RiskPolicy = {
    * Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
    */
   promptInjectionRules?: Array<string> | undefined;
-  /**
-   * CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.
-   */
-  scopeExempt?: string | undefined;
-  /**
-   * CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.
-   */
-  scopeInclude?: string | undefined;
   /**
    * CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.
    */
@@ -206,7 +194,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
       id: z.string(),
-      message_types: z.optional(z.array(z.string())),
       model_config: z.optional(RiskPolicyModelConfig$inboundSchema),
       name: z.string(),
       pending_messages: z.int(),
@@ -216,8 +203,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       project_id: z.string(),
       prompt: z.optional(z.string()),
       prompt_injection_rules: z.optional(z.array(z.string())),
-      scope_exempt: z.optional(z.string()),
-      scope_include: z.optional(z.string()),
       score: z._default(z.number(), 5),
       sources: z.array(z.string()),
       total_messages: z.int(),
@@ -238,7 +223,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "custom_rule_ids": "customRuleIds",
         "detection_scopes": "detectionScopes",
         "disabled_rules": "disabledRules",
-        "message_types": "messageTypes",
         "model_config": "modelConfig",
         "pending_messages": "pendingMessages",
         "policy_type": "policyType",
@@ -246,8 +230,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "presidio_score_threshold": "presidioScoreThreshold",
         "project_id": "projectId",
         "prompt_injection_rules": "promptInjectionRules",
-        "scope_exempt": "scopeExempt",
-        "scope_include": "scopeInclude",
         "total_messages": "totalMessages",
         "updated_at": "updatedAt",
         "user_message": "userMessage",

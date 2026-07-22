@@ -95,7 +95,6 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					PolicyVersion:    policy.Version,
 					MessageIDs:       batch,
 					Sources:          policy.Sources,
-					MessageTypes:     policy.MessageTypes,
 					PresidioEntities: policy.PresidioEntities,
 					// Derived authoritatively from the policy inside AnalyzeBatch.Do;
 					// left unset here to avoid a second config source.

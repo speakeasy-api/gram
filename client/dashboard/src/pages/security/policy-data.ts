@@ -2,12 +2,6 @@ import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governa
 
 export type PolicyAction = "flag" | "block" | "warn";
 
-export type PolicyMessageType =
-  | "user_message"
-  | "tool_request"
-  | "tool_response"
-  | "assistant_message";
-
 export type RuleCategory =
   | "secrets"
   | "financial"
@@ -119,28 +113,6 @@ export const RULE_CATEGORY_META: Record<
     description:
       "Organization-defined detection rules over message content, tool calls, and arguments",
     icon: "regex",
-  },
-};
-
-export const POLICY_MESSAGE_TYPE_META: Record<
-  PolicyMessageType,
-  { label: string; description: string }
-> = {
-  user_message: {
-    label: "User Prompts",
-    description: "Prompt text submitted by the user before the agent acts",
-  },
-  tool_request: {
-    label: "Tool Requests",
-    description: "Arguments and payloads sent into tool calls",
-  },
-  tool_response: {
-    label: "Tool Responses",
-    description: "Data returned from tool executions",
-  },
-  assistant_message: {
-    label: "Assistant Messages",
-    description: "Assistant text responses that are not tool-call requests",
   },
 };
 

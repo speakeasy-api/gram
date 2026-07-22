@@ -100,6 +100,7 @@ type Activities struct {
 	fetchUnanalyzedMessages         *risk_analysis.FetchUnanalyzed
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
 	markMessagesAnalyzed            *risk_analysis.MarkMessagesAnalyzed
+	backfillDetectionScopes         *risk_analysis.BackfillDetectionScopes
 	reconcileExclusion              *risk_exclusion.Reconcile
 	skillObservationReconciler      *activities.SkillObservationReconciler
 	cleanRiskPolicyResults          *risk_policy.Cleanup
@@ -232,6 +233,7 @@ func NewActivities(
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                    analyzeBatch,
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
+		backfillDetectionScopes:         risk_analysis.NewBackfillDetectionScopes(logger, tracerProvider, db, celEng),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
 		skillObservationReconciler:      activities.NewSkillObservationReconciler(db, telemetryRepo),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
@@ -452,6 +454,14 @@ func (a *Activities) AnalyzeBatch(ctx context.Context, input risk_analysis.Analy
 	result, err := a.analyzeBatch.Do(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("analyze batch: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) BackfillRiskDetectionScopes(ctx context.Context) (*risk_analysis.BackfillDetectionScopesResult, error) {
+	result, err := a.backfillDetectionScopes.Do(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("backfill risk detection scopes: %w", err)
 	}
 	return result, nil
 }

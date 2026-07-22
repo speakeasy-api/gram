@@ -1,9 +1,7 @@
 import celExamples from "./cel-examples.json";
 import {
   DETECTION_RULES,
-  POLICY_MESSAGE_TYPE_META,
   type PolicyAction,
-  type PolicyMessageType,
   type RuleCategory,
 } from "./policy-data";
 import { ruleIdToPresidioEntity } from "./rule-ids";
@@ -59,10 +57,6 @@ export const CATEGORY_LEVEL_DETECTORS: Set<RuleCategory> = new Set([
   "destructive_tool",
   "cli_destructive",
 ]);
-
-export const ALL_POLICY_MESSAGE_TYPES = Object.keys(
-  POLICY_MESSAGE_TYPE_META,
-) as Array<PolicyMessageType>;
 
 export type CategoriesPayload = {
   sources: string[];
@@ -190,20 +184,6 @@ export function pinnedHiddenRuleIds(presidioEntities?: string[]): Set<string> {
     }
   }
   return pinned;
-}
-
-export function policyMessageTypesForForm(
-  messageTypes?: string[],
-): Set<PolicyMessageType> {
-  if (!messageTypes?.length) {
-    return new Set(ALL_POLICY_MESSAGE_TYPES);
-  }
-
-  return new Set(
-    messageTypes.filter((type): type is PolicyMessageType =>
-      ALL_POLICY_MESSAGE_TYPES.includes(type as PolicyMessageType),
-    ),
-  );
 }
 
 /** Example scope CEL snippets offered beneath the include field — narrow a

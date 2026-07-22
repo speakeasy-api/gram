@@ -284,31 +284,14 @@ func (s *Scanner) ScanForEnforcement(
 
 	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
 	// fan-out) so prompt_based policies don't each repeat the slug lookup and
-	// so the lookup is never cancelled by a sibling match. Gated on the exact
-	// condition under which the fan-out would run the judge - a prompt_based
-	// policy whose message_types apply to this message - so the lookup is
-	// skipped entirely for scans that can never enforce one. message_types gates
-	// candidacy; scope_include narrows further per-message in scanPolicy.
-	inMessageScope := func(p repo.RiskPolicy) bool {
-		return len(p.MessageTypes) == 0 ||
-			slices.Contains(p.MessageTypes, messageType)
-	}
-
+	// so the lookup is never cancelled by a sibling match. Per-message scoping
+	// (the prompt_policy detection scope) is applied in scanPolicy.
 	promptPoliciesOn := false
 	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType == ra.PolicyTypePromptBased && inMessageScope(p)
+		return p.PolicyType == ra.PolicyTypePromptBased
 	}) {
 		// All enforcing policies for a project belong to the same org.
 		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
-	}
-
-	// Same once-per-scan resolution for the recommended-scopes flag: category
-	// detection scopes compose only when the project has opted in.
-	recommendedScopesOn := false
-	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-		return inMessageScope(p)
-	}) {
-		recommendedScopesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagRiskRecommendedScopes)
 	}
 
 	// Fan out across policies. The first goroutine that finds a match returns
@@ -331,12 +314,9 @@ func (s *Scanner) ScanForEnforcement(
 		if !policyApplication.Satisfied {
 			continue
 		}
-		if !inMessageScope(p) {
-			continue
-		}
 
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, recommendedScopesOn)
+			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -463,7 +443,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call - its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool, recommendedScopesOn bool) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -479,8 +459,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		span.End()
 	}()
 
-	// Build the structured view once; the application predicates and custom
-	// rules both evaluate against it.
+	// Build the structured view once; the detection scopes and custom rules
+	// both evaluate against it.
 	view := ra.MessageView{Content: text, Type: messageType, Tools: []ra.ToolView{}}
 	if messageType == message.ToolRequest && toolName != "" {
 		// In realtime a tool-request's text carries the call arguments (the same
@@ -492,21 +472,11 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
 	}
 
-	// Policy application gates detection: include narrows scope (alongside
-	// message_types); exempt takes the message out of the policy.
-	eng := s.celEng
-	app, err := ra.CompileScope(eng, policy.ScopeInclude.String, policy.ScopeExempt.String)
-	if err != nil {
-		return nil, fmt.Errorf("compile policy scope: %w", err)
-	}
-	if !app.Includes(view) || app.Exempts(view) {
-		return nil, nil
-	}
-	specified, err := ra.CompileDetectionScopes(eng, ra.DetectionScopesFromConfig(policy.AnalyzerConfig))
+	specified, err := ra.CompileDetectionScopes(s.celEng, ra.DetectionScopesFromConfig(policy.AnalyzerConfig))
 	if err != nil {
 		return nil, fmt.Errorf("compile detection scopes: %w", err)
 	}
-	categoryScope := ra.NewCategoryScope(app, s.recommended, specified, recommendedScopesOn)
+	categoryScope := ra.NewCategoryScope(s.recommended, specified)
 
 	if policy.PolicyType == ra.PolicyTypePromptBased {
 		if !categoryScope.SourceInScope(view, promptpolicy.Source) {
@@ -532,10 +502,10 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 	}
 
 	// Evaluate custom detection rules up front; their findings are held for the
-	// block check after the built-in sources. Message exemptions were already
-	// applied above via the policy's scope_exempt.
+	// block check after the built-in sources. A specified detection scope for
+	// the custom category gates them like any other source.
 	var customFindings []scanners.Finding
-	if len(policy.CustomRuleIds) > 0 {
+	if len(policy.CustomRuleIds) > 0 && categoryScope.SourceInScope(view, ra.SourceCustom) {
 		customFindings, err = s.scanCustomRules(ctx, policy, view)
 		if err != nil {
 			// A broken custom rule must not disable the built-in detectors (a
@@ -627,7 +597,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 			}
 		}
 	}
-	if denyFindings := filter(customFindings); len(denyFindings) > 0 {
+	if denyFindings := categoryScope.FilterFindings(view, filter(customFindings)); len(denyFindings) > 0 {
 		return &ScanResult{
 			Action:          policy.Action,
 			PolicyID:        policy.ID.String(),
@@ -646,10 +616,9 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 }
 
 // scanPromptPolicy evaluates text against a prompt_based policy's guardrail
-// prompt via the LLM judge. The caller (ScanForEnforcement) has already
-// filtered policies to those whose message_types apply to this message, so the
-// judge runs for whatever message types the policy declares. Returns nil when
-// the judge does not match (including fail-open on judge error).
+// prompt via the LLM judge. The caller (scanPolicy) has already checked the
+// prompt_policy detection scope for this message. Returns nil when the judge
+// does not match (including fail-open on judge error).
 func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !promptPoliciesOn {

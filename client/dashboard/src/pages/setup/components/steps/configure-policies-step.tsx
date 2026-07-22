@@ -31,7 +31,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Badge, Button } from "@speakeasy-api/moonshine";
@@ -40,10 +39,8 @@ import { StepContainer } from "../step-container";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
-  POLICY_MESSAGE_TYPE_META,
   type RuleCategory,
   type PolicyAction,
-  type PolicyMessageType,
 } from "@/pages/security/policy-data";
 import { ruleIdToPresidioEntity } from "@/pages/security/rule-ids";
 import { cn } from "@/lib/utils";
@@ -66,7 +63,6 @@ const CATEGORY_ICONS: Partial<Record<RuleCategory, LucideIcon>> = {
 type CategoryConfig = {
   enabled: boolean;
   action: PolicyAction;
-  messageTypes: Set<PolicyMessageType>;
 };
 
 // Onboarding-scoped category list. Shadow MCP is pinned as a dedicated hero
@@ -82,93 +78,30 @@ const WIZARD_CATEGORIES: RuleCategory[] = [
 ];
 
 // Smart defaults per category. Mirrors what we'd seed in the Policy Center if
-// the user just clicked through onboarding accepting everything.
+// the user just clicked through onboarding accepting everything. Message
+// surfaces come from the server's recommended detection scopes per category.
 const DEFAULTS: Record<RuleCategory, CategoryConfig> = {
-  secrets: {
-    enabled: false,
-    action: "block",
-    messageTypes: new Set(["tool_request", "tool_response"]),
-  },
-  pii: {
-    enabled: false,
-    action: "flag",
-    messageTypes: new Set(["tool_request", "tool_response"]),
-  },
-  prompt_injection: {
-    enabled: false,
-    action: "flag",
-    messageTypes: new Set(["tool_response"]),
-  },
-  financial: {
-    enabled: false,
-    action: "flag",
-    messageTypes: new Set(["tool_request", "tool_response"]),
-  },
-  government_ids: {
-    enabled: false,
-    action: "flag",
-    messageTypes: new Set(["tool_request", "tool_response"]),
-  },
-  healthcare: {
-    enabled: false,
-    action: "flag",
-    messageTypes: new Set(["tool_request", "tool_response"]),
-  },
-  prompt_policy: {
-    enabled: false,
-    action: "flag",
-    messageTypes: new Set(["tool_request"]),
-  },
-  shadow_mcp: {
-    enabled: false,
-    action: "block",
-    messageTypes: new Set(["tool_request"]),
-  },
+  secrets: { enabled: false, action: "block" },
+  pii: { enabled: false, action: "flag" },
+  prompt_injection: { enabled: false, action: "flag" },
+  financial: { enabled: false, action: "flag" },
+  government_ids: { enabled: false, action: "flag" },
+  healthcare: { enabled: false, action: "flag" },
+  prompt_policy: { enabled: false, action: "flag" },
+  shadow_mcp: { enabled: false, action: "block" },
   // Categories not shown in the wizard still need a default so type checking
   // and shared helpers can stay polymorphic; they're inert at this layer.
-  off_policy: {
-    enabled: false,
-    action: "flag",
-    messageTypes: new Set(["user_message"]),
-  },
-  destructive_tool: {
-    enabled: false,
-    action: "flag",
-    messageTypes: new Set(["tool_request"]),
-  },
-  cli_destructive: {
-    enabled: false,
-    action: "flag",
-    messageTypes: new Set(["tool_request"]),
-  },
-  account_identity: {
-    enabled: false,
-    action: "flag",
-    messageTypes: new Set(["user_message"]),
-  },
-  custom: {
-    enabled: false,
-    action: "flag",
-    messageTypes: new Set(["tool_request", "tool_response"]),
-  },
+  off_policy: { enabled: false, action: "flag" },
+  destructive_tool: { enabled: false, action: "flag" },
+  cli_destructive: { enabled: false, action: "flag" },
+  account_identity: { enabled: false, action: "flag" },
+  custom: { enabled: false, action: "flag" },
 };
 
-const MESSAGE_TYPES: PolicyMessageType[] = [
-  "user_message",
-  "tool_request",
-  "tool_response",
-  "assistant_message",
-];
-
-// The risk policy API returns `action`/`messageTypes` as free-form strings, so
-// values are validated before entering local state — an unknown value would
-// otherwise crash `formatMessageTypes` (POLICY_MESSAGE_TYPE_META[t].label).
+// The risk policy API returns `action` as a free-form string, so values are
+// validated before entering local state.
 function isPolicyAction(value: unknown): value is PolicyAction {
   return value === "flag" || value === "block" || value === "warn";
-}
-
-function isPolicyMessageType(value: unknown): value is PolicyMessageType {
-  return (MESSAGE_TYPES as string[]).includes(value as string);
 }
 
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -215,14 +148,6 @@ function categoryMatchesPolicy(
   return false;
 }
 
-function formatMessageTypes(types: Set<PolicyMessageType>): string {
-  if (types.size === 0) return "Off — no message types";
-  if (types.size === MESSAGE_TYPES.length) return "All message types";
-  return Array.from(types)
-    .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
-    .join(", ");
-}
-
 export function ConfigurePoliciesStep({
   onBack,
 }: ConfigurePoliciesStepProps): JSX.Element {
@@ -242,10 +167,7 @@ export function ConfigurePoliciesStep({
     () => {
       const next = {} as Record<RuleCategory, CategoryConfig>;
       (Object.keys(DEFAULTS) as RuleCategory[]).forEach((k) => {
-        next[k] = {
-          ...DEFAULTS[k],
-          messageTypes: new Set(DEFAULTS[k].messageTypes),
-        };
+        next[k] = { ...DEFAULTS[k] };
       });
       return next;
     },
@@ -296,7 +218,6 @@ export function ConfigurePoliciesStep({
           promptInjectionRules: existing.promptInjectionRules,
           disabledRules: existing.disabledRules,
           customRuleIds: existing.customRuleIds ?? [],
-          messageTypes: [...nextCfg.messageTypes],
           action: nextCfg.action,
           autoName: existing.autoName ?? true,
           userMessage: existing.userMessage ?? "",
@@ -325,27 +246,11 @@ export function ConfigurePoliciesStep({
         const serverAction = isPolicyAction(existing.action)
           ? existing.action
           : next[cat].action;
-        const serverMessageTypes = new Set<PolicyMessageType>(
-          (existing.messageTypes ?? []).filter(isPolicyMessageType),
-        );
-        // Server returned no recognizable message types — keep local defaults
-        // rather than rendering an empty ("Off") policy.
-        if (serverMessageTypes.size === 0) {
-          for (const t of next[cat].messageTypes) serverMessageTypes.add(t);
-        }
-        const messageTypesEqual =
-          formatMessageTypes(serverMessageTypes) ===
-          formatMessageTypes(next[cat].messageTypes);
-        if (
-          !next[cat].enabled ||
-          next[cat].action !== serverAction ||
-          !messageTypesEqual
-        ) {
+        if (!next[cat].enabled || next[cat].action !== serverAction) {
           next[cat] = {
             ...next[cat],
             enabled: true,
             action: serverAction,
-            messageTypes: serverMessageTypes,
           };
           changed = true;
         }
@@ -375,7 +280,6 @@ export function ConfigurePoliciesStep({
             createRiskPolicyRequestBody: {
               enabled: true,
               ...buildPolicyPayload(cat),
-              messageTypes: [...cfg.messageTypes],
               action: cfg.action,
               autoName: true,
             },
@@ -430,18 +334,6 @@ export function ConfigurePoliciesStep({
     if (next) persistConfigChange(cat, next);
   };
 
-  const toggleMessageType = (cat: RuleCategory, t: PolicyMessageType) => {
-    let next: CategoryConfig | undefined;
-    setConfigs((prev) => {
-      const types = new Set(prev[cat].messageTypes);
-      if (types.has(t)) types.delete(t);
-      else types.add(t);
-      next = { ...prev[cat], messageTypes: types };
-      return { ...prev, [cat]: next };
-    });
-    if (next) persistConfigChange(cat, next);
-  };
-
   const shadow = configs.shadow_mcp;
   const enabledCount = WIZARD_CATEGORIES.filter(
     (c) => configs[c].enabled,
@@ -462,7 +354,7 @@ export function ConfigurePoliciesStep({
         </div>
       }
       title="Configure policies"
-      description="Pick what Speakeasy should flag or block in agent traffic. You can refine actions, message scopes, and individual rules any time in the Policy Center."
+      description="Pick what Speakeasy should flag or block in agent traffic. You can refine actions, detection scopes, and individual rules any time in the Policy Center."
       onContinue={handleComplete}
       continueLabel="Complete setup"
       showBack
@@ -532,9 +424,7 @@ export function ConfigurePoliciesStep({
                       {meta.label}
                     </p>
                     <p className="text-muted-foreground mt-1 truncate text-xs">
-                      {cfg.enabled
-                        ? formatMessageTypes(cfg.messageTypes)
-                        : "Disabled"}
+                      {cfg.enabled ? meta.description : "Disabled"}
                     </p>
                   </div>
                   <ActionPill action={cfg.enabled ? cfg.action : "off"} />
@@ -658,46 +548,6 @@ export function ConfigurePoliciesStep({
                       selected={activeConfig.action === "block"}
                     />
                   </RadioGroup>
-                </section>
-
-                <section className="space-y-3">
-                  <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                    Apply to
-                  </p>
-                  <div className="space-y-2">
-                    {MESSAGE_TYPES.map((t) => {
-                      const meta = POLICY_MESSAGE_TYPE_META[t];
-                      const checked = activeConfig.messageTypes.has(t);
-                      const id = `msg-${activeCategory}-${t}`;
-                      return (
-                        <label
-                          key={t}
-                          htmlFor={id}
-                          className={cn(
-                            "border-border bg-secondary/20 flex items-start gap-3 rounded-md border p-3",
-                            !activeConfig.enabled && "opacity-50",
-                          )}
-                        >
-                          <Checkbox
-                            id={id}
-                            checked={checked}
-                            disabled={!activeConfig.enabled}
-                            onCheckedChange={() =>
-                              toggleMessageType(activeCategory, t)
-                            }
-                          />
-                          <div className="min-w-0 flex-1">
-                            <Label htmlFor={id} className="cursor-pointer">
-                              {meta.label}
-                            </Label>
-                            <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                              {meta.description}
-                            </p>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
                 </section>
               </div>
 

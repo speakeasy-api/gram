@@ -3815,11 +3815,12 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- drops any finding whose canonical rule_id appears here.
   disabled_rules TEXT[],
   custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
+  -- Deprecated: policy-wide scoping (message_types + scope predicates) was
+  -- replaced by per-category detection scopes in analyzer_config
+  -- (detection_scopes). Values are composed into detection scopes and cleared
+  -- by the BackfillRiskDetectionScopes workflow; the columns are unused by
+  -- application code and pending a contract migration to drop them.
   message_types TEXT[],
-  -- Fine-grained applicability as CEL boolean expressions over message fields
-  -- (see internal/risk/celenv). A policy applies when scope_include is true (or
-  -- NULL = all) AND scope_exempt is not true. scope_include generalizes
-  -- message_types; NULL falls back to those cards.
   scope_include TEXT,
   scope_exempt TEXT,
   action TEXT NOT NULL DEFAULT 'flag',
