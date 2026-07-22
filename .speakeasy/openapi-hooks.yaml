@@ -112,6 +112,96 @@ paths:
       x-speakeasy-name-override: ingest
       x-speakeasy-react-hook:
         name: IngestHookEvent
+  /rpc/hooks.uploadSkillContent:
+    post:
+      description: Uploads skill manifest content requested by the unified hook ingest endpoint.
+      operationId: uploadSkillContent
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadSkillContentPayload'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: uploadSkillContent hooks
+      tags:
+        - hooks
+      x-speakeasy-name-override: uploadSkillContent
 components:
   schemas:
     Error:
@@ -312,9 +402,23 @@ components:
         name:
           type: string
           description: Activated skill name.
+          maxLength: 256
+        raw_sha256:
+          type: string
+          description: SHA-256 of the raw skill manifest, if available.
+          maxLength: 128
         source:
           type: string
           description: Skill source or namespace, if available.
+          maxLength: 256
+        source_level:
+          type: string
+          description: Scope where the skill was resolved, if available.
+          maxLength: 64
+        source_path:
+          type: string
+          description: Local path where the skill was resolved, if available.
+          maxLength: 4096
       description: Skill activation payload.
       required:
         - name
@@ -420,6 +524,26 @@ components:
         - schema_version
         - source
         - event
+    UploadSkillContentPayload:
+      type: object
+      properties:
+        content:
+          type: string
+          description: Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.
+        raw_sha256:
+          type: string
+          description: Lowercase SHA-256 of the raw content.
+          pattern: ^[0-9a-f]{64}$
+        schema_version:
+          type: string
+          description: Contract version.
+          enum:
+            - hook.skill-content.v1
+      description: Content for a skill manifest requested by a prior hook ingest response.
+      required:
+        - schema_version
+        - raw_sha256
+        - content
   securitySchemes:
     admin_auth_header_Authorization:
       type: apiKey
@@ -460,7 +584,7 @@ tags:
   - name: admin
     description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: agent
-    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.
+    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
   - name: assets
@@ -551,6 +675,8 @@ tags:
     description: Fetch telemetry data for tools in Gram.
   - name: templates
     description: Manages re-usable prompt templates and higher-order tools for a project.
+  - name: tokenExchange
+    description: 'Device-agent token exchange: trade an org-scoped install credential (an API key with the ''agent'' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.'
   - name: tools
     description: Dashboard API for interacting with tools.
   - name: toolsets

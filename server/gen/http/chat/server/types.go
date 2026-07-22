@@ -94,6 +94,10 @@ type LoadChatResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the chat
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// The ID of the assistant that produced this chat, if any
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// The name of the assistant that produced this chat, if any
+	AssistantName *string `form:"assistant_name,omitempty" json:"assistant_name,omitempty" xml:"assistant_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -1612,6 +1616,10 @@ type ChatOverviewResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the chat
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// The ID of the assistant that produced this chat, if any
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// The name of the assistant that produced this chat, if any
+	AssistantName *string `form:"assistant_name,omitempty" json:"assistant_name,omitempty" xml:"assistant_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -1806,6 +1814,8 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		Title:                res.Title,
 		UserID:               res.UserID,
 		ExternalUserID:       res.ExternalUserID,
+		AssistantID:          res.AssistantID,
+		AssistantName:        res.AssistantName,
 		NumMessages:          res.NumMessages,
 		Source:               res.Source,
 		CreatedAt:            res.CreatedAt,

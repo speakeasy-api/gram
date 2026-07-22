@@ -799,7 +799,7 @@ func TestListSources(t *testing.T) {
 
 	result, err := ti.service.ListSources(ctx, &gen.ListSourcesPayload{})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"Codex", "claude-code"}, result.Sources)
+	require.ElementsMatch(t, []string{"codex", "claude-code"}, result.Sources)
 }
 
 // TestListSources_CanonicalizesAndDropsEmpty covers AIS-233: legacy chats
@@ -818,7 +818,7 @@ func TestListSources_CanonicalizesAndDropsEmpty(t *testing.T) {
 
 	result, err := ti.service.ListSources(ctx, &gen.ListSourcesPayload{})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"Codex", "claude-code"}, result.Sources)
+	require.ElementsMatch(t, []string{"codex", "claude-code"}, result.Sources)
 }
 
 // TestListChats_Filter_Source_ExpandsAliases verifies that filtering by the

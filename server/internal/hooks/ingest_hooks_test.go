@@ -634,7 +634,7 @@ func TestIngest_SkillRowSurvivesToolIOScrub(t *testing.T) {
 	require.NoError(t, err)
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
 	disabled := func(context.Context, string) (bool, error) { return false, nil }
-	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), chConn, enabled, disabled, nil)
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, enabled, disabled, nil)
 	chClient := telemetryrepo.New(chConn)
 	authCtx := hookAuthContext(t, ctx)
 

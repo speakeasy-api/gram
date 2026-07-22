@@ -12,7 +12,7 @@ import {
   Icon,
 } from "@speakeasy-api/moonshine";
 import { ChevronDown, Copy } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { formatNanoTimestamp, getSeverityColorClass } from "./utils";
 
 interface LogDetailSheetProps {
@@ -367,6 +367,7 @@ function CollapsibleBodySection({
   defaultOpen?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const contentId = useId();
 
   // Try to pretty-print JSON content
   let displayContent = content;
@@ -378,34 +379,38 @@ function CollapsibleBodySection({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="relative flex flex-col gap-2">
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="group flex items-center justify-between"
+        type="button"
+        aria-controls={contentId}
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((open) => !open)}
+        className="group flex min-h-7 items-center justify-between pr-12"
       >
-        <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+        <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
           {title}
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            className="hover:bg-muted rounded p-1.5"
-            onClick={(e) => {
-              e.stopPropagation();
-              void navigator.clipboard.writeText(content);
-            }}
-          >
-            <Copy className="size-4" />
-          </button>
-          <ChevronDown
-            className={cn(
-              "text-muted-foreground size-4 transition-transform",
-              !isOpen && "-rotate-90",
-            )}
-          />
-        </div>
+        </span>
+        <ChevronDown
+          aria-hidden="true"
+          className={cn(
+            "text-muted-foreground absolute top-1.5 right-0 size-4 transition-transform",
+            !isOpen && "-rotate-90",
+          )}
+        />
+      </button>
+      <button
+        type="button"
+        aria-label={`Copy ${title}`}
+        className="hover:bg-muted absolute top-0 right-5 z-10 rounded p-1.5"
+        onClick={() => void navigator.clipboard.writeText(content)}
+      >
+        <Copy aria-hidden="true" className="size-4" />
       </button>
       {isOpen && (
-        <div className="bg-muted/40 border-border max-h-96 overflow-y-auto rounded-lg border p-4">
+        <div
+          id={contentId}
+          className="bg-muted/40 border-border max-h-96 overflow-y-auto rounded-lg border p-4"
+        >
           <pre className="font-mono text-sm break-words whitespace-pre-wrap">
             {displayContent}
           </pre>

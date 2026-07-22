@@ -24,11 +24,18 @@ type Client struct {
 	// endpoint.
 	AddVersionDoer goahttp.Doer
 
+	// Update Doer is the HTTP client used to make requests to the update endpoint.
+	UpdateDoer goahttp.Doer
+
 	// List Doer is the HTTP client used to make requests to the list endpoint.
 	ListDoer goahttp.Doer
 
 	// Get Doer is the HTTP client used to make requests to the get endpoint.
 	GetDoer goahttp.Doer
+
+	// ListUnknownActivations Doer is the HTTP client used to make requests to the
+	// listUnknownActivations endpoint.
+	ListUnknownActivationsDoer goahttp.Doer
 
 	// ListVersions Doer is the HTTP client used to make requests to the
 	// listVersions endpoint.
@@ -70,20 +77,22 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateDoer:            doer,
-		AddVersionDoer:        doer,
-		ListDoer:              doer,
-		GetDoer:               doer,
-		ListVersionsDoer:      doer,
-		ArchiveDoer:           doer,
-		DistributeDoer:        doer,
-		UndistributeDoer:      doer,
-		ListDistributionsDoer: doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		CreateDoer:                 doer,
+		AddVersionDoer:             doer,
+		UpdateDoer:                 doer,
+		ListDoer:                   doer,
+		GetDoer:                    doer,
+		ListUnknownActivationsDoer: doer,
+		ListVersionsDoer:           doer,
+		ArchiveDoer:                doer,
+		DistributeDoer:             doer,
+		UndistributeDoer:           doer,
+		ListDistributionsDoer:      doer,
+		RestoreResponseBody:        restoreBody,
+		scheme:                     scheme,
+		host:                       host,
+		decoder:                    dec,
+		encoder:                    enc,
 	}
 }
 
@@ -135,6 +144,30 @@ func (c *Client) AddVersion() goa.Endpoint {
 	}
 }
 
+// Update returns an endpoint that makes HTTP requests to the skills service
+// update server.
+func (c *Client) Update() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateRequest(c.encoder)
+		decodeResponse = DecodeUpdateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "update", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // List returns an endpoint that makes HTTP requests to the skills service list
 // server.
 func (c *Client) List() goa.Endpoint {
@@ -178,6 +211,30 @@ func (c *Client) Get() goa.Endpoint {
 		resp, err := c.GetDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "get", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListUnknownActivations returns an endpoint that makes HTTP requests to the
+// skills service listUnknownActivations server.
+func (c *Client) ListUnknownActivations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListUnknownActivationsRequest(c.encoder)
+		decodeResponse = DecodeListUnknownActivationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListUnknownActivationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListUnknownActivationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listUnknownActivations", err)
 		}
 		return decodeResponse(resp)
 	}

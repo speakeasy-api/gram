@@ -99,12 +99,13 @@ type OsSpec = {
   label: string;
   tileDesc: string;
   logo: string;
-  // Per-logo size: the Apple/Windows marks fill their viewBox edge-to-edge,
-  // while Tux ships with whitespace around it, so it needs to run larger to
-  // look the same optical size. Defaults to h-8 w-8.
+  // Per-logo size: the Apple/Windows marks fill their square viewBox
+  // edge-to-edge, while Tux is a taller, non-square figure — it runs a touch
+  // larger (and is object-contain'd) to sit at the same optical size without
+  // distorting. Defaults to h-8 w-8.
   logoSize?: string;
   // Monochrome-black logos (the Apple mark) vanish on a dark background — flip
-  // them in dark mode. The colored Windows/Linux marks must NOT be inverted.
+  // them in dark mode. The colored Windows/Tux marks must NOT be inverted.
   invertLogoInDark?: boolean;
   lang: "bash" | "powershell";
   archNote?: React.ReactNode;
@@ -172,7 +173,7 @@ Invoke-WebRequest "$BASE/speakeasy_\${VERSION}_windows_amd64.exe"  -OutFile spea
     label: "Linux",
     tileDesc: "x64 or arm64",
     logo: "/icons/platforms/linux.svg",
-    logoSize: "h-10 w-10",
+    logoSize: "h-9 w-9",
     lang: "bash",
     archNote: (
       <>
@@ -349,7 +350,7 @@ function ManualDownload({ os }: { os: OsKey }) {
                   alt=""
                   aria-hidden
                   className={cn(
-                    "h-4 w-4 shrink-0",
+                    "h-4 w-4 shrink-0 object-contain",
                     cfg.invertLogoInDark && "dark:invert",
                   )}
                 />
@@ -903,6 +904,7 @@ function OsTile({ os, onClick }: { os: OsKey; onClick: () => void }) {
           alt={`${cfg.label} logo`}
           className={cn(
             cfg.logoSize ?? "h-8 w-8",
+            "object-contain",
             cfg.invertLogoInDark && "dark:invert",
           )}
         />
@@ -925,7 +927,7 @@ export function DeviceAgentSetup(): React.JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title stage="preview">Install the agent</Page.Section.Title>
+      <Page.Section.Title>Install the agent</Page.Section.Title>
       <Page.Section.Description>
         The Speakeasy device agent runs on-device and enforces your org's
         required AI-tool plugins and MCP configuration, then reports compliance
@@ -933,6 +935,18 @@ export function DeviceAgentSetup(): React.JSX.Element {
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="flex flex-col gap-4">
+          <Alert variant="info">
+            <Icon name="building-2" className="h-4 w-4" />
+            <AlertTitle>Rolling out to more than a few machines?</AlertTitle>
+            <AlertDescription>
+              We recommend deploying the agent through your MDM (Kandji, Jamf,
+              Intune, or similar). It installs the binaries and drops a{" "}
+              <code>managed.json</code> so identity and enrollment are set
+              centrally — no per-user setup. The{" "}
+              <strong className="font-medium">Fleet (MDM)</strong> path in each
+              platform's walkthrough covers it.
+            </AlertDescription>
+          </Alert>
           <Type small muted>
             Pick the platform you're installing on to walk through setup.
           </Type>

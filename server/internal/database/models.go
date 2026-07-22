@@ -53,13 +53,18 @@ type AiIntegrationSync struct {
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
+	Schedule              string
+	Kind                  string
 	PollWatermarkAt       pgtype.Timestamptz
+	PollCheckpoint        pgtype.Text
 	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
 	LastPollError         pgtype.Text
 	LastPollFailedAt      pgtype.Timestamptz
 	LastPollSuccessAt     pgtype.Timestamptz
 	ConsecutiveFailures   int32
+	AutoPausedAt          pgtype.Timestamptz
+	DisabledAt            pgtype.Timestamptz
 	ID                    uuid.UUID
 }
 
@@ -173,18 +178,19 @@ type AssistantRuntime struct {
 }
 
 type AssistantThread struct {
-	ID            uuid.UUID
-	AssistantID   uuid.UUID
-	ProjectID     uuid.UUID
-	CorrelationID string
-	ChatID        uuid.UUID
-	SourceKind    string
-	SourceRefJson []byte
-	LastEventAt   pgtype.Timestamptz
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	ID               uuid.UUID
+	AssistantID      uuid.UUID
+	ProjectID        uuid.UUID
+	CorrelationID    string
+	ChatID           uuid.UUID
+	SourceKind       string
+	SourceRefJson    []byte
+	SkillSetSnapshot []byte
+	LastEventAt      pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type AssistantThreadEvent struct {
@@ -380,19 +386,25 @@ type ChatUserFeedback struct {
 }
 
 type CustomDomain struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	Domain          string
-	Verified        bool
-	Activated       bool
-	IngressName     pgtype.Text
-	CertSecretName  pgtype.Text
-	ProvisionerKind string
-	IpAllowlist     []string
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	ID                   uuid.UUID
+	OrganizationID       string
+	Domain               string
+	Verified             bool
+	Activated            bool
+	IngressName          pgtype.Text
+	CertSecretName       pgtype.Text
+	ProvisionerKind      string
+	IpAllowlist          []string
+	HealthStatus         pgtype.Text
+	HealthIssue          pgtype.Text
+	HealthCheckedAt      pgtype.Timestamptz
+	UnhealthySince       pgtype.Timestamptz
+	CertificateExpiresAt pgtype.Timestamptz
+	ConsecutiveFailures  pgtype.Int4
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
 
 type Deployment struct {
@@ -1111,7 +1123,6 @@ type OrganizationMetadatum struct {
 	Name               string
 	Slug               string
 	GramAccountType    string
-	SsoConnectionID    pgtype.Text
 	WorkosID           pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
@@ -1637,6 +1648,9 @@ type Skill struct {
 	Summary        pgtype.Text
 	SourceKind     string
 	Classification string
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+	SeenCount      int64
 	ArchivedAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -1648,11 +1662,41 @@ type SkillDistribution struct {
 	SkillID         uuid.UUID
 	PinnedVersionID uuid.NullUUID
 	PluginID        uuid.NullUUID
+	AssistantID     uuid.NullUUID
 	Channel         string
 	CreatedByUserID string
 	RevokedAt       pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+}
+
+type SkillObservation struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	IdempotencyKey     pgtype.Text
+	Provider           string
+	UserID             pgtype.Text
+	UserEmail          pgtype.Text
+	Hostname           pgtype.Text
+	SessionID          pgtype.Text
+	SkillName          string
+	Source             pgtype.Text
+	SourceLevel        pgtype.Text
+	SourcePath         pgtype.Text
+	RawSha256          pgtype.Text
+	SeenAt             pgtype.Timestamptz
+	SkillID            uuid.NullUUID
+	SkillVersionID     uuid.NullUUID
+	ReconciledAt       pgtype.Timestamptz
+	ReconcileErrorCode pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+}
+
+type SkillRawHash struct {
+	ProjectID       uuid.UUID
+	RawSha256       string
+	CanonicalSha256 string
+	CreatedAt       pgtype.Timestamptz
 }
 
 type SkillSyncReceipt struct {
@@ -1680,6 +1724,20 @@ type SkillVersion struct {
 	ValidationErrors []byte
 	CreatedAt        pgtype.Timestamptz
 	CreatedByUserID  string
+}
+
+type SkillVersionLineage struct {
+	SkillVersionID       uuid.UUID
+	SkillID              uuid.UUID
+	DerivedFromVersionID uuid.UUID
+}
+
+type SkillVersionOrigin struct {
+	SkillVersionID uuid.UUID
+	SkillID        uuid.UUID
+	ProjectID      uuid.UUID
+	Origin         string
+	CreatedAt      pgtype.Timestamptz
 }
 
 type SlackApp struct {

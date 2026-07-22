@@ -3860,13 +3860,13 @@ paths:
       operationId: getAgentPlugins
       parameters:
         - allowEmptyValue: true
-          description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+          description: Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
           example: dev@acme.corp
           in: query
           name: email
           required: true
           schema:
-            description: Email address of the enrolled user. Used to resolve plugin assignments against principal URNs.
+            description: Email address of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
             example: dev@acme.corp
             type: string
         - allowEmptyValue: true
@@ -4126,12 +4126,12 @@ paths:
       operationId: getAIIntegrationConfig
       parameters:
         - allowEmptyValue: true
-          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
           in: query
           name: provider
           required: true
           schema:
-            description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+            description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -4218,6 +4218,296 @@ paths:
       x-speakeasy-name-override: getConfig
       x-speakeasy-react-hook:
         name: AIIntegrationConfig
+  /rpc/aiIntegrations.listSchedules:
+    get:
+      description: List the sync schedules and their scheduler state for a provider's org-wide AI integration config. Returns an empty list when no config is set.
+      operationId: listAIIntegrationSchedules
+      parameters:
+        - allowEmptyValue: true
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+          in: query
+          name: provider
+          required: true
+          schema:
+            description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAIIntegrationSchedulesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listSchedules aiIntegrations
+      tags:
+        - aiIntegrations
+      x-speakeasy-name-override: listSchedules
+      x-speakeasy-react-hook:
+        name: AIIntegrationSchedules
+  /rpc/aiIntegrations.retrySchedule:
+    post:
+      description: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak. The scheduler picks it up on its next tick.
+      operationId: retryAIIntegrationSchedule
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetryScheduleRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIIntegrationScheduleState'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: retrySchedule aiIntegrations
+      tags:
+        - aiIntegrations
+      x-speakeasy-name-override: retrySchedule
+      x-speakeasy-react-hook:
+        name: RetryAIIntegrationSchedule
+  /rpc/aiIntegrations.setScheduleEnabled:
+    post:
+      description: Enable or disable one sync schedule of a provider's org-wide AI integration config. Disabled schedules are skipped by the poller until re-enabled.
+      operationId: setAIIntegrationScheduleEnabled
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetScheduleEnabledRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIIntegrationScheduleState'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: setScheduleEnabled aiIntegrations
+      tags:
+        - aiIntegrations
+      x-speakeasy-name-override: setScheduleEnabled
+      x-speakeasy-react-hook:
+        name: SetAIIntegrationScheduleEnabled
   /rpc/aiIntegrations.upsertConfig:
     post:
       description: Create or update the org-wide AI integration config for a provider.
@@ -7800,11 +8090,11 @@ paths:
       operationId: listChats
       parameters:
         - allowEmptyValue: true
-          description: Search query (searches chat ID, user ID, and title)
+          description: Search query (searches chat ID, user ID, user name, and title)
           in: query
           name: search
           schema:
-            description: Search query (searches chat ID, user ID, and title)
+            description: Search query (searches chat ID, user ID, user name, and title)
             type: string
         - allowEmptyValue: true
           description: Filter by external user ID
@@ -13653,6 +13943,96 @@ paths:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
+  /rpc/hooks.uploadSkillContent:
+    post:
+      description: Uploads skill manifest content requested by the unified hook ingest endpoint.
+      operationId: uploadSkillContent
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadSkillContentPayload'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: uploadSkillContent hooks
+      tags:
+        - hooks
+      x-speakeasy-name-override: uploadSkillContent
   /rpc/hooks.upsertServerNameOverride:
     post:
       tags:
@@ -18278,6 +18658,114 @@ paths:
       x-speakeasy-name-override: getDeletePreflight
       x-speakeasy-react-hook:
         name: OrganizationRemoteSessionIssuerDeletePreflight
+  /rpc/organizationRemoteSessionIssuers.getMigratePreflight:
+    get:
+      description: 'Authoritative impact summary for migrating a remote_session_issuer''s clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.'
+      operationId: getOrganizationRemoteSessionIssuerMigratePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The remote_session_issuer to migrate away from.
+          in: query
+          name: source_id
+          required: true
+          schema:
+            description: The remote_session_issuer to migrate away from.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The remote_session_issuer to migrate onto.
+          in: query
+          name: target_id
+          required: true
+          schema:
+            description: The remote_session_issuer to migrate onto.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationIssuerMigratePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getIssuerMigratePreflight organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: getMigratePreflight
+      x-speakeasy-react-hook:
+        name: OrganizationRemoteSessionIssuerMigratePreflight
   /rpc/organizationRemoteSessionIssuers.list:
     get:
       description: List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
@@ -18391,6 +18879,102 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: OrganizationRemoteSessionIssuers
+  /rpc/organizationRemoteSessionIssuers.migrate:
+    post:
+      description: 'Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller''s organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.'
+      operationId: migrateOrganizationRemoteSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateIssuerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrateOrganizationRemoteSessionIssuerResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: migrateIssuer organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: migrate
+      x-speakeasy-react-hook:
+        name: MigrateOrganizationRemoteSessionIssuer
   /rpc/organizationRemoteSessionIssuers.move:
     post:
       description: 'Re-scope a remote_session_issuer in the caller''s organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.'
@@ -31751,7 +32335,7 @@ paths:
         name: CreateSkill
   /rpc/skills.distribute:
     post:
-      description: Create or update the active distribution of a skill to a plugin. Repeating the request for the same skill and plugin updates the version pin or is a no-op.
+      description: Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.
       operationId: distributeSkill
       parameters:
         - allowEmptyValue: true
@@ -31778,6 +32362,9 @@ paths:
       requestBody:
         content:
           application/json:
+            example:
+              id: 550e8400-e29b-41d4-a716-446655440000
+              plugin_id: 550e8400-e29b-41d4-a716-446655440001
             schema:
               $ref: '#/components/schemas/DistributeSkillRequestBody'
         required: true
@@ -32228,6 +32815,131 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: SkillDistributions
+  /rpc/skills.listUnknownActivations:
+    get:
+      description: List terminal skill activations that could not be attributed to a skill version.
+      operationId: listUnknownSkillActivations
+      parameters:
+        - allowEmptyValue: true
+          description: Cursor for the next page of unknown activations.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of unknown activations.
+            type: string
+        - allowEmptyValue: true
+          description: The number of unknown activations to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The number of unknown activations to return per page.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListUnknownSkillActivationsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listUnknownActivations skills
+      tags:
+        - skills
+      x-speakeasy-name-override: listUnknownActivations
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: UnknownSkillActivations
   /rpc/skills.listVersions:
     get:
       description: List immutable versions of an active skill, newest first. The implementation requires the skills product feature and skill read scope.
@@ -32364,7 +33076,7 @@ paths:
         name: SkillVersions
   /rpc/skills.undistribute:
     post:
-      description: Revoke a skill's active distribution to a plugin. Repeated requests are a no-op.
+      description: Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.
       operationId: undistributeSkill
       parameters:
         - allowEmptyValue: true
@@ -32391,6 +33103,9 @@ paths:
       requestBody:
         content:
           application/json:
+            example:
+              id: 550e8400-e29b-41d4-a716-446655440000
+              plugin_id: 550e8400-e29b-41d4-a716-446655440001
             schema:
               $ref: '#/components/schemas/UndistributeSkillRequestBody'
         required: true
@@ -32463,24 +33178,24 @@ paths:
       x-speakeasy-name-override: undistribute
       x-speakeasy-react-hook:
         name: UndistributeSkill
-  /rpc/spendrules.archiveRule:
+  /rpc/skills.update:
     post:
-      description: 'Archive a budget rule. There is no delete: archiving ends the rule''s lineage while retaining its slug, version history, and events. Any open circuits for the rule close on the next evaluation cycle.'
-      operationId: archiveSpendRule
+      description: Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.
+      operationId: updateSkill
       parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
           name: Gram-Session
           schema:
             description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
             type: string
         - allowEmptyValue: true
           description: project header
@@ -32493,117 +33208,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RiskIDRequestBody'
-        required: true
-      responses:
-        "200":
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: archiveSpendRule spendRules
-      tags:
-        - spendRules
-      x-speakeasy-group: spendRules.rules
-      x-speakeasy-name-override: archive
-      x-speakeasy-react-hook:
-        name: SpendRulesArchiveRule
-        type: mutation
-  /rpc/spendrules.createRule:
-    post:
-      description: Create a new budget rule for the current organization.
-      operationId: createSpendRule
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateSpendRuleRequestBody'
+              $ref: '#/components/schemas/UpdateSkillRequestBody'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SpendRule'
+                $ref: '#/components/schemas/Skill'
           description: OK response.
         "400":
           content:
@@ -32660,677 +33272,17 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
-        - {}
-      summary: createSpendRule spendRules
-      tags:
-        - spendRules
-      x-speakeasy-group: spendRules.rules
-      x-speakeasy-name-override: create
-      x-speakeasy-react-hook:
-        name: SpendRulesCreateRule
-        type: mutation
-  /rpc/spendrules.getOverview:
-    get:
-      description: 'Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.'
-      operationId: getSpendRulesOverview
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SpendRulesOverviewResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
         - {}
-      summary: getSpendRulesOverview spendRules
+      summary: update skills
       tags:
-        - spendRules
-      x-speakeasy-group: spendRules.overview
-      x-speakeasy-name-override: get
-      x-speakeasy-react-hook:
-        name: SpendRulesOverview
-  /rpc/spendrules.getRule:
-    get:
-      description: Get a budget rule by ID.
-      operationId: getSpendRule
-      parameters:
-        - allowEmptyValue: true
-          description: The rule ID.
-          in: query
-          name: id
-          required: true
-          schema:
-            description: The rule ID.
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SpendRule'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: getSpendRule spendRules
-      tags:
-        - spendRules
-      x-speakeasy-group: spendRules.rules
-      x-speakeasy-name-override: get
-      x-speakeasy-react-hook:
-        name: SpendRulesGetRule
-  /rpc/spendrules.listEvents:
-    get:
-      description: List warning and breach events emitted by budget rule evaluation, most recent first.
-      operationId: listSpendRuleEvents
-      parameters:
-        - allowEmptyValue: true
-          description: 'Optional rule ID to filter by. Matches the rule''s whole lineage: events from every version of the rule are returned.'
-          in: query
-          name: rule_id
-          schema:
-            description: 'Optional rule ID to filter by. Matches the rule''s whole lineage: events from every version of the rule are returned.'
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Optional event type to filter by.
-          in: query
-          name: event_type
-          schema:
-            description: Optional event type to filter by.
-            enum:
-              - warning
-              - breach
-            type: string
-        - allowEmptyValue: true
-          description: Cursor to fetch the next page of events.
-          in: query
-          name: cursor
-          schema:
-            description: Cursor to fetch the next page of events.
-            type: string
-        - allowEmptyValue: true
-          description: Maximum number of events to return per page.
-          in: query
-          name: limit
-          schema:
-            description: Maximum number of events to return per page.
-            format: int64
-            maximum: 200
-            minimum: 1
-            type: integer
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListSpendRuleEventsResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: listSpendRuleEvents spendRules
-      tags:
-        - spendRules
-      x-speakeasy-group: spendRules.events
-      x-speakeasy-name-override: list
-      x-speakeasy-react-hook:
-        name: SpendRulesListEvents
-  /rpc/spendrules.listRules:
-    get:
-      description: List all budget rules for the current organization.
-      operationId: listSpendRules
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListSpendRulesResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: listSpendRules spendRules
-      tags:
-        - spendRules
-      x-speakeasy-group: spendRules.rules
-      x-speakeasy-name-override: list
-      x-speakeasy-react-hook:
-        name: SpendRulesListRules
-  /rpc/spendrules.previewRule:
-    post:
-      description: Preview which actors a target expression matches and their current spend against a proposed budget. Powers the live preview in the rule editor and the per-actor breakdown in the rule detail view.
-      operationId: previewSpendRule
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PreviewSpendRuleRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PreviewSpendRuleResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: previewSpendRule spendRules
-      tags:
-        - spendRules
-      x-speakeasy-group: spendRules.rules
-      x-speakeasy-name-override: preview
-      x-speakeasy-react-hook:
-        name: SpendRulesPreviewRule
-        type: mutation
-  /rpc/spendrules.updateRule:
-    put:
-      description: 'Update a budget rule. Rule rows are immutable version snapshots: any change besides the enabled toggle archives the current version row and creates a successor at version + 1 (returned as the result, under a new ID). Enabled-only changes toggle the live row in place.'
-      operationId: updateSpendRule
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateSpendRuleRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SpendRule'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: updateSpendRule spendRules
-      tags:
-        - spendRules
-      x-speakeasy-group: spendRules.rules
+        - skills
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
-        name: SpendRulesUpdateRule
-        type: mutation
+        name: UpdateSkill
   /rpc/telemetry.captureEvent:
     post:
       description: Capture a telemetry event and forward it to PostHog
@@ -33653,6 +33605,112 @@ paths:
       x-speakeasy-name-override: getHooksSummary
       x-speakeasy-react-hook:
         name: GetHooksSummary
+        type: query
+  /rpc/telemetry.getMcpServerActivity:
+    post:
+      description: Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.
+      operationId: getMcpServerActivity
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetMcpServerActivityPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMcpServerActivityResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getMcpServerActivity telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getMcpServerActivity
+      x-speakeasy-react-hook:
+        name: GetMcpServerActivity
         type: query
   /rpc/telemetry.getObservabilityOverview:
     post:
@@ -36160,6 +36218,92 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateTemplate
+  /rpc/tokenExchange.exchange:
+    post:
+      description: Exchange the org-scoped device-agent install credential plus a vouched user email for a long-lived, per-user API key carrying the 'agent_user' scope. Authenticated with an org-scoped API key carrying the 'agent' scope — deliberately broader than the 'agent_user' scope the minted per-user keys carry, so a leaked per-user key cannot re-enter this endpoint to forge another user's key. The raw key is returned exactly once.
+      operationId: tokenExchange
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExchangeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: exchange tokenExchange
+      tags:
+        - tokenExchange
+      x-speakeasy-name-override: exchange
   /rpc/tools.list:
     get:
       description: List all tools for a project
@@ -42224,7 +42368,7 @@ components:
           description: Whether the provider integration is active.
         external_organization_id:
           type: string
-          description: Provider organization identifier. Required for anthropic_compliance; omitted for providers that do not need one.
+          description: Provider organization identifier. Required for anthropic_compliance and codex_compliance; omitted for providers that do not need one.
         has_api_key:
           type: boolean
           description: Whether an API key is currently stored. The key itself is never returned.
@@ -42261,7 +42405,7 @@ components:
           description: Project used as the telemetry write target. Omitted when no config is set.
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
         updated_at:
           type: string
           description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
@@ -42272,6 +42416,62 @@ components:
         - provider
         - enabled
         - has_api_key
+    AIIntegrationScheduleState:
+      type: object
+      properties:
+        auto_paused_at:
+          type: string
+          description: ISO 8601 timestamp when the scheduler auto-paused the schedule after repeated provider rejections. Omitted unless auto-paused.
+          format: date-time
+        consecutive_failures:
+          type: integer
+          description: Number of consecutive failed polls. Resets to zero on success or retry.
+          format: int64
+        enabled:
+          type: boolean
+          description: Whether the user has this schedule enabled. Disabled schedules are skipped by the poller until re-enabled.
+        last_poll_error:
+          type: string
+          description: Stored error from the schedule's latest failed poll. Omitted unless the latest poll failed.
+        last_poll_failed_at:
+          type: string
+          description: ISO 8601 timestamp for the schedule's latest failed poll. Omitted unless a poll has failed.
+          format: date-time
+        last_poll_success_at:
+          type: string
+          description: ISO 8601 timestamp for the schedule's last successful poll. Omitted until a poll succeeds.
+          format: date-time
+        next_poll_after:
+          type: string
+          description: ISO 8601 timestamp for the schedule's next scheduled poll.
+          format: date-time
+        schedule:
+          type: string
+          description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
+        status:
+          type: string
+          description: Derived status for the schedule's latest poll state.
+          enum:
+            - pending
+            - success
+            - failed
+            - auto_paused
+            - disabled
+        stream:
+          type: string
+          description: Product-level identifier for the stream this schedule writes (e.g. cursor.usage, claude.chat.message). Omitted for legacy schedules with no registered stream.
+        stream_kind:
+          type: string
+          description: Whether the stream carries discrete events or aggregated metrics. Omitted for legacy schedules with no registered stream.
+          enum:
+            - events
+            - metrics
+      description: Scheduler state for one sync schedule (stream) of a provider integration.
+      required:
+        - schedule
+        - enabled
+        - status
+        - consecutive_failures
     AccessMember:
       type: object
       properties:
@@ -42540,6 +42740,10 @@ components:
         content:
           type: string
           description: The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
+        derived_from_version_id:
+          type: string
+          description: The optional source version this new version was derived from.
+          format: uuid
         id:
           type: string
           description: The skill ID.
@@ -42950,6 +43154,11 @@ components:
           type: string
           description: The project ID owning the assistant.
           format: uuid
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantSkillRef'
+          description: Skills attached to the assistant.
         status:
           type: string
           description: The assistant status.
@@ -42977,6 +43186,7 @@ components:
         - instructions
         - toolsets
         - mcp_servers
+        - skills
         - warm_ttl_seconds
         - max_concurrency
         - status
@@ -43052,6 +43262,24 @@ components:
         - updated_at
         - last_access
         - valid_at
+    AssistantSkillRef:
+      type: object
+      properties:
+        pinned_version_id:
+          type: string
+          description: The pinned version, absent when tracking latest valid.
+          format: uuid
+        resolved_version_id:
+          type: string
+          description: The currently resolved valid version.
+          format: uuid
+        skill_id:
+          type: string
+          description: The attached skill ID.
+          format: uuid
+      required:
+        - skill_id
+        - resolved_version_id
     AssistantToolsetRef:
       type: object
       properties:
@@ -43724,6 +43952,12 @@ components:
           description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
         agent_usage:
           $ref: '#/components/schemas/AgentUsage'
+        assistant_id:
+          type: string
+          description: The ID of the assistant that produced this chat, if any
+        assistant_name:
+          type: string
+          description: The name of the assistant that produced this chat, if any
         created_at:
           type: string
           description: When the chat was created.
@@ -43881,6 +44115,12 @@ components:
         account_type:
           type: string
           description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
+        assistant_id:
+          type: string
+          description: The ID of the assistant that produced this chat, if any
+        assistant_name:
+          type: string
+          description: The name of the assistant that produced this chat, if any
         created_at:
           type: string
           description: When the chat was created.
@@ -44721,6 +44961,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
+        client_setup_documentation_url:
+          type: string
+          description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
         grant_types_supported:
           type: array
           items:
@@ -45109,6 +45352,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
+        client_setup_documentation_url:
+          type: string
+          description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
         grant_types_supported:
           type: array
           items:
@@ -45325,6 +45571,11 @@ components:
           items:
             type: string
           description: 'Custom detection rule ids to attach as detectors: a match produces a finding.'
+        detection_scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskDetectionScope'
+          description: Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Empty/omitted = all recommendations apply unchanged.
         disabled_rules:
           type: array
           items:
@@ -45583,53 +45834,6 @@ components:
           description: The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
       required:
         - content
-    CreateSpendRuleRequestBody:
-      type: object
-      properties:
-        action:
-          type: string
-          description: 'Rule action: flag or block.'
-          default: flag
-          enum:
-            - flag
-            - block
-        description:
-          type: string
-          description: Optional description of what the rule covers.
-          default: ""
-        enabled:
-          type: boolean
-          description: Whether the rule is active.
-          default: true
-        limit_usd:
-          type: number
-          description: Per-person budget in USD for one window.
-          format: double
-          minimum: 0
-        name:
-          type: string
-          description: The rule name.
-        target:
-          $ref: '#/components/schemas/SpendRuleTargetCondition'
-        warn_at_pct:
-          type: integer
-          description: Percentage of the limit at which a warning event is emitted.
-          default: 80
-          format: int64
-          minimum: 1
-          maximum: 100
-        window_kind:
-          type: string
-          description: UTC calendar window the budget covers.
-          enum:
-            - daily
-            - weekly
-            - monthly
-      required:
-        - name
-        - target
-        - limit_usd
-        - window_kind
     CreateToolsetForm:
       type: object
       properties:
@@ -45995,7 +46199,7 @@ components:
       properties:
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
       required:
         - provider
     DeleteGlobalToolVariationForm:
@@ -46340,6 +46544,10 @@ components:
     DistributeSkillRequestBody:
       type: object
       properties:
+        assistant_id:
+          type: string
+          description: The assistant that carries the skill.
+          format: uuid
         id:
           type: string
           description: The skill ID.
@@ -46352,9 +46560,11 @@ components:
           type: string
           description: The plugin that carries the skill.
           format: uuid
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440000
+        plugin_id: 550e8400-e29b-41d4-a716-446655440001
       required:
         - id
-        - plugin_id
     EmployeeDataFlowEdge:
       type: object
       properties:
@@ -46625,6 +46835,15 @@ components:
       properties:
         deployment:
           $ref: '#/components/schemas/Deployment'
+    ExchangeRequestBody:
+      type: object
+      properties:
+        email:
+          type: string
+          description: Email address of the enrolled user to mint a per-user key for. Resolved to a user within the authenticated org.
+          example: dev@acme.corp
+      required:
+        - email
     ExportMcpMetadataRequestBody:
       type: object
       properties:
@@ -47745,6 +47964,38 @@ components:
       properties:
         metadata:
           $ref: '#/components/schemas/McpMetadata'
+    GetMcpServerActivityPayload:
+      type: object
+      properties:
+        recent_window_days:
+          type: integer
+          description: Size of the recent-activity window in days. A server with tool calls in the overall lookback window but none inside this window is flagged as stale. Defaults to 14.
+          default: 14
+          format: int64
+          minimum: 1
+          maximum: 90
+      description: Payload for per-MCP-server tool-call activity used by the Distribute MCP listing indicators
+    GetMcpServerActivityResult:
+      type: object
+      properties:
+        activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpServerActivity'
+          description: One entry per MCP server (hosted or tunneled) that has received at least one tool call within the lookback window
+        lookback_days:
+          type: integer
+          description: The overall lookback window size in days (bounded by telemetry retention)
+          format: int64
+        recent_window_days:
+          type: integer
+          description: The recent-activity window size in days that was applied
+          format: int64
+      description: Per-MCP-server tool-call activity. Only servers with at least one tool call inside the lookback window are returned; a server absent from the list has never received a tool call (within the telemetry retention window).
+      required:
+        - activity
+        - recent_window_days
+        - lookback_days
     GetMetricsSummaryResult:
       type: object
       properties:
@@ -47887,6 +48138,9 @@ components:
         session_capture_enabled:
           type: boolean
           description: Whether Claude Code session capture is enabled
+        skill_capture_metadata_only:
+          type: boolean
+          description: Whether skill capture stores activation metadata without requesting manifest content
         skills_enabled:
           type: boolean
           description: Whether the Skills page is enabled for the organization
@@ -47911,6 +48165,7 @@ components:
         - hooks_fail_open_enabled
         - custom_model_keys_enabled
         - skills_enabled
+        - skill_capture_metadata_only
         - device_agent
     GetProjectForm:
       type: object
@@ -48029,14 +48284,30 @@ components:
     GetSkillResult:
       type: object
       properties:
+        adoption:
+          $ref: '#/components/schemas/SkillAdoption'
+        assistant_count:
+          type: integer
+          description: The number of active, non-deleted assistants using the skill.
+          format: int64
+        drift:
+          $ref: '#/components/schemas/SkillDrift'
         latest_version:
           $ref: '#/components/schemas/SkillVersion'
+        sighting_timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillSightingTimelinePoint'
+          description: Daily activations in the adoption window.
         skill:
           $ref: '#/components/schemas/Skill'
       description: An active skill and its derived latest version.
       required:
         - skill
-        - latest_version
+        - adoption
+        - sighting_timeline
+        - drift
+        - assistant_count
     GetToolUsageFilterOptionsPayload:
       type: object
       properties:
@@ -48495,9 +48766,23 @@ components:
         name:
           type: string
           description: Activated skill name.
+          maxLength: 256
+        raw_sha256:
+          type: string
+          description: SHA-256 of the raw skill manifest, if available.
+          maxLength: 128
         source:
           type: string
           description: Skill source or namespace, if available.
+          maxLength: 256
+        source_level:
+          type: string
+          description: Scope where the skill was resolved, if available.
+          maxLength: 64
+        source_path:
+          type: string
+          description: Local path where the skill was resolved, if available.
+          maxLength: 4096
       description: Skill activation payload.
       required:
         - name
@@ -49019,6 +49304,25 @@ components:
       required:
         - client_name
         - activity_count
+    ListAIIntegrationSchedulesResult:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: Organization the schedules belong to.
+        provider:
+          type: string
+          description: AI provider identifier.
+        schedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIIntegrationScheduleState'
+          description: Scheduler state for each of the provider's sync schedules.
+      description: Sync schedules for one provider integration. Empty when no config is set for the provider.
+      required:
+        - organization_id
+        - provider
+        - schedules
     ListAllowedOriginsResult:
       type: object
       properties:
@@ -49953,8 +50257,8 @@ components:
         distributions:
           type: array
           items:
-            $ref: '#/components/schemas/SkillDistribution'
-          description: The active skill distributions in this page.
+            $ref: '#/components/schemas/PluginSkillDistribution'
+          description: The active plugin skill distributions in this page.
         next_cursor:
           type: string
           description: Cursor for the next page; absent when exhausted.
@@ -49999,29 +50303,6 @@ components:
           description: The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').
       required:
         - sources
-    ListSpendRuleEventsResult:
-      type: object
-      properties:
-        events:
-          type: array
-          items:
-            $ref: '#/components/schemas/SpendRuleEvent'
-          description: The list of budget rule events, most recent first.
-        next_cursor:
-          type: string
-          description: Cursor for the next page of events.
-      required:
-        - events
-    ListSpendRulesResult:
-      type: object
-      properties:
-        rules:
-          type: array
-          items:
-            $ref: '#/components/schemas/SpendRule'
-          description: The list of budget rules.
-      required:
-        - rules
     ListSyncedUsersResult:
       type: object
       properties:
@@ -50234,6 +50515,20 @@ components:
       description: Result type for listing tunneled MCP servers
       required:
         - tunneled_mcp_servers
+    ListUnknownSkillActivationsResult:
+      type: object
+      properties:
+        activations:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnknownSkillActivation'
+          description: Unknown activations in this page.
+        next_cursor:
+          type: string
+          description: Cursor for the next page; absent when exhausted.
+      description: A page of terminal skill activations without exact version attribution.
+      required:
+        - activations
     ListUserGrantsResult:
       type: object
       properties:
@@ -50736,6 +51031,54 @@ components:
         - visibility
         - created_at
         - updated_at
+    McpServerActivity:
+      type: object
+      properties:
+        last_tool_call_at:
+          type: string
+          description: ISO 8601 timestamp of the most recent tool call
+          format: date-time
+        recent_tool_calls:
+          type: integer
+          description: Number of tool calls observed inside the recent-activity window
+          format: int64
+        target_id:
+          type: string
+          description: 'Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers'
+        target_label:
+          type: string
+          description: User-facing label for the target
+        target_type:
+          type: string
+          description: MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.
+          enum:
+            - hosted_mcp_server
+            - tunneled_mcp_server
+        total_tool_calls:
+          type: integer
+          description: Number of tool calls observed across the whole lookback window
+          format: int64
+      description: Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers)
+      required:
+        - target_type
+        - target_id
+        - target_label
+        - total_tool_calls
+        - recent_tool_calls
+    MigrateIssuerRequestBody:
+      type: object
+      properties:
+        source_id:
+          type: string
+          description: The remote_session_issuer to migrate away from; soft-deleted on success.
+          format: uuid
+        target_id:
+          type: string
+          description: The remote_session_issuer to migrate onto; survives and adopts the source's clients.
+          format: uuid
+      required:
+        - source_id
+        - target_id
     MigrateLegacyGramRegistrationsForm:
       type: object
       properties:
@@ -50761,6 +51104,23 @@ components:
       description: Result of a legacy gram registration migration.
       required:
         - migrated_count
+    MigrateOrganizationRemoteSessionIssuerResult:
+      type: object
+      properties:
+        clients_migrated:
+          type: integer
+          description: Number of remote_session_clients re-pointed from the source issuer to the target issuer. Zero when the source had no active clients.
+          format: int64
+        issuer:
+          $ref: '#/components/schemas/RemoteSessionIssuer'
+        source_deleted:
+          type: boolean
+          description: TRUE when the source issuer was soft-deleted.
+      description: 'Outcome of consolidating a source remote_session_issuer onto a target issuer: the surviving target issuer, how many clients were re-pointed, and whether the source was soft-deleted.'
+      required:
+        - issuer
+        - clients_migrated
+        - source_deleted
     MintUserSessionRequestBody:
       type: object
       properties:
@@ -51562,6 +51922,44 @@ components:
       required:
         - client_count
         - mcp_server_names
+    OrganizationIssuerMigratePreflight:
+      type: object
+      properties:
+        can_migrate:
+          type: boolean
+          description: 'TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.'
+        client_count:
+          type: integer
+          description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
+          format: int64
+        conflicting_mcp_server_names:
+          type: array
+          items:
+            type: string
+          description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+        endpoint_mismatches:
+          type: array
+          items:
+            type: string
+          description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.
+        mcp_server_names:
+          type: array
+          items:
+            type: string
+          description: Display names of MCP servers attached to the source issuer's clients.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+      description: 'Authoritative impact summary for migrating a remote_session_issuer''s clients onto another issuer: how many clients move, which MCP servers are affected, and every blocker that would make the migration fail.'
+      required:
+        - client_count
+        - mcp_server_names
+        - endpoint_mismatches
+        - conflicting_mcp_server_names
+        - warnings
+        - can_migrate
     OrganizationMcpServer:
       type: object
       properties:
@@ -51965,6 +52363,10 @@ components:
           items:
             $ref: '#/components/schemas/PluginServer'
           description: Servers included in this plugin.
+        skill_count:
+          type: integer
+          description: Number of active skills in this plugin.
+          format: int64
         slug:
           type: string
           description: URL-safe identifier, unique per org.
@@ -52031,59 +52433,72 @@ components:
         - policy
         - sort_order
         - created_at
-    PreviewSpendRuleRequestBody:
+    PluginSkillDistribution:
       type: object
       properties:
-        limit_usd:
-          type: number
-          description: Per-person budget in USD used to compute usage percentages.
-          format: double
-          minimum: 0
-        target:
-          $ref: '#/components/schemas/SpendRuleTargetCondition'
-        warn_at_pct:
-          type: integer
-          description: Percentage of the limit at which a warning event is emitted.
-          default: 80
-          format: int64
-          minimum: 1
-          maximum: 100
-        window_kind:
+        channel:
           type: string
-          description: UTC calendar window to compute spend over.
+          description: The distribution channel.
           enum:
-            - daily
-            - weekly
-            - monthly
-      required:
-        - target
-        - limit_usd
-        - window_kind
-    PreviewSpendRuleResult:
-      type: object
-      properties:
-        actors:
-          type: array
-          items:
-            $ref: '#/components/schemas/SpendRuleActorUsage'
-          description: Matched actors with their current-window spend, ordered by spend descending. Capped at 50 entries.
-        matched_count:
-          type: integer
-          description: Total number of organization members the target expression matches.
-          format: int64
-        window_end:
+            - plugin
+        created_at:
           type: string
-          description: Exclusive end of the current window used for spend.
+          description: When the distribution was created.
           format: date-time
-        window_start:
+        created_by_user_id:
           type: string
-          description: Inclusive start of the current window used for spend.
+          description: The user that created the distribution.
+        id:
+          type: string
+          description: The distribution ID.
+          format: uuid
+        pinned_version_id:
+          type: string
+          description: The pinned version, absent when tracking the latest valid version.
+          format: uuid
+        plugin_id:
+          type: string
+          description: The plugin that carries the skill.
+          format: uuid
+        plugin_name:
+          type: string
+          description: The name of the plugin that carries the skill.
+        project_id:
+          type: string
+          description: The project that owns the distribution.
+          format: uuid
+        resolved_version_id:
+          type: string
+          description: The version currently targeted by this distribution.
+          format: uuid
+        skill_display_name:
+          type: string
+          description: The display name of the distributed skill.
+        skill_id:
+          type: string
+          description: The distributed skill ID.
+          format: uuid
+        skill_name:
+          type: string
+          description: The canonical name of the distributed skill.
+        updated_at:
+          type: string
+          description: When the distribution configuration last changed.
           format: date-time
+      description: An active plugin distribution of a project skill.
       required:
-        - matched_count
-        - window_start
-        - window_end
-        - actors
+        - id
+        - project_id
+        - skill_id
+        - skill_name
+        - skill_display_name
+        - plugin_id
+        - plugin_name
+        - resolved_version_id
+        - channel
+        - created_by_user_id
+        - created_at
+        - updated_at
     Project:
       type: object
       properties:
@@ -52707,6 +53122,7 @@ components:
             - division_name
             - cost_center_name
             - email
+            - hostname
             - model
             - hook_source
             - account_type
@@ -52803,6 +53219,7 @@ components:
             - division_name
             - cost_center_name
             - email
+            - hostname
             - model
             - hook_source
             - account_type
@@ -53210,6 +53627,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+        client_setup_documentation_url:
+          type: string
+          description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.
         created_at:
           type: string
           format: date-time
@@ -53532,6 +53952,18 @@ components:
         - type
         - status_codes
         - content_types
+    RetryScheduleRequestBody:
+      type: object
+      properties:
+        provider:
+          type: string
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+        schedule:
+          type: string
+          description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
+      required:
+        - provider
+        - schedule
     RevokeAllRemoteSessionsResult:
       type: object
       properties:
@@ -53586,9 +54018,14 @@ components:
           items:
             $ref: '#/components/schemas/RiskCategoryDefinition'
           description: Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.
+        recommended_scopes_version:
+          type: integer
+          description: Version of the recommended-scope registry; bumps when any recommendation changes.
+          format: int64
       description: Canonical risk category definitions used to classify findings, in classification-priority order. Consumers should iterate in order and pick the first match.
       required:
         - categories
+        - recommended_scopes_version
     RiskCategoryDefinition:
       type: object
       properties:
@@ -53604,6 +54041,18 @@ components:
         label:
           type: string
           description: Human-readable category label for UI rendering.
+        recommended_scope_applicable:
+          type: boolean
+          description: False when the category is session-scoped and message scoping does not apply (e.g. account_identity).
+        recommended_scope_exempt:
+          type: string
+          description: Centrally recommended CEL exemption predicate; empty = no exemption.
+        recommended_scope_include:
+          type: string
+          description: Centrally recommended CEL scope predicate for this category; empty = no include restriction.
+        recommended_scope_rationale:
+          type: string
+          description: User-facing explanation of the recommended scope and the consequences of disabling it. Empty when the category has no recommendation.
         rule_id_prefix:
           type: string
           description: When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').
@@ -53624,6 +54073,10 @@ components:
         - source
         - rule_ids
         - rule_id_prefix
+        - recommended_scope_include
+        - recommended_scope_exempt
+        - recommended_scope_rationale
+        - recommended_scope_applicable
     RiskChatSummary:
       type: object
       properties:
@@ -53697,6 +54150,20 @@ components:
         - severity
         - created_at
         - updated_at
+    RiskDetectionScope:
+      type: object
+      properties:
+        category:
+          type: string
+          description: Risk category key this detection scope applies to.
+        scope_exempt:
+          type: string
+          description: 'CEL exemption predicate: the category skips a message when this boolean expression is true. Empty means no exemption.'
+        scope_include:
+          type: string
+          description: 'CEL scope predicate: the category detects on a message only when this boolean expression is true. Empty means every message surface is included.'
+      required:
+        - category
     RiskExclusion:
       type: object
       properties:
@@ -53906,6 +54373,11 @@ components:
           items:
             type: string
           description: 'Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.'
+        detection_scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskDetectionScope'
+          description: Per-category detection scopes specified for this policy. The scan surface merges these with the recommended scopes, the specified scope winning on category conflict. Empty means every recommendation applies unchanged.
         disabled_rules:
           type: array
           items:
@@ -55679,6 +56151,7 @@ components:
             - hooks_fail_open
             - custom_model_keys
             - skills
+            - skill_capture_metadata_only
           maxLength: 60
       required:
         - feature_name
@@ -55698,6 +56171,22 @@ components:
           $ref: '#/components/schemas/Project'
       required:
         - project
+    SetScheduleEnabledRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the schedule should be polled.
+        provider:
+          type: string
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+        schedule:
+          type: string
+          description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
+      required:
+        - provider
+        - schedule
+        - enabled
     SetSourceEnvironmentLinkRequestBody:
       type: object
       properties:
@@ -56121,11 +56610,19 @@ components:
           format: date-time
         display_name:
           type: string
-          description: The display name from the latest recorded manifest.
+          description: The user-facing registry name.
+        first_seen_at:
+          type: string
+          description: When this skill was first activated.
+          format: date-time
         id:
           type: string
           description: The skill ID.
           format: uuid
+        last_seen_at:
+          type: string
+          description: When this skill was most recently activated.
+          format: date-time
         latest_version_id:
           type: string
           description: The derived latest version ID, selected from immutable version creation order.
@@ -56137,12 +56634,16 @@ components:
           type: string
           description: The project that owns the skill.
           format: uuid
+        seen_count:
+          type: integer
+          description: The number of reconciled activations observed for this skill.
+          format: int64
         source_kind:
           type: string
           description: How the skill entered the registry.
         summary:
           type: string
-          description: The optional summary from the latest recorded manifest.
+          description: The optional registry summary.
         updated_at:
           type: string
           description: When the skill was last updated.
@@ -56159,10 +56660,35 @@ components:
         - display_name
         - source_kind
         - classification
-        - latest_version_id
         - version_count
+        - seen_count
         - created_at
         - updated_at
+    SkillAdoption:
+      type: object
+      properties:
+        activations_in_window:
+          type: integer
+          description: Activations observed during the rolling window.
+          format: int64
+        distinct_hostnames:
+          type: integer
+          description: Distinct non-empty hostnames that activated the skill during the rolling window.
+          format: int64
+        window_end:
+          type: string
+          description: End of the rolling adoption window.
+          format: date-time
+        window_start:
+          type: string
+          description: Start of the rolling adoption window.
+          format: date-time
+      description: Activation adoption metrics for a skill.
+      required:
+        - window_start
+        - window_end
+        - distinct_hostnames
+        - activations_in_window
     SkillBreakdownRow:
       type: object
       properties:
@@ -56184,11 +56710,19 @@ components:
     SkillDistribution:
       type: object
       properties:
+        assistant_id:
+          type: string
+          description: The assistant that carries the skill.
+          format: uuid
+        assistant_name:
+          type: string
+          description: The name of the assistant that carries the skill.
         channel:
           type: string
           description: The distribution channel.
           enum:
             - plugin
+            - assistant
         created_at:
           type: string
           description: When the distribution was created.
@@ -56233,20 +56767,83 @@ components:
           type: string
           description: When the distribution configuration last changed.
           format: date-time
-      description: An active plugin distribution of a project skill.
+      description: An active plugin or assistant distribution of a project skill.
       required:
         - id
         - project_id
         - skill_id
         - skill_name
         - skill_display_name
-        - plugin_id
-        - plugin_name
         - resolved_version_id
         - channel
         - created_by_user_id
         - created_at
         - updated_at
+    SkillDrift:
+      type: object
+      properties:
+        active_machines:
+          type: integer
+          description: Machines that activated the skill during the window.
+          format: int64
+        drifted_machines:
+          type: integer
+          description: Active machines whose latest attributed activation used another version.
+          format: int64
+        indeterminate_machines:
+          type: integer
+          description: Active machines without a version or without one unambiguous target.
+          format: int64
+        on_target_machines:
+          type: integer
+          description: Active machines whose latest activation used the target version.
+          format: int64
+        target_state:
+          type: string
+          description: Whether the skill has no distribution target, one target, or conflicting targets.
+          enum:
+            - not_distributed
+            - single
+            - ambiguous
+        target_version_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Distinct versions targeted by active plugin distributions.
+        window_end:
+          type: string
+          description: End of the active-machine window.
+          format: date-time
+        window_start:
+          type: string
+          description: Start of the active-machine window.
+          format: date-time
+      description: Active-machine convergence against the skill's plugin distribution target.
+      required:
+        - window_start
+        - window_end
+        - target_state
+        - target_version_ids
+        - active_machines
+        - on_target_machines
+        - drifted_machines
+        - indeterminate_machines
+    SkillSightingTimelinePoint:
+      type: object
+      properties:
+        activation_count:
+          type: integer
+          description: Activations observed during the day.
+          format: int64
+        bucket_start:
+          type: string
+          description: Start of the UTC day.
+          format: date-time
+      description: A UTC-day activation bucket for a skill.
+      required:
+        - bucket_start
+        - activation_count
     SkillSummary:
       type: object
       properties:
@@ -56317,9 +56914,17 @@ components:
         created_by_user_id:
           type: string
           description: The user that recorded this version.
+        derived_from_version_id:
+          type: string
+          description: The source version this version was derived from.
+          format: uuid
         description:
           type: string
           description: The optional description from this manifest version.
+        first_seen_at:
+          type: string
+          description: When this exact version was first activated.
+          format: date-time
         frontmatter:
           type: object
           description: All top-level frontmatter fields parsed from this manifest version.
@@ -56328,6 +56933,10 @@ components:
           type: string
           description: The skill version ID.
           format: uuid
+        last_seen_at:
+          type: string
+          description: When this exact version was most recently activated.
+          format: date-time
         metadata:
           type: object
           description: Metadata parsed from this manifest version.
@@ -56335,6 +56944,10 @@ components:
         raw_sha256:
           type: string
           description: The SHA-256 digest of the exact uploaded SKILL.md content.
+        seen_count:
+          type: integer
+          description: The number of activations attributed to this exact version.
+          format: int64
         skill_id:
           type: string
           description: The skill that owns this version.
@@ -56360,6 +56973,7 @@ components:
         - validation_errors
         - created_at
         - created_by_user_id
+        - seen_count
     SourceEnvironmentLink:
       type: object
       properties:
@@ -56386,296 +57000,6 @@ components:
         - source_kind
         - source_slug
         - environment_id
-    SpendRule:
-      type: object
-      properties:
-        action:
-          type: string
-          description: 'Rule action: flag (record events only) or block (deny agent traffic on breach).'
-          enum:
-            - flag
-            - block
-        created_at:
-          type: string
-          description: When the rule was created.
-          format: date-time
-        description:
-          type: string
-          description: Description of what the rule covers. Empty when unset.
-        enabled:
-          type: boolean
-          description: Whether the rule is active.
-        id:
-          type: string
-          description: 'The budget rule ID. Identifies one immutable version row: edits produce a successor row with a fresh ID.'
-          format: uuid
-        limit_usd:
-          type: number
-          description: Per-person budget in USD for one window.
-          format: double
-        name:
-          type: string
-          description: The rule name.
-        organization_id:
-          type: string
-          description: The organization ID.
-        rule_expr:
-          type: string
-          description: CEL boolean expression over actor usage that identifies a budget breach for matched members.
-        slug:
-          type: string
-          description: URL-safe identifier derived from the name at creation time. Unique per organization and immutable; the rule URN embeds it.
-        target:
-          $ref: '#/components/schemas/SpendRuleTargetCondition'
-        target_expr:
-          type: string
-          description: CEL boolean expression over member attributes (email, directory attributes, groups, roles) selecting who the rule applies to.
-        updated_at:
-          type: string
-          description: When the rule was last updated.
-          format: date-time
-        urn:
-          type: string
-          description: Versioned rule URN, e.g. spend_rule:eng-monthly-cap:v3. Pins the exact rule configuration that produced an event.
-        version:
-          type: integer
-          description: Position of this row in its slug lineage; every edit archives the current row and creates version + 1.
-          format: int64
-        warn_at_pct:
-          type: integer
-          description: Percentage of the limit at which a warning event is emitted.
-          format: int64
-        window_kind:
-          type: string
-          description: UTC calendar window the budget covers.
-          enum:
-            - daily
-            - weekly
-            - monthly
-      required:
-        - id
-        - urn
-        - organization_id
-        - name
-        - slug
-        - description
-        - target
-        - target_expr
-        - rule_expr
-        - limit_usd
-        - window_kind
-        - warn_at_pct
-        - action
-        - enabled
-        - version
-        - created_at
-        - updated_at
-    SpendRuleActorUsage:
-      type: object
-      properties:
-        breached:
-          type: boolean
-          description: Whether the rule expression currently matches this actor usage.
-        display_name:
-          type: string
-          description: Actor display name, when known.
-        email:
-          type: string
-          description: Actor email.
-        limit_usd:
-          type: number
-          description: Per-person budget in USD.
-          format: double
-        spend_usd:
-          type: number
-          description: Actor spend in USD within the current window.
-          format: double
-        used_pct:
-          type: number
-          description: Spend as a percentage of the limit (may exceed 100).
-          format: double
-        user_id:
-          type: string
-          description: Gram user ID of the actor, when linked.
-      required:
-        - email
-        - spend_usd
-        - limit_usd
-        - used_pct
-        - breached
-    SpendRuleEvent:
-      type: object
-      properties:
-        created_at:
-          type: string
-          description: When the event was recorded.
-          format: date-time
-        display_name:
-          type: string
-          description: Actor display name, when known.
-        email:
-          type: string
-          description: Actor email.
-        event_type:
-          type: string
-          description: Event type.
-          enum:
-            - warning
-            - breach
-        id:
-          type: string
-          description: The event ID.
-          format: uuid
-        limit_usd:
-          type: number
-          description: Per-person budget in USD the rule granted at the pinned version.
-          format: double
-        rule_id:
-          type: string
-          description: ID of the exact rule version row that produced the event.
-          format: uuid
-        rule_name:
-          type: string
-          description: Name of the rule as of the version that fired.
-        rule_urn:
-          type: string
-          description: Versioned rule URN pinning the config that produced the event.
-        spend_usd:
-          type: number
-          description: Actor spend in USD at evaluation time.
-          format: double
-        user_id:
-          type: string
-          description: Gram user ID of the actor, when linked.
-        window_end:
-          type: string
-          description: Exclusive end of the budget window; the budget resets at this instant.
-          format: date-time
-        window_start:
-          type: string
-          description: Inclusive start of the budget window.
-          format: date-time
-      required:
-        - id
-        - rule_id
-        - rule_urn
-        - rule_name
-        - event_type
-        - email
-        - spend_usd
-        - limit_usd
-        - window_start
-        - window_end
-        - created_at
-    SpendRuleTargetCondition:
-      type: object
-      properties:
-        attribute:
-          type: string
-          description: Member attribute name.
-        operator:
-          type: string
-          description: 'Comparison operator: equals, not_equals, starts_with, ends_with, contains, matches, or includes.'
-        value:
-          type: string
-          description: Comparison value.
-      required:
-        - attribute
-        - operator
-        - value
-    SpendRuleUsage:
-      type: object
-      properties:
-        budget_usd:
-          type: number
-          description: Total budgeted spend in USD (per-person limit times matched users).
-          format: double
-        matched_users:
-          type: integer
-          description: Number of organization members the rule currently matches.
-          format: int64
-        rule_id:
-          type: string
-          description: The budget rule ID.
-          format: uuid
-        spend_usd:
-          type: number
-          description: Total spend in USD across matched users within the current window.
-          format: double
-        status:
-          type: string
-          description: Derived rule status from the worst matched actor.
-          enum:
-            - healthy
-            - approaching
-            - flagging
-            - blocking
-        users_breached:
-          type: integer
-          description: Matched users at or past the limit.
-          format: int64
-        users_warned:
-          type: integer
-          description: Matched users at or past the warning threshold but under the limit.
-          format: int64
-        worst_used_pct:
-          type: number
-          description: Highest per-actor usage percentage across matched users (may exceed 100).
-          format: double
-      required:
-        - rule_id
-        - matched_users
-        - users_warned
-        - users_breached
-        - spend_usd
-        - budget_usd
-        - worst_used_pct
-        - status
-    SpendRulesOverviewResult:
-      type: object
-      properties:
-        rules:
-          type: array
-          items:
-            $ref: '#/components/schemas/SpendRuleUsage'
-          description: Current-window usage per enabled rule.
-        rules_total:
-          type: integer
-          description: Total enabled rules.
-          format: int64
-        rules_unhealthy:
-          type: integer
-          description: Enabled rules whose status is not healthy.
-          format: int64
-        spend_over_budget_usd:
-          type: number
-          description: Current spend over planned budget in USD, summed across actors over their per-person limits.
-          format: double
-        total_budget_usd:
-          type: number
-          description: Total budgeted spend in USD across enabled rules (per-person limits times matched users).
-          format: double
-        total_spend_usd:
-          type: number
-          description: Spend in USD across all users matched by enabled rules, in each rule's current window.
-          format: double
-        users_breached:
-          type: integer
-          description: Distinct users at or past the limit of at least one enabled rule.
-          format: int64
-        users_total:
-          type: integer
-          description: Distinct users matched by at least one enabled rule.
-          format: int64
-      required:
-        - total_spend_usd
-        - total_budget_usd
-        - users_breached
-        - users_total
-        - rules_unhealthy
-        - rules_total
-        - spend_over_budget_usd
-        - rules
     SubmitFeedbackRequestBody:
       type: object
       properties:
@@ -57142,6 +57466,28 @@ components:
         - failed_tool_calls
         - avg_tool_latency_ms
         - avg_session_duration_ms
+    TokenResult:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: The raw per-user API key (carries the `agent_user` scope). Returned exactly once; store it securely. Presented as the Gram-Key on downstream user-scoped endpoints.
+        expires_in:
+          type: integer
+          description: Always zero. The minted key has no expiry (api_keys has no TTL).
+          format: int64
+        refresh_token:
+          type: string
+          description: Always empty. The minted key is long-lived and does not refresh; its lifecycle lever is revocation.
+        user_email:
+          type: string
+          description: Email the key was minted for.
+      description: A minted per-user API key for the device agent.
+      required:
+        - access_token
+        - refresh_token
+        - expires_in
+        - user_email
     TokensUnderManagement:
       type: object
       properties:
@@ -58758,6 +59104,10 @@ components:
     UndistributeSkillRequestBody:
       type: object
       properties:
+        assistant_id:
+          type: string
+          description: The assistant the skill was distributed to.
+          format: uuid
         id:
           type: string
           description: The skill ID.
@@ -58766,9 +59116,48 @@ components:
           type: string
           description: The plugin the skill was distributed to.
           format: uuid
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440000
+        plugin_id: 550e8400-e29b-41d4-a716-446655440001
       required:
         - id
-        - plugin_id
+    UnknownSkillActivation:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The activation observation ID.
+          format: uuid
+        provider:
+          type: string
+          description: The agent provider that reported the activation.
+        reason:
+          type: string
+          description: Why exact version attribution failed.
+          enum:
+            - invalid_name
+            - unresolved_hash
+            - ambiguous_hash
+        seen_at:
+          type: string
+          description: When the activation occurred.
+          format: date-time
+        skill_name:
+          type: string
+          description: The skill name reported by the agent.
+        source:
+          type: string
+          description: The optional provider-specific source.
+        source_level:
+          type: string
+          description: The optional source precedence level.
+      description: A completed activation that could not be attributed to a skill version.
+      required:
+        - id
+        - skill_name
+        - provider
+        - seen_at
+        - reason
     UpdateAssistantForm:
       type: object
       properties:
@@ -59280,6 +59669,9 @@ components:
         client_id_metadata_document_supported:
           type: boolean
           description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+        client_setup_documentation_url:
+          type: string
+          description: Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
         grant_types_supported:
           type: array
           items:
@@ -59434,6 +59826,11 @@ components:
           items:
             type: string
           description: 'Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.'
+        detection_scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskDetectionScope'
+          description: Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Omit to preserve the current value; send empty to clear.
         disabled_rules:
           type: array
           items:
@@ -59658,50 +60055,29 @@ components:
         - project_id
         - server_url
         - name
-    UpdateSpendRuleRequestBody:
+    UpdateSkillRequestBody:
       type: object
       properties:
-        action:
+        display_name:
           type: string
-          description: 'Rule action: flag or block. Omit to preserve the current action.'
-          enum:
-            - flag
-            - block
-        description:
-          type: string
-          description: Description of what the rule covers. Omit to preserve the current description.
-        enabled:
-          type: boolean
-          description: Whether the rule is active. Omit to preserve the current state.
+          description: The user-facing skill name.
+          maxLength: 256
         id:
           type: string
-          description: The rule ID.
+          description: The skill ID.
           format: uuid
-        limit_usd:
-          type: number
-          description: Per-person budget in USD for one window. Omit to preserve the current limit.
-          format: double
-          minimum: 0
         name:
           type: string
-          description: The rule name. Omit to preserve the current name.
-        target:
-          $ref: '#/components/schemas/SpendRuleTargetCondition'
-        warn_at_pct:
-          type: integer
-          description: Percentage of the limit at which a warning event is emitted. Omit to preserve the current threshold.
-          format: int64
-          minimum: 1
-          maximum: 100
-        window_kind:
+          description: The canonical skill name.
+          maxLength: 64
+        summary:
           type: string
-          description: UTC calendar window the budget covers. Omit to preserve the current window.
-          enum:
-            - daily
-            - weekly
-            - monthly
+          description: The optional skill summary.
+          maxLength: 1024
       required:
         - id
+        - name
+        - display_name
     UpdateToolsetForm:
       type: object
       properties:
@@ -59980,6 +60356,26 @@ components:
           $ref: '#/components/schemas/Asset'
       required:
         - asset
+    UploadSkillContentPayload:
+      type: object
+      properties:
+        content:
+          type: string
+          description: Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.
+        raw_sha256:
+          type: string
+          description: Lowercase SHA-256 of the raw content.
+          pattern: ^[0-9a-f]{64}$
+        schema_version:
+          type: string
+          description: Contract version.
+          enum:
+            - hook.skill-content.v1
+      description: Content for a skill manifest requested by a prior hook ingest response.
+      required:
+        - schema_version
+        - raw_sha256
+        - content
     UpsertAllowedOriginForm:
       type: object
       properties:
@@ -60018,10 +60414,10 @@ components:
           description: Whether the integration should be active.
         external_organization_id:
           type: string
-          description: Provider organization identifier. Required for anthropic_compliance.
+          description: Provider organization identifier. Required for anthropic_compliance and codex_compliance.
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
       required:
         - provider
         - api_key
@@ -60631,7 +61027,7 @@ tags:
   - name: admin
     description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: agent
-    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an org-scoped API key carrying the 'agent' scope.
+    description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so existing installs keep working during the transition.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
   - name: assets
@@ -60716,12 +61112,12 @@ tags:
     description: Manage risk analysis policies and view scan results.
   - name: skills
     description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
-  - name: spendRules
-    description: Manage budget rules, view budget events, and preview actor targeting.
   - name: telemetry
     description: Fetch telemetry data for tools in Gram.
   - name: templates
     description: Manages re-usable prompt templates and higher-order tools for a project.
+  - name: tokenExchange
+    description: 'Device-agent token exchange: trade an org-scoped install credential (an API key with the ''agent'' scope) plus a vouched user email for a long-lived, per-user API key scoped for the device agent.'
   - name: tools
     description: Dashboard API for interacting with tools.
   - name: toolsets

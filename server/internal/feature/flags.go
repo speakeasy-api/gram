@@ -11,8 +11,12 @@ const (
 	// create or update nl-type risk policies and have them enforced. The
 	// dashboard gates the matching UI behind the same key.
 	FlagPromptPolicies Flag = "gram-prompt-policies"
+	// FlagRiskRecommendedScopes gates per-project composition of recommended
+	// per-category detection scopes. Default off during rollout.
+	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
 
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
+	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its

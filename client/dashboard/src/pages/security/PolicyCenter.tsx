@@ -1689,39 +1689,6 @@ function ActionBadge({ action }: { action: PolicyAction }): JSX.Element {
   );
 }
 
-/** One session-part as a selectable card (Scope step). */
-export function ScopeCard({
-  type,
-  checked,
-  onToggle,
-}: {
-  type: PolicyMessageType;
-  checked: boolean;
-  onToggle: (checked: boolean) => void;
-}): JSX.Element {
-  const meta = POLICY_MESSAGE_TYPE_META[type];
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
-        checked
-          ? "border-foreground bg-muted/40"
-          : "border-border hover:bg-muted/30",
-      )}
-    >
-      <Checkbox
-        checked={checked}
-        onCheckedChange={(next) => onToggle(!!next)}
-        className="mt-0.5"
-      />
-      <div className="min-w-0">
-        <div className="text-sm font-medium">{meta.label}</div>
-        <div className="text-muted-foreground text-xs">{meta.description}</div>
-      </div>
-    </label>
-  );
-}
-
 export function ActionPicker({
   formAction,
   setFormAction,

@@ -119,6 +119,48 @@ func TestLogs_PersistsClaudeOTELRecordWithoutSessionID(t *testing.T) {
 	require.NotContains(t, logs[0].Attributes, "conversation")
 }
 
+// A canonical hooks session.started carrying only the device hostname (an
+// org-scoped ingest key with no self-reported email) seeds the session cache,
+// and the Claude OTEL path stamps that hostname onto the session's rows —
+// which is what lets the email dimension fall back to the device for
+// company-credential sessions that emit no user identity.
+func TestLogs_StampsCachedHostnameOnClaudeRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	sessionID := "claude-hostname-fallback-" + uuid.NewString()
+	hostname := "ci-runner-hostname-test"
+
+	payload := canonicalIngestPayload("claude", "session.started", sessionID)
+	payload.Source.Hostname = &hostname
+	_, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	err = ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(timestamp)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("prompt.id", "prompt-hostname-1"),
+				strAttr("event.name", "api_request"),
+				strAttr("model", "claude-opus-4-8"),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), claudeOTELLogsURN, timestamp, 1)
+	require.Contains(t, logs[0].Attributes, "hostname")
+	require.Contains(t, logs[0].Attributes, hostname)
+}
+
 func TestLogs_CodexPayloadContinuesThroughUsagePath(t *testing.T) {
 	t.Parallel()
 
@@ -370,7 +412,7 @@ func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstan
 	t.Helper()
 
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
-	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), ti.chConn, enabled, enabled, nil)
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, enabled, enabled, nil)
 	return telemetryrepo.New(ti.chConn)
 }
 

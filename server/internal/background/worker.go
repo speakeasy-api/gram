@@ -148,9 +148,11 @@ func ForDeploymentProcessing(
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
 		Publishers: &Publishers{
-			PresidioAnalysis:    gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
-			GitleaksAnalysis:    gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
-			CustomRulesAnalysis: gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+			PresidioAnalysis:        gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
+			GitleaksAnalysis:        gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+			PromptInjectionAnalysis: gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
+			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
+			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 		},
 	}
 }
@@ -335,6 +337,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
+	temporalWorker.RegisterActivity(activities.MaybeSendOpenRouterCreditsAlerts)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
@@ -360,6 +363,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
 	temporalWorker.RegisterActivity(activities.MarkMessagesAnalyzed)
 	temporalWorker.RegisterActivity(activities.ReconcileExclusion)
+	temporalWorker.RegisterActivity(activities.ReconcileSkillObservations)
+	temporalWorker.RegisterActivity(activities.ListProjectsWithPendingSkillObservations)
 	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
@@ -425,6 +430,8 @@ func NewTemporalWorker(
 	// Risk analysis coordinator workflow
 	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
+	temporalWorker.RegisterWorkflow(ReconcileSkillObservationsWorkflow)
+	temporalWorker.RegisterWorkflow(SkillObservationReconciliationSweepWorkflow)
 	temporalWorker.RegisterWorkflow(RiskPolicyCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
@@ -517,6 +524,10 @@ func NewTemporalWorker(
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add spend rule evaluation schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddSkillObservationReconciliationSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add skill observation reconciliation schedule", attr.SlogError(err))
 	}
 
 	if opts.PluginPublisher != nil {

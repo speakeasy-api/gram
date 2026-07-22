@@ -1,5 +1,40 @@
 # dashboard
 
+## 0.92.0
+
+### Minor Changes
+
+- ce5571d: Rename and edit captured skills, preserve immutable version lineage, and expose curation controls in the dashboard.
+- 7728555: Playground: tunneled MCP servers can now be selected and chatted with (behind the `gram-tunneled-mcp` flag).
+
+### Patch Changes
+
+- 792f487: Fix a crash in the policy scope traffic preview when a matched message produced no highlight spans.
+- 2d80662: Add a "What's shipped this week on the platform?" suggestion to the chat landing page and the project assistant's slash-command menu. Picking it starts a session that asks the assistant to check the changelog for the week's platform releases.
+- eacabda: Make the cost explorer's breakdown machinery treat the "(unset)" bucket as a first-class group everywhere, fixing the hidden Account Type breakdown on drilled slices that mix classified and unclassified spend (DNO-425).
+
+  Server: telemetry.query's dimension_values now keeps the '' bucket for every groupable dimension — it is the "(unset)" row a breakdown by that dimension renders, so consumers can count it. Only dimensions where '' means "not applicable" (the Claude attribution cuts and query_source, flagged in the dimension registry) still drop it. Empty role/group arrays likewise surface as the "(unset)" bucket.
+
+  Dashboard: the breakdown axis is resolved against the slice's actual group counts by one shared resolver, at drill time (using the clicked row's dimension values) and on load — a division whose spend all sits in one department lands directly on its users with no Department selector, while a division splitting into a named department plus department-less spend keeps the Department cut (previously hidden). The entity/detail query no longer depends on the axis (removing an internal resolution cycle), grouped queries wait for the resolved axis instead of fetching twice, a `?by=` naming a pinned or un-splittable dimension falls back to the level's default, and the URL is rewritten in place whenever the rendered axis diverges from `?by=` so links always reflect the view.
+
+- 8571971: Add the standard toolbar search box to the costs breakdown section, filtering the visible breakdown rows (or sessions) client-side while keeping the preset breakdown-axis controls in place.
+- afdca04: Polish the Device Agent install page: replace the distorted Linux mascot with the official Tux, add an MDM rollout recommendation, and drop the preview badges on the page title and sidebar nav item.
+- 86f8a76: Serve the project homepage's hook/agent-view metrics (Total Spend, Sessions, Top Users, Most Agent Sessions by User, Most Used Agents) from the pre-aggregated `attribute_metrics_summaries` table via `telemetry.query` instead of paginating every user through `telemetry.searchUsers` (which scanned raw `telemetry_logs`). This is the same source the Costs page uses, so the homepage and Costs figures now agree. The MCP-hosting fallback view is unchanged.
+- 1a04494: Fall back to the device hostname on the user cost breakdown when a session carries no email. The Go hooks report the machine's hostname on every event; it now rides the session cache onto Claude OTEL cost rows, and the `email` telemetry dimension groups identity-less spend per device instead of pooling it all into one bucket. Only sessions with neither email nor hostname remain under "Team-wide API Usage".
+- 6ea128d: feat: surface issuer setup documentation when creating clients. `remote_session_issuer` records now expose a `client_setup_documentation_url`, settable on create and update across the project-scoped, org-admin, and platform-admin (global) issuer surfaces. The dashboard edits it on the issuer Settings tab and shows it on the Overview tab alongside the discovered RFC 8414 `service_documentation`. Both are linked from the New Client sheet — as **Client Setup Documentation** and **Service Documentation** — so customers can set up an OAuth client with the provider themselves, owning its credentials, access, and rate limits rather than sharing a Gram-owned client. `client_setup_documentation_url` must be an absolute `http(s)` URL (validated with `urls.IsAbsoluteHTTP`, since it is rendered as a link); an empty string clears it.
+- e5800a5: Flag inactive MCP servers on the Distribute MCP listing. A new `telemetry.getMcpServerActivity` endpoint reports per-server tool-call activity, and each card/row now shows a subtle indicator when a server has never received a tool call and a warning when it has had no tool calls in the last two weeks.
+- 72855da: Normalize provider names and product-surface labels across reporting, agent sessions, tool logs, and cost views. Anthropic compliance imports now persist canonical Claude desktop/web source slugs, while historical source aliases remain filterable.
+- 223394c: Add a search bar to the plugin detail page that filters the plugin's MCP servers, assignments, and skills, with distinct empty states for "nothing added yet" vs "no search matches".
+- 0f7a061: Fix dashboard React warnings caused by nested log controls, duplicate risk-rule keys, command-palette focus restoration, and unsupported Moonshine button children.
+- 1a04494: Label the empty user bucket on cost breakdowns as "Team-wide API Usage" instead of "(unset)". Claude Code sessions authenticated with a company API key or gateway emit no user identity, so their pooled spend is the shared team account's usage, not a data gap. The label applies everywhere the user dimension renders — the cost table, the Top spenders widget (which now includes the bucket instead of hiding it), the drill-in profile, breadcrumbs, and the billing token-usage breakdown — while other dimensions keep "(unset)".
+- 1dc4aec: Upgrade recharts from v2 to v3 in the Elements chart plugins, migrating off the deprecated Cell component with no visual changes.
+
+## 0.91.1
+
+### Patch Changes
+
+- 50289f1: Show the number of active skills carried by each plugin on the Plugins page.
+
 ## 0.91.0
 
 ### Minor Changes

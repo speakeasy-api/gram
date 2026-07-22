@@ -505,6 +505,83 @@ class _WarmupFailExecutor:
         self.shutdowns.append((wait, cancel_futures))
 
 
+class _WarmupSuccessExecutor:
+    """Executor stand-in whose warmup tasks complete immediately."""
+
+    def __init__(self):
+        self.shutdowns: list[tuple[bool, bool]] = []
+
+    def submit(self, fn, *args):
+        future: Future = Future()
+        future.set_result(1)
+        return future
+
+    def shutdown(self, wait=True, cancel_futures=False):
+        self.shutdowns.append((wait, cancel_futures))
+
+
+async def test_pool_create_constructs_executor_off_event_loop(monkeypatch):
+    event_loop_thread = threading.current_thread()
+    constructor_thread: list[threading.Thread] = []
+
+    def build_executor(**kwargs):
+        constructor_thread.append(threading.current_thread())
+        return _WarmupSuccessExecutor()
+
+    monkeypatch.setattr(
+        "pystreams.risk.scanner.ProcessPoolExecutor",
+        build_executor,
+    )
+
+    scanner = await ProcessPoolScanner.create(max_workers=1)
+    await scanner.aclose()
+
+    assert constructor_thread
+    assert constructor_thread[0] is not event_loop_thread
+
+
+async def test_pool_create_reaps_executor_when_cancelled_during_construction(
+    monkeypatch,
+):
+    executor = _WarmupSuccessExecutor()
+    constructor_started = threading.Event()
+    release_constructor = threading.Event()
+
+    def build_executor(**kwargs):
+        constructor_started.set()
+        release_constructor.wait()
+        return executor
+
+    monkeypatch.setattr(
+        "pystreams.risk.scanner.ProcessPoolExecutor",
+        build_executor,
+    )
+
+    scopes: list[anyio.CancelScope] = []
+    finished = anyio.Event()
+
+    async def create_scanner() -> None:
+        with anyio.CancelScope() as scope:
+            scopes.append(scope)
+            try:
+                await ProcessPoolScanner.create(max_workers=1)
+            finally:
+                finished.set()
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(create_scanner)
+        with anyio.fail_after(2):
+            while not constructor_started.is_set():  # noqa: ASYNC110
+                await anyio.sleep(0.01)
+
+        scopes[0].cancel()
+        release_constructor.set()
+        with anyio.fail_after(2):
+            await finished.wait()
+
+    assert executor.shutdowns, "executor was not shut down after cancellation"
+
+
 async def test_pool_create_reaps_workers_when_warmup_fails(monkeypatch):
     executor = _WarmupFailExecutor()
     monkeypatch.setattr(

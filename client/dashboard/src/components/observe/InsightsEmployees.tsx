@@ -7,8 +7,8 @@ import {
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { useInsightsState } from "@/components/insights-context";
-import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -445,10 +445,7 @@ export function InsightsEmployeesContent(): JSX.Element {
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
           <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">Employee Enrollment</h1>
-                <ReleaseStageBadge stage="preview" />
-              </div>
+              <h1 className="text-xl font-semibold">Employee Enrollment</h1>
               <p className="text-muted-foreground text-sm">
                 Track platform adoption for organization members in this project
                 over {rangeLabel}. Employees with tool or agent session activity
@@ -699,7 +696,9 @@ function EmployeeTable({
         header: (
           <span className="flex items-center gap-1">
             Accounts
-            <SimpleTooltip tooltip="The AI provider accounts (Claude, Codex, Cursor) each employee has been seen using, labelled team or personal. Accounts are linked automatically from tool activity, so this stays blank until an employee is seen using a recognized account.">
+            <SimpleTooltip
+              tooltip={`The AI provider accounts (Claude, Codex, Cursor) each employee has been seen using, labelled team or personal. Accounts are linked automatically from tool activity, so this stays blank until an employee is seen using a recognized account. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`}
+            >
               <Info className="text-muted-foreground size-3 shrink-0" />
             </SimpleTooltip>
           </span>

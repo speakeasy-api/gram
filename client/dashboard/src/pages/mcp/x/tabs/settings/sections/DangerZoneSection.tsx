@@ -272,16 +272,12 @@ function ServerAvailabilityDialog({
             disabled={isLoading}
             onClick={onConfirm}
           >
-            {isLoading ? (
-              <>
-                <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
-                </Button.LeftIcon>
-                <Button.Text>Saving</Button.Text>
-              </>
-            ) : (
-              <Button.Text>Continue</Button.Text>
+            {isLoading && (
+              <Button.LeftIcon>
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              </Button.LeftIcon>
             )}
+            <Button.Text>{isLoading ? "Saving" : "Continue"}</Button.Text>
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

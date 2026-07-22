@@ -15,6 +15,7 @@ function version(id: string): SkillVersion {
     frontmatter: {},
     specValid: true,
     validationErrors: [],
+    seenCount: 0,
   };
 }
 

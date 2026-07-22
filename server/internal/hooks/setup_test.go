@@ -143,13 +143,13 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
-	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
-	spendGate := spendrules.NewGate(logger, spendGateCache)
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	serverURL, err := url.Parse("https://localhost:8080")
 	require.NoError(t, err)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore, serverURL)
+	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
+	spendGate := spendrules.NewGate(logger, spendGateCache)
 	svc := NewService(
 		logger,
 		conn,
@@ -168,7 +168,6 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		spendGate,
 		shadowMCPClient,
 		chatWriter,
-		serverURL,
 		siteURL,
 		"test-jwt-secret",
 	)

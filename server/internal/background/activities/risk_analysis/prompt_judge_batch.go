@@ -9,8 +9,12 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -80,7 +84,7 @@ func judgeFanout(
 	}
 }
 
-func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, outOfPolicyScope []bool) [][]scanners.Finding {
+func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
@@ -89,7 +93,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 
 	indices := make([]int, 0, len(messages))
 	for i := range messages {
-		if len(outOfPolicyScope) > 0 && outOfPolicyScope[i] {
+		if !masks.InScope(i, categories.CategoryPromptPolicy) {
 			continue
 		}
 		indices = append(indices, i)
@@ -109,6 +113,8 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		return out
 	}
 
+	a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices)
+
 	judgeFanout(
 		ctx, a.judge,
 		args.OrganizationID, args.ProjectID.String(), policy.Prompt.String, cfg,
@@ -125,4 +131,46 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 
 func (a *AnalyzeBatch) projectFlagEnabled(ctx context.Context, orgID string, projectID uuid.UUID, flag feature.Flag) bool {
 	return policyflags.ProjectFlagEnabled(ctx, a.logger, repo.New(a.db), a.flags, orgID, projectID, flag)
+}
+
+func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int) {
+	requestID, err := uuid.NewV7()
+	if err != nil {
+		a.logger.WarnContext(ctx, "failed to generate prompt policy scan request id", attr.SlogError(err))
+		return
+	}
+
+	createdAt := time.Now().UTC().Format(time.RFC3339)
+	publishResults := make([]gcp.PublishResult, 0, len(indices))
+	for _, idx := range indices {
+		msg := messages[idx]
+		jm := batchJudgeMessage(msg)
+		toolCalls := make([]*riskv1.PromptPolicyAnalysis_ToolCall, 0, len(jm.ToolCalls))
+		for _, call := range jm.ToolCalls {
+			toolCalls = append(toolCalls, riskv1.PromptPolicyAnalysis_ToolCall_builder{
+				Name:      &call.ToolName,
+				Arguments: &call.Arguments,
+			}.Build())
+		}
+
+		publishResults = append(publishResults, a.promptPolicyPub.Publish(ctx, riskv1.PromptPolicyAnalysis_builder{
+			RequestId:         new(requestID.String()),
+			ChatMessageId:     new(msg.ID.String()),
+			ProjectId:         new(args.ProjectID.String()),
+			OrganizationId:    &args.OrganizationID,
+			RiskPolicyId:      new(args.RiskPolicyID.String()),
+			RiskPolicyVersion: &args.PolicyVersion,
+			CreatedAt:         &createdAt,
+
+			Content:     new(msg.Content),
+			UserId:      &msg.UserID,
+			Prompt:      &policy.Prompt.String,
+			ModelConfig: policy.ModelConfig,
+			MessageType: new(jm.Type),
+			Body:        &jm.Body,
+			ToolName:    &jm.ToolName,
+			ToolCalls:   toolCalls,
+		}.Build()))
+	}
+	drainPublishAcks(ctx, a.logger, "failed to publish prompt policy scan request", publishResults)
 }

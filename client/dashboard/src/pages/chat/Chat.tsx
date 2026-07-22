@@ -34,6 +34,7 @@ import {
 } from "@gram/client/react-query/listChats.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
+import { resolveChatOwner } from "@/lib/chat-owner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   useHideInsightsDock,
@@ -642,9 +643,10 @@ function RecentRowIcon({
   externalUserId?: string;
 }): ReactElement {
   const { data: membersData } = useMembers();
-  const member = membersData?.members.find(
-    (m) => m.id === userId || (!!externalUserId && m.email === externalUserId),
-  );
+  const member = resolveChatOwner(membersData?.members, {
+    userId,
+    externalUserId,
+  });
 
   if (member) {
     const display = member.name || member.email;

@@ -14,6 +14,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export const Channel = {
   Plugin: "plugin",
+  Assistant: "assistant",
 } as const;
 /**
  * The distribution channel.
@@ -21,9 +22,17 @@ export const Channel = {
 export type Channel = ClosedEnum<typeof Channel>;
 
 /**
- * An active plugin distribution of a project skill.
+ * An active plugin or assistant distribution of a project skill.
  */
 export type SkillDistribution = {
+  /**
+   * The assistant that carries the skill.
+   */
+  assistantId?: string | undefined;
+  /**
+   * The name of the assistant that carries the skill.
+   */
+  assistantName?: string | undefined;
   /**
    * The distribution channel.
    */
@@ -47,11 +56,11 @@ export type SkillDistribution = {
   /**
    * The plugin that carries the skill.
    */
-  pluginId: string;
+  pluginId?: string | undefined;
   /**
    * The name of the plugin that carries the skill.
    */
-  pluginName: string;
+  pluginName?: string | undefined;
   /**
    * The project that owns the distribution.
    */
@@ -89,6 +98,8 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    assistant_id: z.optional(z.string()),
+    assistant_name: z.optional(z.string()),
     channel: Channel$inboundSchema,
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -97,8 +108,8 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
     created_by_user_id: z.string(),
     id: z.string(),
     pinned_version_id: z.optional(z.string()),
-    plugin_id: z.string(),
-    plugin_name: z.string(),
+    plugin_id: z.optional(z.string()),
+    plugin_name: z.optional(z.string()),
     project_id: z.string(),
     resolved_version_id: z.string(),
     skill_display_name: z.string(),
@@ -111,6 +122,8 @@ export const SkillDistribution$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "assistant_id": "assistantId",
+      "assistant_name": "assistantName",
       "created_at": "createdAt",
       "created_by_user_id": "createdByUserId",
       "pinned_version_id": "pinnedVersionId",

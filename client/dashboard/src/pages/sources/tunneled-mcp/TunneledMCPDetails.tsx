@@ -724,15 +724,11 @@ function NameSection({
               onClick={() => void handleSave()}
             >
               {update.isPending ? (
-                <>
-                  <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
-                  </Button.LeftIcon>
-                  <Button.Text>Saving</Button.Text>
-                </>
-              ) : (
-                <Button.Text>Save</Button.Text>
-              )}
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+              ) : null}
+              <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>
             </Button>
           </RequireScope>
         </Stack>
@@ -868,15 +864,13 @@ function TunnelKeySection({
                   disabled={rotate.isPending}
                 >
                   {rotate.isPending ? (
-                    <>
-                      <Button.LeftIcon>
-                        <Loader2 className="size-4 animate-spin" />
-                      </Button.LeftIcon>
-                      <Button.Text>Rotating</Button.Text>
-                    </>
-                  ) : (
-                    <Button.Text>Rotate</Button.Text>
-                  )}
+                    <Button.LeftIcon>
+                      <Loader2 className="size-4 animate-spin" />
+                    </Button.LeftIcon>
+                  ) : null}
+                  <Button.Text>
+                    {rotate.isPending ? "Rotating" : "Rotate"}
+                  </Button.Text>
                 </Button>
               </Dialog.Footer>
             </>

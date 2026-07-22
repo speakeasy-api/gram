@@ -242,6 +242,8 @@ type Plugin struct {
 	IsDefault *bool
 	// Number of active servers in this plugin.
 	ServerCount *int64
+	// Number of active skills in this plugin.
+	SkillCount *int64
 	// Number of role/user assignments.
 	AssignmentCount *int64
 	// Servers included in this plugin.
