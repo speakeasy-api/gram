@@ -27,7 +27,8 @@ type Source[T any] interface {
 	// UpperBound returns the exclusive upper bound for pulls ending at
 	// endTime, e.g. a provider finalization watermark like Anthropic's
 	// data_refreshed_at. Sources whose data is immediately final return
-	// endTime.
+	// endTime. A zero time means the provider has no finalized data yet;
+	// the poller treats the run as a successful no-op.
 	UpperBound(ctx context.Context, endTime time.Time) (time.Time, error)
 	// FetchPage fetches one response page for the fixed window. pageToken is
 	// empty for the first request and otherwise the opaque value returned by
@@ -86,6 +87,12 @@ func (p *Poller[T]) Do(ctx context.Context) error {
 	upperBound, err := p.upperBound(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch %s upper bound: %w", p.Schedule, err)
+	}
+	// A zero upper bound means the source has no finalized data to pull yet.
+	// Leave the watermark untouched and let the run succeed so the schedule
+	// retries at its normal cadence instead of burning failure retries.
+	if upperBound.IsZero() {
+		return nil
 	}
 
 	checkpoint := p.State.Checkpoint
