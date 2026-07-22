@@ -13,9 +13,14 @@ var sourceAliases = map[string][]string{
 	"claude":          {"claude", "claude-desktop", "claude-chat-desktop", "Claude Chat Desktop"},
 	"claude-chat-web": {"claude-chat-web", "Claude Chat Web"},
 	"claude-code":     {"claude-code", "ClaudeCode"},
-	"cowork":          {"cowork", "claude-cowork", "Claude Cowork"},
-	"cursor":          {"cursor", "Cursor"},
-	"codex":           {"codex", "Codex"},
+	// Claude Code Desktop is its own surface, distinct from the claude-code
+	// CLI and from cowork. Note: sessions captured before surface resolution
+	// landed stored this adapter slug for cowork sessions too — those
+	// historical rows are indistinguishable from genuine CCD by source alone.
+	"claude-code-desktop": {"claude-code-desktop"},
+	"cowork":              {"cowork", "claude-cowork", "Claude Cowork"},
+	"cursor":              {"cursor", "Cursor"},
+	"codex":               {"codex", "Codex"},
 }
 
 // rawToCanonicalSource is the reverse of sourceAliases: each known raw value

@@ -115,8 +115,12 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		}
 
 		completeMetadata := SessionMetadata{
-			SessionID:           session.SessionID,
-			ServiceName:         conv.Default(session.ServiceName, cached.ServiceName),
+			SessionID: session.SessionID,
+			// Surface-specificity merge, not plain first-non-empty: the OTEL
+			// stream reports "claude-code" for the CLI and Claude Code Desktop
+			// alike, so a cached desktop adapter slug must survive this batch,
+			// while an incoming "cowork" upgrades whatever was cached.
+			ServiceName:         preferClaudeServiceName(session.ServiceName, cached.ServiceName),
 			UserEmail:           userEmail,
 			UserID:              userID,
 			Provider:            providerAnthropic,
@@ -379,9 +383,19 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				logAttrs[attr.ProjectIDKey] = projectID
 				logAttrs[attr.OrganizationIDKey] = orgID
 				logAttrs[attr.ResourceURNKey] = claudeOTELLogsURN
-				logAttrs[attr.HookSourceKey] = "claude-code"
 				sessionID := stringAttr(logAttrs, attribute.Key("session.id"))
 				sessionMeta := attributionBySession[sessionID]
+				// Label the row with the session's product surface — cowork,
+				// claude-code-desktop, or claude-code. The resource's
+				// service.name is the source of truth where it disambiguates
+				// (cowork self-identifies); the session's merged service name
+				// carries the desktop adapter slug that separates CCD from
+				// the CLI, both of which report "claude-code" over OTEL.
+				surface := conv.Default(
+					claudeSurfaceFromServiceName(preferClaudeServiceName(resourceServiceName, sessionMeta.ServiceName)),
+					"claude-code",
+				)
+				logAttrs[attr.HookSourceKey] = surface
 				stampAccountAttribution(logAttrs, sessionMeta)
 				if shouldTriggerClaudePromptCorrelation(logAttrs) {
 					correlationSessionIDs[sessionID] = struct{}{}
@@ -424,7 +438,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				timestamp, observedTimestamp := otelLogTimestamps(logRecord)
 				logParams := telemetry.WithOTELMetadata(telemetry.LogParams{
 					Timestamp:  timestamp,
-					ToolInfo:   claudeOTELLogToolInfo(orgID, parsedProjectID.String()),
+					ToolInfo:   claudeOTELLogToolInfo(surface, orgID, parsedProjectID.String()),
 					UserInfo:   userInfo,
 					Attributes: logAttrs,
 				}, observedTimestamp, resourceAttrs)
@@ -496,9 +510,13 @@ func (s *Service) scheduleClaudePromptCorrelation(ctx context.Context, projectID
 	}
 }
 
-func claudeOTELLogToolInfo(orgID string, projectID string) telemetry.ToolInfo {
+// claudeOTELLogToolInfo labels an OTEL log row with the session's product
+// surface (claude-code or cowork). The URN stays claude-code:otel:logs for
+// every surface — it identifies the stream's provenance, and the session and
+// cost aggregations anchor their Claude predicates on it.
+func claudeOTELLogToolInfo(surface string, orgID string, projectID string) telemetry.ToolInfo {
 	return telemetry.ToolInfo{
-		Name:           "claude-code",
+		Name:           surface,
 		OrganizationID: orgID,
 		ProjectID:      projectID,
 		ID:             "",
