@@ -69,11 +69,12 @@ func TestSummarizeUsesSuccessfulRunMedianAndReportsErrors(t *testing.T) {
 
 	set := validTestBenchSet()
 	set.Cases = append(set.Cases, testCase{ID: "second", ScoreMin: 0.7, ScoreMax: 0.8})
-	firstScore := 0.5
+	firstLowScore := 0.4
+	firstHighScore := 0.6
 	secondScore := 0.75
 	results := []result{
-		{RequestedModel: efficacy.JudgeModel, CaseID: "case", ScoreMin: 0.4, ScoreMax: 0.6, Score: &firstScore, Latency: time.Second, Tokens: 100},
-		{RequestedModel: efficacy.JudgeModel, CaseID: "case", ScoreMin: 0.4, ScoreMax: 0.6, Score: &firstScore, Latency: 2 * time.Second, Tokens: 100},
+		{RequestedModel: efficacy.JudgeModel, CaseID: "case", ScoreMin: 0.4, ScoreMax: 0.6, Score: &firstLowScore, Latency: time.Second, Tokens: 100},
+		{RequestedModel: efficacy.JudgeModel, CaseID: "case", ScoreMin: 0.4, ScoreMax: 0.6, Score: &firstHighScore, Latency: 2 * time.Second, Tokens: 100},
 		{RequestedModel: efficacy.JudgeModel, CaseID: "second", ScoreMin: 0.7, ScoreMax: 0.8, Score: &secondScore, Latency: 3 * time.Second, Tokens: 100},
 		{RequestedModel: efficacy.JudgeModel, CaseID: "second", ScoreMin: 0.7, ScoreMax: 0.8, Score: nil, Latency: 4 * time.Second, Error: "completion failed"},
 	}
@@ -86,6 +87,18 @@ func TestSummarizeUsesSuccessfulRunMedianAndReportsErrors(t *testing.T) {
 	require.Equal(t, 1, summary.Errors)
 	require.Equal(t, 2*time.Second, summary.P50)
 	require.Equal(t, 3*time.Second, summary.P95)
+}
+
+func TestLoadBaselineRejectsMixedModels(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "baseline.json")
+	b, err := json.Marshal([]result{{RequestedModel: "model-a"}, {RequestedModel: "model-b"}})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, b, 0o600))
+
+	_, err = loadBaseline(path)
+	require.EqualError(t, err, "baseline must contain exactly one requested model, found 2")
 }
 
 func validTestBenchSet() benchSet {

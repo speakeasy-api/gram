@@ -136,7 +136,7 @@ func main() {
 	}
 
 	if *baselineFile != "" {
-		baseline, err := loadResults(*baselineFile)
+		baseline, err := loadBaseline(*baselineFile)
 		if err != nil {
 			exitf("load baseline: %v", err)
 		}
@@ -451,6 +451,23 @@ func loadResults(path string) ([]result, error) {
 	var results []result
 	if err := json.Unmarshal(b, &results); err != nil {
 		return nil, err
+	}
+	return results, nil
+}
+
+func loadBaseline(path string) ([]result, error) {
+	results, err := loadResults(path)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, 1)
+	for _, res := range results {
+		if res.RequestedModel != "" && !slices.Contains(models, res.RequestedModel) {
+			models = append(models, res.RequestedModel)
+		}
+	}
+	if len(models) != 1 {
+		return nil, fmt.Errorf("baseline must contain exactly one requested model, found %d", len(models))
 	}
 	return results, nil
 }
