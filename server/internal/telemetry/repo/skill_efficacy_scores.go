@@ -277,7 +277,7 @@ func (q *Queries) QuerySkillInsights(ctx context.Context, arg QuerySkillInsights
 	if err != nil {
 		return nil, fmt.Errorf("querying skill insights: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var result []SkillInsightBucket
 	for rows.Next() {
