@@ -41,3 +41,13 @@ func DeleteIssuerOrganizationRemoteSessionIssuersPath() string {
 func MoveIssuerOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.move"
 }
+
+// GetIssuerMigratePreflightOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service getIssuerMigratePreflight HTTP endpoint.
+func GetIssuerMigratePreflightOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.getMigratePreflight"
+}
+
+// MigrateIssuerOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service migrateIssuer HTTP endpoint.
+func MigrateIssuerOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.migrate"
+}

@@ -18,6 +18,7 @@ import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
 import { useSession } from "@/contexts/Auth";
+import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
   INSIGHTS_DOCK_VT_CLASS,
@@ -763,12 +764,13 @@ export function InsightsProvider({
     }) => {
       if (!userId && !externalUserId) return undefined;
       // Chats started from the dashboard itself have no `userId` at capture
-      // time and stash the caller's email in `externalUserId` instead — fall
-      // back to an email match so those still resolve to a member.
-      const member = membersData?.members.find(
-        (m) =>
-          m.id === userId || (!!externalUserId && m.email === externalUserId),
-      );
+      // time and stash the caller's email in `externalUserId` instead —
+      // resolveChatOwner falls back to a case-insensitive email match so
+      // those still resolve to a member.
+      const member = resolveChatOwner(membersData?.members, {
+        userId,
+        externalUserId,
+      });
       return (
         member && {
           name: member.name,
@@ -795,7 +797,7 @@ export function InsightsProvider({
       externalUserId?: string;
     }) => {
       if (!userId && !externalUserId) return true;
-      return userId === user.id || externalUserId === user.email;
+      return userId === user.id || emailsMatch(externalUserId, user.email);
     },
     [user.id, user.email],
   );

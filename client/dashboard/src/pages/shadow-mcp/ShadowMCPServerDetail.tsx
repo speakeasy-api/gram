@@ -10,6 +10,7 @@ import {
   type ShadowMCPPolicy,
 } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
 import {
+  eligibleShadowMCPAllowRulePolicies,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusDescription,
@@ -17,6 +18,7 @@ import {
   shadowMCPPolicyState,
   type ShadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
+import { ALLOW_RULE_POLICY_REQUIRED } from "@/components/shadow-mcp/shadowMCPInventoryActionItems";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
@@ -249,45 +251,62 @@ function TopUsersTable({
 }
 
 function DetailActionButtons({
+  allowRuleUnavailableMessage,
+  canManageAllowRules,
   disabled,
   onOpenAction,
   server,
 }: {
+  allowRuleUnavailableMessage: string;
+  canManageAllowRules: boolean;
   disabled: boolean;
   onOpenAction: (mode: InventoryActionMode) => void;
   server: ShadowMCPInventoryServer;
 }) {
   const primaryMode = actionModeForServer(server);
+  const primaryRequiresAllowRule =
+    primaryMode === "add" || primaryMode === "edit";
+  const hasVisibleAllowRuleAction =
+    primaryRequiresAllowRule || server.access === "allowed";
+  const primaryDisabled =
+    disabled || (primaryRequiresAllowRule && !canManageAllowRules);
 
   return (
-    <div className="flex items-center gap-2">
-      <Button
-        disabled={disabled}
-        onClick={() => onOpenAction(primaryMode)}
-        variant="primary"
-      >
-        <Button.Text>{actionLabel(primaryMode)}</Button.Text>
-      </Button>
-      {server.access === "allowed" && primaryMode !== "edit" && (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
         <Button
-          disabled={disabled}
-          onClick={() => onOpenAction("edit")}
-          variant="tertiary"
+          disabled={primaryDisabled}
+          onClick={() => onOpenAction(primaryMode)}
+          variant="primary"
         >
-          <Button.Text>{actionLabel("edit")}</Button.Text>
+          <Button.Text>{actionLabel(primaryMode)}</Button.Text>
         </Button>
-      )}
-      {server.access === "allowed" && (
-        <Button
-          disabled={disabled}
-          onClick={() => onOpenAction("delete")}
-          variant="tertiary"
-        >
-          <Button.LeftIcon>
-            <Icon name="trash-2" />
-          </Button.LeftIcon>
-          <Button.Text>Delete Rule</Button.Text>
-        </Button>
+        {server.access === "allowed" && primaryMode !== "edit" && (
+          <Button
+            disabled={disabled || !canManageAllowRules}
+            onClick={() => onOpenAction("edit")}
+            variant="tertiary"
+          >
+            <Button.Text>{actionLabel("edit")}</Button.Text>
+          </Button>
+        )}
+        {server.access === "allowed" && (
+          <Button
+            disabled={disabled}
+            onClick={() => onOpenAction("delete")}
+            variant="tertiary"
+          >
+            <Button.LeftIcon>
+              <Icon name="trash-2" />
+            </Button.LeftIcon>
+            <Button.Text>Delete Rule</Button.Text>
+          </Button>
+        )}
+      </div>
+      {hasVisibleAllowRuleAction && !canManageAllowRules && (
+        <Type muted small>
+          {allowRuleUnavailableMessage}
+        </Type>
       )}
     </div>
   );
@@ -303,10 +322,15 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const policyState = policiesQuery.isError
     ? "unavailable"
     : shadowMCPPolicyState(policiesQuery.data?.policies);
-  const shadowMCPPolicies: ShadowMCPPolicy[] =
-    policiesQuery.data?.policies.filter((policy) =>
-      policy.sources.includes("shadow_mcp"),
-    ) ?? [];
+  let shadowMCPPolicies: ShadowMCPPolicy[] = [];
+  if (!policiesQuery.isError) {
+    shadowMCPPolicies = eligibleShadowMCPAllowRulePolicies(
+      policiesQuery.data?.policies,
+    );
+  }
+  const allowRuleUnavailableMessage = policiesQuery.isError
+    ? "Policy status is unavailable. Refresh the page to try again."
+    : ALLOW_RULE_POLICY_REQUIRED;
   const queryEnabled = project.id.length > 0 && serverSlug.length > 0;
   const [usersCursor, setUsersCursor] = useState<string | undefined>(undefined);
   const [userPages, setUserPages] = useState<UsersPage[]>([]);
@@ -556,6 +580,8 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             <Page.Section.CTA>
               {server && (
                 <DetailActionButtons
+                  allowRuleUnavailableMessage={allowRuleUnavailableMessage}
+                  canManageAllowRules={shadowMCPPolicies.length > 0}
                   disabled={isSubmitting}
                   onOpenAction={openAction}
                   server={server}
@@ -587,6 +613,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     }}
                     onSubmit={submitInventoryAction}
                     open={activeAction !== null}
+                    policyUnavailableMessage={allowRuleUnavailableMessage}
                     roles={rolesQuery.data?.roles ?? []}
                     shadowMCPPolicies={shadowMCPPolicies}
                   />
