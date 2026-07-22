@@ -229,6 +229,20 @@ TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated trace summaries for fast trace-level queries without needing to scan all logs';
 
+-- The sort key is (gram_project_id, trace_id), so time-windowed reads cannot
+-- prune by the primary key and would otherwise scan a project's full 90-day
+-- history. This index prunes at PART granularity, not granule granularity:
+-- within a merged part, rows sort by (project, trace_id) — trace ids are
+-- random, so every granule mixes the part's whole time range and its minmax
+-- bounds prune nothing. But merges only combine block-contiguous parts and
+-- rows arrive roughly chronologically, so any part — however deeply merged —
+-- covers a bounded insertion-time interval and parts outside the queried
+-- window skip entirely (measured ~89% of granules skipped for a 1-week
+-- window over 90 days of chronologically inserted data merged to 9 parts;
+-- an OPTIMIZE FINAL single-part table prunes 0% — do not fully compact this
+-- table). Readers opt in via a WHERE start_time_unix_nano pre-filter.
+CREATE INDEX IF NOT EXISTS idx_trace_summaries_start_time ON trace_summaries (start_time_unix_nano) TYPE minmax GRANULARITY 1;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS trace_summaries_mv TO trace_summaries AS
 SELECT
     trace_id,
