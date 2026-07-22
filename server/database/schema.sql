@@ -3904,6 +3904,18 @@ CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
 
+-- Open-findings reads that join risk_policies (CountFindings*,
+-- ListRiskResultsByProjectFound) filter on the same open-findings predicate
+-- but need risk_policy_id, which _project_found_idx lacks — and the planner
+-- overestimates the predicate's row count ~5x (it multiplies the
+-- found/excluded_at/false_positive_at selectivities as if independent), which
+-- priced the resulting bitmap heap scan above a parallel seq scan of the
+-- whole table. Keying on risk_policy_id makes the policy-join count an
+-- index-only scan, which stays cheap no matter how far off the estimate is.
+CREATE INDEX IF NOT EXISTS risk_results_project_open_policy_idx
+ON risk_results (project_id, risk_policy_id)
+WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
+
 -- Serves the risk overview window scan (GetRiskOverviewCounts): counts every
 -- scanned message in a project's created_at window regardless of found state,
 -- so the partial _project_found_idx cannot help. Range-scans just the window;
