@@ -3031,6 +3031,16 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   last_poll_failed_at timestamptz,
   last_poll_success_at timestamptz,
   consecutive_failures integer NOT NULL DEFAULT 0,
+  -- Set when the scheduler stops polling this schedule because the provider
+  -- repeatedly rejected the configuration (e.g. a revoked api key). Paused
+  -- schedules are skipped by candidate selection until the user updates the
+  -- integration, which resets the sync state and clears this.
+  auto_paused_at timestamptz,
+  -- Set when a user explicitly pauses this schedule from the dashboard.
+  -- Deliberately separate from auto_paused_at so "you paused this" and "we
+  -- paused this over a rejected configuration" stay distinguishable. Only the
+  -- user re-enabling the schedule clears it; config saves do not.
+  disabled_at timestamptz,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
 
   CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
