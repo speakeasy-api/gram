@@ -2574,8 +2574,8 @@ async function seedPersonalAccounts(init: {
   // materialize into the like-named columns, so usage dashboards can split team
   // vs personal. user.id is the owning employee (matching the identity
   // enrichment), so personal usage rolls up under the employee. Idempotent via
-  // the targeted DELETE on the usage URNs (which observability seeding, running
-  // first, doesn't use).
+  // the targeted DELETE on the usage URNs scoped to this phase's deterministic
+  // session ids (observability seeding emits rows with the same URNs).
   const USAGE_URN: Record<string, string> = {
     anthropic: "claude-code:usage:metrics",
     openai: "codex:usage:metrics",
@@ -2588,6 +2588,7 @@ async function seedPersonalAccounts(init: {
   };
   const EVENTS_PER_ACCOUNT = 8;
   const chRows: string[] = [];
+  const usageSessionIds: string[] = [];
   accounts.forEach((acct, acctIdx) => {
     const models =
       MODELS[acct.provider as Personal["provider"]] ?? MODELS.anthropic;
@@ -2600,6 +2601,7 @@ async function seedPersonalAccounts(init: {
       const timeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
       const traceId = crypto.randomBytes(16).toString("hex");
       const sessionId = seedUUID(`sess:${acct.id}:${k}`);
+      usageSessionIds.push(sessionId);
       const inputTokens = 1200 + ((acctIdx * 7 + k * 53) % 5000);
       const outputTokens = 300 + ((acctIdx * 11 + k * 29) % 1800);
       const totalTokens = inputTokens + outputTokens;
@@ -2670,19 +2672,34 @@ async function seedPersonalAccounts(init: {
     }
   });
 
-  // Idempotency: clear every provider's usage URN (derived from USAGE_URN so new
-  // providers like cursor are covered automatically) and the prior tool-call
-  // traces (by their deterministic chat ids) before re-inserting.
+  // Idempotency: clear this phase's prior rows (usage rows + tool-call traces,
+  // both keyed by their deterministic chat ids) before re-inserting. The usage
+  // delete must ALSO match the chat id, not just the URN: observability
+  // seeding emits codex/cursor \${surface}:usage:metrics rows too (its
+  // agent-session history), and an unscoped URN delete silently clobbered
+  // those after their aggregates were already backfilled, leaving the summary
+  // tables inconsistent with the raw rows.
   const usageUrnList = Object.values(USAGE_URN)
     .map((urn) => `'${urn}'`)
     .join(", ");
+  const usageSessionIdList = usageSessionIds.map((id) => `'${id}'`).join(", ");
   const toolSessionIdList = toolSessionIds.map((id) => `'${id}'`).join(", ");
+  // This phase runs after seedObservabilityData's chat_session_summaries
+  // backfill, and its rows sit before the chat_session_summaries_mv cutoff —
+  // so the summary rows for exactly this phase's chats are rebuilt here
+  // (delete + scoped backfill; an unscoped re-backfill would double the
+  // already-aggregated chats).
+  const personalChatIdList = [...usageSessionIds, ...toolSessionIds]
+    .map((id) => `'${id}'`)
+    .join(", ");
   const chSQL = `
     SET mutations_sync = 1;
-    ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}' AND gram_urn IN (${usageUrnList});
+    ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}' AND gram_urn IN (${usageUrnList}) AND gram_chat_id IN (${usageSessionIdList});
     ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}' AND gram_chat_id IN (${toolSessionIdList});
     INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chRows.concat(toolRows).join(",\n")};
+    ALTER TABLE chat_session_summaries DELETE WHERE gram_project_id = '${projectId}' AND chat_id IN (${personalChatIdList});
+    ${chatSessionBackfillSQL(projectId, "telemetry_logs", `time_unix_nano < chat_session_cutoff_unix_nano AND chat_id IN (${personalChatIdList})`)}
   `;
 
   try {
@@ -4325,10 +4342,12 @@ async function seedObservabilityData(init: {
     ALTER TABLE metrics_summaries DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE chat_token_summaries DELETE WHERE gram_project_id = '${projectId}';
+    ALTER TABLE chat_session_summaries DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE attribute_keys DELETE WHERE gram_project_id = '${projectId}';
     INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chInserts.join(",\n")};
     ${attributeMetricsBackfillSQL(projectId, "telemetry_logs", `time_unix_nano >= ${rawTtlBoundaryNano} AND time_unix_nano < attribute_metrics_cutoff_unix_nano`)}
+    ${chatSessionBackfillSQL(projectId, "telemetry_logs", `time_unix_nano < chat_session_cutoff_unix_nano`)}
     ${scratchBackfillSQL}
   `;
 
@@ -4451,6 +4470,102 @@ function attributeMetricsBackfillSQL(
         mcp_server_name,
         mcp_tool_name,
         hook_hostname;
+  `;
+}
+
+// Backfills chat_session_summaries for telemetry rows older than the MV's
+// live-ingestion cutoff (chat_session_summaries_mv skips rows before
+// 2026-07-21 22:00 UTC). Unlike attributeMetricsBackfillSQL this mirrors the CURRENT MV
+// rules exactly — production's out-of-band backfill for this table uses the
+// same provenance-first predicates, so seeded history stays an honest replica.
+// No scratch-clone (pre-TTL) variant: chat_session_summaries carries the same
+// 90-day TTL as raw telemetry_logs, so older rows would be dropped at insert.
+// `sourceTable` must be telemetry_logs or a clone of it (relies on its
+// materialized columns); `timePredicate` may reference
+// chat_session_cutoff_unix_nano from the WITH clause.
+function chatSessionBackfillSQL(
+  projectId: string,
+  sourceTable: string,
+  timePredicate: string,
+): string {
+  return `
+    INSERT INTO chat_session_summaries (gram_project_id, time_bucket, chat_id, session_user_email, session_hook_source, session_model, start_time_unix_nano, end_time_unix_nano, message_count, tool_call_count, failed_tool_call_count, total_input_tokens, total_output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, total_cost, department_names, job_titles, employee_types, division_names, cost_center_names, emails, hostnames, models, hook_sources, account_types, providers, billing_modes, roles, groups, attribution_tuples)
+    WITH
+        toUnixTimestamp64Nano(toDateTime64('2026-07-21 22:00:00', 9, 'UTC')) AS chat_session_cutoff_unix_nano,
+        (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
+        (
+            is_claude_otel_row
+            AND chat_id != ''
+            AND toString(attributes.prompt.id) != ''
+            AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
+        ) AS is_claude_api_request,
+        (
+            is_claude_otel_row
+            AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
+        ) AS is_claude_tool_result,
+        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+        (
+            hook_source IN ('codex', 'cursor')
+            AND toString(attributes.gram.tool.name) != ''
+            AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
+            AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
+        ) AS is_agent_tool_call,
+        (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
+        (is_claude_api_request OR is_agent_usage_row) AS is_usage_row,
+        (
+            (is_claude_tool_result AND toString(attributes.success) = 'false')
+            OR (is_agent_tool_call AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
+        ) AS is_failed_tool_call,
+        multiIf(
+            toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
+            toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
+            toString(id)
+        ) AS tool_call_dedup_id,
+        if(is_claude_api_request, toString(attributes.prompt.id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+        multiIf(
+            is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
+            is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
+            toString(attributes.gen_ai.response.model)
+        ) AS effective_model
+    SELECT
+        gram_project_id,
+        toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS time_bucket,
+        chat_id,
+        max(user_email) AS session_user_email,
+        max(hook_source) AS session_hook_source,
+        argMaxIfState(effective_model, time_unix_nano, effective_model != '') AS session_model,
+        min(time_unix_nano) AS start_time_unix_nano,
+        max(time_unix_nano) AS end_time_unix_nano,
+        uniqExactIfState(session_message_id, session_message_id != '') AS message_count,
+        uniqExactIfState(tool_call_dedup_id, is_counted_tool_call) AS tool_call_count,
+        countIf(is_failed_tool_call) AS failed_tool_call_count,
+        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
+        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
+        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
+        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
+        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS cache_creation_input_tokens,
+        sumIf(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_usage_row) AS total_cost,
+        groupUniqArray(toString(attributes.user.attributes.department_name)) AS department_names,
+        groupUniqArray(toString(attributes.user.attributes.job_title)) AS job_titles,
+        groupUniqArray(toString(attributes.user.attributes.employee_type)) AS employee_types,
+        groupUniqArray(toString(attributes.user.attributes.division_name)) AS division_names,
+        groupUniqArray(toString(attributes.user.attributes.cost_center_name)) AS cost_center_names,
+        groupUniqArray(if(user_email != '', user_email, toString(attributes.gram.hook.hostname))) AS emails,
+        groupUniqArray(toString(attributes.gram.hook.hostname)) AS hostnames,
+        groupUniqArray(effective_model) AS models,
+        groupUniqArray(hook_source) AS hook_sources,
+        groupUniqArray(account_type) AS account_types,
+        groupUniqArray(provider) AS providers,
+        groupUniqArray(billing_mode) AS billing_modes,
+        groupUniqArrayArray(arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))) AS roles,
+        groupUniqArrayArray(arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))) AS groups,
+        groupUniqArrayIf(tuple(toString(attributes.query_source), toString(attributes.skill.name), toString(attributes.agent.name), toString(attributes.mcp_server.name), toString(attributes.mcp_tool.name)), is_claude_api_request) AS attribution_tuples
+    FROM ${sourceTable}
+    WHERE gram_project_id = '${projectId}'
+      AND (${timePredicate})
+      AND chat_id != ''
+      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
+    GROUP BY gram_project_id, time_bucket, chat_id;
   `;
 }
 
