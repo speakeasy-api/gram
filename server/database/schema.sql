@@ -1207,6 +1207,16 @@ CREATE INDEX IF NOT EXISTS remote_session_issuers_organization_id_idx
 ON remote_session_issuers (organization_id)
 WHERE deleted IS FALSE;
 
+-- Backs resolving an issuer by its upstream URL, where the URL equality is the
+-- selective predicate and the tenancy tier is applied as a filter on top.
+-- Deliberately NOT unique: a project, an organization and a platform issuer may
+-- all legitimately point at the same authorization server, and a customer may
+-- keep a private duplicate carrying its own client setup documentation. Do not
+-- convert this to a unique index.
+CREATE INDEX IF NOT EXISTS remote_session_issuers_issuer_idx
+ON remote_session_issuers (issuer)
+WHERE deleted IS FALSE;
+
 -- Remote Session Clients are records of Gram's client registrations with
 -- upstream authorization servers
 CREATE TABLE IF NOT EXISTS remote_session_clients (
