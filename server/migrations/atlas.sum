@@ -1,4 +1,4 @@
-h1:cn9J46i6DCc+Rx3wVr1yoNFG+OBtxpM2+nmgnYXpnxc=
+h1:qEzjseIla/L49JEScohOwmW9mYiP3WeikkWUXxaIek8=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -287,3 +287,4 @@ h1:cn9J46i6DCc+Rx3wVr1yoNFG+OBtxpM2+nmgnYXpnxc=
 20260722094814_custom-domains-add-health.sql h1:rPyAbSNozU6SrxQBB0ZnKi0sdWOkYbtFDl1xKOn4FWw=
 20260722101626_risk-results-open-policy-idx.sql h1:L1Wbe6sg3DIFE0yJ3kWKR/Bob5IsgMGN8vkFL64EL/E=
 20260722120647_aiintegrations-sync-pause-controls.sql h1:RE2myegMIhHtZjD/aPL6hipMereyE/gZ53+W24lcwC4=
+20260722123722_users-email-lower-idx.sql h1:HsbU8RAGn9Nq8TQ3f3ENQNBC4G6RzUrMmFN9BhJkCn8=
