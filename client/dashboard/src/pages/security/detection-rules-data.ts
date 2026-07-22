@@ -58,7 +58,7 @@ const CATEGORY_RULE_DESCRIPTION: Record<RuleCategory, string> = {
   prompt_policy:
     "Natural-language guardrail evaluated by the policy judge against agent activity.",
   prompt_injection:
-    "Hybrid detector that combines classifier scoring with regex and keyword heuristics to flag attempts to override the agent's instructions.",
+    "LLM judge that semantically evaluates messages for attempts to override the agent's instructions, in user prompts or smuggled through tool outputs.",
   off_policy:
     "Classifier-backed detector for requests that fall outside the organization's acceptable-use policy.",
   shadow_mcp:
