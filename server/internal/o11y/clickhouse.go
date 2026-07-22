@@ -26,10 +26,13 @@ import (
 const meterClickhouseQueryDuration = "clickhouse.client.query.duration"
 
 // tracedClickhouseConn decorates a clickhouse.Conn so every query issued
-// through it — by any repo, current or future — emits a client span carrying
-// the query text (db.query.text) plus a duration metric, with the span
-// context forwarded to ClickHouse so the server-side execution spans
-// (system.opentelemetry_span_log) join the request trace. clickhouse-go only
+// through it — by any repo, current or future — emits a client span plus a
+// duration metric, labeled with the issuing function
+// (gram.clickhouse.operation) and target table. The full SQL text is
+// deliberately NOT attached: the operation name identifies the code that
+// builds the query, and omitting the text keeps span ingest volume flat.
+// The span context is forwarded to ClickHouse so the server-side execution
+// spans (system.opentelemetry_span_log) join the request trace. clickhouse-go only
 // sends trace context that is explicitly attached via
 // clickhouse.Context/WithSpan; it never reads the span from ctx itself.
 //
@@ -67,8 +70,8 @@ func TraceClickhouseConn(conn clickhouse.Conn, tracerProvider trace.TracerProvid
 
 // clickhouseTablePatterns extract the primary table a statement targets, for
 // the metric/span label only — a mismatch can mislabel a dashboard bucket but
-// never affects query behavior, and the full query text rides the span as
-// ground truth. Inputs are exclusively our own placeholder-parameterized SQL
+// never affects query behavior, and the operation label names the function
+// whose SQL is the ground truth. Inputs are exclusively our own placeholder-parameterized SQL
 // (user values are bound as args, never interpolated). Known label limits,
 // pinned by TestClickhouseTargetTable: the first FROM wins (a CTE reading
 // another table labels that table; JOINs label the leading table), and an
@@ -132,7 +135,7 @@ func (c *tracedClickhouseConn) start(ctx context.Context, spanName, query string
 	operation := clickhouseCallerOperation()
 	ctx, span := c.tracer.Start(ctx, spanName,
 		trace.WithSpanKind(trace.SpanKindClient),
-		trace.WithAttributes(semconv.DBSystemNameClickHouse, semconv.DBQueryText(query), attr.ClickhouseTable(table), attr.ClickhouseOperation(operation)),
+		trace.WithAttributes(semconv.DBSystemNameClickHouse, attr.ClickhouseTable(table), attr.ClickhouseOperation(operation)),
 	)
 	if sc := span.SpanContext(); sc.IsValid() {
 		ctx = clickhouse.Context(ctx, clickhouse.WithSpan(sc))
