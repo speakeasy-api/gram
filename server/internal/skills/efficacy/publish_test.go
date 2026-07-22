@@ -179,10 +179,21 @@ func (blockingSink) InsertSkillEfficacyScores(ctx context.Context, _ []telemetry
 // load.
 type countingChats struct {
 	TranscriptSource
-	loads map[uuid.UUID]int
+	loads  map[uuid.UUID]int
+	counts map[uuid.UUID]int
 	// rows is every message the source handed back across all pages, which is
 	// the peak the loader would have held had it read the chat whole.
 	rows int
+}
+
+func (c *countingChats) CountChatMessages(ctx context.Context, arg chatrepo.CountChatMessagesParams) (int64, error) {
+	c.counts[arg.ChatID]++
+	count, err := c.TranscriptSource.CountChatMessages(ctx, arg)
+	if err != nil {
+		return 0, fmt.Errorf("counting chats count transcript: %w", err)
+	}
+
+	return count, nil
 }
 
 func (c *countingChats) ListChatTranscriptMessagesPage(ctx context.Context, arg chatrepo.ListChatTranscriptMessagesPageParams) ([]chatrepo.ListChatTranscriptMessagesPageRow, error) {
@@ -784,7 +795,7 @@ func TestPublishReadsSharedChatTranscriptOncePerPass(t *testing.T) {
 	h.judge.results[SurfaceAssistant] = okVerdict()
 
 	publisher := h.publisher(t, h.scores)
-	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, rows: 0}
+	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, counts: map[uuid.UUID]int{}, rows: 0}
 	publisher.chats = chats
 
 	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{dev.ID, assistant.ID}, nil)
@@ -1007,7 +1018,7 @@ func TestPublishPagedTranscriptMatchesAWholeChatRead(t *testing.T) {
 	)
 
 	publisher := h.publisher(t, h.scores)
-	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, rows: 0}
+	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, counts: map[uuid.UUID]int{}, rows: 0}
 	publisher.chats = chats
 
 	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
@@ -1044,7 +1055,7 @@ func TestPublishBoundsPagesForALongTranscript(t *testing.T) {
 	total := longMessages + 2
 
 	publisher := h.publisher(t, h.scores)
-	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, rows: 0}
+	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, counts: map[uuid.UUID]int{}, rows: 0}
 	publisher.chats = chats
 
 	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
@@ -1123,7 +1134,7 @@ func TestPublishLoadsEveryShortMessageThatFitsTheTranscriptBudget(t *testing.T) 
 	total := shortMessages + 2
 
 	publisher := h.publisher(t, h.scores)
-	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, rows: 0}
+	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, counts: map[uuid.UUID]int{}, rows: 0}
 	publisher.chats = chats
 
 	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
@@ -1131,6 +1142,7 @@ func TestPublishLoadsEveryShortMessageThatFitsTheTranscriptBudget(t *testing.T) 
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 
 	require.Equal(t, (total+transcriptPageSize-1)/transcriptPageSize, chats.loads[evaluation.ChatID])
+	require.Equal(t, 1, chats.counts[evaluation.ChatID])
 	require.Equal(t, total, chats.rows)
 
 	require.Len(t, h.judge.inputs, 1)

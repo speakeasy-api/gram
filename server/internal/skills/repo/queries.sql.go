@@ -725,6 +725,59 @@ func (q *Queries) DeleteSkillVersionOrigin(ctx context.Context, arg DeleteSkillV
 }
 
 const enqueueSkillEfficacyEvaluations = `-- name: EnqueueSkillEfficacyEvaluations :exec
+WITH input_units AS (
+  SELECT
+    unnest($1::text[]) AS session_id,
+    unnest($2::text[]) AS surface,
+    unnest($3::uuid[]) AS chat_id,
+    unnest($4::uuid[]) AS skill_id,
+    unnest($5::uuid[]) AS skill_version_id,
+    unnest($6::text[]) AS canonical_sha256,
+    unnest($7::timestamptz[]) AS observed_at,
+    unnest($8::text[]) AS user_id,
+    unnest($9::text[]) AS user_email
+), actor_bound_units AS (
+  SELECT
+    p.organization_id,
+    p.id AS project_id,
+    unit.surface,
+    unit.session_id,
+    unit.chat_id,
+    unit.skill_id,
+    unit.skill_version_id,
+    unit.canonical_sha256,
+    unit.observed_at
+  FROM input_units unit
+  JOIN projects p
+    ON p.id = $10::uuid
+    AND p.deleted IS FALSE
+  JOIN chats c
+    ON c.id = unit.chat_id
+    AND c.project_id = p.id
+    AND c.deleted IS FALSE
+    AND (
+      unit.surface = 'assistant'
+      OR (unit.user_id <> '' AND c.user_id = unit.user_id)
+      OR (unit.user_email <> '' AND c.external_user_id = unit.user_email)
+    )
+  WHERE EXISTS (
+      SELECT 1
+      FROM chat_messages cm
+      WHERE cm.chat_id = c.id
+        AND (cm.project_id IS NULL OR cm.project_id = p.id)
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM chat_messages cm
+      WHERE cm.chat_id = c.id
+        AND (cm.project_id IS NULL OR cm.project_id = p.id)
+        AND cm.created_at > now() - $11::interval
+    )
+), deduplicated_units AS (
+  SELECT DISTINCT ON (project_id, session_id, skill_version_id, surface) organization_id, project_id, surface, session_id, chat_id, skill_id, skill_version_id, canonical_sha256, observed_at
+  FROM actor_bound_units
+  ORDER BY project_id, session_id, skill_version_id, surface, observed_at DESC
+)
 INSERT INTO skill_efficacy_evaluations (
   organization_id,
   project_id,
@@ -737,8 +790,8 @@ INSERT INTO skill_efficacy_evaluations (
   observed_at
 )
 SELECT
-  p.organization_id,
-  p.id,
+  unit.organization_id,
+  unit.project_id,
   unit.surface,
   unit.session_id,
   unit.chat_id,
@@ -746,43 +799,7 @@ SELECT
   unit.skill_version_id,
   unit.canonical_sha256,
   unit.observed_at
-FROM (
-  SELECT
-    unnest($1::text[]) AS session_id,
-    unnest($2::text[]) AS surface,
-    unnest($3::uuid[]) AS chat_id,
-    unnest($4::uuid[]) AS skill_id,
-    unnest($5::uuid[]) AS skill_version_id,
-    unnest($6::text[]) AS canonical_sha256,
-    unnest($7::timestamptz[]) AS observed_at,
-    unnest($8::text[]) AS user_id,
-    unnest($9::text[]) AS user_email
-) unit
-JOIN projects p
-  ON p.id = $10::uuid
-  AND p.deleted IS FALSE
-JOIN chats c
-  ON c.id = unit.chat_id
-  AND c.project_id = p.id
-  AND c.deleted IS FALSE
-  AND (
-    unit.surface = 'assistant'
-    OR (unit.user_id <> '' AND c.user_id = unit.user_id)
-    OR (unit.user_email <> '' AND c.external_user_id = unit.user_email)
-  )
-WHERE EXISTS (
-    SELECT 1
-    FROM chat_messages cm
-    WHERE cm.chat_id = c.id
-      AND (cm.project_id IS NULL OR cm.project_id = p.id)
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM chat_messages cm
-    WHERE cm.chat_id = c.id
-      AND (cm.project_id IS NULL OR cm.project_id = p.id)
-      AND cm.created_at > now() - $11::interval
-  )
+FROM deduplicated_units unit
 ON CONFLICT (project_id, session_id, skill_version_id, surface) DO UPDATE
 SET observed_at = GREATEST(skill_efficacy_evaluations.observed_at, excluded.observed_at),
     updated_at = clock_timestamp()
@@ -819,6 +836,8 @@ type EnqueueSkillEfficacyEvaluationsParams struct {
 // the project and have that chat's transcript scored. An activation carrying no
 // actor at all matches nothing and is refused. The assistant surface is exempt:
 // its session ids are server-generated and its activations carry no actor.
+// Deduplication happens after actor binding so user-id and email observations
+// can both confirm without targeting the same upsert row twice.
 func (q *Queries) EnqueueSkillEfficacyEvaluations(ctx context.Context, arg EnqueueSkillEfficacyEvaluationsParams) error {
 	_, err := q.db.Exec(ctx, enqueueSkillEfficacyEvaluations,
 		arg.SessionIds,
@@ -2924,6 +2943,17 @@ func (q *Queries) LoadReservedSkillEfficacyEvaluations(ctx context.Context, arg 
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockOrganizationSkillEfficacyBudget = `-- name: LockOrganizationSkillEfficacyBudget :exec
+SELECT pg_advisory_xact_lock(hashtextextended('skill-efficacy:' || $1::text, 0))
+`
+
+// Settings updates share the reservation lock so their audit snapshot and the
+// sampling policy observed by reservations both describe committed state.
+func (q *Queries) LockOrganizationSkillEfficacyBudget(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockOrganizationSkillEfficacyBudget, organizationID)
+	return err
 }
 
 const lockProjectOrganizationSkillEfficacyBudget = `-- name: LockProjectOrganizationSkillEfficacyBudget :exec

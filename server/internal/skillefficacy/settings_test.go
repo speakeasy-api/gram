@@ -2,7 +2,10 @@
 package skillefficacy_test
 
 import (
+	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
 func TestGetSettingsReturnsPlatformDefaults(t *testing.T) {
@@ -131,4 +135,59 @@ func TestUpsertSettingsPersistsAndAuditsBeforeAfter(t *testing.T) {
 	require.Equal(t, map[string]any{
 		"enabled": false, "per_skill_daily_cap": float64(10000), "org_daily_cap": float64(10000), "new_version_burst": float64(10000),
 	}, afterSnapshot)
+}
+
+func TestConcurrentUpsertSettingsAuditsCommittedTransitions(t *testing.T) {
+	ctx, ti := newTestService(t)
+	setSkillsFeature(t, ctx, ti, true)
+	adminCtx := withGrant(t, ctx, authz.ScopeOrgAdmin)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.service.UpsertSettings(adminCtx, &gen.UpsertSettingsPayload{
+		ApikeyToken: nil, SessionToken: nil, Enabled: true,
+		PerSkillDailyCap: 1, OrgDailyCap: 10, NewVersionBurst: 100,
+	})
+	require.NoError(t, err)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillEfficacySettingsUpsert)
+	require.NoError(t, err)
+
+	lockTx, err := ti.conn.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = lockTx.Rollback(context.Background()) })
+	require.NoError(t, skillsrepo.New(lockTx).LockOrganizationSkillEfficacyBudget(ctx, authCtx.ActiveOrganizationID))
+
+	payloads := []*gen.UpsertSettingsPayload{
+		{ApikeyToken: nil, SessionToken: nil, Enabled: true, PerSkillDailyCap: 2, OrgDailyCap: 20, NewVersionBurst: 200},
+		{ApikeyToken: nil, SessionToken: nil, Enabled: false, PerSkillDailyCap: 3, OrgDailyCap: 30, NewVersionBurst: 300},
+	}
+	results := make(chan error, len(payloads))
+	var wg sync.WaitGroup
+	for _, payload := range payloads {
+		wg.Go(func() {
+			_, callErr := ti.service.UpsertSettings(adminCtx, payload)
+			results <- callErr
+		})
+	}
+	require.Never(t, func() bool { return len(results) > 0 }, 100*time.Millisecond, 10*time.Millisecond)
+	require.NoError(t, lockTx.Commit(ctx))
+	wg.Wait()
+	close(results)
+	for callErr := range results {
+		require.NoError(t, callErr)
+	}
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillEfficacySettingsUpsert)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+2, afterCount)
+	stored, err := ti.service.GetSettings(withGrant(t, ctx, authz.ScopeOrgRead), &gen.GetSettingsPayload{ApikeyToken: nil, SessionToken: nil})
+	require.NoError(t, err)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionSkillEfficacySettingsUpsert)
+	require.NoError(t, err)
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, float64(stored.PerSkillDailyCap), afterSnapshot["per_skill_daily_cap"])
+	require.NotEqual(t, float64(1), beforeSnapshot["per_skill_daily_cap"])
 }
