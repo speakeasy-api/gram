@@ -2,7 +2,6 @@
 package skillefficacy_test
 
 import (
-	"context"
 	"sync"
 	"testing"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestGetSettingsReturnsPlatformDefaults(t *testing.T) {
@@ -152,9 +152,7 @@ func TestConcurrentUpsertSettingsAuditsCommittedTransitions(t *testing.T) {
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillEfficacySettingsUpsert)
 	require.NoError(t, err)
 
-	lockTx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = lockTx.Rollback(context.Background()) })
+	lockTx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, skillsrepo.New(lockTx).LockOrganizationSkillEfficacyBudget(ctx, authCtx.ActiveOrganizationID))
 
 	payloads := []*gen.UpsertSettingsPayload{
@@ -188,6 +186,6 @@ func TestConcurrentUpsertSettingsAuditsCommittedTransitions(t *testing.T) {
 	require.NoError(t, err)
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
-	require.Equal(t, float64(stored.PerSkillDailyCap), afterSnapshot["per_skill_daily_cap"])
+	require.InEpsilon(t, float64(stored.PerSkillDailyCap), afterSnapshot["per_skill_daily_cap"], 1e-9)
 	require.NotEqual(t, float64(1), beforeSnapshot["per_skill_daily_cap"])
 }
