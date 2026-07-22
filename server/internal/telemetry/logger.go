@@ -64,9 +64,9 @@ type Logger struct {
 func NewLogger(
 	shutdownCtx context.Context,
 	logger *slog.Logger,
-	// Both providers are kept for signature stability: all ClickHouse write
-	// spans and durations are emitted at the connection layer
-	// (o11y.TraceClickhouseConn), not per-logger.
+	// Both providers are unused and kept only for signature stability:
+	// ClickHouse client calls are not individually instrumented (DNO-602
+	// simplified o11y.TraceClickhouseConn to span-context forwarding only).
 	_ trace.TracerProvider,
 	_ metric.MeterProvider,
 	chConn clickhouse.Conn,
@@ -180,11 +180,8 @@ func (l *Logger) LogBulkStaging(ctx context.Context, params []LogParams) error {
 
 // detachedWriteContext returns the shutdown-scoped context synchronous
 // ClickHouse writes run on (they must survive request cancellation), carrying
-// the caller's span so the connection-level spans and metric
-// (o11y.TraceClickhouseConn) parent into the request trace instead of
-// surfacing as orphan roots. Connection-layer instrumentation replaced the
-// per-write wrapper spans and telemetry.clickhouse.write.duration metric
-// (DNO-521 -> DNO-602).
+// the caller's span so the connection layer (o11y.TraceClickhouseConn) can
+// forward the request's trace context to ClickHouse's server-side span log.
 func (l *Logger) detachedWriteContext(ctx context.Context) context.Context {
 	return trace.ContextWithSpan(l.shutdownCtx(), trace.SpanFromContext(ctx))
 }

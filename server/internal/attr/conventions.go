@@ -393,14 +393,6 @@ const (
 	PaginationHasNextPageKey = attribute.Key("gram.pagination.has_next_page")
 
 	ClickhouseQueryDurationMsKey = attribute.Key("gram.clickhouse.query_duration_ms")
-	// ClickhouseTableKey is the primary table a ClickHouse client call
-	// targets (first FROM / INSERT INTO / ALTER TABLE identifier in the
-	// query) — a low-cardinality label for per-table latency dashboards.
-	ClickhouseTableKey = attribute.Key("gram.clickhouse.table")
-	// ClickhouseOperationKey is the Go function that issued a ClickHouse
-	// client call (e.g. ListSessions), derived from the call stack — a
-	// low-cardinality label naming each query for dashboards and monitors.
-	ClickhouseOperationKey = attribute.Key("gram.clickhouse.operation")
 
 	RetryAttemptKey = attribute.Key("retry.attempt")
 	RetryWaitKey    = attribute.Key("retry.wait")
@@ -1596,12 +1588,6 @@ func ClickhouseQueryDurationMs(v float64) attribute.KeyValue {
 func SlogClickhouseQueryDurationMs(v float64) slog.Attr {
 	return slog.Float64(string(ClickhouseQueryDurationMsKey), v)
 }
-
-func ClickhouseTable(v string) attribute.KeyValue { return ClickhouseTableKey.String(v) }
-func ClickhouseOperation(v string) attribute.KeyValue {
-	return ClickhouseOperationKey.String(v)
-}
-func SlogClickhouseTable(v string) slog.Attr { return slog.String(string(ClickhouseTableKey), v) }
 
 func MCPRegistryID(v string) attribute.KeyValue { return MCPRegistryIDKey.String(v) }
 func SlogMCPRegistryID(v string) slog.Attr      { return slog.String(string(MCPRegistryIDKey), v) }

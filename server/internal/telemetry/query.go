@@ -483,10 +483,8 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		CursorGramChatID: cursorGramChatID,
 		Limit:            limit + 1,
 	}
-	// The connection-level decorator (o11y.TraceClickhouseConn) traces the
-	// query with the routed path visible via gram.clickhouse.operation
-	// (Queries.listSessionsFromRawLogs vs Queries.listSessionsFromSummaries)
-	// and gram.clickhouse.table.
+	// Wide windows are served from chat_session_summaries, narrow ones from
+	// raw telemetry_logs (repo.ListSessionsParams.UsesSummaryPath).
 	items, err := s.chRepo.ListSessions(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing sessions")

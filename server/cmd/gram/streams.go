@@ -322,7 +322,7 @@ func newStreamsCommand() *cli.Command {
 			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
 			var chConn clickhouse.Conn
 			if enableCHRiskWrites {
-				conn, shutdown, err := newClickhouseClient(ctx, logger, tracerProvider, meterProvider, c)
+				conn, shutdown, err := newClickhouseClient(ctx, logger, c)
 				if err != nil {
 					logger.ErrorContext(ctx, "failed to create clickhouse client, disabling clickhouse risk_findings writer", attr.SlogError(err))
 					enableCHRiskWrites = false
