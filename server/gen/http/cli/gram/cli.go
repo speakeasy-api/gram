@@ -133,7 +133,7 @@ func UsageCommands() []string {
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|update|list|get|list-unknown-activations|list-versions|archive|distribute|undistribute|list-distributions)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
@@ -2270,6 +2270,48 @@ func ParseEndpoint(
 		telemetryGetToolUsageSummarySessionTokenFlag     = telemetryGetToolUsageSummaryFlags.String("session-token", "", "")
 		telemetryGetToolUsageSummaryProjectSlugInputFlag = telemetryGetToolUsageSummaryFlags.String("project-slug-input", "", "")
 
+		telemetryGetToolUsageTotalsFlags                = flag.NewFlagSet("get-tool-usage-totals", flag.ExitOnError)
+		telemetryGetToolUsageTotalsBodyFlag             = telemetryGetToolUsageTotalsFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageTotalsApikeyTokenFlag      = telemetryGetToolUsageTotalsFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageTotalsSessionTokenFlag     = telemetryGetToolUsageTotalsFlags.String("session-token", "", "")
+		telemetryGetToolUsageTotalsProjectSlugInputFlag = telemetryGetToolUsageTotalsFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageTargetsFlags                = flag.NewFlagSet("get-tool-usage-targets", flag.ExitOnError)
+		telemetryGetToolUsageTargetsBodyFlag             = telemetryGetToolUsageTargetsFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageTargetsApikeyTokenFlag      = telemetryGetToolUsageTargetsFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageTargetsSessionTokenFlag     = telemetryGetToolUsageTargetsFlags.String("session-token", "", "")
+		telemetryGetToolUsageTargetsProjectSlugInputFlag = telemetryGetToolUsageTargetsFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageUsersFlags                = flag.NewFlagSet("get-tool-usage-users", flag.ExitOnError)
+		telemetryGetToolUsageUsersBodyFlag             = telemetryGetToolUsageUsersFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageUsersApikeyTokenFlag      = telemetryGetToolUsageUsersFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageUsersSessionTokenFlag     = telemetryGetToolUsageUsersFlags.String("session-token", "", "")
+		telemetryGetToolUsageUsersProjectSlugInputFlag = telemetryGetToolUsageUsersFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageTargetTimeSeriesFlags                = flag.NewFlagSet("get-tool-usage-target-time-series", flag.ExitOnError)
+		telemetryGetToolUsageTargetTimeSeriesBodyFlag             = telemetryGetToolUsageTargetTimeSeriesFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageTargetTimeSeriesApikeyTokenFlag      = telemetryGetToolUsageTargetTimeSeriesFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageTargetTimeSeriesSessionTokenFlag     = telemetryGetToolUsageTargetTimeSeriesFlags.String("session-token", "", "")
+		telemetryGetToolUsageTargetTimeSeriesProjectSlugInputFlag = telemetryGetToolUsageTargetTimeSeriesFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageUserTimeSeriesFlags                = flag.NewFlagSet("get-tool-usage-user-time-series", flag.ExitOnError)
+		telemetryGetToolUsageUserTimeSeriesBodyFlag             = telemetryGetToolUsageUserTimeSeriesFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageUserTimeSeriesApikeyTokenFlag      = telemetryGetToolUsageUserTimeSeriesFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageUserTimeSeriesSessionTokenFlag     = telemetryGetToolUsageUserTimeSeriesFlags.String("session-token", "", "")
+		telemetryGetToolUsageUserTimeSeriesProjectSlugInputFlag = telemetryGetToolUsageUserTimeSeriesFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageUsersByTargetFlags                = flag.NewFlagSet("get-tool-usage-users-by-target", flag.ExitOnError)
+		telemetryGetToolUsageUsersByTargetBodyFlag             = telemetryGetToolUsageUsersByTargetFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageUsersByTargetApikeyTokenFlag      = telemetryGetToolUsageUsersByTargetFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageUsersByTargetSessionTokenFlag     = telemetryGetToolUsageUsersByTargetFlags.String("session-token", "", "")
+		telemetryGetToolUsageUsersByTargetProjectSlugInputFlag = telemetryGetToolUsageUsersByTargetFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageTargetToolBreakdownFlags                = flag.NewFlagSet("get-tool-usage-target-tool-breakdown", flag.ExitOnError)
+		telemetryGetToolUsageTargetToolBreakdownBodyFlag             = telemetryGetToolUsageTargetToolBreakdownFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageTargetToolBreakdownApikeyTokenFlag      = telemetryGetToolUsageTargetToolBreakdownFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageTargetToolBreakdownSessionTokenFlag     = telemetryGetToolUsageTargetToolBreakdownFlags.String("session-token", "", "")
+		telemetryGetToolUsageTargetToolBreakdownProjectSlugInputFlag = telemetryGetToolUsageTargetToolBreakdownFlags.String("project-slug-input", "", "")
+
 		telemetryListToolUsageTracesFlags                = flag.NewFlagSet("list-tool-usage-traces", flag.ExitOnError)
 		telemetryListToolUsageTracesBodyFlag             = telemetryListToolUsageTracesFlags.String("body", "REQUIRED", "")
 		telemetryListToolUsageTracesApikeyTokenFlag      = telemetryListToolUsageTracesFlags.String("apikey-token", "", "")
@@ -3166,6 +3208,13 @@ func ParseEndpoint(
 	telemetryListAttributeKeysFlags.Usage = telemetryListAttributeKeysUsage
 	telemetryGetHooksSummaryFlags.Usage = telemetryGetHooksSummaryUsage
 	telemetryGetToolUsageSummaryFlags.Usage = telemetryGetToolUsageSummaryUsage
+	telemetryGetToolUsageTotalsFlags.Usage = telemetryGetToolUsageTotalsUsage
+	telemetryGetToolUsageTargetsFlags.Usage = telemetryGetToolUsageTargetsUsage
+	telemetryGetToolUsageUsersFlags.Usage = telemetryGetToolUsageUsersUsage
+	telemetryGetToolUsageTargetTimeSeriesFlags.Usage = telemetryGetToolUsageTargetTimeSeriesUsage
+	telemetryGetToolUsageUserTimeSeriesFlags.Usage = telemetryGetToolUsageUserTimeSeriesUsage
+	telemetryGetToolUsageUsersByTargetFlags.Usage = telemetryGetToolUsageUsersByTargetUsage
+	telemetryGetToolUsageTargetToolBreakdownFlags.Usage = telemetryGetToolUsageTargetToolBreakdownUsage
 	telemetryListToolUsageTracesFlags.Usage = telemetryListToolUsageTracesUsage
 	telemetryGetToolUsageFilterOptionsFlags.Usage = telemetryGetToolUsageFilterOptionsUsage
 	telemetryGetMcpServerActivityFlags.Usage = telemetryGetMcpServerActivityUsage
@@ -4725,6 +4774,27 @@ func ParseEndpoint(
 
 			case "get-tool-usage-summary":
 				epf = telemetryGetToolUsageSummaryFlags
+
+			case "get-tool-usage-totals":
+				epf = telemetryGetToolUsageTotalsFlags
+
+			case "get-tool-usage-targets":
+				epf = telemetryGetToolUsageTargetsFlags
+
+			case "get-tool-usage-users":
+				epf = telemetryGetToolUsageUsersFlags
+
+			case "get-tool-usage-target-time-series":
+				epf = telemetryGetToolUsageTargetTimeSeriesFlags
+
+			case "get-tool-usage-user-time-series":
+				epf = telemetryGetToolUsageUserTimeSeriesFlags
+
+			case "get-tool-usage-users-by-target":
+				epf = telemetryGetToolUsageUsersByTargetFlags
+
+			case "get-tool-usage-target-tool-breakdown":
+				epf = telemetryGetToolUsageTargetToolBreakdownFlags
 
 			case "list-tool-usage-traces":
 				epf = telemetryListToolUsageTracesFlags
@@ -6332,6 +6402,27 @@ func ParseEndpoint(
 			case "get-tool-usage-summary":
 				endpoint = c.GetToolUsageSummary()
 				data, err = telemetryc.BuildGetToolUsageSummaryPayload(*telemetryGetToolUsageSummaryBodyFlag, *telemetryGetToolUsageSummaryApikeyTokenFlag, *telemetryGetToolUsageSummarySessionTokenFlag, *telemetryGetToolUsageSummaryProjectSlugInputFlag)
+			case "get-tool-usage-totals":
+				endpoint = c.GetToolUsageTotals()
+				data, err = telemetryc.BuildGetToolUsageTotalsPayload(*telemetryGetToolUsageTotalsBodyFlag, *telemetryGetToolUsageTotalsApikeyTokenFlag, *telemetryGetToolUsageTotalsSessionTokenFlag, *telemetryGetToolUsageTotalsProjectSlugInputFlag)
+			case "get-tool-usage-targets":
+				endpoint = c.GetToolUsageTargets()
+				data, err = telemetryc.BuildGetToolUsageTargetsPayload(*telemetryGetToolUsageTargetsBodyFlag, *telemetryGetToolUsageTargetsApikeyTokenFlag, *telemetryGetToolUsageTargetsSessionTokenFlag, *telemetryGetToolUsageTargetsProjectSlugInputFlag)
+			case "get-tool-usage-users":
+				endpoint = c.GetToolUsageUsers()
+				data, err = telemetryc.BuildGetToolUsageUsersPayload(*telemetryGetToolUsageUsersBodyFlag, *telemetryGetToolUsageUsersApikeyTokenFlag, *telemetryGetToolUsageUsersSessionTokenFlag, *telemetryGetToolUsageUsersProjectSlugInputFlag)
+			case "get-tool-usage-target-time-series":
+				endpoint = c.GetToolUsageTargetTimeSeries()
+				data, err = telemetryc.BuildGetToolUsageTargetTimeSeriesPayload(*telemetryGetToolUsageTargetTimeSeriesBodyFlag, *telemetryGetToolUsageTargetTimeSeriesApikeyTokenFlag, *telemetryGetToolUsageTargetTimeSeriesSessionTokenFlag, *telemetryGetToolUsageTargetTimeSeriesProjectSlugInputFlag)
+			case "get-tool-usage-user-time-series":
+				endpoint = c.GetToolUsageUserTimeSeries()
+				data, err = telemetryc.BuildGetToolUsageUserTimeSeriesPayload(*telemetryGetToolUsageUserTimeSeriesBodyFlag, *telemetryGetToolUsageUserTimeSeriesApikeyTokenFlag, *telemetryGetToolUsageUserTimeSeriesSessionTokenFlag, *telemetryGetToolUsageUserTimeSeriesProjectSlugInputFlag)
+			case "get-tool-usage-users-by-target":
+				endpoint = c.GetToolUsageUsersByTarget()
+				data, err = telemetryc.BuildGetToolUsageUsersByTargetPayload(*telemetryGetToolUsageUsersByTargetBodyFlag, *telemetryGetToolUsageUsersByTargetApikeyTokenFlag, *telemetryGetToolUsageUsersByTargetSessionTokenFlag, *telemetryGetToolUsageUsersByTargetProjectSlugInputFlag)
+			case "get-tool-usage-target-tool-breakdown":
+				endpoint = c.GetToolUsageTargetToolBreakdown()
+				data, err = telemetryc.BuildGetToolUsageTargetToolBreakdownPayload(*telemetryGetToolUsageTargetToolBreakdownBodyFlag, *telemetryGetToolUsageTargetToolBreakdownApikeyTokenFlag, *telemetryGetToolUsageTargetToolBreakdownSessionTokenFlag, *telemetryGetToolUsageTargetToolBreakdownProjectSlugInputFlag)
 			case "list-tool-usage-traces":
 				endpoint = c.ListToolUsageTraces()
 				data, err = telemetryc.BuildListToolUsageTracesPayload(*telemetryListToolUsageTracesBodyFlag, *telemetryListToolUsageTracesApikeyTokenFlag, *telemetryListToolUsageTracesSessionTokenFlag, *telemetryListToolUsageTracesProjectSlugInputFlag)
@@ -15504,6 +15595,13 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    list-attribute-keys: List distinct attribute keys available for filtering`)
 	fmt.Fprintln(os.Stderr, `    get-hooks-summary: Get aggregated hooks metrics grouped by server`)
 	fmt.Fprintln(os.Stderr, `    get-tool-usage-summary: Get target-aware MCP and tool usage metrics`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-totals: Get overall MCP and tool usage totals`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-targets: Get top MCP and tool usage targets`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-users: Get top MCP and tool usage user identities`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-target-time-series: Get time-series MCP and tool usage grouped by target`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-user-time-series: Get time-series MCP and tool usage grouped by user identity`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-users-by-target: Get cross-dimensional MCP and tool usage grouped by target and user identity`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-target-tool-breakdown: Get per-tool MCP and tool usage grouped by target`)
 	fmt.Fprintln(os.Stderr, `    list-tool-usage-traces: List target-aware MCP and tool usage traces`)
 	fmt.Fprintln(os.Stderr, `    get-tool-usage-filter-options: Get filter options for target-aware MCP and tool usage metrics`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-activity: Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.`)
@@ -15908,6 +16006,174 @@ func telemetryGetToolUsageSummaryUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-summary --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageTotalsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-totals", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get overall MCP and tool usage totals`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-totals --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageTargetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-targets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get top MCP and tool usage targets`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-targets --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageUsersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-users", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get top MCP and tool usage user identities`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-users --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageTargetTimeSeriesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-target-time-series", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get time-series MCP and tool usage grouped by target`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-target-time-series --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageUserTimeSeriesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-user-time-series", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get time-series MCP and tool usage grouped by user identity`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-user-time-series --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageUsersByTargetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-users-by-target", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get cross-dimensional MCP and tool usage grouped by target and user identity`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-users-by-target --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageTargetToolBreakdownUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-target-tool-breakdown", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get per-tool MCP and tool usage grouped by target`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-target-tool-breakdown --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryListToolUsageTracesUsage() {

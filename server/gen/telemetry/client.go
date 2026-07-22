@@ -15,53 +15,67 @@ import (
 
 // Client is the "telemetry" service client.
 type Client struct {
-	SearchLogsEndpoint                goa.Endpoint
-	SearchToolCallsEndpoint           goa.Endpoint
-	SearchChatsEndpoint               goa.Endpoint
-	SearchUsersEndpoint               goa.Endpoint
-	CaptureEventEndpoint              goa.Endpoint
-	GetProjectMetricsSummaryEndpoint  goa.Endpoint
-	GetUserMetricsSummaryEndpoint     goa.Endpoint
-	GetEmployeeDataFlowGraphEndpoint  goa.Endpoint
-	GetObservabilityOverviewEndpoint  goa.Endpoint
-	GetProjectOverviewEndpoint        goa.Endpoint
-	QueryEndpoint                     goa.Endpoint
-	QueryTumDetailsEndpoint           goa.Endpoint
-	ListSessionsEndpoint              goa.Endpoint
-	ListFilterOptionsEndpoint         goa.Endpoint
-	ListAttributeKeysEndpoint         goa.Endpoint
-	GetHooksSummaryEndpoint           goa.Endpoint
-	GetToolUsageSummaryEndpoint       goa.Endpoint
-	ListToolUsageTracesEndpoint       goa.Endpoint
-	GetToolUsageFilterOptionsEndpoint goa.Endpoint
-	GetMcpServerActivityEndpoint      goa.Endpoint
-	ListHooksTracesEndpoint           goa.Endpoint
+	SearchLogsEndpoint                      goa.Endpoint
+	SearchToolCallsEndpoint                 goa.Endpoint
+	SearchChatsEndpoint                     goa.Endpoint
+	SearchUsersEndpoint                     goa.Endpoint
+	CaptureEventEndpoint                    goa.Endpoint
+	GetProjectMetricsSummaryEndpoint        goa.Endpoint
+	GetUserMetricsSummaryEndpoint           goa.Endpoint
+	GetEmployeeDataFlowGraphEndpoint        goa.Endpoint
+	GetObservabilityOverviewEndpoint        goa.Endpoint
+	GetProjectOverviewEndpoint              goa.Endpoint
+	QueryEndpoint                           goa.Endpoint
+	QueryTumDetailsEndpoint                 goa.Endpoint
+	ListSessionsEndpoint                    goa.Endpoint
+	ListFilterOptionsEndpoint               goa.Endpoint
+	ListAttributeKeysEndpoint               goa.Endpoint
+	GetHooksSummaryEndpoint                 goa.Endpoint
+	GetToolUsageSummaryEndpoint             goa.Endpoint
+	GetToolUsageTotalsEndpoint              goa.Endpoint
+	GetToolUsageTargetsEndpoint             goa.Endpoint
+	GetToolUsageUsersEndpoint               goa.Endpoint
+	GetToolUsageTargetTimeSeriesEndpoint    goa.Endpoint
+	GetToolUsageUserTimeSeriesEndpoint      goa.Endpoint
+	GetToolUsageUsersByTargetEndpoint       goa.Endpoint
+	GetToolUsageTargetToolBreakdownEndpoint goa.Endpoint
+	ListToolUsageTracesEndpoint             goa.Endpoint
+	GetToolUsageFilterOptionsEndpoint       goa.Endpoint
+	GetMcpServerActivityEndpoint            goa.Endpoint
+	ListHooksTracesEndpoint                 goa.Endpoint
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
 	return &Client{
-		SearchLogsEndpoint:                searchLogs,
-		SearchToolCallsEndpoint:           searchToolCalls,
-		SearchChatsEndpoint:               searchChats,
-		SearchUsersEndpoint:               searchUsers,
-		CaptureEventEndpoint:              captureEvent,
-		GetProjectMetricsSummaryEndpoint:  getProjectMetricsSummary,
-		GetUserMetricsSummaryEndpoint:     getUserMetricsSummary,
-		GetEmployeeDataFlowGraphEndpoint:  getEmployeeDataFlowGraph,
-		GetObservabilityOverviewEndpoint:  getObservabilityOverview,
-		GetProjectOverviewEndpoint:        getProjectOverview,
-		QueryEndpoint:                     query,
-		QueryTumDetailsEndpoint:           queryTumDetails,
-		ListSessionsEndpoint:              listSessions,
-		ListFilterOptionsEndpoint:         listFilterOptions,
-		ListAttributeKeysEndpoint:         listAttributeKeys,
-		GetHooksSummaryEndpoint:           getHooksSummary,
-		GetToolUsageSummaryEndpoint:       getToolUsageSummary,
-		ListToolUsageTracesEndpoint:       listToolUsageTraces,
-		GetToolUsageFilterOptionsEndpoint: getToolUsageFilterOptions,
-		GetMcpServerActivityEndpoint:      getMcpServerActivity,
-		ListHooksTracesEndpoint:           listHooksTraces,
+		SearchLogsEndpoint:                      searchLogs,
+		SearchToolCallsEndpoint:                 searchToolCalls,
+		SearchChatsEndpoint:                     searchChats,
+		SearchUsersEndpoint:                     searchUsers,
+		CaptureEventEndpoint:                    captureEvent,
+		GetProjectMetricsSummaryEndpoint:        getProjectMetricsSummary,
+		GetUserMetricsSummaryEndpoint:           getUserMetricsSummary,
+		GetEmployeeDataFlowGraphEndpoint:        getEmployeeDataFlowGraph,
+		GetObservabilityOverviewEndpoint:        getObservabilityOverview,
+		GetProjectOverviewEndpoint:              getProjectOverview,
+		QueryEndpoint:                           query,
+		QueryTumDetailsEndpoint:                 queryTumDetails,
+		ListSessionsEndpoint:                    listSessions,
+		ListFilterOptionsEndpoint:               listFilterOptions,
+		ListAttributeKeysEndpoint:               listAttributeKeys,
+		GetHooksSummaryEndpoint:                 getHooksSummary,
+		GetToolUsageSummaryEndpoint:             getToolUsageSummary,
+		GetToolUsageTotalsEndpoint:              getToolUsageTotals,
+		GetToolUsageTargetsEndpoint:             getToolUsageTargets,
+		GetToolUsageUsersEndpoint:               getToolUsageUsers,
+		GetToolUsageTargetTimeSeriesEndpoint:    getToolUsageTargetTimeSeries,
+		GetToolUsageUserTimeSeriesEndpoint:      getToolUsageUserTimeSeries,
+		GetToolUsageUsersByTargetEndpoint:       getToolUsageUsersByTarget,
+		GetToolUsageTargetToolBreakdownEndpoint: getToolUsageTargetToolBreakdown,
+		ListToolUsageTracesEndpoint:             listToolUsageTraces,
+		GetToolUsageFilterOptionsEndpoint:       getToolUsageFilterOptions,
+		GetMcpServerActivityEndpoint:            getMcpServerActivity,
+		ListHooksTracesEndpoint:                 listHooksTraces,
 	}
 }
 
@@ -448,6 +462,167 @@ func (c *Client) GetToolUsageSummary(ctx context.Context, p *GetToolUsageSummary
 		return
 	}
 	return ires.(*GetToolUsageSummaryResult), nil
+}
+
+// GetToolUsageTotals calls the "getToolUsageTotals" endpoint of the
+// "telemetry" service.
+// GetToolUsageTotals may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetToolUsageTotals(ctx context.Context, p *GetToolUsageTotalsPayload) (res *GetToolUsageTotalsResult, err error) {
+	var ires any
+	ires, err = c.GetToolUsageTotalsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetToolUsageTotalsResult), nil
+}
+
+// GetToolUsageTargets calls the "getToolUsageTargets" endpoint of the
+// "telemetry" service.
+// GetToolUsageTargets may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetToolUsageTargets(ctx context.Context, p *GetToolUsageTargetsPayload) (res *GetToolUsageTargetsResult, err error) {
+	var ires any
+	ires, err = c.GetToolUsageTargetsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetToolUsageTargetsResult), nil
+}
+
+// GetToolUsageUsers calls the "getToolUsageUsers" endpoint of the "telemetry"
+// service.
+// GetToolUsageUsers may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetToolUsageUsers(ctx context.Context, p *GetToolUsageUsersPayload) (res *GetToolUsageUsersResult, err error) {
+	var ires any
+	ires, err = c.GetToolUsageUsersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetToolUsageUsersResult), nil
+}
+
+// GetToolUsageTargetTimeSeries calls the "getToolUsageTargetTimeSeries"
+// endpoint of the "telemetry" service.
+// GetToolUsageTargetTimeSeries may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetToolUsageTargetTimeSeries(ctx context.Context, p *GetToolUsageTargetTimeSeriesPayload) (res *GetToolUsageTargetTimeSeriesResult, err error) {
+	var ires any
+	ires, err = c.GetToolUsageTargetTimeSeriesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetToolUsageTargetTimeSeriesResult), nil
+}
+
+// GetToolUsageUserTimeSeries calls the "getToolUsageUserTimeSeries" endpoint
+// of the "telemetry" service.
+// GetToolUsageUserTimeSeries may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetToolUsageUserTimeSeries(ctx context.Context, p *GetToolUsageUserTimeSeriesPayload) (res *GetToolUsageUserTimeSeriesResult, err error) {
+	var ires any
+	ires, err = c.GetToolUsageUserTimeSeriesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetToolUsageUserTimeSeriesResult), nil
+}
+
+// GetToolUsageUsersByTarget calls the "getToolUsageUsersByTarget" endpoint of
+// the "telemetry" service.
+// GetToolUsageUsersByTarget may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetToolUsageUsersByTarget(ctx context.Context, p *GetToolUsageUsersByTargetPayload) (res *GetToolUsageUsersByTargetResult, err error) {
+	var ires any
+	ires, err = c.GetToolUsageUsersByTargetEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetToolUsageUsersByTargetResult), nil
+}
+
+// GetToolUsageTargetToolBreakdown calls the "getToolUsageTargetToolBreakdown"
+// endpoint of the "telemetry" service.
+// GetToolUsageTargetToolBreakdown may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetToolUsageTargetToolBreakdown(ctx context.Context, p *GetToolUsageTargetToolBreakdownPayload) (res *GetToolUsageTargetToolBreakdownResult, err error) {
+	var ires any
+	ires, err = c.GetToolUsageTargetToolBreakdownEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetToolUsageTargetToolBreakdownResult), nil
 }
 
 // ListToolUsageTraces calls the "listToolUsageTraces" endpoint of the
