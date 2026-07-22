@@ -11,8 +11,6 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -454,22 +452,11 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		CursorGramChatID: cursorGramChatID,
 		Limit:            limit + 1,
 	}
-	// Named per routed path so the raw telemetry_logs scan and the
-	// chat_session_summaries read stay separately visible in traces. The
-	// connection-level decorator (o11y.TraceClickhouseConn) emits the
-	// clickhouse.query child span under this one and forwards its context to
-	// ClickHouse's server-side spans.
-	spanName := "telemetry.listSessions.clickhouse.raw"
-	if params.UsesSummaryPath() {
-		spanName = "telemetry.listSessions.clickhouse.summary"
-	}
-	queryCtx, span := s.tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
-	items, err := s.chRepo.ListSessions(queryCtx, params)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-	}
-	span.End()
+	// The connection-level decorator (o11y.TraceClickhouseConn) traces the
+	// query with the routed path visible via gram.clickhouse.operation
+	// (Queries.listSessionsFromRawLogs vs Queries.listSessionsFromSummaries)
+	// and gram.clickhouse.table.
+	items, err := s.chRepo.ListSessions(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing sessions")
 	}
