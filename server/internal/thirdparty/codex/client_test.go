@@ -29,7 +29,7 @@ func TestListLogsSendsAuthAndFilters(t *testing.T) {
 		if got := r.URL.Query().Get("limit"); got != "100" {
 			t.Errorf("expected limit 100, got %q", got)
 		}
-		if got := r.URL.Query().Get("after"); got != "2026-07-16T00:00:00Z" {
+		if got := r.URL.Query().Get("after"); got != "2026-07-16T00:00:00.123456789Z" {
 			t.Errorf("expected after timestamp, got %q", got)
 		}
 

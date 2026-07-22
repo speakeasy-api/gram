@@ -189,7 +189,7 @@ func (c *Client) setHeaders(req *http.Request) {
 }
 
 func formatComplianceTimestamp(t time.Time) string {
-	return t.UTC().Truncate(time.Second).Format(time.RFC3339)
+	return t.UTC().Format(time.RFC3339Nano)
 }
 
 type HTTPError struct {
