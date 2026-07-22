@@ -1001,6 +1001,61 @@ LIMIT @batch_size;
 -- the project and have that chat's transcript scored. An activation carrying no
 -- actor at all matches nothing and is refused. The assistant surface is exempt:
 -- its session ids are server-generated and its activations carry no actor.
+-- Deduplication happens after actor binding so user-id and email observations
+-- can both confirm without targeting the same upsert row twice.
+WITH input_units AS (
+  SELECT
+    unnest(@session_ids::text[]) AS session_id,
+    unnest(@surfaces::text[]) AS surface,
+    unnest(@chat_ids::uuid[]) AS chat_id,
+    unnest(@skill_ids::uuid[]) AS skill_id,
+    unnest(@skill_version_ids::uuid[]) AS skill_version_id,
+    unnest(@canonical_sha256s::text[]) AS canonical_sha256,
+    unnest(@observed_ats::timestamptz[]) AS observed_at,
+    unnest(@user_ids::text[]) AS user_id,
+    unnest(@user_emails::text[]) AS user_email
+), actor_bound_units AS (
+  SELECT
+    p.organization_id,
+    p.id AS project_id,
+    unit.surface,
+    unit.session_id,
+    unit.chat_id,
+    unit.skill_id,
+    unit.skill_version_id,
+    unit.canonical_sha256,
+    unit.observed_at
+  FROM input_units unit
+  JOIN projects p
+    ON p.id = @project_id::uuid
+    AND p.deleted IS FALSE
+  JOIN chats c
+    ON c.id = unit.chat_id
+    AND c.project_id = p.id
+    AND c.deleted IS FALSE
+    AND (
+      unit.surface = 'assistant'
+      OR (unit.user_id <> '' AND c.user_id = unit.user_id)
+      OR (unit.user_email <> '' AND c.external_user_id = unit.user_email)
+    )
+  WHERE EXISTS (
+      SELECT 1
+      FROM chat_messages cm
+      WHERE cm.chat_id = c.id
+        AND (cm.project_id IS NULL OR cm.project_id = p.id)
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM chat_messages cm
+      WHERE cm.chat_id = c.id
+        AND (cm.project_id IS NULL OR cm.project_id = p.id)
+        AND cm.created_at > now() - @inactivity::interval
+    )
+), deduplicated_units AS (
+  SELECT DISTINCT ON (project_id, session_id, skill_version_id, surface) *
+  FROM actor_bound_units
+  ORDER BY project_id, session_id, skill_version_id, surface, observed_at DESC
+)
 INSERT INTO skill_efficacy_evaluations (
   organization_id,
   project_id,
@@ -1013,8 +1068,8 @@ INSERT INTO skill_efficacy_evaluations (
   observed_at
 )
 SELECT
-  p.organization_id,
-  p.id,
+  unit.organization_id,
+  unit.project_id,
   unit.surface,
   unit.session_id,
   unit.chat_id,
@@ -1022,43 +1077,7 @@ SELECT
   unit.skill_version_id,
   unit.canonical_sha256,
   unit.observed_at
-FROM (
-  SELECT
-    unnest(@session_ids::text[]) AS session_id,
-    unnest(@surfaces::text[]) AS surface,
-    unnest(@chat_ids::uuid[]) AS chat_id,
-    unnest(@skill_ids::uuid[]) AS skill_id,
-    unnest(@skill_version_ids::uuid[]) AS skill_version_id,
-    unnest(@canonical_sha256s::text[]) AS canonical_sha256,
-    unnest(@observed_ats::timestamptz[]) AS observed_at,
-    unnest(@user_ids::text[]) AS user_id,
-    unnest(@user_emails::text[]) AS user_email
-) unit
-JOIN projects p
-  ON p.id = @project_id::uuid
-  AND p.deleted IS FALSE
-JOIN chats c
-  ON c.id = unit.chat_id
-  AND c.project_id = p.id
-  AND c.deleted IS FALSE
-  AND (
-    unit.surface = 'assistant'
-    OR (unit.user_id <> '' AND c.user_id = unit.user_id)
-    OR (unit.user_email <> '' AND c.external_user_id = unit.user_email)
-  )
-WHERE EXISTS (
-    SELECT 1
-    FROM chat_messages cm
-    WHERE cm.chat_id = c.id
-      AND (cm.project_id IS NULL OR cm.project_id = p.id)
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM chat_messages cm
-    WHERE cm.chat_id = c.id
-      AND (cm.project_id IS NULL OR cm.project_id = p.id)
-      AND cm.created_at > now() - @inactivity::interval
-  )
+FROM deduplicated_units unit
 ON CONFLICT (project_id, session_id, skill_version_id, surface) DO UPDATE
 SET observed_at = GREATEST(skill_efficacy_evaluations.observed_at, excluded.observed_at),
     updated_at = clock_timestamp()
