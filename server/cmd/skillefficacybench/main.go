@@ -212,7 +212,7 @@ func evaluate(client openrouter.CompletionClient, model string, tc testCase, run
 	response, err := client.GetObjectCompletion(ctx, request)
 	res.Latency = time.Since(started)
 	if err != nil {
-		res.Error = "completion failed"
+		res.Error = fmt.Sprintf("completion failed: %v", err)
 		return res
 	}
 	if response == nil || response.Message == nil {
@@ -224,7 +224,7 @@ func evaluate(client openrouter.CompletionClient, model string, tc testCase, run
 	res.CostUSD = response.Usage.Cost
 	verdict, err := efficacy.ParseVerdict(strings.TrimSpace(openrouter.GetText(*response.Message)))
 	if err != nil {
-		res.Error = "invalid verdict"
+		res.Error = fmt.Sprintf("invalid verdict: %v", err)
 		return res
 	}
 	res.Score = &verdict.Score

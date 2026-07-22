@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -34,7 +35,11 @@ func TestInsightsToolUsesAuthenticatedProjectAndDegradesWithoutScores(t *testing
 	versionID := uuid.NewString()
 	from := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	to := from.Add(24 * time.Hour)
-	svc := &stubSkillsService{listResult: &genskills.ListSkillsResult{Skills: []*gentypes.Skill{{ID: skillID, Name: "verification", DisplayName: "Verification"}}, NextCursor: nil}}
+	createdAt := "2026-06-01T00:00:00Z"
+	svc := &stubSkillsService{
+		listResult:         &genskills.ListSkillsResult{Skills: []*gentypes.Skill{{ID: skillID, Name: "verification", DisplayName: "Verification"}}, NextCursor: nil},
+		listVersionsResult: &genskills.ListSkillVersionsResult{Versions: []*gentypes.SkillVersion{{ID: versionID, CreatedAt: createdAt}}, NextCursor: nil},
+	}
 	reader := &stubSkillInsightsReader{rows: []telemetryrepo.SkillInsightBucket{{
 		SkillID:                  skillID,
 		SkillVersionID:           versionID,
@@ -79,6 +84,56 @@ func TestInsightsToolUsesAuthenticatedProjectAndDegradesWithoutScores(t *testing
 	require.InDelta(t, 1.25, result.Skills[0].Metrics.SessionCostUSD, 0)
 	require.InDelta(t, 0.625, *result.Skills[0].Metrics.AverageSessionCostUSD, 0)
 	require.Nil(t, result.Skills[0].Metrics.Efficacy)
+	require.Equal(t, createdAt, result.Skills[0].Versions[0].CreatedAt)
+}
+
+func TestInsightsToolQueriesOneSkillAndItsVersions(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	skillID := uuid.NewString()
+	versionID := uuid.NewString()
+	createdAt := "2026-06-01T00:00:00Z"
+	svc := &stubSkillsService{
+		getResult:          &genskills.GetSkillResult{Skill: &gentypes.Skill{ID: skillID, Name: "verification", DisplayName: "Verification"}, LatestVersion: nil},
+		listVersionsResult: &genskills.ListSkillVersionsResult{Versions: []*gentypes.SkillVersion{{ID: versionID, CreatedAt: createdAt}}, NextCursor: nil},
+	}
+	reader := &stubSkillInsightsReader{rows: []telemetryrepo.SkillInsightBucket{{SkillID: skillID, SkillVersionID: versionID, ActivationCount: 1}}}
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-test", ProjectID: &projectID, ProjectSlug: nil})
+	var out bytes.Buffer
+
+	err := NewInsightsTool(svc, reader).Call(ctx, skillToolCallEnv(""), bytes.NewBufferString(`{"skill_id":"`+skillID+`"}`), &out)
+	require.NoError(t, err)
+	require.Equal(t, skillID, svc.getPayload.ID)
+	require.Equal(t, skillID, svc.listVersionsPayload.ID)
+	require.Equal(t, []string{skillID}, reader.params.SkillIDs)
+
+	var result insightsResult
+	require.NoError(t, json.Unmarshal(out.Bytes(), &result))
+	require.Len(t, result.Skills, 1)
+	require.Equal(t, createdAt, result.Skills[0].Versions[0].CreatedAt)
+}
+
+func TestInsightsToolRejectsMissingSkillResult(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	skillID := uuid.NewString()
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-test", ProjectID: &projectID, ProjectSlug: nil})
+
+	err := NewInsightsTool(&stubSkillsService{}, &stubSkillInsightsReader{}).Call(ctx, skillToolCallEnv(""), bytes.NewBufferString(`{"skill_id":"`+skillID+`"}`), &bytes.Buffer{})
+	require.EqualError(t, err, "get skill returned no skill")
+}
+
+func TestInsightsToolReturnsSkillLookupError(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	skillID := uuid.NewString()
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-test", ProjectID: &projectID, ProjectSlug: nil})
+
+	err := NewInsightsTool(&stubSkillsService{getErr: errors.New("not found")}, &stubSkillInsightsReader{}).Call(ctx, skillToolCallEnv(""), bytes.NewBufferString(`{"skill_id":"`+skillID+`"}`), &bytes.Buffer{})
+	require.EqualError(t, err, "get skill: not found")
 }
 
 func TestBuildInsightsResultCombinesWeightedScoreAndROI(t *testing.T) {

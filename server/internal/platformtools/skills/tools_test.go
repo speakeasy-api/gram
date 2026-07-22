@@ -18,6 +18,7 @@ type stubSkillsService struct {
 	listDistributionsPayload *genskills.ListDistributionsPayload
 	listResult               *genskills.ListSkillsResult
 	getResult                *genskills.GetSkillResult
+	getErr                   error
 	listVersionsResult       *genskills.ListSkillVersionsResult
 }
 
@@ -31,6 +32,9 @@ func (s *stubSkillsService) List(_ context.Context, payload *genskills.ListPaylo
 
 func (s *stubSkillsService) Get(_ context.Context, payload *genskills.GetPayload) (*genskills.GetSkillResult, error) {
 	s.getPayload = payload
+	if s.getErr != nil {
+		return nil, s.getErr
+	}
 	if s.getResult != nil {
 		return s.getResult, nil
 	}
