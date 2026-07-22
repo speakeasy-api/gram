@@ -29,6 +29,22 @@ export type RiskCategoryDefinition = {
    */
   label: string;
   /**
+   * False when the category is session-scoped and message scoping does not apply (e.g. account_identity).
+   */
+  recommendedScopeApplicable: boolean;
+  /**
+   * Centrally recommended CEL exemption predicate; empty = no exemption.
+   */
+  recommendedScopeExempt: string;
+  /**
+   * Centrally recommended CEL scope predicate for this category; empty = no include restriction.
+   */
+  recommendedScopeInclude: string;
+  /**
+   * User-facing explanation of the recommended scope and the consequences of disabling it. Empty when the category has no recommendation.
+   */
+  recommendedScopeRationale: string;
+  /**
    * When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').
    */
   ruleIdPrefix: string;
@@ -52,12 +68,20 @@ export const RiskCategoryDefinition$inboundSchema: z.ZodMiniType<
     icon: z.string(),
     key: z.string(),
     label: z.string(),
+    recommended_scope_applicable: z.boolean(),
+    recommended_scope_exempt: z.string(),
+    recommended_scope_include: z.string(),
+    recommended_scope_rationale: z.string(),
     rule_id_prefix: z.string(),
     rule_ids: z.array(z.string()),
     source: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "recommended_scope_applicable": "recommendedScopeApplicable",
+      "recommended_scope_exempt": "recommendedScopeExempt",
+      "recommended_scope_include": "recommendedScopeInclude",
+      "recommended_scope_rationale": "recommendedScopeRationale",
       "rule_id_prefix": "ruleIdPrefix",
       "rule_ids": "ruleIds",
     });

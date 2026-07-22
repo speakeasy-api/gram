@@ -66,8 +66,13 @@ func (l *Logger) UpsertShadowMCPInventoryURLs(ctx context.Context, inventoryURLs
 		return nil
 	}
 
-	chRepo := repo.New(l.chConn)
-	if err := chRepo.UpsertShadowMCPInventoryURLs(l.shutdownCtx(), params); err != nil {
+	// This currently issues one ClickHouse point-SELECT per URL plus the
+	// final insert (see repo.UpsertShadowMCPInventoryURLs), so the span and
+	// metric measure the whole sequential batch (DNO-521/DNO-606).
+	err := l.observeCHWrite(ctx, "telemetry.upsertShadowMCPInventoryURLs", chWriteOperationUpsertShadowMCP, len(params), func(writeCtx context.Context) error {
+		return repo.New(l.chConn).UpsertShadowMCPInventoryURLs(writeCtx, params)
+	})
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "upsert shadow mcp inventory urls")
 	}
 

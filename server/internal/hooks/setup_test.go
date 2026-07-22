@@ -126,13 +126,13 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
-	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	serverURL, err := url.Parse("https://localhost:8080")
 	require.NoError(t, err)
 	efficacySignals := &recordingEfficacySignaler{mu: sync.Mutex{}, err: nil, signals: nil}
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore, serverURL)
+	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	svc := NewService(
 		logger,
 		conn,
