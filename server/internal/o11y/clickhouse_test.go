@@ -102,6 +102,8 @@ func TestTraceClickhouseConn_ExecEmitsSpanWithQueryText(t *testing.T) {
 	require.Equal(t, codes.Unset, spans[0].Status().Code)
 	requireSpanAttr(t, spans[0], "db.query.text", "ALTER TABLE chat_session_summaries DELETE WHERE 1")
 	requireSpanAttr(t, spans[0], "gram.clickhouse.table", "chat_session_summaries")
+	// The operation is the calling function, derived from the stack.
+	requireSpanAttr(t, spans[0], "gram.clickhouse.operation", "TestTraceClickhouseConn_ExecEmitsSpanWithQueryText")
 
 	// The inner call must receive the client span's context so ClickHouse's
 	// server-side spans parent under it.

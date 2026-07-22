@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"regexp"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -89,15 +91,48 @@ func clickhouseTargetTable(query string) string {
 	return "unknown"
 }
 
+// clickhouseCallerOperation names the query after the function that issued
+// it: the first stack frame outside this package (and the runtime), which is
+// the repo method or caller function — e.g. ListSessions or
+// listSessionsFromSummaries. Automatic for every query with no per-call-site
+// wiring, and bounded in cardinality by the number of query functions.
+func clickhouseCallerOperation() string {
+	pc := make([]uintptr, 16)
+	n := runtime.Callers(2, pc)
+	frames := runtime.CallersFrames(pc[:n])
+	for {
+		frame, more := frames.Next()
+		// Skip this decorator's own frames by name rather than frame count:
+		// counting is fragile under inlining.
+		if frame.Function != "" &&
+			!strings.Contains(frame.Function, "o11y.clickhouseCallerOperation") &&
+			!strings.Contains(frame.Function, "o11y.(*tracedClickhouseConn)") {
+			name := frame.Function
+			if i := strings.LastIndex(name, "/"); i >= 0 {
+				name = name[i+1:]
+			}
+			// Trim the package qualifier, keeping Type.Method or function.
+			if i := strings.Index(name, "."); i >= 0 {
+				name = name[i+1:]
+			}
+			return strings.NewReplacer("(", "", ")", "", "*", "").Replace(name)
+		}
+		if !more {
+			return "unknown"
+		}
+	}
+}
+
 // start opens the client span and returns everything the call needs to
 // finish it: the ClickHouse-bound context (span context attached for
 // server-side spans), the span, and a done callback recording status +
 // duration metric.
 func (c *tracedClickhouseConn) start(ctx context.Context, spanName, query string) (context.Context, trace.Span, func(err error)) {
 	table := clickhouseTargetTable(query)
+	operation := clickhouseCallerOperation()
 	ctx, span := c.tracer.Start(ctx, spanName,
 		trace.WithSpanKind(trace.SpanKindClient),
-		trace.WithAttributes(semconv.DBSystemNameClickHouse, semconv.DBQueryText(query), attr.ClickhouseTable(table)),
+		trace.WithAttributes(semconv.DBSystemNameClickHouse, semconv.DBQueryText(query), attr.ClickhouseTable(table), attr.ClickhouseOperation(operation)),
 	)
 	if sc := span.SpanContext(); sc.IsValid() {
 		ctx = clickhouse.Context(ctx, clickhouse.WithSpan(sc))
@@ -112,6 +147,7 @@ func (c *tracedClickhouseConn) start(ctx context.Context, spanName, query string
 		if c.queryDuration != nil {
 			c.queryDuration.Record(ctx, time.Since(begin).Seconds(), metric.WithAttributes(
 				attr.ClickhouseTable(table),
+				attr.ClickhouseOperation(operation),
 				attr.Outcome(OutcomeFromErrorWithTimeout(err)),
 			))
 		}
