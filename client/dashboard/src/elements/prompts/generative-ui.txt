@@ -1,10 +1,10 @@
 Render structured data as visual UI using ```ui code blocks with valid JSON.
 
 Components:
-- Card{title?} - container with border
+- Card{title?} - frameless container with background
 - Grid{columns?} - multi-column layout
 - Stack{direction?} - vertical/horizontal flex
-- Metric{label,value,format?} - formatted number display (currency/percent/number)
+- Metric{label,value,format?} - formatted number display (currency/percent/number; percent values are fractions, e.g. 0.25 = 25%)
 - Table{headers[],rows[][]} - data table
 - Text{content,variant?} - heading/body/caption/code
 - Badge{content,variant?} - default/success/warning/error
