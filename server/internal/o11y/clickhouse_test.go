@@ -22,9 +22,18 @@ import (
 
 type fakeClickhouseRows struct {
 	driver.Rows
-	closeErr error
-	closed   bool
+	closeErr  error
+	closed    bool
+	nextCalls int
 }
+
+// Next reports one row then exhaustion.
+func (r *fakeClickhouseRows) Next() bool {
+	r.nextCalls++
+	return r.nextCalls <= 1
+}
+
+func (r *fakeClickhouseRows) Err() error { return nil }
 
 func (r *fakeClickhouseRows) Close() error {
 	r.closed = true
@@ -58,6 +67,19 @@ func (f *fakeClickhouseConn) Select(ctx context.Context, _ any, query string, _ 
 	return f.selectErr
 }
 
+type fakeClickhouseRow struct {
+	driver.Row
+	scanErr error
+}
+
+func (r *fakeClickhouseRow) Scan(...any) error { return r.scanErr }
+
+func (f *fakeClickhouseConn) QueryRow(ctx context.Context, query string, _ ...any) driver.Row {
+	f.gotSpanContext = trace.SpanContextFromContext(ctx)
+	f.gotQuery = query
+	return &fakeClickhouseRow{scanErr: f.queryErr}
+}
+
 func (f *fakeClickhouseConn) Query(ctx context.Context, query string, _ ...any) (driver.Rows, error) {
 	f.gotSpanContext = trace.SpanContextFromContext(ctx)
 	f.gotQuery = query
@@ -82,6 +104,20 @@ func newRecordingTracedConn(t *testing.T, inner clickhouse.Conn) (clickhouse.Con
 	return TraceClickhouseConn(inner, tracerProvider, meterProvider, slog.New(slog.DiscardHandler)), recorder, reader //nolint:forbidigo // GG006: testenv imports o11y; using it here would be an import cycle.
 }
 
+func requireSingleSpan(t *testing.T, recorder *tracetest.SpanRecorder) sdktrace.ReadOnlySpan {
+	t.Helper()
+	spans := recorder.Ended()
+	require.Len(t, spans, 1)
+	return spans[0]
+}
+
+func requireSingleDataPoint(t *testing.T, reader *sdkmetric.ManualReader) metricdata.HistogramDataPoint[float64] {
+	t.Helper()
+	dps := queryDurationDataPoints(t, reader)
+	require.Len(t, dps, 1)
+	return dps[0]
+}
+
 func spanAttr(span sdktrace.ReadOnlySpan, key string) (string, bool) {
 	for _, kv := range span.Attributes() {
 		if string(kv.Key) == key {
@@ -103,7 +139,7 @@ func requireSpanAttr(t *testing.T, span sdktrace.ReadOnlySpan, key, want string)
 func queryDurationDataPoints(t *testing.T, reader *sdkmetric.ManualReader) []metricdata.HistogramDataPoint[float64] {
 	t.Helper()
 	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(context.Background(), &rm))
+	require.NoError(t, reader.Collect(t.Context(), &rm))
 	for _, scope := range rm.ScopeMetrics {
 		for _, m := range scope.Metrics {
 			if m.Name != meterClickhouseQueryDuration {
@@ -142,9 +178,10 @@ func TestTraceClickhouseConn_ExecEmitsSpan(t *testing.T) {
 	requireSpanAttr(t, spans[0], "gram.clickhouse.operation", "TestTraceClickhouseConn_ExecEmitsSpan")
 
 	// The inner call must receive the client span's context so ClickHouse's
-	// server-side spans parent under it.
+	// server-side spans parent under it, and the query untouched.
 	require.True(t, inner.gotSpanContext.IsValid())
 	require.Equal(t, spans[0].SpanContext().SpanID(), inner.gotSpanContext.SpanID())
+	require.Equal(t, "ALTER TABLE chat_session_summaries DELETE WHERE 1", inner.gotQuery)
 }
 
 // TestTraceClickhouseConn_NoQueryTextOnSpan pins a deliberate decision: the
@@ -381,7 +418,7 @@ func TestClickhouseOperation_Goroutine(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- conn.Exec(context.Background(), "SELECT 1")
+		done <- conn.Exec(t.Context(), "SELECT 1")
 	}()
 	require.NoError(t, <-done)
 
@@ -433,8 +470,85 @@ func TestClickhouseTargetTable(t *testing.T) {
 		// Pinned label limits: first FROM wins, JOINs label the leading table.
 		"WITH c AS (SELECT x FROM table_a) SELECT y FROM table_b JOIN c": "table_a",
 		"SELECT a.x FROM table_a a JOIN table_b b ON a.id = b.id":        "table_a",
+		// Database-qualified names label the TABLE segment, not the database.
+		"SELECT 1 FROM system.opentelemetry_span_log":    "opentelemetry_span_log",
+		"INSERT INTO gram.telemetry_logs (a) VALUES (?)": "telemetry_logs",
 	}
 	for query, want := range cases {
 		require.Equal(t, want, clickhouseTargetTable(query), "query: %s", query)
 	}
+}
+
+func TestTraceClickhouseConn_DoubleCloseRecordsOnce(t *testing.T) {
+	t.Parallel()
+
+	rows := &fakeClickhouseRows{}
+	inner := &fakeClickhouseConn{rows: rows}
+	conn, recorder, reader := newRecordingTracedConn(t, inner)
+
+	got, err := conn.Query(t.Context(), "SELECT 1 FROM t")
+	require.NoError(t, err)
+	require.NoError(t, got.Close())
+	// The explicit-Close-plus-deferred-Close pattern is legal with
+	// clickhouse-go; the wrapper must not double-record.
+	require.NoError(t, got.Close())
+
+	require.Len(t, recorder.Ended(), 1)
+	require.Equal(t, uint64(1), requireSingleDataPoint(t, reader).Count)
+}
+
+func TestTraceClickhouseConn_RowsExhaustionCompletesWithoutClose(t *testing.T) {
+	t.Parallel()
+
+	rows := &fakeClickhouseRows{}
+	inner := &fakeClickhouseConn{rows: rows}
+	conn, recorder, reader := newRecordingTracedConn(t, inner)
+
+	got, err := conn.Query(t.Context(), "SELECT 1 FROM t")
+	require.NoError(t, err)
+	for got.Next() { //nolint:revive // consuming the stream is the point
+	}
+	// clickhouse-go releases the stream when Next returns false, and callers
+	// may legally skip Close after exhaustion — the span and metric must not
+	// leak open in that pattern.
+	require.Len(t, recorder.Ended(), 1)
+	require.Equal(t, uint64(1), requireSingleDataPoint(t, reader).Count)
+
+	// A later deferred Close stays a no-op for recording.
+	require.NoError(t, got.Close())
+	require.Len(t, recorder.Ended(), 1)
+	require.Equal(t, uint64(1), requireSingleDataPoint(t, reader).Count)
+}
+
+func TestTraceClickhouseConn_QueryRowTracedOnScan(t *testing.T) {
+	t.Parallel()
+
+	inner := &fakeClickhouseConn{}
+	conn, recorder, reader := newRecordingTracedConn(t, inner)
+
+	row := conn.QueryRow(t.Context(), "SELECT count() FROM chat_session_summaries")
+	// driver.Row is lazy: nothing completes until the terminal call.
+	require.Empty(t, recorder.Ended())
+
+	var count uint64
+	require.NoError(t, row.Scan(&count))
+
+	span := requireSingleSpan(t, recorder)
+	require.Equal(t, "clickhouse.query_row", span.Name())
+	requireSpanAttr(t, span, "gram.clickhouse.table", "chat_session_summaries")
+	require.Equal(t, "success", dataPointAttr(requireSingleDataPoint(t, reader), "gram.outcome"))
+}
+
+func TestTraceClickhouseConn_QueryRowScanErrorRecordsFailure(t *testing.T) {
+	t.Parallel()
+
+	inner := &fakeClickhouseConn{queryErr: errors.New("scan failed")}
+	conn, recorder, reader := newRecordingTracedConn(t, inner)
+
+	row := conn.QueryRow(t.Context(), "SELECT count() FROM t")
+	var count uint64
+	require.Error(t, row.Scan(&count))
+
+	require.Equal(t, codes.Error, requireSingleSpan(t, recorder).Status().Code)
+	require.Equal(t, "failure", dataPointAttr(requireSingleDataPoint(t, reader), "gram.outcome"))
 }

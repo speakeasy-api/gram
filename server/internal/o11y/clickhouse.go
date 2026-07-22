@@ -10,6 +10,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
@@ -36,9 +37,15 @@ const meterClickhouseQueryDuration = "clickhouse.client.query.duration"
 // sends trace context that is explicitly attached via
 // clickhouse.Context/WithSpan; it never reads the span from ctx itself.
 //
-// PrepareBatch and AsyncInsert pass through untraced: the synchronous
-// telemetry write path is instrumented at the Logger layer (observeCHWrite),
-// which owns its own spans and metric.
+// PrepareBatch and AsyncInsert pass through untraced (no batch caller runs
+// inside the server processes today; wrap driver.Batch here before adopting
+// one on a hot path). The synchronous telemetry writes go through Exec and
+// are therefore traced here at the connection layer AND measured at the
+// Logger layer (observeCHWrite): the layers are complementary, not
+// duplicates — telemetry.clickhouse.write.duration is the logger-level
+// operation (stable snake_case names, row counts, retry-inclusive), while
+// clickhouse.client.query.duration is the per-call connection layer. Do not
+// sum the two metrics.
 type tracedClickhouseConn struct {
 	clickhouse.Conn
 	tracer        trace.Tracer
@@ -79,17 +86,23 @@ func TraceClickhouseConn(conn clickhouse.Conn, tracerProvider trace.TracerProvid
 // parens by requiring an identifier, so a
 // "FROM (SELECT ... FROM chat_session_summaries s)" resolves to the inner
 // table.
-var clickhouseTablePatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)\bINSERT\s+INTO\s+` + "`?" + `([a-zA-Z_][a-zA-Z0-9_]*)`),
-	regexp.MustCompile(`(?i)\bALTER\s+TABLE\s+` + "`?" + `([a-zA-Z_][a-zA-Z0-9_]*)`),
-	regexp.MustCompile(`(?i)\bFROM\s+` + "`?" + `([a-zA-Z_][a-zA-Z0-9_]*)`),
-}
+// A single alternation keeps this to ONE scan of the SQL text (three
+// sequential patterns cost ~200us on our largest ~8KB queries; one early-
+// matching scan is near-free). First match by position preserves the
+// intended precedence: INSERT INTO / ALTER TABLE lead their statements, and
+// for SELECTs the first FROM wins. An optional database qualifier
+// (FROM db.table) is skipped so the TABLE segment is captured.
+var clickhouseTablePattern = regexp.MustCompile(
+	`(?i)\b(?:INSERT\s+INTO|ALTER\s+TABLE|FROM)\s+` + "`?" + `(?:[a-zA-Z_][a-zA-Z0-9_]*\.)?` + "`?" + `([a-zA-Z_][a-zA-Z0-9_]*)`)
+
+// receiverCleaner strips Go method-receiver punctuation from stack-frame
+// names, e.g. (*Queries).ListSessions -> Queries.ListSessions. Built once:
+// strings.Replacer compiles an internal machine per instance.
+var receiverCleaner = strings.NewReplacer("(", "", ")", "", "*", "")
 
 func clickhouseTargetTable(query string) string {
-	for _, pattern := range clickhouseTablePatterns {
-		if m := pattern.FindStringSubmatch(query); m != nil {
-			return m[1]
-		}
+	if m := clickhouseTablePattern.FindStringSubmatch(query); m != nil {
+		return m[1]
 	}
 	return "unknown"
 }
@@ -118,7 +131,7 @@ func clickhouseCallerOperation() string {
 			if i := strings.Index(name, "."); i >= 0 {
 				name = name[i+1:]
 			}
-			return strings.NewReplacer("(", "", ")", "", "*", "").Replace(name)
+			return receiverCleaner.Replace(name)
 		}
 		if !more {
 			return "unknown"
@@ -126,23 +139,41 @@ func clickhouseCallerOperation() string {
 	}
 }
 
-// start opens the client span and returns everything the call needs to
-// finish it: the ClickHouse-bound context (span context attached for
-// server-side spans), the span, and a done callback recording status +
-// duration metric.
-func (c *tracedClickhouseConn) start(ctx context.Context, spanName, query string) (context.Context, trace.Span, func(err error)) {
+// start opens the client span and returns the ClickHouse-bound context
+// (span context attached for server-side spans) plus a done callback that
+// records status + the duration metric and ends the span. done is
+// idempotent: only its first invocation records.
+func (c *tracedClickhouseConn) start(ctx context.Context, spanName, query string) (context.Context, func(err error)) {
 	table := clickhouseTargetTable(query)
 	operation := clickhouseCallerOperation()
 	ctx, span := c.tracer.Start(ctx, spanName,
 		trace.WithSpanKind(trace.SpanKindClient),
-		trace.WithAttributes(semconv.DBSystemNameClickHouse, attr.ClickhouseTable(table), attr.ClickhouseOperation(operation)),
+		trace.WithAttributes(
+			semconv.DBSystemNameClickHouse,
+			// Legacy key alongside db.system.name: Datadog's database
+			// facets key on db.system, and deps.go's Redis spans still
+			// emit the pre-rename semconv. Drop once the binary
+			// standardizes on one semconv version.
+			attribute.String("db.system", "clickhouse"),
+			attr.ClickhouseTable(table),
+			attr.ClickhouseOperation(operation),
+		),
 	)
 	if sc := span.SpanContext(); sc.IsValid() {
+		// clickhouse-go v2 merges: Context() seeds from the parent's
+		// existing QueryOptions before applying WithSpan, so caller options
+		// (WithAsync, settings, parameters) survive this wrap. That merge
+		// is driver behavior, not contract — re-verify on driver upgrades.
 		ctx = clickhouse.Context(ctx, clickhouse.WithSpan(sc))
 	}
 
 	begin := time.Now()
+	completed := false
 	done := func(err error) {
+		if completed {
+			return
+		}
+		completed = true
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
@@ -156,12 +187,12 @@ func (c *tracedClickhouseConn) start(ctx context.Context, spanName, query string
 		}
 		span.End()
 	}
-	return ctx, span, done
+	return ctx, done
 }
 
 //nolint:wrapcheck // A transparent decorator must return the driver's error unchanged.
 func (c *tracedClickhouseConn) Exec(ctx context.Context, query string, args ...any) error {
-	ctx, _, done := c.start(ctx, "clickhouse.exec", query)
+	ctx, done := c.start(ctx, "clickhouse.exec", query)
 	err := c.Conn.Exec(ctx, query, args...)
 	done(err)
 	return err
@@ -169,15 +200,23 @@ func (c *tracedClickhouseConn) Exec(ctx context.Context, query string, args ...a
 
 //nolint:wrapcheck // A transparent decorator must return the driver's error unchanged.
 func (c *tracedClickhouseConn) Select(ctx context.Context, dest any, query string, args ...any) error {
-	ctx, _, done := c.start(ctx, "clickhouse.select", query)
+	ctx, done := c.start(ctx, "clickhouse.select", query)
 	err := c.Conn.Select(ctx, dest, query, args...)
 	done(err)
 	return err
 }
 
+func (c *tracedClickhouseConn) QueryRow(ctx context.Context, query string, args ...any) driver.Row {
+	ctx, done := c.start(ctx, "clickhouse.query_row", query)
+	row := c.Conn.QueryRow(ctx, query, args...)
+	// driver.Row is lazy: the terminal call (Scan/ScanStruct/Err) completes
+	// the span and metric.
+	return &tracedClickhouseRow{Row: row, done: done}
+}
+
 //nolint:wrapcheck // A transparent decorator must return the driver's error unchanged.
 func (c *tracedClickhouseConn) Query(ctx context.Context, query string, args ...any) (driver.Rows, error) {
-	ctx, _, done := c.start(ctx, "clickhouse.query", query)
+	ctx, done := c.start(ctx, "clickhouse.query", query)
 	rows, err := c.Conn.Query(ctx, query, args...)
 	if err != nil {
 		done(err)
@@ -190,15 +229,54 @@ func (c *tracedClickhouseConn) Query(ctx context.Context, query string, args ...
 }
 
 // tracedClickhouseRows completes the query span and duration metric when the
-// result set is closed.
+// result set ends: at stream exhaustion (Next returning false — clickhouse-go
+// releases the stream there, and callers may legally skip Close after it) or
+// at Close, whichever comes first. done is idempotent, so hitting both — or a
+// double Close — records exactly once.
 type tracedClickhouseRows struct {
 	driver.Rows
 	done func(err error)
 }
 
+func (r *tracedClickhouseRows) Next() bool {
+	next := r.Rows.Next()
+	if !next {
+		r.done(r.Err())
+	}
+	return next
+}
+
 //nolint:wrapcheck // A transparent decorator must return the driver's error unchanged.
 func (r *tracedClickhouseRows) Close() error {
 	err := r.Rows.Close()
+	r.done(err)
+	return err
+}
+
+// tracedClickhouseRow completes the query_row span and duration metric on
+// the first terminal call. done is idempotent.
+type tracedClickhouseRow struct {
+	driver.Row
+	done func(err error)
+}
+
+//nolint:wrapcheck // A transparent decorator must return the driver's error unchanged.
+func (r *tracedClickhouseRow) Scan(dest ...any) error {
+	err := r.Row.Scan(dest...)
+	r.done(err)
+	return err
+}
+
+//nolint:wrapcheck // A transparent decorator must return the driver's error unchanged.
+func (r *tracedClickhouseRow) ScanStruct(dest any) error {
+	err := r.Row.ScanStruct(dest)
+	r.done(err)
+	return err
+}
+
+//nolint:wrapcheck // A transparent decorator must return the driver's error unchanged.
+func (r *tracedClickhouseRow) Err() error {
+	err := r.Row.Err()
 	r.done(err)
 	return err
 }

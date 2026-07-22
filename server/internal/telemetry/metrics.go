@@ -63,7 +63,11 @@ func (l *Logger) observeCHWrite(ctx context.Context, spanName string, operation 
 	))
 	defer span.End()
 
-	err := write(l.shutdownCtx())
+	// The write runs on the detached shutdown context (it must survive
+	// request cancellation) but carries this span, so the connection-level
+	// clickhouse.exec child spans (o11y.TraceClickhouseConn) parent here
+	// instead of surfacing as orphan roots.
+	err := write(trace.ContextWithSpan(l.shutdownCtx(), span))
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 	}

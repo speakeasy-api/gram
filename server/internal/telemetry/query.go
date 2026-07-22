@@ -455,8 +455,10 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		Limit:            limit + 1,
 	}
 	// Named per routed path so the raw telemetry_logs scan and the
-	// chat_session_summaries read stay separately visible in traces; the repo
-	// forwards this span's context to ClickHouse alongside the query.
+	// chat_session_summaries read stay separately visible in traces. The
+	// connection-level decorator (o11y.TraceClickhouseConn) emits the
+	// clickhouse.query child span under this one and forwards its context to
+	// ClickHouse's server-side spans.
 	spanName := "telemetry.listSessions.clickhouse.raw"
 	if params.UsesSummaryPath() {
 		spanName = "telemetry.listSessions.clickhouse.summary"
