@@ -74,6 +74,8 @@ type fakeClickhouseRow struct {
 
 func (r *fakeClickhouseRow) Scan(...any) error { return r.scanErr }
 
+func (r *fakeClickhouseRow) Err() error { return nil }
+
 func (f *fakeClickhouseConn) QueryRow(ctx context.Context, query string, _ ...any) driver.Row {
 	f.gotSpanContext = trace.SpanContextFromContext(ctx)
 	f.gotQuery = query
@@ -551,4 +553,25 @@ func TestTraceClickhouseConn_QueryRowScanErrorRecordsFailure(t *testing.T) {
 
 	require.Equal(t, codes.Error, requireSingleSpan(t, recorder).Status().Code)
 	require.Equal(t, "failure", dataPointAttr(requireSingleDataPoint(t, reader), "gram.outcome"))
+}
+
+// TestTraceClickhouseConn_QueryRowNilErrCheckDoesNotComplete pins the P2
+// review finding: driver.Row.Err() reports pre-execution errors without
+// consuming the row, so a nil Err() check before Scan must not complete the
+// span with a dispatch-only duration.
+func TestTraceClickhouseConn_QueryRowNilErrCheckDoesNotComplete(t *testing.T) {
+	t.Parallel()
+
+	inner := &fakeClickhouseConn{}
+	conn, recorder, reader := newRecordingTracedConn(t, inner)
+
+	row := conn.QueryRow(t.Context(), "SELECT count() FROM t")
+	require.NoError(t, row.Err())
+	require.Empty(t, recorder.Ended(), "a nil Err() pre-check must not complete the span")
+	require.Empty(t, queryDurationDataPoints(t, reader))
+
+	var count uint64
+	require.NoError(t, row.Scan(&count))
+	require.Len(t, recorder.Ended(), 1)
+	require.Equal(t, uint64(1), requireSingleDataPoint(t, reader).Count)
 }

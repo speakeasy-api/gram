@@ -93,7 +93,7 @@ func TraceClickhouseConn(conn clickhouse.Conn, tracerProvider trace.TracerProvid
 // for SELECTs the first FROM wins. An optional database qualifier
 // (FROM db.table) is skipped so the TABLE segment is captured.
 var clickhouseTablePattern = regexp.MustCompile(
-	`(?i)\b(?:INSERT\s+INTO|ALTER\s+TABLE|FROM)\s+` + "`?" + `(?:[a-zA-Z_][a-zA-Z0-9_]*\.)?` + "`?" + `([a-zA-Z_][a-zA-Z0-9_]*)`)
+	`(?i)\b(?:INSERT\s+INTO|ALTER\s+TABLE|FROM)\s+` + "`?" + `(?:[a-zA-Z_][a-zA-Z0-9_]*` + "`?" + `\.)?` + "`?" + `([a-zA-Z_][a-zA-Z0-9_]*)`)
 
 // receiverCleaner strips Go method-receiver punctuation from stack-frame
 // names, e.g. (*Queries).ListSessions -> Queries.ListSessions. Built once:
@@ -274,9 +274,16 @@ func (r *tracedClickhouseRow) ScanStruct(dest any) error {
 	return err
 }
 
+// Err completes the span only when it reports an actual error: a nil Err()
+// is a pre-execution check that does not consume the row (the caller's
+// subsequent Scan/ScanStruct executes the query and completes the span with
+// the real duration and outcome).
+//
 //nolint:wrapcheck // A transparent decorator must return the driver's error unchanged.
 func (r *tracedClickhouseRow) Err() error {
 	err := r.Row.Err()
-	r.done(err)
+	if err != nil {
+		r.done(err)
+	}
 	return err
 }
