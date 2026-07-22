@@ -127,12 +127,13 @@ func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *
 // Publication order per evaluation is existence guard → judge → synchronous
 // insert → mark scored, and the guard runs for the WHOLE batch before any judge
 // call: a retry that follows a crash between insert and mark must not pay for
-// inference a second time. The score id is the evaluation id, so a replayed
-// insert is the same row rather than a duplicate, and the guard window starts at
-// the batch's earliest evaluation created_at and always extends past the current
-// pass, so it contains every insert a previous pass could have made — including
-// one made for a reservation older than the slack, and one made before a stale
-// reset moved the row's reservation day forward.
+// inference a second time. The score id is the evaluation id, so every physical
+// retry has the same logical event identity and analytical reads collapse it.
+// The guard window starts at the batch's earliest evaluation created_at and
+// always extends past the current pass, so it contains every insert a previous
+// pass could have made — including one made for a reservation older than the
+// slack, and one made before a stale reset moved the row's reservation day
+// forward.
 //
 // A model failure charges the evaluation an attempt and the batch continues; the
 // third one terminates that evaluation as failed and never writes a score. A
@@ -599,10 +600,11 @@ func (p *Publisher) markScored(ctx context.Context, projectID uuid.UUID, id uuid
 	return nil
 }
 
-// scoreRow builds the sink row. The score id is the evaluation id, which makes
-// publication idempotent across retries, and created_at is the insert-time
-// clock, which the guard window always contains because its upper bound tracks
-// the clock too.
+// scoreRow builds the sink row. The score id is the evaluation id, which gives
+// retries one logical event identity, and created_at is the insert-time clock,
+// which the guard window always contains because its upper bound tracks the
+// clock too. ClickHouse may retain duplicate physical rows; read paths collapse
+// them by this ID.
 func scoreRow(projectID uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, judged JudgeResult) telemetryrepo.SkillEfficacyScore {
 	return telemetryrepo.SkillEfficacyScore{
 		ID:                 input.ID,
