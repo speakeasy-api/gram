@@ -411,8 +411,10 @@ func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Co
 		ID:             uuid.New(),
 		ProjectID:      cfg.ProjectID,
 		OrganizationID: cfg.OrganizationID,
-		UserID:         conv.ToPGText(userID),
-		ExternalUserID: conv.ToPGText(activity.Actor.UserID),
+		// NULL when unresolved so the upsert's COALESCE preserves a user
+		// resolved by an earlier activity or the message-page enrichment.
+		UserID:         conv.ToPGTextEmpty(userID),
+		ExternalUserID: conv.ToPGTextEmpty(activity.Actor.UserID),
 		ExternalChatID: conv.ToPGText(activity.ClaudeChatID),
 		// NULL so the upsert's COALESCE never clobbers the real title set by
 		// the one-time enrichment from the chat's first message page.
@@ -501,8 +503,10 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 		ID:             chatID,
 		ProjectID:      cfg.ProjectID,
 		OrganizationID: cfg.OrganizationID,
-		UserID:         conv.ToPGText(userID),
-		ExternalUserID: conv.ToPGText(page.User.ID),
+		// NULL when unresolved so the upsert's COALESCE preserves a user
+		// resolved from a prior sync.
+		UserID:         conv.ToPGTextEmpty(userID),
+		ExternalUserID: conv.ToPGTextEmpty(page.User.ID),
 		ExternalChatID: conv.ToPGText(page.ID),
 		Title:          conv.ToPGText(page.Name),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),

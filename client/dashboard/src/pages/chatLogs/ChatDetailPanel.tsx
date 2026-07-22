@@ -59,6 +59,7 @@ import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
 import { formatPlatform } from "@/lib/formatPlatform";
@@ -261,7 +262,7 @@ function SessionSummary({
     lastMessageTimestamp?: Date;
     updatedAt: Date;
   };
-  userLabel: string;
+  userLabel: ReactNode;
   messageCount: number;
   toolCount: number;
   compact?: boolean;
@@ -638,7 +639,7 @@ function ChatDetailHeader({
 }: {
   chatId: string;
   chat: Parameters<typeof SessionSummary>[0]["chat"] & { title?: string };
-  userLabel: string;
+  userLabel: ReactNode;
   messageCount: number;
   toolCount: number;
   canManageChat: boolean;
@@ -870,6 +871,18 @@ function ChatDetailPanel({
         personalAccountEmail(chat),
       )
     : "anonymous";
+  // Same label as a node: unresolved owners get an explanatory tooltip in the
+  // header's session details, while transcript rows keep the plain string.
+  const userLabelNode = chat ? (
+    <ChatOwnerLabel
+      members={membersData?.members}
+      chat={chat}
+      currentUser={user}
+      accountEmail={personalAccountEmail(chat)}
+    />
+  ) : (
+    "anonymous"
+  );
   // Only the primary (or risk) initial load blanks the whole panel; a search
   // re-fetch updates the transcript in place — its loading shows in the search
   // bar and as a "Searching…" empty state instead.
@@ -1241,7 +1254,7 @@ function ChatDetailPanel({
       <ChatDetailHeader
         chatId={chatId}
         chat={chat}
-        userLabel={userLabel}
+        userLabel={userLabelNode}
         messageCount={chat.numMessages}
         toolCount={toolLogs.length}
         canManageChat={canManageChat}
