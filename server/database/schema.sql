@@ -2102,6 +2102,11 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key
 ON users (email);
 
+-- Connected-user resolution matches emails case-insensitively
+-- (GetConnectedUsersByEmails), which users_email_key cannot serve.
+CREATE INDEX IF NOT EXISTS users_email_lower_idx
+ON users (lower(email));
+
 -- user_accounts is the registry of external AI provider accounts (Claude today;
 -- other providers in the future) observed for a Gram organization, each linked to
 -- the employee (Gram user) who owns it. It is the entity behind personal-account

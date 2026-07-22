@@ -1,4 +1,4 @@
-h1:QnOCCrQ4nf1kmheMzHSvXBje3BrOpJLWh7GSc3Cngik=
+h1:ri2i2usL83jIB+ULCMFo7FXcrV/doe3y9lo7WNGXVoM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -283,3 +283,4 @@ h1:QnOCCrQ4nf1kmheMzHSvXBje3BrOpJLWh7GSc3Cngik=
 20260721093938_risk-results-autovacuum-insert-cadence.sql h1:yUpY0HL6nQrNEl7HEkvOuGby0dSEX+QfFt4BrjK8KyM=
 20260721125001_ai-integration-poll-checkpoint.sql h1:OMjSUB9GcRGrONy32TNzXHuapkFOaVwYvoAPuZbxylk=
 20260721225140_ai-integration-sync-schedules-contract.sql h1:To66VlwrBJi3Entrc9+zF5ZGryrGLMp8jEkSrmi+6LY=
+20260722020442_users-email-lower-idx.sql h1:BF5+BaGdi8FQ+yz4mVCO2ya25YJsb1q2Et57zn9UBGw=
