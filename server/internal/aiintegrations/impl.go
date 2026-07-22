@@ -163,7 +163,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 
 	// Start the watermark one lookback period in the past so the first poll
 	// backfills usage emitted just before the key was configured.
-	watermark := time.Now().UTC().Add(-initialUsagePollLookback)
+	watermark := time.Now().UTC().Add(-initialPollLookbackForProvider(provider))
 	resetPollWatermarkAt := conv.Ternary(
 		beforeRow != nil && (apiKeySupplied || externalOrgChanged),
 		&watermark,

@@ -66,6 +66,78 @@ func TestBuildCodexCostLogParamsVerifiesSHAAndMapsTelemetry(t *testing.T) {
 	require.InDelta(t, 0.962288, attrs[attr.GenAIUsageCostKey], 0.000001)
 }
 
+func TestBuildCodexCostLogParamsRoutesNonCodexProductsToChatGPTURN(t *testing.T) {
+	t.Parallel()
+
+	// One file mixing the three product surfaces observed in the compliance
+	// feed. Only the codex row may land under codex:usage:metrics; ChatGPT and
+	// Work rows are parked under chatgpt:usage:metrics.
+	body := []byte(
+		`{"event_id":"event_codex","type":"COSTS","timestamp":"2026-07-19T15:59:59Z","payload":{"day":"2026-07-19","hour":15,"identity":{"user_id":"user_1","email":"dev@example.com"},"product":"codex","client":"exec","surface":"exec","model":"gpt-5.6-sol","measures":{"usage":{"text_input_tokens":10,"text_output_tokens":5},"billing":[{"sku":"GPT-5.6 - Input","quantity":{"value":10,"unit":"tokens"},"cost":{"value":0.5,"unit":"CREDITS"}}]}}}` + "\n" +
+			`{"event_id":"event_chatgpt","type":"COSTS","timestamp":"2026-07-19T16:59:59Z","payload":{"day":"2026-07-19","hour":16,"identity":{"user_id":"user_2","email":"dev2@example.com"},"product":"ChatGPT","client":"web","model":"gpt-5-5","measures":{"usage":{"text_input_tokens":20,"text_output_tokens":8},"billing":[]}}}` + "\n" +
+			`{"event_id":"event_work","type":"COSTS","timestamp":"2026-07-19T17:59:59Z","payload":{"day":"2026-07-19","hour":17,"identity":{"user_id":"user_3","email":"dev3@example.com"},"product":"Work","client":"web","model":"gpt-5-5","measures":{"usage":{"text_input_tokens":30,"text_output_tokens":9},"billing":[{"sku":"GPT-5.5 - Input","quantity":{"value":30,"unit":"tokens"},"cost":{"value":1.0,"unit":"CREDITS"}}]}}}` + "\n",
+	)
+
+	cfg := codexCostConfig()
+	file := codexapi.LogFile{
+		ID:         "eclf_products",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC),
+		FileName:   "COSTS_2026-07-19T18:00:00.000000+00:00.jsonl",
+		FileSize:   int64(len(body)),
+		FileSHA256: "",
+	}
+
+	logParams, err := buildCodexCostLogParams(cfg, file, body)
+	require.NoError(t, err)
+	require.Len(t, logParams, 3)
+
+	codexRow := logParams[0]
+	require.Equal(t, codexUsageMetricsURN, codexRow.ToolInfo.URN)
+	require.Equal(t, codexHookSource, codexRow.ToolInfo.Name)
+	require.Equal(t, codexUsageMetricsURN, codexRow.Attributes[attr.ResourceURNKey])
+	require.Equal(t, codexHookSource, codexRow.Attributes[attr.HookSourceKey])
+	require.Equal(t, "codex", codexRow.Attributes[attr.CodexComplianceProductKey])
+
+	chatgptRow := logParams[1]
+	require.Equal(t, chatgptUsageMetricsURN, chatgptRow.ToolInfo.URN)
+	require.Equal(t, chatgptHookSource, chatgptRow.ToolInfo.Name)
+	require.Equal(t, chatgptUsageMetricsURN, chatgptRow.Attributes[attr.ResourceURNKey])
+	require.Equal(t, chatgptHookSource, chatgptRow.Attributes[attr.HookSourceKey])
+	require.Equal(t, "ChatGPT", chatgptRow.Attributes[attr.CodexComplianceProductKey])
+
+	workRow := logParams[2]
+	require.Equal(t, chatgptUsageMetricsURN, workRow.ToolInfo.URN)
+	require.Equal(t, chatgptHookSource, workRow.ToolInfo.Name)
+	require.Equal(t, "Work", workRow.Attributes[attr.CodexComplianceProductKey])
+	// Billing still prices non-Codex rows; the cost just lands under the
+	// parked URN instead of the codex stream.
+	require.InDelta(t, 0.04, workRow.Attributes[attr.GenAIUsageCostKey], 0.000001)
+}
+
+func TestBuildCodexCostLogParamsRoutesMissingProductToChatGPTURN(t *testing.T) {
+	t.Parallel()
+
+	// A row with no product claim must not be counted as Codex spend.
+	body := []byte(`{"event_id":"event_no_product","type":"COSTS","timestamp":"2026-07-19T15:59:59Z","payload":{"identity":{"user_id":"user_1","email":"dev@example.com"},"measures":{"usage":{"text_input_tokens":10},"billing":[]}}}` + "\n")
+
+	cfg := codexCostConfig()
+	file := codexapi.LogFile{
+		ID:         "eclf_no_product",
+		EventType:  codexComplianceCostsEventType,
+		EndTime:    time.Date(2026, 7, 19, 16, 0, 0, 0, time.UTC),
+		FileName:   "COSTS_2026-07-19T16:00:00.000000+00:00.jsonl",
+		FileSize:   int64(len(body)),
+		FileSHA256: "",
+	}
+
+	logParams, err := buildCodexCostLogParams(cfg, file, body)
+	require.NoError(t, err)
+	require.Len(t, logParams, 1)
+	require.Equal(t, chatgptUsageMetricsURN, logParams[0].ToolInfo.URN)
+	require.Equal(t, chatgptHookSource, logParams[0].Attributes[attr.HookSourceKey])
+}
+
 func TestBuildCodexCostLogParamsRejectsSHAMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -110,7 +182,7 @@ func TestCodexCostSourceUpperBoundReturnsStartWhenNoLogs(t *testing.T) {
 	cfg.PollWatermarkAt = time.Time{}
 	cfg.PollCheckpoint = timewindowpoller.CompletedCheckpoint(time.Time{})
 	endTime := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
-	start := endTime.Add(-InitialUsagePollLookback)
+	start := endTime.Add(-CodexComplianceInitialLookback)
 	client := &stubCodexComplianceClient{
 		listPages: []*codexapi.LogsPage{
 			{Data: nil, HasMore: false, LastEndTime: time.Time{}},
@@ -170,7 +242,7 @@ func TestCodexCostPollerDoesNotAdvanceWatermarkWhenNoLogs(t *testing.T) {
 		EndTime: endTime,
 		Heartbeat: func(context.Context, int) {
 		},
-		InitialLookback: InitialUsagePollLookback,
+		InitialLookback: CodexComplianceInitialLookback,
 		MaxWindow:       0,
 		Granularity:     0,
 		ResumeOffset:    0,
