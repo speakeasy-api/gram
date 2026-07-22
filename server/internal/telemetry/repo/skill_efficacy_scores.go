@@ -122,7 +122,11 @@ func (q *Queries) ListSkillEfficacyScoreSessions(ctx context.Context, arg ListSk
 		}
 		result = append(result, row)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating scored sessions: %w", err)
+	}
+
+	return result, nil
 }
 
 // SkillInsightBucket is one activation-time bucket for a skill version. Score

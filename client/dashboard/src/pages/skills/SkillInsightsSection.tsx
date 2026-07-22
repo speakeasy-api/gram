@@ -1,6 +1,6 @@
 import { ChartCard } from "@/components/chart/ChartCard";
-import { CHART_COLORS } from "@/components/billing/breakdown-options";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { CHART_COLORS } from "@/components/stacked-time-series";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
