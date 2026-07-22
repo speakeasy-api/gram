@@ -1172,6 +1172,11 @@ SELECT pg_advisory_xact_lock(hashtextextended('skill-efficacy:' || p.organizatio
 FROM projects p
 WHERE p.id = @project_id::uuid;
 
+-- name: LockOrganizationSkillEfficacyBudget :exec
+-- Settings updates share the reservation lock so their audit snapshot and the
+-- sampling policy observed by reservations both describe committed state.
+SELECT pg_advisory_xact_lock(hashtextextended('skill-efficacy:' || @organization_id::text, 0));
+
 -- name: GetSkillEfficacySettingsForProject :one
 -- All-null settings columns mean the organization has no row, and Go applies
 -- the package defaults.
@@ -1185,6 +1190,34 @@ FROM projects p
 LEFT JOIN skill_efficacy_settings s ON s.organization_id = p.organization_id
 WHERE p.id = @project_id::uuid
   AND p.deleted IS FALSE;
+
+-- name: GetSkillEfficacySettingsForOrganization :one
+SELECT *
+FROM skill_efficacy_settings
+WHERE organization_id = @organization_id;
+
+-- name: UpsertSkillEfficacySettingsForOrganization :one
+INSERT INTO skill_efficacy_settings (
+  organization_id,
+  enabled,
+  per_skill_daily_cap,
+  org_daily_cap,
+  new_version_burst
+)
+VALUES (
+  @organization_id,
+  @enabled,
+  @per_skill_daily_cap,
+  @org_daily_cap,
+  @new_version_burst
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET enabled = excluded.enabled,
+    per_skill_daily_cap = excluded.per_skill_daily_cap,
+    org_daily_cap = excluded.org_daily_cap,
+    new_version_burst = excluded.new_version_burst,
+    updated_at = clock_timestamp()
+RETURNING *;
 
 -- name: CountSkillEfficacyOrgSpendForProject :one
 -- Org-grained spend for the day, entered through the project: counts every

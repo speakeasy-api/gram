@@ -1344,6 +1344,27 @@ func (q *Queries) GetSkillEfficacyJudgeInputs(ctx context.Context, arg GetSkillE
 	return items, nil
 }
 
+const getSkillEfficacySettingsForOrganization = `-- name: GetSkillEfficacySettingsForOrganization :one
+SELECT organization_id, enabled, per_skill_daily_cap, org_daily_cap, new_version_burst, created_at, updated_at
+FROM skill_efficacy_settings
+WHERE organization_id = $1
+`
+
+func (q *Queries) GetSkillEfficacySettingsForOrganization(ctx context.Context, organizationID string) (SkillEfficacySetting, error) {
+	row := q.db.QueryRow(ctx, getSkillEfficacySettingsForOrganization, organizationID)
+	var i SkillEfficacySetting
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Enabled,
+		&i.PerSkillDailyCap,
+		&i.OrgDailyCap,
+		&i.NewVersionBurst,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getSkillEfficacySettingsForProject = `-- name: GetSkillEfficacySettingsForProject :one
 SELECT
   p.organization_id,
@@ -2924,6 +2945,17 @@ func (q *Queries) LoadReservedSkillEfficacyEvaluations(ctx context.Context, arg 
 	return items, nil
 }
 
+const lockOrganizationSkillEfficacyBudget = `-- name: LockOrganizationSkillEfficacyBudget :exec
+SELECT pg_advisory_xact_lock(hashtextextended('skill-efficacy:' || $1::text, 0))
+`
+
+// Settings updates share the reservation lock so their audit snapshot and the
+// sampling policy observed by reservations both describe committed state.
+func (q *Queries) LockOrganizationSkillEfficacyBudget(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockOrganizationSkillEfficacyBudget, organizationID)
+	return err
+}
+
 const lockProjectOrganizationSkillEfficacyBudget = `-- name: LockProjectOrganizationSkillEfficacyBudget :exec
 SELECT pg_advisory_xact_lock(hashtextextended('skill-efficacy:' || p.organization_id, 0))
 FROM projects p
@@ -3518,6 +3550,59 @@ func (q *Queries) UpdateSkillDistribution(ctx context.Context, arg UpdateSkillDi
 		&i.Channel,
 		&i.CreatedByUserID,
 		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertSkillEfficacySettingsForOrganization = `-- name: UpsertSkillEfficacySettingsForOrganization :one
+INSERT INTO skill_efficacy_settings (
+  organization_id,
+  enabled,
+  per_skill_daily_cap,
+  org_daily_cap,
+  new_version_burst
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET enabled = excluded.enabled,
+    per_skill_daily_cap = excluded.per_skill_daily_cap,
+    org_daily_cap = excluded.org_daily_cap,
+    new_version_burst = excluded.new_version_burst,
+    updated_at = clock_timestamp()
+RETURNING organization_id, enabled, per_skill_daily_cap, org_daily_cap, new_version_burst, created_at, updated_at
+`
+
+type UpsertSkillEfficacySettingsForOrganizationParams struct {
+	OrganizationID   string
+	Enabled          bool
+	PerSkillDailyCap int32
+	OrgDailyCap      int32
+	NewVersionBurst  int32
+}
+
+func (q *Queries) UpsertSkillEfficacySettingsForOrganization(ctx context.Context, arg UpsertSkillEfficacySettingsForOrganizationParams) (SkillEfficacySetting, error) {
+	row := q.db.QueryRow(ctx, upsertSkillEfficacySettingsForOrganization,
+		arg.OrganizationID,
+		arg.Enabled,
+		arg.PerSkillDailyCap,
+		arg.OrgDailyCap,
+		arg.NewVersionBurst,
+	)
+	var i SkillEfficacySetting
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.Enabled,
+		&i.PerSkillDailyCap,
+		&i.OrgDailyCap,
+		&i.NewVersionBurst,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

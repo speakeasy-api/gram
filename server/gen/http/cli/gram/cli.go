@@ -60,6 +60,7 @@ import (
 	remotesessionsc "github.com/speakeasy-api/gram/server/gen/http/remote_sessions/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
 	riskc "github.com/speakeasy-api/gram/server/gen/http/risk/client"
+	skillefficacyc "github.com/speakeasy-api/gram/server/gen/http/skill_efficacy/client"
 	skillsc "github.com/speakeasy-api/gram/server/gen/http/skills/client"
 	telemetryc "github.com/speakeasy-api/gram/server/gen/http/telemetry/client"
 	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
@@ -130,6 +131,7 @@ func UsageCommands() []string {
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"skill-efficacy (get-settings|upsert-settings)",
 		"skills (create|add-version|update|list|get|list-unknown-activations|list-versions|archive|distribute|undistribute|list-distributions)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -2074,6 +2076,17 @@ func ParseEndpoint(
 		riskDeleteRiskEvalReviewSessionTokenFlag     = riskDeleteRiskEvalReviewFlags.String("session-token", "", "")
 		riskDeleteRiskEvalReviewProjectSlugInputFlag = riskDeleteRiskEvalReviewFlags.String("project-slug-input", "", "")
 
+		skillEfficacyFlags = flag.NewFlagSet("skill-efficacy", flag.ContinueOnError)
+
+		skillEfficacyGetSettingsFlags            = flag.NewFlagSet("get-settings", flag.ExitOnError)
+		skillEfficacyGetSettingsApikeyTokenFlag  = skillEfficacyGetSettingsFlags.String("apikey-token", "", "")
+		skillEfficacyGetSettingsSessionTokenFlag = skillEfficacyGetSettingsFlags.String("session-token", "", "")
+
+		skillEfficacyUpsertSettingsFlags            = flag.NewFlagSet("upsert-settings", flag.ExitOnError)
+		skillEfficacyUpsertSettingsBodyFlag         = skillEfficacyUpsertSettingsFlags.String("body", "REQUIRED", "")
+		skillEfficacyUpsertSettingsApikeyTokenFlag  = skillEfficacyUpsertSettingsFlags.String("apikey-token", "", "")
+		skillEfficacyUpsertSettingsSessionTokenFlag = skillEfficacyUpsertSettingsFlags.String("session-token", "", "")
+
 		skillsFlags = flag.NewFlagSet("skills", flag.ContinueOnError)
 
 		skillsCreateFlags                = flag.NewFlagSet("create", flag.ExitOnError)
@@ -3108,6 +3121,10 @@ func ParseEndpoint(
 	riskListRiskEvalReviewsFlags.Usage = riskListRiskEvalReviewsUsage
 	riskDeleteRiskEvalReviewFlags.Usage = riskDeleteRiskEvalReviewUsage
 
+	skillEfficacyFlags.Usage = skillEfficacyUsage
+	skillEfficacyGetSettingsFlags.Usage = skillEfficacyGetSettingsUsage
+	skillEfficacyUpsertSettingsFlags.Usage = skillEfficacyUpsertSettingsUsage
+
 	skillsFlags.Usage = skillsUsage
 	skillsCreateFlags.Usage = skillsCreateUsage
 	skillsAddVersionFlags.Usage = skillsAddVersionUsage
@@ -3343,6 +3360,8 @@ func ParseEndpoint(
 			svcf = resourcesFlags
 		case "risk":
 			svcf = riskFlags
+		case "skill-efficacy":
+			svcf = skillEfficacyFlags
 		case "skills":
 			svcf = skillsFlags
 		case "telemetry":
@@ -4591,6 +4610,16 @@ func ParseEndpoint(
 
 			case "delete-risk-eval-review":
 				epf = riskDeleteRiskEvalReviewFlags
+
+			}
+
+		case "skill-efficacy":
+			switch epn {
+			case "get-settings":
+				epf = skillEfficacyGetSettingsFlags
+
+			case "upsert-settings":
+				epf = skillEfficacyUpsertSettingsFlags
 
 			}
 
@@ -6185,6 +6214,16 @@ func ParseEndpoint(
 			case "delete-risk-eval-review":
 				endpoint = c.DeleteRiskEvalReview()
 				data, err = riskc.BuildDeleteRiskEvalReviewPayload(*riskDeleteRiskEvalReviewPolicyIDFlag, *riskDeleteRiskEvalReviewChatIDFlag, *riskDeleteRiskEvalReviewApikeyTokenFlag, *riskDeleteRiskEvalReviewSessionTokenFlag, *riskDeleteRiskEvalReviewProjectSlugInputFlag)
+			}
+		case "skill-efficacy":
+			c := skillefficacyc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-settings":
+				endpoint = c.GetSettings()
+				data, err = skillefficacyc.BuildGetSettingsPayload(*skillEfficacyGetSettingsApikeyTokenFlag, *skillEfficacyGetSettingsSessionTokenFlag)
+			case "upsert-settings":
+				endpoint = c.UpsertSettings()
+				data, err = skillefficacyc.BuildUpsertSettingsPayload(*skillEfficacyUpsertSettingsBodyFlag, *skillEfficacyUpsertSettingsApikeyTokenFlag, *skillEfficacyUpsertSettingsSessionTokenFlag)
 			}
 		case "skills":
 			c := skillsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -15041,6 +15080,60 @@ func riskDeleteRiskEvalReviewUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk delete-risk-eval-review --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// skillEfficacyUsage displays the usage of the skill-efficacy command and its
+// subcommands.
+func skillEfficacyUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization-wide skill efficacy sampling settings.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] skill-efficacy COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-settings: Get effective organization-wide skill efficacy sampling settings.`)
+	fmt.Fprintln(os.Stderr, `    upsert-settings: Create or replace organization-wide skill efficacy sampling settings.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s skill-efficacy COMMAND --help\n", os.Args[0])
+}
+func skillEfficacyGetSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skill-efficacy get-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get effective organization-wide skill efficacy sampling settings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skill-efficacy get-settings --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func skillEfficacyUpsertSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skill-efficacy upsert-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or replace organization-wide skill efficacy sampling settings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skill-efficacy upsert-settings --body '{\n      \"enabled\": false,\n      \"new_version_burst\": 1,\n      \"org_daily_cap\": 1,\n      \"per_skill_daily_cap\": 1\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // skillsUsage displays the usage of the skills command and its subcommands.

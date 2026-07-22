@@ -669,6 +669,8 @@ tags:
     description: Dashboard API for interacting with resources.
   - name: risk
     description: Manage risk analysis policies and view scan results.
+  - name: skillEfficacy
+    description: Manage organization-wide skill efficacy sampling settings.
   - name: skills
     description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
   - name: telemetry
