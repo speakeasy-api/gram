@@ -1,3 +1,4 @@
+import { formatCost } from "@/lib/money";
 import type { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type Measures, unsetLabel } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
@@ -49,13 +50,6 @@ const MIX_SKELETON_ROWS = [
   { label: 30, bar: 40 },
   { label: 38, bar: 28 },
 ];
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 function formatCompact(value: number): string {
   return value.toLocaleString(undefined, {

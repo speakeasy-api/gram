@@ -15,12 +15,13 @@ import (
 // UpsertConfigRequestBody is the type of the "aiIntegrations" service
 // "upsertConfig" endpoint HTTP request body.
 type UpsertConfigRequestBody struct {
-	// AI provider identifier. Supported values include cursor and
-	// anthropic_compliance.
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Provider API key. Stored encrypted at rest; never returned on reads.
 	APIKey *string `form:"api_key,omitempty" json:"api_key,omitempty" xml:"api_key,omitempty"`
-	// Provider organization identifier. Required for anthropic_compliance.
+	// Provider organization identifier. Required for anthropic_compliance and
+	// codex_compliance.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
 	// How the provider org is billed: 'metered', 'flat_rate', or 'unknown'.
 	// Free-form; omit to leave the existing value unchanged.
@@ -32,9 +33,33 @@ type UpsertConfigRequestBody struct {
 // DeleteConfigRequestBody is the type of the "aiIntegrations" service
 // "deleteConfig" endpoint HTTP request body.
 type DeleteConfigRequestBody struct {
-	// AI provider identifier. Supported values include cursor and
-	// anthropic_compliance.
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+}
+
+// SetScheduleEnabledRequestBody is the type of the "aiIntegrations" service
+// "setScheduleEnabled" endpoint HTTP request body.
+type SetScheduleEnabledRequestBody struct {
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule *string `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
+	// Whether the schedule should be polled.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
+// RetryScheduleRequestBody is the type of the "aiIntegrations" service
+// "retrySchedule" endpoint HTTP request body.
+type RetryScheduleRequestBody struct {
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule *string `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
 }
 
 // GetConfigResponseBody is the type of the "aiIntegrations" service
@@ -44,13 +69,13 @@ type GetConfigResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// AI provider identifier. Supported values include cursor and
-	// anthropic_compliance.
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// Provider organization identifier. Required for anthropic_compliance; omitted
-	// for providers that do not need one.
+	// Provider organization identifier. Required for anthropic_compliance and
+	// codex_compliance; omitted for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
@@ -89,13 +114,13 @@ type UpsertConfigResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the config belongs to.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// AI provider identifier. Supported values include cursor and
-	// anthropic_compliance.
+	// AI provider identifier. Supported values include cursor,
+	// anthropic_compliance, and codex_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// Provider organization identifier. Required for anthropic_compliance; omitted
-	// for providers that do not need one.
+	// Provider organization identifier. Required for anthropic_compliance and
+	// codex_compliance; omitted for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
@@ -125,6 +150,89 @@ type UpsertConfigResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// ISO 8601 timestamp of the most recent change. Omitted when no config is set.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListSchedulesResponseBody is the type of the "aiIntegrations" service
+// "listSchedules" endpoint HTTP response body.
+type ListSchedulesResponseBody struct {
+	// Organization the schedules belong to.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// AI provider identifier.
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// Scheduler state for each of the provider's sync schedules.
+	Schedules []*AIIntegrationScheduleStateResponseBody `form:"schedules" json:"schedules" xml:"schedules"`
+}
+
+// SetScheduleEnabledResponseBody is the type of the "aiIntegrations" service
+// "setScheduleEnabled" endpoint HTTP response body.
+type SetScheduleEnabledResponseBody struct {
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule string `form:"schedule" json:"schedule" xml:"schedule"`
+	// Product-level identifier for the stream this schedule writes (e.g.
+	// cursor.usage, claude.chat.message). Omitted for legacy schedules with no
+	// registered stream.
+	Stream *string `form:"stream,omitempty" json:"stream,omitempty" xml:"stream,omitempty"`
+	// Whether the stream carries discrete events or aggregated metrics. Omitted
+	// for legacy schedules with no registered stream.
+	StreamKind *string `form:"stream_kind,omitempty" json:"stream_kind,omitempty" xml:"stream_kind,omitempty"`
+	// Whether the user has this schedule enabled. Disabled schedules are skipped
+	// by the poller until re-enabled.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Derived status for the schedule's latest poll state.
+	Status string `form:"status" json:"status" xml:"status"`
+	// ISO 8601 timestamp for the schedule's last successful poll. Omitted until a
+	// poll succeeds.
+	LastPollSuccessAt *string `form:"last_poll_success_at,omitempty" json:"last_poll_success_at,omitempty" xml:"last_poll_success_at,omitempty"`
+	// ISO 8601 timestamp for the schedule's latest failed poll. Omitted unless a
+	// poll has failed.
+	LastPollFailedAt *string `form:"last_poll_failed_at,omitempty" json:"last_poll_failed_at,omitempty" xml:"last_poll_failed_at,omitempty"`
+	// Stored error from the schedule's latest failed poll. Omitted unless the
+	// latest poll failed.
+	LastPollError *string `form:"last_poll_error,omitempty" json:"last_poll_error,omitempty" xml:"last_poll_error,omitempty"`
+	// ISO 8601 timestamp for the schedule's next scheduled poll.
+	NextPollAfter *string `form:"next_poll_after,omitempty" json:"next_poll_after,omitempty" xml:"next_poll_after,omitempty"`
+	// Number of consecutive failed polls. Resets to zero on success or retry.
+	ConsecutiveFailures int `form:"consecutive_failures" json:"consecutive_failures" xml:"consecutive_failures"`
+	// ISO 8601 timestamp when the scheduler auto-paused the schedule after
+	// repeated provider rejections. Omitted unless auto-paused.
+	AutoPausedAt *string `form:"auto_paused_at,omitempty" json:"auto_paused_at,omitempty" xml:"auto_paused_at,omitempty"`
+}
+
+// RetryScheduleResponseBody is the type of the "aiIntegrations" service
+// "retrySchedule" endpoint HTTP response body.
+type RetryScheduleResponseBody struct {
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule string `form:"schedule" json:"schedule" xml:"schedule"`
+	// Product-level identifier for the stream this schedule writes (e.g.
+	// cursor.usage, claude.chat.message). Omitted for legacy schedules with no
+	// registered stream.
+	Stream *string `form:"stream,omitempty" json:"stream,omitempty" xml:"stream,omitempty"`
+	// Whether the stream carries discrete events or aggregated metrics. Omitted
+	// for legacy schedules with no registered stream.
+	StreamKind *string `form:"stream_kind,omitempty" json:"stream_kind,omitempty" xml:"stream_kind,omitempty"`
+	// Whether the user has this schedule enabled. Disabled schedules are skipped
+	// by the poller until re-enabled.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Derived status for the schedule's latest poll state.
+	Status string `form:"status" json:"status" xml:"status"`
+	// ISO 8601 timestamp for the schedule's last successful poll. Omitted until a
+	// poll succeeds.
+	LastPollSuccessAt *string `form:"last_poll_success_at,omitempty" json:"last_poll_success_at,omitempty" xml:"last_poll_success_at,omitempty"`
+	// ISO 8601 timestamp for the schedule's latest failed poll. Omitted unless a
+	// poll has failed.
+	LastPollFailedAt *string `form:"last_poll_failed_at,omitempty" json:"last_poll_failed_at,omitempty" xml:"last_poll_failed_at,omitempty"`
+	// Stored error from the schedule's latest failed poll. Omitted unless the
+	// latest poll failed.
+	LastPollError *string `form:"last_poll_error,omitempty" json:"last_poll_error,omitempty" xml:"last_poll_error,omitempty"`
+	// ISO 8601 timestamp for the schedule's next scheduled poll.
+	NextPollAfter *string `form:"next_poll_after,omitempty" json:"next_poll_after,omitempty" xml:"next_poll_after,omitempty"`
+	// Number of consecutive failed polls. Resets to zero on success or retry.
+	ConsecutiveFailures int `form:"consecutive_failures" json:"consecutive_failures" xml:"consecutive_failures"`
+	// ISO 8601 timestamp when the scheduler auto-paused the schedule after
+	// repeated provider rejections. Omitted unless auto-paused.
+	AutoPausedAt *string `form:"auto_paused_at,omitempty" json:"auto_paused_at,omitempty" xml:"auto_paused_at,omitempty"`
 }
 
 // GetConfigUnauthorizedResponseBody is the type of the "aiIntegrations"
@@ -682,6 +790,608 @@ type DeleteConfigGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListSchedulesUnauthorizedResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListSchedulesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSchedulesForbiddenResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "forbidden"
+// error.
+type ListSchedulesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSchedulesBadRequestResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "bad_request"
+// error.
+type ListSchedulesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSchedulesNotFoundResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "not_found"
+// error.
+type ListSchedulesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSchedulesConflictResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "conflict" error.
+type ListSchedulesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSchedulesUnsupportedMediaResponseBody is the type of the
+// "aiIntegrations" service "listSchedules" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSchedulesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSchedulesInvalidResponseBody is the type of the "aiIntegrations" service
+// "listSchedules" endpoint HTTP response body for the "invalid" error.
+type ListSchedulesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSchedulesInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "listSchedules" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSchedulesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSchedulesUnexpectedResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "unexpected"
+// error.
+type ListSchedulesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListSchedulesGatewayErrorResponseBody is the type of the "aiIntegrations"
+// service "listSchedules" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListSchedulesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetScheduleEnabledUnauthorizedResponseBody is the type of the
+// "aiIntegrations" service "setScheduleEnabled" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetScheduleEnabledUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetScheduleEnabledForbiddenResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the "forbidden"
+// error.
+type SetScheduleEnabledForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetScheduleEnabledBadRequestResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the
+// "bad_request" error.
+type SetScheduleEnabledBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetScheduleEnabledNotFoundResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the "not_found"
+// error.
+type SetScheduleEnabledNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetScheduleEnabledConflictResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the "conflict"
+// error.
+type SetScheduleEnabledConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetScheduleEnabledUnsupportedMediaResponseBody is the type of the
+// "aiIntegrations" service "setScheduleEnabled" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetScheduleEnabledUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetScheduleEnabledInvalidResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the "invalid"
+// error.
+type SetScheduleEnabledInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetScheduleEnabledInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "setScheduleEnabled" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetScheduleEnabledInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetScheduleEnabledUnexpectedResponseBody is the type of the "aiIntegrations"
+// service "setScheduleEnabled" endpoint HTTP response body for the
+// "unexpected" error.
+type SetScheduleEnabledUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetScheduleEnabledGatewayErrorResponseBody is the type of the
+// "aiIntegrations" service "setScheduleEnabled" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetScheduleEnabledGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryScheduleUnauthorizedResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "unauthorized"
+// error.
+type RetryScheduleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryScheduleForbiddenResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "forbidden"
+// error.
+type RetryScheduleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryScheduleBadRequestResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "bad_request"
+// error.
+type RetryScheduleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryScheduleNotFoundResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "not_found"
+// error.
+type RetryScheduleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryScheduleConflictResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "conflict" error.
+type RetryScheduleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryScheduleUnsupportedMediaResponseBody is the type of the
+// "aiIntegrations" service "retrySchedule" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RetryScheduleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryScheduleInvalidResponseBody is the type of the "aiIntegrations" service
+// "retrySchedule" endpoint HTTP response body for the "invalid" error.
+type RetryScheduleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryScheduleInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "retrySchedule" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RetryScheduleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryScheduleUnexpectedResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "unexpected"
+// error.
+type RetryScheduleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RetryScheduleGatewayErrorResponseBody is the type of the "aiIntegrations"
+// service "retrySchedule" endpoint HTTP response body for the "gateway_error"
+// error.
+type RetryScheduleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AIIntegrationScheduleStateResponseBody is used to define fields on response
+// body types.
+type AIIntegrationScheduleStateResponseBody struct {
+	// Schedule identifier (e.g. cursor, anthropic_compliance,
+	// anthropic_analytics_usage).
+	Schedule string `form:"schedule" json:"schedule" xml:"schedule"`
+	// Product-level identifier for the stream this schedule writes (e.g.
+	// cursor.usage, claude.chat.message). Omitted for legacy schedules with no
+	// registered stream.
+	Stream *string `form:"stream,omitempty" json:"stream,omitempty" xml:"stream,omitempty"`
+	// Whether the stream carries discrete events or aggregated metrics. Omitted
+	// for legacy schedules with no registered stream.
+	StreamKind *string `form:"stream_kind,omitempty" json:"stream_kind,omitempty" xml:"stream_kind,omitempty"`
+	// Whether the user has this schedule enabled. Disabled schedules are skipped
+	// by the poller until re-enabled.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Derived status for the schedule's latest poll state.
+	Status string `form:"status" json:"status" xml:"status"`
+	// ISO 8601 timestamp for the schedule's last successful poll. Omitted until a
+	// poll succeeds.
+	LastPollSuccessAt *string `form:"last_poll_success_at,omitempty" json:"last_poll_success_at,omitempty" xml:"last_poll_success_at,omitempty"`
+	// ISO 8601 timestamp for the schedule's latest failed poll. Omitted unless a
+	// poll has failed.
+	LastPollFailedAt *string `form:"last_poll_failed_at,omitempty" json:"last_poll_failed_at,omitempty" xml:"last_poll_failed_at,omitempty"`
+	// Stored error from the schedule's latest failed poll. Omitted unless the
+	// latest poll failed.
+	LastPollError *string `form:"last_poll_error,omitempty" json:"last_poll_error,omitempty" xml:"last_poll_error,omitempty"`
+	// ISO 8601 timestamp for the schedule's next scheduled poll.
+	NextPollAfter *string `form:"next_poll_after,omitempty" json:"next_poll_after,omitempty" xml:"next_poll_after,omitempty"`
+	// Number of consecutive failed polls. Resets to zero on success or retry.
+	ConsecutiveFailures int `form:"consecutive_failures" json:"consecutive_failures" xml:"consecutive_failures"`
+	// ISO 8601 timestamp when the scheduler auto-paused the schedule after
+	// repeated provider rejections. Omitted unless auto-paused.
+	AutoPausedAt *string `form:"auto_paused_at,omitempty" json:"auto_paused_at,omitempty" xml:"auto_paused_at,omitempty"`
+}
+
 // NewGetConfigResponseBody builds the HTTP response body from the result of
 // the "getConfig" endpoint of the "aiIntegrations" service.
 func NewGetConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *GetConfigResponseBody {
@@ -724,6 +1434,66 @@ func NewUpsertConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *Upser
 		LastPollFailedAt:       res.LastPollFailedAt,
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
+	}
+	return body
+}
+
+// NewListSchedulesResponseBody builds the HTTP response body from the result
+// of the "listSchedules" endpoint of the "aiIntegrations" service.
+func NewListSchedulesResponseBody(res *aiintegrations.ListAIIntegrationSchedulesResult) *ListSchedulesResponseBody {
+	body := &ListSchedulesResponseBody{
+		OrganizationID: res.OrganizationID,
+		Provider:       res.Provider,
+	}
+	if res.Schedules != nil {
+		body.Schedules = make([]*AIIntegrationScheduleStateResponseBody, len(res.Schedules))
+		for i, val := range res.Schedules {
+			if val == nil {
+				body.Schedules[i] = nil
+				continue
+			}
+			body.Schedules[i] = marshalAiintegrationsAIIntegrationScheduleStateToAIIntegrationScheduleStateResponseBody(val)
+		}
+	} else {
+		body.Schedules = []*AIIntegrationScheduleStateResponseBody{}
+	}
+	return body
+}
+
+// NewSetScheduleEnabledResponseBody builds the HTTP response body from the
+// result of the "setScheduleEnabled" endpoint of the "aiIntegrations" service.
+func NewSetScheduleEnabledResponseBody(res *aiintegrations.AIIntegrationScheduleState) *SetScheduleEnabledResponseBody {
+	body := &SetScheduleEnabledResponseBody{
+		Schedule:            res.Schedule,
+		Stream:              res.Stream,
+		StreamKind:          res.StreamKind,
+		Enabled:             res.Enabled,
+		Status:              res.Status,
+		LastPollSuccessAt:   res.LastPollSuccessAt,
+		LastPollFailedAt:    res.LastPollFailedAt,
+		LastPollError:       res.LastPollError,
+		NextPollAfter:       res.NextPollAfter,
+		ConsecutiveFailures: res.ConsecutiveFailures,
+		AutoPausedAt:        res.AutoPausedAt,
+	}
+	return body
+}
+
+// NewRetryScheduleResponseBody builds the HTTP response body from the result
+// of the "retrySchedule" endpoint of the "aiIntegrations" service.
+func NewRetryScheduleResponseBody(res *aiintegrations.AIIntegrationScheduleState) *RetryScheduleResponseBody {
+	body := &RetryScheduleResponseBody{
+		Schedule:            res.Schedule,
+		Stream:              res.Stream,
+		StreamKind:          res.StreamKind,
+		Enabled:             res.Enabled,
+		Status:              res.Status,
+		LastPollSuccessAt:   res.LastPollSuccessAt,
+		LastPollFailedAt:    res.LastPollFailedAt,
+		LastPollError:       res.LastPollError,
+		NextPollAfter:       res.NextPollAfter,
+		ConsecutiveFailures: res.ConsecutiveFailures,
+		AutoPausedAt:        res.AutoPausedAt,
 	}
 	return body
 }
@@ -1152,6 +1922,440 @@ func NewDeleteConfigGatewayErrorResponseBody(res *goa.ServiceError) *DeleteConfi
 	return body
 }
 
+// NewListSchedulesUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listSchedules" endpoint of the "aiIntegrations" service.
+func NewListSchedulesUnauthorizedResponseBody(res *goa.ServiceError) *ListSchedulesUnauthorizedResponseBody {
+	body := &ListSchedulesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSchedulesForbiddenResponseBody builds the HTTP response body from the
+// result of the "listSchedules" endpoint of the "aiIntegrations" service.
+func NewListSchedulesForbiddenResponseBody(res *goa.ServiceError) *ListSchedulesForbiddenResponseBody {
+	body := &ListSchedulesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSchedulesBadRequestResponseBody builds the HTTP response body from
+// the result of the "listSchedules" endpoint of the "aiIntegrations" service.
+func NewListSchedulesBadRequestResponseBody(res *goa.ServiceError) *ListSchedulesBadRequestResponseBody {
+	body := &ListSchedulesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSchedulesNotFoundResponseBody builds the HTTP response body from the
+// result of the "listSchedules" endpoint of the "aiIntegrations" service.
+func NewListSchedulesNotFoundResponseBody(res *goa.ServiceError) *ListSchedulesNotFoundResponseBody {
+	body := &ListSchedulesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSchedulesConflictResponseBody builds the HTTP response body from the
+// result of the "listSchedules" endpoint of the "aiIntegrations" service.
+func NewListSchedulesConflictResponseBody(res *goa.ServiceError) *ListSchedulesConflictResponseBody {
+	body := &ListSchedulesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSchedulesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listSchedules" endpoint of the "aiIntegrations"
+// service.
+func NewListSchedulesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListSchedulesUnsupportedMediaResponseBody {
+	body := &ListSchedulesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSchedulesInvalidResponseBody builds the HTTP response body from the
+// result of the "listSchedules" endpoint of the "aiIntegrations" service.
+func NewListSchedulesInvalidResponseBody(res *goa.ServiceError) *ListSchedulesInvalidResponseBody {
+	body := &ListSchedulesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSchedulesInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listSchedules" endpoint of the "aiIntegrations"
+// service.
+func NewListSchedulesInvariantViolationResponseBody(res *goa.ServiceError) *ListSchedulesInvariantViolationResponseBody {
+	body := &ListSchedulesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSchedulesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listSchedules" endpoint of the "aiIntegrations" service.
+func NewListSchedulesUnexpectedResponseBody(res *goa.ServiceError) *ListSchedulesUnexpectedResponseBody {
+	body := &ListSchedulesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListSchedulesGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listSchedules" endpoint of the "aiIntegrations" service.
+func NewListSchedulesGatewayErrorResponseBody(res *goa.ServiceError) *ListSchedulesGatewayErrorResponseBody {
+	body := &ListSchedulesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetScheduleEnabledUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setScheduleEnabled" endpoint of the "aiIntegrations"
+// service.
+func NewSetScheduleEnabledUnauthorizedResponseBody(res *goa.ServiceError) *SetScheduleEnabledUnauthorizedResponseBody {
+	body := &SetScheduleEnabledUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetScheduleEnabledForbiddenResponseBody builds the HTTP response body
+// from the result of the "setScheduleEnabled" endpoint of the "aiIntegrations"
+// service.
+func NewSetScheduleEnabledForbiddenResponseBody(res *goa.ServiceError) *SetScheduleEnabledForbiddenResponseBody {
+	body := &SetScheduleEnabledForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetScheduleEnabledBadRequestResponseBody builds the HTTP response body
+// from the result of the "setScheduleEnabled" endpoint of the "aiIntegrations"
+// service.
+func NewSetScheduleEnabledBadRequestResponseBody(res *goa.ServiceError) *SetScheduleEnabledBadRequestResponseBody {
+	body := &SetScheduleEnabledBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetScheduleEnabledNotFoundResponseBody builds the HTTP response body from
+// the result of the "setScheduleEnabled" endpoint of the "aiIntegrations"
+// service.
+func NewSetScheduleEnabledNotFoundResponseBody(res *goa.ServiceError) *SetScheduleEnabledNotFoundResponseBody {
+	body := &SetScheduleEnabledNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetScheduleEnabledConflictResponseBody builds the HTTP response body from
+// the result of the "setScheduleEnabled" endpoint of the "aiIntegrations"
+// service.
+func NewSetScheduleEnabledConflictResponseBody(res *goa.ServiceError) *SetScheduleEnabledConflictResponseBody {
+	body := &SetScheduleEnabledConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetScheduleEnabledUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setScheduleEnabled" endpoint of the
+// "aiIntegrations" service.
+func NewSetScheduleEnabledUnsupportedMediaResponseBody(res *goa.ServiceError) *SetScheduleEnabledUnsupportedMediaResponseBody {
+	body := &SetScheduleEnabledUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetScheduleEnabledInvalidResponseBody builds the HTTP response body from
+// the result of the "setScheduleEnabled" endpoint of the "aiIntegrations"
+// service.
+func NewSetScheduleEnabledInvalidResponseBody(res *goa.ServiceError) *SetScheduleEnabledInvalidResponseBody {
+	body := &SetScheduleEnabledInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetScheduleEnabledInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setScheduleEnabled" endpoint of the
+// "aiIntegrations" service.
+func NewSetScheduleEnabledInvariantViolationResponseBody(res *goa.ServiceError) *SetScheduleEnabledInvariantViolationResponseBody {
+	body := &SetScheduleEnabledInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetScheduleEnabledUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setScheduleEnabled" endpoint of the "aiIntegrations"
+// service.
+func NewSetScheduleEnabledUnexpectedResponseBody(res *goa.ServiceError) *SetScheduleEnabledUnexpectedResponseBody {
+	body := &SetScheduleEnabledUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetScheduleEnabledGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setScheduleEnabled" endpoint of the "aiIntegrations"
+// service.
+func NewSetScheduleEnabledGatewayErrorResponseBody(res *goa.ServiceError) *SetScheduleEnabledGatewayErrorResponseBody {
+	body := &SetScheduleEnabledGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryScheduleUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "retrySchedule" endpoint of the "aiIntegrations" service.
+func NewRetryScheduleUnauthorizedResponseBody(res *goa.ServiceError) *RetryScheduleUnauthorizedResponseBody {
+	body := &RetryScheduleUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryScheduleForbiddenResponseBody builds the HTTP response body from the
+// result of the "retrySchedule" endpoint of the "aiIntegrations" service.
+func NewRetryScheduleForbiddenResponseBody(res *goa.ServiceError) *RetryScheduleForbiddenResponseBody {
+	body := &RetryScheduleForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryScheduleBadRequestResponseBody builds the HTTP response body from
+// the result of the "retrySchedule" endpoint of the "aiIntegrations" service.
+func NewRetryScheduleBadRequestResponseBody(res *goa.ServiceError) *RetryScheduleBadRequestResponseBody {
+	body := &RetryScheduleBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryScheduleNotFoundResponseBody builds the HTTP response body from the
+// result of the "retrySchedule" endpoint of the "aiIntegrations" service.
+func NewRetryScheduleNotFoundResponseBody(res *goa.ServiceError) *RetryScheduleNotFoundResponseBody {
+	body := &RetryScheduleNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryScheduleConflictResponseBody builds the HTTP response body from the
+// result of the "retrySchedule" endpoint of the "aiIntegrations" service.
+func NewRetryScheduleConflictResponseBody(res *goa.ServiceError) *RetryScheduleConflictResponseBody {
+	body := &RetryScheduleConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryScheduleUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "retrySchedule" endpoint of the "aiIntegrations"
+// service.
+func NewRetryScheduleUnsupportedMediaResponseBody(res *goa.ServiceError) *RetryScheduleUnsupportedMediaResponseBody {
+	body := &RetryScheduleUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryScheduleInvalidResponseBody builds the HTTP response body from the
+// result of the "retrySchedule" endpoint of the "aiIntegrations" service.
+func NewRetryScheduleInvalidResponseBody(res *goa.ServiceError) *RetryScheduleInvalidResponseBody {
+	body := &RetryScheduleInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryScheduleInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "retrySchedule" endpoint of the "aiIntegrations"
+// service.
+func NewRetryScheduleInvariantViolationResponseBody(res *goa.ServiceError) *RetryScheduleInvariantViolationResponseBody {
+	body := &RetryScheduleInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryScheduleUnexpectedResponseBody builds the HTTP response body from
+// the result of the "retrySchedule" endpoint of the "aiIntegrations" service.
+func NewRetryScheduleUnexpectedResponseBody(res *goa.ServiceError) *RetryScheduleUnexpectedResponseBody {
+	body := &RetryScheduleUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRetryScheduleGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "retrySchedule" endpoint of the "aiIntegrations" service.
+func NewRetryScheduleGatewayErrorResponseBody(res *goa.ServiceError) *RetryScheduleGatewayErrorResponseBody {
+	body := &RetryScheduleGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetConfigPayload builds a aiIntegrations service getConfig endpoint
 // payload.
 func NewGetConfigPayload(provider string, apikeyToken *string, sessionToken *string) *aiintegrations.GetConfigPayload {
@@ -1191,6 +2395,44 @@ func NewDeleteConfigPayload(body *DeleteConfigRequestBody, apikeyToken *string, 
 	return v
 }
 
+// NewListSchedulesPayload builds a aiIntegrations service listSchedules
+// endpoint payload.
+func NewListSchedulesPayload(provider string, apikeyToken *string, sessionToken *string) *aiintegrations.ListSchedulesPayload {
+	v := &aiintegrations.ListSchedulesPayload{}
+	v.Provider = provider
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewSetScheduleEnabledPayload builds a aiIntegrations service
+// setScheduleEnabled endpoint payload.
+func NewSetScheduleEnabledPayload(body *SetScheduleEnabledRequestBody, apikeyToken *string, sessionToken *string) *aiintegrations.SetScheduleEnabledPayload {
+	v := &aiintegrations.SetScheduleEnabledPayload{
+		Provider: *body.Provider,
+		Schedule: *body.Schedule,
+		Enabled:  *body.Enabled,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewRetrySchedulePayload builds a aiIntegrations service retrySchedule
+// endpoint payload.
+func NewRetrySchedulePayload(body *RetryScheduleRequestBody, apikeyToken *string, sessionToken *string) *aiintegrations.RetrySchedulePayload {
+	v := &aiintegrations.RetrySchedulePayload{
+		Provider: *body.Provider,
+		Schedule: *body.Schedule,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // ValidateUpsertConfigRequestBody runs the validations defined on
 // UpsertConfigRequestBody
 func ValidateUpsertConfigRequestBody(body *UpsertConfigRequestBody) (err error) {
@@ -1211,6 +2453,33 @@ func ValidateUpsertConfigRequestBody(body *UpsertConfigRequestBody) (err error) 
 func ValidateDeleteConfigRequestBody(body *DeleteConfigRequestBody) (err error) {
 	if body.Provider == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	return
+}
+
+// ValidateSetScheduleEnabledRequestBody runs the validations defined on
+// SetScheduleEnabledRequestBody
+func ValidateSetScheduleEnabledRequestBody(body *SetScheduleEnabledRequestBody) (err error) {
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.Schedule == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schedule", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	return
+}
+
+// ValidateRetryScheduleRequestBody runs the validations defined on
+// RetryScheduleRequestBody
+func ValidateRetryScheduleRequestBody(body *RetryScheduleRequestBody) (err error) {
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.Schedule == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schedule", "body"))
 	}
 	return
 }

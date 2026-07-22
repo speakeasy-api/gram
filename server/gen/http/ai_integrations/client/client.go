@@ -29,6 +29,18 @@ type Client struct {
 	// deleteConfig endpoint.
 	DeleteConfigDoer goahttp.Doer
 
+	// ListSchedules Doer is the HTTP client used to make requests to the
+	// listSchedules endpoint.
+	ListSchedulesDoer goahttp.Doer
+
+	// SetScheduleEnabled Doer is the HTTP client used to make requests to the
+	// setScheduleEnabled endpoint.
+	SetScheduleEnabledDoer goahttp.Doer
+
+	// RetrySchedule Doer is the HTTP client used to make requests to the
+	// retrySchedule endpoint.
+	RetryScheduleDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -50,14 +62,17 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetConfigDoer:       doer,
-		UpsertConfigDoer:    doer,
-		DeleteConfigDoer:    doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		GetConfigDoer:          doer,
+		UpsertConfigDoer:       doer,
+		DeleteConfigDoer:       doer,
+		ListSchedulesDoer:      doer,
+		SetScheduleEnabledDoer: doer,
+		RetryScheduleDoer:      doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -128,6 +143,78 @@ func (c *Client) DeleteConfig() goa.Endpoint {
 		resp, err := c.DeleteConfigDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("aiIntegrations", "deleteConfig", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSchedules returns an endpoint that makes HTTP requests to the
+// aiIntegrations service listSchedules server.
+func (c *Client) ListSchedules() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSchedulesRequest(c.encoder)
+		decodeResponse = DecodeListSchedulesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSchedulesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSchedulesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("aiIntegrations", "listSchedules", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetScheduleEnabled returns an endpoint that makes HTTP requests to the
+// aiIntegrations service setScheduleEnabled server.
+func (c *Client) SetScheduleEnabled() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetScheduleEnabledRequest(c.encoder)
+		decodeResponse = DecodeSetScheduleEnabledResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetScheduleEnabledRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetScheduleEnabledDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("aiIntegrations", "setScheduleEnabled", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RetrySchedule returns an endpoint that makes HTTP requests to the
+// aiIntegrations service retrySchedule server.
+func (c *Client) RetrySchedule() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRetryScheduleRequest(c.encoder)
+		decodeResponse = DecodeRetryScheduleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRetryScheduleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RetryScheduleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("aiIntegrations", "retrySchedule", err)
 		}
 		return decodeResponse(resp)
 	}
