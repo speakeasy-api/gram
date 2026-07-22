@@ -1,5 +1,5 @@
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Alert, Icon } from "@speakeasy-api/moonshine";
 
 export const LOG_DATA_RETENTION_MESSAGE =
   "Tool logs and agent sessions are retained for 90 days.";
@@ -15,6 +15,15 @@ export function LogDataRetentionTooltip(): JSX.Element {
         <Icon name="info" className="size-3.5" />
       </button>
     </SimpleTooltip>
+  );
+}
+
+export function LogDataRetentionBanner(): JSX.Element {
+  return (
+    <Alert variant="info" dismissible className="mb-6 text-sm">
+      <span className="font-medium">Data retention:</span>{" "}
+      {LOG_DATA_RETENTION_MESSAGE}
+    </Alert>
   );
 }
 

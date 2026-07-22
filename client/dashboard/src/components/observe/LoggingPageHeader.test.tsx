@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   LOG_DATA_RETENTION_MESSAGE,
+  LogDataRetentionBanner,
   LoggingPageHeader,
 } from "./LoggingPageHeader";
 
@@ -27,5 +28,15 @@ describe("LoggingPageHeader", () => {
 
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip.textContent).toBe(LOG_DATA_RETENTION_MESSAGE);
+  });
+
+  it("shows a dismissible retention banner", () => {
+    render(<LogDataRetentionBanner />);
+
+    expect(screen.getByText(LOG_DATA_RETENTION_MESSAGE)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(screen.queryByText(LOG_DATA_RETENTION_MESSAGE)).toBeNull();
   });
 });

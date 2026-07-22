@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { LogDataRetentionTooltip } from "@/components/observe/LoggingPageHeader";
+import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
@@ -167,15 +167,15 @@ function OrgLogsInner() {
 
   return (
     <>
-      <div className="mb-2 flex items-center gap-1.5">
-        <Heading variant="h4">Logs</Heading>
-        <LogDataRetentionTooltip />
-      </div>
+      <Heading variant="h4" className="mb-2">
+        Logs
+      </Heading>
       <Type muted small className="mb-6">
         Configure logging and telemetry settings for all your tool capture. When
         enabled, tool calls and traces are recorded for debugging and analytics.
         These power the insights and logs page on the platform.
       </Type>
+      <LogDataRetentionBanner />
       <div className="border-border bg-card rounded-lg border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
