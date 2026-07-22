@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  RemoteSessionIssuerDraft,
-  RemoteSessionIssuerDraft$inboundSchema,
-} from "../models/components/remotesessionissuerdraft.js";
+  RemoteSessionIssuerRefresh,
+  RemoteSessionIssuerRefresh$inboundSchema,
+} from "../models/components/remotesessionissuerrefresh.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  DiscoverRemoteSessionIssuerRequest,
-  DiscoverRemoteSessionIssuerRequest$outboundSchema,
-  DiscoverRemoteSessionIssuerSecurity,
-} from "../models/operations/discoverremotesessionissuer.js";
+  RefreshOrganizationRemoteSessionIssuerMetadataRequest,
+  RefreshOrganizationRemoteSessionIssuerMetadataRequest$outboundSchema,
+  RefreshOrganizationRemoteSessionIssuerMetadataSecurity,
+} from "../models/operations/refreshorganizationremotesessionissuermetadata.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * discoverRemoteSessionIssuer remoteSessionIssuers
+ * refreshIssuerMetadata organizationRemoteSessionIssuers
  *
  * @remarks
- * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.
+ * Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.
  */
-export function remoteSessionIssuersDiscover(
+export function organizationRemoteSessionIssuersRefreshMetadata(
   client: GramCore,
-  request: DiscoverRemoteSessionIssuerRequest,
-  security?: DiscoverRemoteSessionIssuerSecurity | undefined,
+  request: RefreshOrganizationRemoteSessionIssuerMetadataRequest,
+  security?: RefreshOrganizationRemoteSessionIssuerMetadataSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    RemoteSessionIssuerDraft,
+    RemoteSessionIssuerRefresh,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function remoteSessionIssuersDiscover(
 
 async function $do(
   client: GramCore,
-  request: DiscoverRemoteSessionIssuerRequest,
-  security?: DiscoverRemoteSessionIssuerSecurity | undefined,
+  request: RefreshOrganizationRemoteSessionIssuerMetadataRequest,
+  security?: RefreshOrganizationRemoteSessionIssuerMetadataSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      RemoteSessionIssuerDraft,
+      RemoteSessionIssuerRefresh,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -96,29 +96,26 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(DiscoverRemoteSessionIssuerRequest$outboundSchema, value),
+      z.parse(
+        RefreshOrganizationRemoteSessionIssuerMetadataRequest$outboundSchema,
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON(
-    "body",
-    payload.DiscoverRemoteSessionIssuerRequestBody,
-    { explode: true },
-  );
+  const body = encodeJSON("body", payload.RiskIDRequestBody, { explode: true });
 
-  const path = pathToFunc("/rpc/remoteSessionIssuers.discover")();
+  const path = pathToFunc(
+    "/rpc/organizationRemoteSessionIssuers.refreshMetadata",
+  )();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -131,26 +128,16 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option1?.projectSlugHeaderGramProject,
-      },
-      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.option1?.sessionHeaderGramSession,
+        value: security?.sessionHeaderGramSession,
       },
     ],
     [
       {
         fieldName: "Gram-Key",
         type: "apiKey:header",
-        value: security?.option2?.apikeyHeaderGramKey,
-      },
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option2?.projectSlugHeaderGramProject,
+        value: security?.apikeyHeaderGramKey,
       },
     ],
   );
@@ -158,7 +145,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "discoverRemoteSessionIssuer",
+    operationID: "refreshOrganizationRemoteSessionIssuerMetadata",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -202,7 +189,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    RemoteSessionIssuerDraft,
+    RemoteSessionIssuerRefresh,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -213,7 +200,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, RemoteSessionIssuerDraft$inboundSchema),
+    M.json(200, RemoteSessionIssuerRefresh$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

@@ -136,6 +136,52 @@ var _ = Service("adminRemoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteGlobalRemoteSessionIssuer"}`)
 	})
 
+	Method("fetchGlobalIssuerMetadata", func() {
+		Description("Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.")
+
+		Payload(func() {
+			Attribute("issuer", String, "Issuer URL to fetch metadata for (e.g. https://login.linear.com).")
+			Required("issuer")
+			security.SessionPayload()
+		})
+
+		Result(rsissuers.RemoteSessionIssuerDraft)
+
+		HTTP(func() {
+			POST("/rpc/adminRemoteSessions.fetchGlobalIssuerMetadata")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "fetchGlobalRemoteSessionIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "fetchGlobalIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FetchGlobalRemoteSessionIssuerMetadata"}`)
+	})
+
+	Method("refreshGlobalIssuerMetadata", func() {
+		Description("Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_issuer id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(rsissuers.RemoteSessionIssuerRefresh)
+
+		HTTP(func() {
+			POST("/rpc/adminRemoteSessions.refreshGlobalIssuerMetadata")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "refreshGlobalRemoteSessionIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "refreshGlobalIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RefreshGlobalRemoteSessionIssuerMetadata"}`)
+	})
+
 	// --- Global clients ---
 
 	Method("createGlobalClient", func() {

@@ -4021,6 +4021,93 @@ paths:
             x-speakeasy-name-override: deleteGlobalIssuer
             x-speakeasy-react-hook:
                 name: DeleteGlobalRemoteSessionIssuer
+    /rpc/adminRemoteSessions.fetchGlobalIssuerMetadata:
+        post:
+            description: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.
+            operationId: fetchGlobalRemoteSessionIssuerMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FetchIssuerMetadataRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionIssuerDraft'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: fetchGlobalIssuerMetadata adminRemoteSessions
+            tags:
+                - adminRemoteSessions
+            x-speakeasy-name-override: fetchGlobalIssuerMetadata
+            x-speakeasy-react-hook:
+                name: FetchGlobalRemoteSessionIssuerMetadata
     /rpc/adminRemoteSessions.getGlobalClient:
         get:
             description: Get a global remote_session_client by id. Requires platform admin.
@@ -4418,6 +4505,93 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: GlobalRemoteSessionIssuers
+    /rpc/adminRemoteSessions.refreshGlobalIssuerMetadata:
+        post:
+            description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
+            operationId: refreshGlobalRemoteSessionIssuerMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionIssuerRefresh'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: refreshGlobalIssuerMetadata adminRemoteSessions
+            tags:
+                - adminRemoteSessions
+            x-speakeasy-name-override: refreshGlobalIssuerMetadata
+            x-speakeasy-react-hook:
+                name: RefreshGlobalRemoteSessionIssuerMetadata
     /rpc/adminRemoteSessions.updateGlobalClient:
         post:
             description: Rotate the client_secret or change non-issuer settings on a global remote_session_client. Requires platform admin.
@@ -19992,6 +20166,101 @@ paths:
             x-speakeasy-name-override: delete
             x-speakeasy-react-hook:
                 name: DeleteOrganizationRemoteSessionIssuer
+    /rpc/organizationRemoteSessionIssuers.fetchMetadata:
+        post:
+            description: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.
+            operationId: fetchOrganizationRemoteSessionIssuerMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FetchIssuerMetadataRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionIssuerDraft'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: fetchIssuerMetadata organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: fetchMetadata
+            x-speakeasy-react-hook:
+                name: FetchOrganizationRemoteSessionIssuerMetadata
     /rpc/organizationRemoteSessionIssuers.get:
         get:
             description: Get any remote_session_issuer (organizational or project-specific) in the caller's organization by id. Requires org:read.
@@ -20597,6 +20866,101 @@ paths:
             x-speakeasy-name-override: move
             x-speakeasy-react-hook:
                 name: MoveOrganizationRemoteSessionIssuer
+    /rpc/organizationRemoteSessionIssuers.refreshMetadata:
+        post:
+            description: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.
+            operationId: refreshOrganizationRemoteSessionIssuerMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionIssuerRefresh'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: refreshIssuerMetadata organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: refreshMetadata
+            x-speakeasy-react-hook:
+                name: RefreshOrganizationRemoteSessionIssuerMetadata
     /rpc/organizationRemoteSessionIssuers.update:
         post:
             description: Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.
@@ -27964,10 +28328,10 @@ paths:
             x-speakeasy-name-override: delete
             x-speakeasy-react-hook:
                 name: DeleteRemoteSessionIssuer
-    /rpc/remoteSessionIssuers.discover:
+    /rpc/remoteSessionIssuers.fetchMetadata:
         post:
-            description: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.
-            operationId: discoverRemoteSessionIssuer
+            description: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Use refreshMetadata to re-discover and persist against an existing issuer.
+            operationId: fetchRemoteSessionIssuerMetadata
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -27994,7 +28358,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/DiscoverRemoteSessionIssuerRequestBody'
+                            $ref: '#/components/schemas/FetchIssuerMetadataRequestBody'
                 required: true
             responses:
                 "200":
@@ -28062,12 +28426,12 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: discoverRemoteSessionIssuer remoteSessionIssuers
+            summary: fetchRemoteSessionIssuerMetadata remoteSessionIssuers
             tags:
                 - remoteSessionIssuers
-            x-speakeasy-name-override: discover
+            x-speakeasy-name-override: fetchMetadata
             x-speakeasy-react-hook:
-                name: DiscoverRemoteSessionIssuer
+                name: FetchRemoteSessionIssuerMetadata
     /rpc/remoteSessionIssuers.get:
         get:
             description: Get a remote_session_issuer by id or by slug. Provide exactly one.
@@ -28302,6 +28666,110 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: RemoteSessionIssuers
+    /rpc/remoteSessionIssuers.refreshMetadata:
+        post:
+            description: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.
+            operationId: refreshRemoteSessionIssuerMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionIssuerRefresh'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: refreshRemoteSessionIssuerMetadata remoteSessionIssuers
+            tags:
+                - remoteSessionIssuers
+            x-speakeasy-name-override: refreshMetadata
+            x-speakeasy-react-hook:
+                name: RefreshRemoteSessionIssuerMetadata
     /rpc/remoteSessionIssuers.update:
         post:
             description: Update fields on an existing remote_session_issuer.
@@ -47967,14 +48435,6 @@ components:
                     format: uuid
             required:
                 - remote_mcp_server_id
-        DiscoverRemoteSessionIssuerRequestBody:
-            type: object
-            properties:
-                issuer:
-                    type: string
-                    description: Issuer URL to discover (e.g. https://login.linear.com).
-            required:
-                - issuer
         DistributeSkillRequestBody:
             type: object
             properties:
@@ -48774,6 +49234,14 @@ components:
             required:
                 - slug
                 - metadata
+        FetchIssuerMetadataRequestBody:
+            type: object
+            properties:
+                issuer:
+                    type: string
+                    description: Issuer URL to fetch metadata for (e.g. https://login.linear.com).
+            required:
+                - issuer
         FetchOpenAPIv3FromURLForm:
             type: object
             properties:
@@ -55321,6 +55789,20 @@ components:
                 - oidc
                 - passthrough
                 - client_id_metadata_document_supported
+                - discovery_warnings
+        RemoteSessionIssuerRefresh:
+            type: object
+            properties:
+                discovery_warnings:
+                    type: array
+                    items:
+                        type: string
+                    description: Warnings describing any RFC 8414 deviations encountered while re-reading the issuer's metadata document. A refresh that returns warnings still persisted its result; deviations severe enough to distrust the document abort the refresh with an error instead.
+                issuer:
+                    $ref: '#/components/schemas/RemoteSessionIssuer'
+            description: 'Result of refreshMetadata: the stored remote_session_issuer as it now stands, plus any warnings raised while re-reading the upstream RFC 8414 document. Distinct from RemoteSessionIssuerDraft, which describes an issuer that may not exist yet and is never persisted.'
+            required:
+                - issuer
                 - discovery_warnings
         RemoveClientFromMcpServerRequestBody:
             type: object

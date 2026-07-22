@@ -243,6 +243,60 @@ func BuildDeleteGlobalIssuerPayload(adminRemoteSessionsDeleteGlobalIssuerID stri
 	return v, nil
 }
 
+// BuildFetchGlobalIssuerMetadataPayload builds the payload for the
+// adminRemoteSessions fetchGlobalIssuerMetadata endpoint from CLI flags.
+func BuildFetchGlobalIssuerMetadataPayload(adminRemoteSessionsFetchGlobalIssuerMetadataBody string, adminRemoteSessionsFetchGlobalIssuerMetadataSessionToken string) (*adminremotesessions.FetchGlobalIssuerMetadataPayload, error) {
+	var err error
+	var body FetchGlobalIssuerMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRemoteSessionsFetchGlobalIssuerMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"issuer\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsFetchGlobalIssuerMetadataSessionToken != "" {
+			sessionToken = &adminRemoteSessionsFetchGlobalIssuerMetadataSessionToken
+		}
+	}
+	v := &adminremotesessions.FetchGlobalIssuerMetadataPayload{
+		Issuer: body.Issuer,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRefreshGlobalIssuerMetadataPayload builds the payload for the
+// adminRemoteSessions refreshGlobalIssuerMetadata endpoint from CLI flags.
+func BuildRefreshGlobalIssuerMetadataPayload(adminRemoteSessionsRefreshGlobalIssuerMetadataBody string, adminRemoteSessionsRefreshGlobalIssuerMetadataSessionToken string) (*adminremotesessions.RefreshGlobalIssuerMetadataPayload, error) {
+	var err error
+	var body RefreshGlobalIssuerMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRemoteSessionsRefreshGlobalIssuerMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsRefreshGlobalIssuerMetadataSessionToken != "" {
+			sessionToken = &adminRemoteSessionsRefreshGlobalIssuerMetadataSessionToken
+		}
+	}
+	v := &adminremotesessions.RefreshGlobalIssuerMetadataPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateGlobalClientPayload builds the payload for the
 // adminRemoteSessions createGlobalClient endpoint from CLI flags.
 func BuildCreateGlobalClientPayload(adminRemoteSessionsCreateGlobalClientBody string, adminRemoteSessionsCreateGlobalClientSessionToken string) (*adminremotesessions.CreateGlobalClientPayload, error) {

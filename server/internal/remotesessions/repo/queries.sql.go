@@ -1318,6 +1318,123 @@ func (q *Queries) GetRemoteSessionIssuerByID(ctx context.Context, arg GetRemoteS
 	return i, err
 }
 
+const getRemoteSessionIssuerByIDForUpdate = `-- name: GetRemoteSessionIssuerByIDForUpdate :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetRemoteSessionIssuerByIDForUpdateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+// GetRemoteSessionIssuerByIDProjectOwned holding a row lock until the
+// transaction ends. refreshMetadata reads the row twice: once before the
+// transaction, to learn the issuer URL to discover against, and again through
+// this query inside the transaction, to snapshot the state its audit entry
+// claims to be overwriting.
+//
+// Only the second read may inform that snapshot. Discovery sits between them
+// and takes up to ten seconds, which is ample room for a concurrent
+// updateIssuer to commit. Snapshotting the first read would then produce an
+// audit entry whose before/after diff attributes that operator's edit to the
+// refresh, and the fields most likely to be edited (name, oidc, passthrough)
+// are exactly the ones refresh never writes.
+//
+// The lock is what makes the second read authoritative: without it the same
+// race merely shrinks to the gap between this SELECT and the UPDATE below.
+// Discovery has already finished by the time it is taken, so no lock is ever
+// held across an upstream HTTP call.
+func (q *Queries) GetRemoteSessionIssuerByIDForUpdate(ctx context.Context, arg GetRemoteSessionIssuerByIDForUpdateParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionIssuerByIDForUpdate, arg.ID, arg.ProjectID)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getRemoteSessionIssuerByIDProjectOwned = `-- name: GetRemoteSessionIssuerByIDProjectOwned :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type GetRemoteSessionIssuerByIDProjectOwnedParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+// Strictly project-owned read. Unlike GetRemoteSessionIssuerByID this does not
+// resolve inherited organization-level issuers: it backs refreshMetadata, which
+// writes, and the project tier may only write its own rows (an inherited issuer
+// is refreshed through organizationRemoteSessionIssuers.refreshMetadata
+// instead). That matches how UpdateRemoteSessionIssuer scopes its write.
+func (q *Queries) GetRemoteSessionIssuerByIDProjectOwned(ctx context.Context, arg GetRemoteSessionIssuerByIDProjectOwnedParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionIssuerByIDProjectOwned, arg.ID, arg.ProjectID)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getRemoteSessionIssuerBySlug = `-- name: GetRemoteSessionIssuerBySlug :one
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
@@ -3370,6 +3487,138 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		arg.Passthrough,
 		arg.ID,
 		arg.ProjectID,
+	)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateRemoteSessionIssuerDiscoveredMetadata = `-- name: UpdateRemoteSessionIssuerDiscoveredMetadata :one
+UPDATE remote_session_issuers
+SET
+    authorization_endpoint = CASE WHEN $1::text = '' THEN NULL ELSE $1::text END,
+    token_endpoint = CASE WHEN $2::text = '' THEN NULL ELSE $2::text END,
+    registration_endpoint = CASE WHEN $3::text = '' THEN NULL ELSE $3::text END,
+    jwks_uri = CASE WHEN $4::text = '' THEN NULL ELSE $4::text END,
+    service_documentation = CASE WHEN $5::text = '' THEN NULL ELSE $5::text END,
+    op_policy_uri = CASE WHEN $6::text = '' THEN NULL ELSE $6::text END,
+    op_tos_uri = CASE WHEN $7::text = '' THEN NULL ELSE $7::text END,
+    scopes_supported = $8::text[],
+    grant_types_supported = $9::text[],
+    response_types_supported = $10::text[],
+    token_endpoint_auth_methods_supported = $11::text[],
+    client_id_metadata_document_supported = $12::boolean,
+    updated_at = clock_timestamp()
+WHERE id = $13
+  AND issuer = $14::text
+  AND project_id IS NOT DISTINCT FROM $15::uuid
+  AND organization_id IS NOT DISTINCT FROM $16::text
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
+	AuthorizationEndpoint             string
+	TokenEndpoint                     string
+	RegistrationEndpoint              string
+	JwksUri                           string
+	ServiceDocumentation              string
+	OpPolicyUri                       string
+	OpTosUri                          string
+	ScopesSupported                   []string
+	GrantTypesSupported               []string
+	ResponseTypesSupported            []string
+	TokenEndpointAuthMethodsSupported []string
+	ClientIDMetadataDocumentSupported bool
+	ID                                uuid.UUID
+	Issuer                            string
+	ProjectID                         uuid.NullUUID
+	OrganizationID                    pgtype.Text
+}
+
+// Write only the columns Gram derives from an upstream RFC 8414 metadata
+// document. refreshMetadata shares this single query across all three issuer
+// tiers, which is what keeps "a refresh never touches Gram's own behavior or
+// display fields" an invariant of the schema rather than of remembering which
+// of UpdateRemoteSessionIssuer's twenty-odd parameters to leave unset: slug,
+// issuer, name, logo_asset_id, client_setup_documentation_url, oidc, and
+// passthrough have no parameter here and cannot be written through it.
+//
+// Every parameter is required rather than a three-state narg. A refresh always
+// restates the issuer's full discovered surface, so there is no "leave this
+// one alone" case: an endpoint the issuer has stopped advertising arrives as
+// an empty string and is cleared to NULL, and a *_supported array it has
+// stopped advertising arrives as an empty array (those columns are NOT NULL
+// with an empty-array default, so NULL is not a value they can hold).
+//
+// Scoping differs from the tier-specific updates by necessity, since one query
+// serves project-owned, organization-level, and global rows. Rather than the
+// caller's own scope it restates the loaded row's identity: callers pass back
+// the project_id, organization_id, and issuer they just read, having already
+// proven through the tier-specific load that they may write that row.
+// IS NOT DISTINCT FROM matches NULL to NULL, so global rows (both scope
+// columns NULL) need no separate query.
+//
+// That identity match is the concurrency control for the write itself, and it
+// holds for callers that take no lock at all. Discovery is a network round trip
+// against a third party and must not run inside the transaction, so the row is
+// necessarily read before the transaction opens and could change underneath us.
+// Two changes matter and both abort the refresh by matching zero rows: a
+// moveIssuer that re-scopes the row, which would otherwise write through an
+// authorization that no longer holds, and an update that repoints issuer, which
+// would otherwise stamp one authorization server's endpoints onto another's URL.
+//
+// Edits to the fields refresh does not write (name, oidc, ...) deliberately do
+// not abort: they are none of a refresh's business. Callers that also write an
+// audit entry must still re-read the row under FOR UPDATE inside the
+// transaction and snapshot that value, because such an edit landing during
+// discovery would otherwise be captured in the refresh's before/after diff and
+// attributed to it. See GetRemoteSessionIssuerByIDForUpdate.
+func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Context, arg UpdateRemoteSessionIssuerDiscoveredMetadataParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, updateRemoteSessionIssuerDiscoveredMetadata,
+		arg.AuthorizationEndpoint,
+		arg.TokenEndpoint,
+		arg.RegistrationEndpoint,
+		arg.JwksUri,
+		arg.ServiceDocumentation,
+		arg.OpPolicyUri,
+		arg.OpTosUri,
+		arg.ScopesSupported,
+		arg.GrantTypesSupported,
+		arg.ResponseTypesSupported,
+		arg.TokenEndpointAuthMethodsSupported,
+		arg.ClientIDMetadataDocumentSupported,
+		arg.ID,
+		arg.Issuer,
+		arg.ProjectID,
+		arg.OrganizationID,
 	)
 	var i RemoteSessionIssuer
 	err := row.Scan(

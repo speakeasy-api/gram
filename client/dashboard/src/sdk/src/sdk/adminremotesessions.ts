@@ -6,15 +6,19 @@ import { adminRemoteSessionsCreateGlobalClient } from "../funcs/adminRemoteSessi
 import { adminRemoteSessionsCreateGlobalIssuer } from "../funcs/adminRemoteSessionsCreateGlobalIssuer.js";
 import { adminRemoteSessionsDeleteGlobalClient } from "../funcs/adminRemoteSessionsDeleteGlobalClient.js";
 import { adminRemoteSessionsDeleteGlobalIssuer } from "../funcs/adminRemoteSessionsDeleteGlobalIssuer.js";
+import { adminRemoteSessionsFetchGlobalIssuerMetadata } from "../funcs/adminRemoteSessionsFetchGlobalIssuerMetadata.js";
 import { adminRemoteSessionsGetGlobalClient } from "../funcs/adminRemoteSessionsGetGlobalClient.js";
 import { adminRemoteSessionsGetGlobalIssuer } from "../funcs/adminRemoteSessionsGetGlobalIssuer.js";
 import { adminRemoteSessionsListGlobalClients } from "../funcs/adminRemoteSessionsListGlobalClients.js";
 import { adminRemoteSessionsListGlobalIssuers } from "../funcs/adminRemoteSessionsListGlobalIssuers.js";
+import { adminRemoteSessionsRefreshGlobalIssuerMetadata } from "../funcs/adminRemoteSessionsRefreshGlobalIssuerMetadata.js";
 import { adminRemoteSessionsUpdateGlobalClient } from "../funcs/adminRemoteSessionsUpdateGlobalClient.js";
 import { adminRemoteSessionsUpdateGlobalIssuer } from "../funcs/adminRemoteSessionsUpdateGlobalIssuer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
+import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
+import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import {
   CreateGlobalRemoteSessionClientRequest,
   CreateGlobalRemoteSessionClientSecurity,
@@ -31,6 +35,10 @@ import {
   DeleteGlobalRemoteSessionIssuerRequest,
   DeleteGlobalRemoteSessionIssuerSecurity,
 } from "../models/operations/deleteglobalremotesessionissuer.js";
+import {
+  FetchGlobalRemoteSessionIssuerMetadataRequest,
+  FetchGlobalRemoteSessionIssuerMetadataSecurity,
+} from "../models/operations/fetchglobalremotesessionissuermetadata.js";
 import {
   GetGlobalRemoteSessionClientRequest,
   GetGlobalRemoteSessionClientSecurity,
@@ -49,6 +57,10 @@ import {
   ListGlobalRemoteSessionIssuersResponse,
   ListGlobalRemoteSessionIssuersSecurity,
 } from "../models/operations/listglobalremotesessionissuers.js";
+import {
+  RefreshGlobalRemoteSessionIssuerMetadataRequest,
+  RefreshGlobalRemoteSessionIssuerMetadataSecurity,
+} from "../models/operations/refreshglobalremotesessionissuermetadata.js";
 import {
   UpdateGlobalRemoteSessionClientRequest,
   UpdateGlobalRemoteSessionClientSecurity,
@@ -138,6 +150,25 @@ export class AdminRemoteSessions extends ClientSDK {
   }
 
   /**
+   * fetchGlobalIssuerMetadata adminRemoteSessions
+   *
+   * @remarks
+   * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.
+   */
+  async fetchGlobalIssuerMetadata(
+    request: FetchGlobalRemoteSessionIssuerMetadataRequest,
+    security?: FetchGlobalRemoteSessionIssuerMetadataSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerDraft> {
+    return unwrapAsync(adminRemoteSessionsFetchGlobalIssuerMetadata(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getGlobalClient adminRemoteSessions
    *
    * @remarks
@@ -210,6 +241,25 @@ export class AdminRemoteSessions extends ClientSDK {
     PageIterator<ListGlobalRemoteSessionIssuersResponse, { cursor: string }>
   > {
     return unwrapResultIterator(adminRemoteSessionsListGlobalIssuers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * refreshGlobalIssuerMetadata adminRemoteSessions
+   *
+   * @remarks
+   * Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
+   */
+  async refreshGlobalIssuerMetadata(
+    request: RefreshGlobalRemoteSessionIssuerMetadataRequest,
+    security?: RefreshGlobalRemoteSessionIssuerMetadataSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerRefresh> {
+    return unwrapAsync(adminRemoteSessionsRefreshGlobalIssuerMetadata(
       this,
       request,
       security,

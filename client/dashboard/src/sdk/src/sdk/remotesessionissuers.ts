@@ -4,13 +4,15 @@
 
 import { remoteSessionIssuersCreate } from "../funcs/remoteSessionIssuersCreate.js";
 import { remoteSessionIssuersDelete } from "../funcs/remoteSessionIssuersDelete.js";
-import { remoteSessionIssuersDiscover } from "../funcs/remoteSessionIssuersDiscover.js";
+import { remoteSessionIssuersFetchMetadata } from "../funcs/remoteSessionIssuersFetchMetadata.js";
 import { remoteSessionIssuersGet } from "../funcs/remoteSessionIssuersGet.js";
 import { remoteSessionIssuersList } from "../funcs/remoteSessionIssuersList.js";
+import { remoteSessionIssuersRefreshMetadata } from "../funcs/remoteSessionIssuersRefreshMetadata.js";
 import { remoteSessionIssuersUpdate } from "../funcs/remoteSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
 import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
+import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import {
   CreateRemoteSessionIssuerRequest,
   CreateRemoteSessionIssuerSecurity,
@@ -20,9 +22,9 @@ import {
   DeleteRemoteSessionIssuerSecurity,
 } from "../models/operations/deleteremotesessionissuer.js";
 import {
-  DiscoverRemoteSessionIssuerRequest,
-  DiscoverRemoteSessionIssuerSecurity,
-} from "../models/operations/discoverremotesessionissuer.js";
+  FetchRemoteSessionIssuerMetadataRequest,
+  FetchRemoteSessionIssuerMetadataSecurity,
+} from "../models/operations/fetchremotesessionissuermetadata.js";
 import {
   GetRemoteSessionIssuerRequest,
   GetRemoteSessionIssuerSecurity,
@@ -32,6 +34,10 @@ import {
   ListRemoteSessionIssuersResponse,
   ListRemoteSessionIssuersSecurity,
 } from "../models/operations/listremotesessionissuers.js";
+import {
+  RefreshRemoteSessionIssuerMetadataRequest,
+  RefreshRemoteSessionIssuerMetadataSecurity,
+} from "../models/operations/refreshremotesessionissuermetadata.js";
 import {
   UpdateRemoteSessionIssuerRequest,
   UpdateRemoteSessionIssuerSecurity,
@@ -79,17 +85,17 @@ export class RemoteSessionIssuers extends ClientSDK {
   }
 
   /**
-   * discoverRemoteSessionIssuer remoteSessionIssuers
+   * fetchRemoteSessionIssuerMetadata remoteSessionIssuers
    *
    * @remarks
-   * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.
+   * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Use refreshMetadata to re-discover and persist against an existing issuer.
    */
-  async discover(
-    request: DiscoverRemoteSessionIssuerRequest,
-    security?: DiscoverRemoteSessionIssuerSecurity | undefined,
+  async fetchMetadata(
+    request: FetchRemoteSessionIssuerMetadataRequest,
+    security?: FetchRemoteSessionIssuerMetadataSecurity | undefined,
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuerDraft> {
-    return unwrapAsync(remoteSessionIssuersDiscover(
+    return unwrapAsync(remoteSessionIssuersFetchMetadata(
       this,
       request,
       security,
@@ -130,6 +136,25 @@ export class RemoteSessionIssuers extends ClientSDK {
     PageIterator<ListRemoteSessionIssuersResponse, { cursor: string }>
   > {
     return unwrapResultIterator(remoteSessionIssuersList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * refreshRemoteSessionIssuerMetadata remoteSessionIssuers
+   *
+   * @remarks
+   * Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.
+   */
+  async refreshMetadata(
+    request: RefreshRemoteSessionIssuerMetadataRequest,
+    security?: RefreshRemoteSessionIssuerMetadataSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerRefresh> {
+    return unwrapAsync(remoteSessionIssuersRefreshMetadata(
       this,
       request,
       security,

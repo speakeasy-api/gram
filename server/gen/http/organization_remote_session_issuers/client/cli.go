@@ -433,3 +433,72 @@ func BuildMigrateIssuerPayload(organizationRemoteSessionIssuersMigrateIssuerBody
 
 	return v, nil
 }
+
+// BuildFetchIssuerMetadataPayload builds the payload for the
+// organizationRemoteSessionIssuers fetchIssuerMetadata endpoint from CLI flags.
+func BuildFetchIssuerMetadataPayload(organizationRemoteSessionIssuersFetchIssuerMetadataBody string, organizationRemoteSessionIssuersFetchIssuerMetadataSessionToken string, organizationRemoteSessionIssuersFetchIssuerMetadataApikeyToken string) (*organizationremotesessionissuers.FetchIssuerMetadataPayload, error) {
+	var err error
+	var body FetchIssuerMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersFetchIssuerMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"issuer\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersFetchIssuerMetadataSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersFetchIssuerMetadataSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersFetchIssuerMetadataApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersFetchIssuerMetadataApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.FetchIssuerMetadataPayload{
+		Issuer: body.Issuer,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildRefreshIssuerMetadataPayload builds the payload for the
+// organizationRemoteSessionIssuers refreshIssuerMetadata endpoint from CLI
+// flags.
+func BuildRefreshIssuerMetadataPayload(organizationRemoteSessionIssuersRefreshIssuerMetadataBody string, organizationRemoteSessionIssuersRefreshIssuerMetadataSessionToken string, organizationRemoteSessionIssuersRefreshIssuerMetadataApikeyToken string) (*organizationremotesessionissuers.RefreshIssuerMetadataPayload, error) {
+	var err error
+	var body RefreshIssuerMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersRefreshIssuerMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersRefreshIssuerMetadataSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersRefreshIssuerMetadataSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersRefreshIssuerMetadataApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersRefreshIssuerMetadataApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.RefreshIssuerMetadataPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}

@@ -16,12 +16,13 @@ import (
 
 // Endpoints wraps the "remoteSessionIssuers" service endpoints.
 type Endpoints struct {
-	DiscoverRemoteSessionIssuer goa.Endpoint
-	CreateRemoteSessionIssuer   goa.Endpoint
-	UpdateRemoteSessionIssuer   goa.Endpoint
-	ListRemoteSessionIssuers    goa.Endpoint
-	GetRemoteSessionIssuer      goa.Endpoint
-	DeleteRemoteSessionIssuer   goa.Endpoint
+	FetchRemoteSessionIssuerMetadata   goa.Endpoint
+	RefreshRemoteSessionIssuerMetadata goa.Endpoint
+	CreateRemoteSessionIssuer          goa.Endpoint
+	UpdateRemoteSessionIssuer          goa.Endpoint
+	ListRemoteSessionIssuers           goa.Endpoint
+	GetRemoteSessionIssuer             goa.Endpoint
+	DeleteRemoteSessionIssuer          goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "remoteSessionIssuers" service with
@@ -30,19 +31,21 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		DiscoverRemoteSessionIssuer: NewDiscoverRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
-		CreateRemoteSessionIssuer:   NewCreateRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
-		UpdateRemoteSessionIssuer:   NewUpdateRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
-		ListRemoteSessionIssuers:    NewListRemoteSessionIssuersEndpoint(s, a.APIKeyAuth),
-		GetRemoteSessionIssuer:      NewGetRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
-		DeleteRemoteSessionIssuer:   NewDeleteRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
+		FetchRemoteSessionIssuerMetadata:   NewFetchRemoteSessionIssuerMetadataEndpoint(s, a.APIKeyAuth),
+		RefreshRemoteSessionIssuerMetadata: NewRefreshRemoteSessionIssuerMetadataEndpoint(s, a.APIKeyAuth),
+		CreateRemoteSessionIssuer:          NewCreateRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
+		UpdateRemoteSessionIssuer:          NewUpdateRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
+		ListRemoteSessionIssuers:           NewListRemoteSessionIssuersEndpoint(s, a.APIKeyAuth),
+		GetRemoteSessionIssuer:             NewGetRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
+		DeleteRemoteSessionIssuer:          NewDeleteRemoteSessionIssuerEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "remoteSessionIssuers" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.DiscoverRemoteSessionIssuer = m(e.DiscoverRemoteSessionIssuer)
+	e.FetchRemoteSessionIssuerMetadata = m(e.FetchRemoteSessionIssuerMetadata)
+	e.RefreshRemoteSessionIssuerMetadata = m(e.RefreshRemoteSessionIssuerMetadata)
 	e.CreateRemoteSessionIssuer = m(e.CreateRemoteSessionIssuer)
 	e.UpdateRemoteSessionIssuer = m(e.UpdateRemoteSessionIssuer)
 	e.ListRemoteSessionIssuers = m(e.ListRemoteSessionIssuers)
@@ -50,12 +53,12 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DeleteRemoteSessionIssuer = m(e.DeleteRemoteSessionIssuer)
 }
 
-// NewDiscoverRemoteSessionIssuerEndpoint returns an endpoint function that
-// calls the method "discoverRemoteSessionIssuer" of service
+// NewFetchRemoteSessionIssuerMetadataEndpoint returns an endpoint function
+// that calls the method "fetchRemoteSessionIssuerMetadata" of service
 // "remoteSessionIssuers".
-func NewDiscoverRemoteSessionIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewFetchRemoteSessionIssuerMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DiscoverRemoteSessionIssuerPayload)
+		p := req.(*FetchRemoteSessionIssuerMetadataPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -106,7 +109,67 @@ func NewDiscoverRemoteSessionIssuerEndpoint(s Service, authAPIKeyFn security.Aut
 		if err != nil {
 			return nil, err
 		}
-		return s.DiscoverRemoteSessionIssuer(ctx, p)
+		return s.FetchRemoteSessionIssuerMetadata(ctx, p)
+	}
+}
+
+// NewRefreshRemoteSessionIssuerMetadataEndpoint returns an endpoint function
+// that calls the method "refreshRemoteSessionIssuerMetadata" of service
+// "remoteSessionIssuers".
+func NewRefreshRemoteSessionIssuerMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RefreshRemoteSessionIssuerMetadataPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RefreshRemoteSessionIssuerMetadata(ctx, p)
 	}
 }
 
