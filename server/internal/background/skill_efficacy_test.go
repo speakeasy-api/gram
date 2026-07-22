@@ -44,7 +44,7 @@ func registerIdleEnqueue(env *testsuite.TestWorkflowEnvironment) {
 func registerEmptyClaim(env *testsuite.TestWorkflowEnvironment) {
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ activities.LoadReservedSkillEfficacyEvaluationsParams) (*activities.SkillEfficacyBatch, error) {
-			return &activities.SkillEfficacyBatch{IDs: nil}, nil
+			return &activities.SkillEfficacyBatch{IDs: nil, ClaimToken: uuid.Nil}, nil
 		},
 		activity.RegisterOptions{Name: "LoadReservedSkillEfficacyEvaluations"},
 	)
@@ -78,7 +78,7 @@ func TestSkillEfficacyCoordinatorWorkflowCompletesWhenThereIsNoWork(t *testing.T
 		func(_ context.Context, params activities.ReserveSkillEfficacyEvaluationsParams) (*activities.ReserveSkillEfficacyEvaluationsResult, error) {
 			reserveCalls++
 			require.Equal(t, efficacy.MaxReservedClaimBatch, params.BatchSize)
-			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
+			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, ClaimToken: uuid.Nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
 		},
 		activity.RegisterOptions{Name: "ReserveSkillEfficacyEvaluations"},
 	)
@@ -87,7 +87,7 @@ func TestSkillEfficacyCoordinatorWorkflowCompletesWhenThereIsNoWork(t *testing.T
 		func(_ context.Context, params activities.LoadReservedSkillEfficacyEvaluationsParams) (*activities.SkillEfficacyBatch, error) {
 			claimCalls++
 			require.Equal(t, projectID, params.ProjectID)
-			return &activities.SkillEfficacyBatch{IDs: nil}, nil
+			return &activities.SkillEfficacyBatch{IDs: nil, ClaimToken: uuid.Nil}, nil
 		},
 		activity.RegisterOptions{Name: "LoadReservedSkillEfficacyEvaluations"},
 	)
@@ -137,7 +137,7 @@ func TestSkillEfficacyCoordinatorWorkflowChainsTheEnqueueCursorAndResetsItWhenEx
 	)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ activities.ReserveSkillEfficacyEvaluationsParams) (*activities.ReserveSkillEfficacyEvaluationsResult, error) {
-			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
+			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, ClaimToken: uuid.Nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
 		},
 		activity.RegisterOptions{Name: "ReserveSkillEfficacyEvaluations"},
 	)
@@ -163,6 +163,7 @@ func TestSkillEfficacyCoordinatorWorkflowPublishesReservedBatchesUntilThereIsNoW
 	env := suite.NewTestWorkflowEnvironment()
 	projectID := uuid.New()
 	batch := []uuid.UUID{uuid.New(), uuid.New()}
+	claimToken := uuid.New()
 
 	registerIdleEnqueue(env)
 	reserveCalls := 0
@@ -170,9 +171,9 @@ func TestSkillEfficacyCoordinatorWorkflowPublishesReservedBatchesUntilThereIsNoW
 		func(_ context.Context, _ activities.ReserveSkillEfficacyEvaluationsParams) (*activities.ReserveSkillEfficacyEvaluationsResult, error) {
 			reserveCalls++
 			if reserveCalls == 1 {
-				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: batch, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
+				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: batch, ClaimToken: claimToken, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
 			}
-			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
+			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, ClaimToken: uuid.Nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
 		},
 		activity.RegisterOptions{Name: "ReserveSkillEfficacyEvaluations"},
 	)
@@ -181,6 +182,7 @@ func TestSkillEfficacyCoordinatorWorkflowPublishesReservedBatchesUntilThereIsNoW
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, params activities.PublishSkillEfficacyBatchParams) (*activities.PublishSkillEfficacyBatchResult, error) {
 			require.Equal(t, projectID, params.ProjectID)
+			require.Equal(t, claimToken, params.ClaimToken)
 			published = append(published, params.IDs)
 			return &activities.PublishSkillEfficacyBatchResult{
 				Loaded: len(params.IDs), AlreadyPublished: 0, Scored: len(params.IDs),
@@ -211,6 +213,7 @@ func TestSkillEfficacyCoordinatorWorkflowContinuesAsNewWhenThePassCapStopsIt(t *
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	projectID := uuid.New()
+	claimToken := uuid.New()
 
 	registerIdleEnqueue(env)
 	reserveCalls := 0
@@ -218,7 +221,7 @@ func TestSkillEfficacyCoordinatorWorkflowContinuesAsNewWhenThePassCapStopsIt(t *
 		func(_ context.Context, _ activities.ReserveSkillEfficacyEvaluationsParams) (*activities.ReserveSkillEfficacyEvaluationsResult, error) {
 			reserveCalls++
 			// Every pass finds a batch: the queue never runs dry inside this run.
-			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: []uuid.UUID{uuid.New()}, NextCursor: efficacy.PendingCursor{}}, nil
+			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: []uuid.UUID{uuid.New()}, ClaimToken: claimToken, NextCursor: efficacy.PendingCursor{}}, nil
 		},
 		activity.RegisterOptions{Name: "ReserveSkillEfficacyEvaluations"},
 	)
@@ -227,6 +230,7 @@ func TestSkillEfficacyCoordinatorWorkflowContinuesAsNewWhenThePassCapStopsIt(t *
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, params activities.PublishSkillEfficacyBatchParams) (*activities.PublishSkillEfficacyBatchResult, error) {
 			publishCalls++
+			require.Equal(t, claimToken, params.ClaimToken)
 			return &activities.PublishSkillEfficacyBatchResult{
 				Loaded: len(params.IDs), AlreadyPublished: 0, Scored: len(params.IDs),
 				ModelFailures: 0, Failed: 0, Retryable: 0,
@@ -252,6 +256,7 @@ func TestSkillEfficacyCoordinatorWorkflowChainsThePendingCursorAcrossPasses(t *t
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	stopped := efficacy.PendingCursor{ObservedAt: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC), ID: uuid.New()}
+	claimToken := uuid.New()
 
 	registerIdleEnqueue(env)
 	var seen []efficacy.PendingCursor
@@ -262,10 +267,11 @@ func TestSkillEfficacyCoordinatorWorkflowChainsThePendingCursorAcrossPasses(t *t
 			// reports where it stopped; the second reaches the end and reports the
 			// head.
 			if len(seen) == 1 {
-				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: []uuid.UUID{uuid.New()}, NextCursor: stopped}, nil
+				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: []uuid.UUID{uuid.New()}, ClaimToken: claimToken, NextCursor: stopped}, nil
 			}
 			return &activities.ReserveSkillEfficacyEvaluationsResult{
 				IDs:        nil,
+				ClaimToken: uuid.Nil,
 				NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil},
 			}, nil
 		},
@@ -274,6 +280,7 @@ func TestSkillEfficacyCoordinatorWorkflowChainsThePendingCursorAcrossPasses(t *t
 	registerEmptyClaim(env)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, params activities.PublishSkillEfficacyBatchParams) (*activities.PublishSkillEfficacyBatchResult, error) {
+			require.Equal(t, claimToken, params.ClaimToken)
 			return &activities.PublishSkillEfficacyBatchResult{
 				Loaded: len(params.IDs), AlreadyPublished: 0, Scored: len(params.IDs),
 				ModelFailures: 0, Failed: 0, Retryable: 0,
@@ -301,6 +308,7 @@ func TestSkillEfficacyCoordinatorWorkflowContinuesAfterAnEmptyProgressingReserva
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	advanced := efficacy.PendingCursor{ObservedAt: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC), ID: uuid.New()}
+	claimToken := uuid.New()
 
 	registerIdleEnqueue(env)
 	var seen []efficacy.PendingCursor
@@ -309,11 +317,11 @@ func TestSkillEfficacyCoordinatorWorkflowContinuesAfterAnEmptyProgressingReserva
 			seen = append(seen, params.Cursor)
 			switch len(seen) {
 			case 1:
-				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, NextCursor: advanced}, nil
+				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, ClaimToken: uuid.Nil, NextCursor: advanced}, nil
 			case 2:
-				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: []uuid.UUID{uuid.New()}, NextCursor: efficacy.PendingCursor{}}, nil
+				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: []uuid.UUID{uuid.New()}, ClaimToken: claimToken, NextCursor: efficacy.PendingCursor{}}, nil
 			default:
-				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, NextCursor: efficacy.PendingCursor{}}, nil
+				return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, ClaimToken: uuid.Nil, NextCursor: efficacy.PendingCursor{}}, nil
 			}
 		},
 		activity.RegisterOptions{Name: "ReserveSkillEfficacyEvaluations"},
@@ -322,6 +330,7 @@ func TestSkillEfficacyCoordinatorWorkflowContinuesAfterAnEmptyProgressingReserva
 	published := 0
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, params activities.PublishSkillEfficacyBatchParams) (*activities.PublishSkillEfficacyBatchResult, error) {
+			require.Equal(t, claimToken, params.ClaimToken)
 			published += len(params.IDs)
 			return &activities.PublishSkillEfficacyBatchResult{
 				Loaded: len(params.IDs), AlreadyPublished: 0, Scored: len(params.IDs),
@@ -344,11 +353,12 @@ func TestSkillEfficacyCoordinatorWorkflowPublishesReservationsAnOwnerAbandoned(t
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	abandoned := []uuid.UUID{uuid.New()}
+	claimToken := uuid.New()
 
 	registerIdleEnqueue(env)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ activities.ReserveSkillEfficacyEvaluationsParams) (*activities.ReserveSkillEfficacyEvaluationsResult, error) {
-			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
+			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, ClaimToken: uuid.Nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
 		},
 		activity.RegisterOptions{Name: "ReserveSkillEfficacyEvaluations"},
 	)
@@ -357,15 +367,16 @@ func TestSkillEfficacyCoordinatorWorkflowPublishesReservationsAnOwnerAbandoned(t
 		func(_ context.Context, _ activities.LoadReservedSkillEfficacyEvaluationsParams) (*activities.SkillEfficacyBatch, error) {
 			claims++
 			if claims == 1 {
-				return &activities.SkillEfficacyBatch{IDs: abandoned}, nil
+				return &activities.SkillEfficacyBatch{IDs: abandoned, ClaimToken: claimToken}, nil
 			}
-			return &activities.SkillEfficacyBatch{IDs: nil}, nil
+			return &activities.SkillEfficacyBatch{IDs: nil, ClaimToken: uuid.Nil}, nil
 		},
 		activity.RegisterOptions{Name: "LoadReservedSkillEfficacyEvaluations"},
 	)
 	var published [][]uuid.UUID
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, params activities.PublishSkillEfficacyBatchParams) (*activities.PublishSkillEfficacyBatchResult, error) {
+			require.Equal(t, claimToken, params.ClaimToken)
 			published = append(published, params.IDs)
 			return &activities.PublishSkillEfficacyBatchResult{
 				Loaded: 1, AlreadyPublished: 1, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0,
@@ -397,7 +408,7 @@ func TestSkillEfficacyCoordinatorWorkflowCoalescesSignalsRaisedWhileItWorks(t *t
 			env.SignalWorkflow(SignalSkillEfficacyRequested, struct{}{})
 			env.SignalWorkflow(SignalSkillEfficacyRequested, struct{}{})
 			env.SignalWorkflow(SignalSkillEfficacyRequested, struct{}{})
-			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
+			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, ClaimToken: uuid.Nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
 		},
 		activity.RegisterOptions{Name: "ReserveSkillEfficacyEvaluations"},
 	)
@@ -421,7 +432,7 @@ func TestSkillEfficacyCoordinatorWorkflowDrainsTheSignalThatStartedIt(t *testing
 	registerIdleEnqueue(env)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ activities.ReserveSkillEfficacyEvaluationsParams) (*activities.ReserveSkillEfficacyEvaluationsResult, error) {
-			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
+			return &activities.ReserveSkillEfficacyEvaluationsResult{IDs: nil, ClaimToken: uuid.Nil, NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}}, nil
 		},
 		activity.RegisterOptions{Name: "ReserveSkillEfficacyEvaluations"},
 	)
@@ -446,12 +457,14 @@ func TestSkillEfficacyCoordinatorWorkflowFailsWhenPublicationCannotRecover(t *te
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	claimToken := uuid.New()
 
 	registerIdleEnqueue(env)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ activities.ReserveSkillEfficacyEvaluationsParams) (*activities.ReserveSkillEfficacyEvaluationsResult, error) {
 			return &activities.ReserveSkillEfficacyEvaluationsResult{
 				IDs:        []uuid.UUID{uuid.New()},
+				ClaimToken: claimToken,
 				NextCursor: efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil},
 			}, nil
 		},
@@ -460,8 +473,9 @@ func TestSkillEfficacyCoordinatorWorkflowFailsWhenPublicationCannotRecover(t *te
 	registerEmptyClaim(env)
 	attempts := 0
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ activities.PublishSkillEfficacyBatchParams) (*activities.PublishSkillEfficacyBatchResult, error) {
+		func(_ context.Context, params activities.PublishSkillEfficacyBatchParams) (*activities.PublishSkillEfficacyBatchResult, error) {
 			attempts++
+			require.Equal(t, claimToken, params.ClaimToken)
 			return nil, errors.New("clickhouse unavailable")
 		},
 		activity.RegisterOptions{Name: "PublishSkillEfficacyBatch"},
@@ -499,7 +513,7 @@ func TestSkillEfficacySweepWorkflowResetsStaleReservationsBeforeSignalling(t *te
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, params activities.ResetStaleSkillEfficacyReservationsParams) (*activities.ResetStaleSkillEfficacyReservationsResult, error) {
 			order = append(order, "reset:"+params.ProjectID.String())
-			return &activities.ResetStaleSkillEfficacyReservationsResult{Reset: 1}, nil
+			return &activities.ResetStaleSkillEfficacyReservationsResult{Recovered: 1, DeadLettered: 0}, nil
 		},
 		activity.RegisterOptions{Name: "ResetStaleSkillEfficacyReservations"},
 	)
@@ -543,7 +557,7 @@ func TestSkillEfficacySweepWorkflowCarriesOnPastAProjectItCannotRecover(t *testi
 			if params.ProjectID == failing {
 				return nil, errors.New("database unavailable")
 			}
-			return &activities.ResetStaleSkillEfficacyReservationsResult{Reset: 0}, nil
+			return &activities.ResetStaleSkillEfficacyReservationsResult{Recovered: 0, DeadLettered: 0}, nil
 		},
 		activity.RegisterOptions{Name: "ResetStaleSkillEfficacyReservations"},
 	)
@@ -582,7 +596,7 @@ func TestSkillEfficacySweepWorkflowContinuesAsNewPastAFullPage(t *testing.T) {
 	)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ activities.ResetStaleSkillEfficacyReservationsParams) (*activities.ResetStaleSkillEfficacyReservationsResult, error) {
-			return &activities.ResetStaleSkillEfficacyReservationsResult{Reset: 0}, nil
+			return &activities.ResetStaleSkillEfficacyReservationsResult{Recovered: 0, DeadLettered: 0}, nil
 		},
 		activity.RegisterOptions{Name: "ResetStaleSkillEfficacyReservations"},
 	)

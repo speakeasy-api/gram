@@ -149,14 +149,3 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 -- create.
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES (@plugin_id, @organization_id, @principal_urn);
-
--- name: ResetSkillEfficacyReservationFixture :execrows
--- Test-only fixture for simulating a stale reaper taking one reserved row while
--- a publisher still holds it.
-UPDATE skill_efficacy_evaluations
-SET state = 'pending',
-    reserved_on = NULL,
-    updated_at = clock_timestamp()
-WHERE project_id = @project_id
-  AND id = @id
-  AND state = 'reserved';

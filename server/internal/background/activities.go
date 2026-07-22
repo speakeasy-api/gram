@@ -259,6 +259,8 @@ func NewActivities(
 		// completion client as every other platform judge, so efficacy scoring
 		// cannot outspend the org's key behind their backs.
 		skillEfficacyScorer: activities.NewSkillEfficacyScorer(
+			logger,
+			meterProvider,
 			db,
 			productFeatures,
 			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter)),
