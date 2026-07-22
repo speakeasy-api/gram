@@ -1392,6 +1392,7 @@ var queryDimensions = []any{
 	"billing_mode", // metered (real cost) | flat_rate (estimate) | unknown
 	"query_source",
 	"skill_name",
+	"skill_version",
 	"agent_name",
 	"mcp_server_name",
 	"mcp_tool_name",
@@ -1414,7 +1415,7 @@ var queryMeasures = []any{
 }
 
 var QueryPayload = Type("QueryPayload", func() {
-	Description("Payload for a generic org-scoped analytics query")
+	Description("Payload for a generic org-scoped analytics query. Queries involving skill_version use raw telemetry retained for 90 days and attribute each whole session to every activated version; timeseries place the whole session in its start-time bucket.")
 
 	Attribute("from", String, "Start time in ISO 8601 format", func() {
 		Format(FormatDateTime)

@@ -364,6 +364,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.MarkMessagesAnalyzed)
 	temporalWorker.RegisterActivity(activities.ReconcileExclusion)
 	temporalWorker.RegisterActivity(activities.ReconcileSkillObservations)
+	temporalWorker.RegisterActivity(activities.SyncSkillSessionVersions)
 	temporalWorker.RegisterActivity(activities.ListProjectsWithPendingSkillObservations)
 	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
