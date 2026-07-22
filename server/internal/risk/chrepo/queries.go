@@ -69,13 +69,10 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 		return nil
 	}
 
-	ctx = clickhouse.Context(ctx,
-		clickhouse.WithAsync(false),
-		clickhouse.WithSettings(clickhouse.Settings{
-			"async_insert":          1,
-			"wait_for_async_insert": 0,
-		}),
-	)
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert":          1,
+		"wait_for_async_insert": 0,
+	}))
 
 	builder := sq.Insert("risk_findings").
 		Columns(
