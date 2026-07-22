@@ -50,6 +50,13 @@ func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 			ServerName:         "Other",
 			SeenAt:             lastSeen.Add(time.Hour),
 		},
+		{
+			GramProjectID:      otherProjectID,
+			CanonicalServerURL: "https://other.example.com/mcp",
+			URLHost:            "other.example.com",
+			ServerName:         "Other Only",
+			SeenAt:             lastSeen.Add(time.Hour),
+		},
 	}))
 
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
@@ -66,6 +73,17 @@ func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 	require.Equal(t, "Speakeasy", rows[0].ServerName)
 	require.Equal(t, firstSeen, rows[0].FirstSeen)
 	require.Equal(t, lastSeen, rows[0].LastSeen)
+
+	existingURLs, err := ti.chClient.ListExistingShadowMCPInventoryURLs(ctx, telemetryRepo.ListExistingShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		CanonicalServerURLs: []string{
+			"https://mcp.speakeasy.com/mcp",
+			"https://other.example.com/mcp",
+			"https://missing.example.com/mcp",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://mcp.speakeasy.com/mcp"}, existingURLs)
 }
 
 func TestShadowMCPInventoryURLs_NameOverrideSurvivesLaterObservation(t *testing.T) {
