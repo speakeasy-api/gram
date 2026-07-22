@@ -10,9 +10,9 @@ import (
 )
 
 // eventKey is the ordered identity of an ingested analytics row. Its hash is
-// stored on every row (cursor.event_hash, claude_chat.event_hash) so
-// consumers needing exact-once sums can dedupe by
-// (gram_project_id, <provider>.event_hash) — covering the crash window
+// stored on every row (cursor.event_hash, claude_chat.event_hash,
+// codex.compliance.event_hash) so consumers needing exact-once sums can dedupe
+// by (gram_project_id, <provider>.event_hash) — covering the crash window
 // between a ClickHouse write and the watermark advance, where one window can
 // be re-ingested.
 //

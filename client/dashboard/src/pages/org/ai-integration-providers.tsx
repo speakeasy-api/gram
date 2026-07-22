@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { ClaudeCodeIcon, CursorIcon } from "../hooks/HookSourceIcon";
+import { ClaudeCodeIcon, CodexIcon, CursorIcon } from "../hooks/HookSourceIcon";
 
 type ProviderIcon = (props: { className?: string }) => JSX.Element;
 
@@ -153,6 +153,46 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
           Learn more
         </a>
         .
+      </>
+    ),
+  },
+  {
+    provider: "codex_compliance",
+    name: "OpenAI Compliance Logs",
+    description: "Import Codex usage and spend from OpenAI Compliance Logs.",
+    onboardingDescription:
+      "Connect OpenAI's Compliance Logs API so the platform can import Codex cost data for reporting.",
+    setupGuide: {
+      steps: [
+        {
+          title: "Create a Compliance API key",
+          description:
+            "Create an OpenAI API key with access to compliance logs for the organization whose Codex spend Speakeasy should import.",
+        },
+        {
+          title: "Copy your OpenAI organization ID",
+          description:
+            "Copy the OpenAI organization ID for the organization whose Codex cost logs Speakeasy should import. It should start with org-.",
+        },
+        {
+          title: "Paste both values into Speakeasy",
+          description:
+            "Copy the Compliance API key and OpenAI organization ID, then paste both below. The platform stores the key securely and starts importing Codex cost logs.",
+          showsForm: true,
+        },
+      ],
+    },
+    icon: CodexIcon,
+    apiKeyLabel: "OpenAI Compliance Logs API key",
+    apiKeyPlaceholder: "Paste your OpenAI Compliance Logs API key",
+    requiresOrganizationId: true,
+    organizationIdLabel: "OpenAI organization ID",
+    organizationIdPlaceholder: "org-...",
+    helpText: (
+      <>
+        Codex cost import uses OpenAI Compliance Logs Platform{" "}
+        <code className="text-foreground">COSTS</code> files for an OpenAI API
+        organization. Use an <code className="text-foreground">org-*</code> ID.
       </>
     ),
   },

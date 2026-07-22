@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,7 +25,10 @@ import (
 const (
 	ProviderCursor              = "cursor"
 	ProviderAnthropicCompliance = "anthropic_compliance"
+	ProviderCodexCompliance     = "codex_compliance"
 )
+
+var codexExternalOrganizationIDPattern = regexp.MustCompile(`^org-[A-Za-z0-9_-]+$`)
 
 // Sync schedules name the independent polling pipelines a config can run,
 // each with its own ai_integration_syncs row (cadence, checkpoint, failure
@@ -38,6 +42,7 @@ const (
 	ScheduleAnthropicCompliance     = ProviderAnthropicCompliance
 	ScheduleAnthropicAnalyticsUsage = "anthropic_analytics_usage"
 	ScheduleAnthropicAnalyticsCost  = "anthropic_analytics_cost"
+	ScheduleCodexCompliance         = ProviderCodexCompliance
 )
 
 // Sync kinds record how a schedule checkpoints progress.
@@ -62,6 +67,8 @@ func providerSyncSchedule(provider string) syncSchedule {
 	switch provider {
 	case ProviderAnthropicCompliance:
 		return syncSchedule{schedule: ScheduleAnthropicCompliance, kind: SyncKindCursor}
+	case ProviderCodexCompliance:
+		return syncSchedule{schedule: ScheduleCodexCompliance, kind: SyncKindTime}
 	default:
 		return syncSchedule{schedule: ScheduleCursor, kind: SyncKindTime}
 	}
@@ -78,6 +85,8 @@ func syncSchedulesFor(provider string) []syncSchedule {
 			{schedule: ScheduleAnthropicAnalyticsUsage, kind: SyncKindTime},
 			{schedule: ScheduleAnthropicAnalyticsCost, kind: SyncKindTime},
 		}
+	case ProviderCodexCompliance:
+		return []syncSchedule{providerSyncSchedule(provider)}
 	default:
 		return []syncSchedule{providerSyncSchedule(provider)}
 	}
@@ -87,6 +96,7 @@ const (
 	initialUsagePollLookback             = time.Hour * 24
 	cursorUsagePollInterval              = time.Hour
 	anthropicComplianceUsagePollInterval = 5 * time.Minute
+	codexComplianceUsagePollInterval     = 5 * time.Minute
 	maxUsagePollErrorMessage             = 4000
 
 	// anthropicAnalyticsPollInterval is the delay between Admin Analytics API
@@ -111,6 +121,8 @@ func pollIntervalForSchedule(schedule string) time.Duration {
 		return anthropicComplianceUsagePollInterval
 	case ScheduleAnthropicAnalyticsUsage, ScheduleAnthropicAnalyticsCost:
 		return anthropicAnalyticsPollInterval
+	case ScheduleCodexCompliance:
+		return codexComplianceUsagePollInterval
 	default:
 		return cursorUsagePollInterval
 	}
@@ -181,7 +193,7 @@ func normalizeProvider(provider string) (string, error) {
 		return "", oops.E(oops.CodeInvalid, nil, "provider is required")
 	}
 	switch provider {
-	case ProviderCursor, ProviderAnthropicCompliance:
+	case ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance:
 	default:
 		return "", oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider: %s", provider)
 	}
@@ -218,8 +230,15 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		return UpsertResult{}, err
 	}
 
-	if provider == ProviderAnthropicCompliance && externalOrganizationID == nil {
-		return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id is required for anthropic_compliance")
+	if providerRequiresExternalOrganizationID(provider) && externalOrganizationID == nil {
+		return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id is required for %s", provider)
+	}
+	if provider == ProviderCodexCompliance && externalOrganizationID != nil {
+		trimmedExternalOrganizationID := strings.TrimSpace(*externalOrganizationID)
+		if !codexExternalOrganizationIDPattern.MatchString(trimmedExternalOrganizationID) {
+			return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id must be an OpenAI organization ID starting with org- for %s", provider)
+		}
+		externalOrganizationID = &trimmedExternalOrganizationID
 	}
 
 	q := repo.New(dbtx)
@@ -298,7 +317,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	}
 	if resetPollWatermarkAt != nil {
 		syncRow.PollWatermarkAt = conv.ToPGTimestamptz(*resetPollWatermarkAt)
-		syncRow.NextPollAfter = conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(pollIntervalForSchedule(provider)))
+		syncRow.NextPollAfter = conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(pollIntervalForSchedule(providerSched.schedule)))
 		syncRow.LastPollError = pgtype.Text{String: "", Valid: false}
 		syncRow.LastPollFailedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		syncRow.LastPollSuccessAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
@@ -324,6 +343,10 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		Row:                  &row,
 		CreatedNewGeneration: createdNewGeneration,
 	}, nil
+}
+
+func providerRequiresExternalOrganizationID(provider string) bool {
+	return provider == ProviderAnthropicCompliance || provider == ProviderCodexCompliance
 }
 
 func (s *Store) softDeleteWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string) error {
@@ -407,7 +430,7 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, pollDueBefore time.
 func (s *Store) ensureActiveSyncSchedules(ctx context.Context) error {
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
 		q := repo.New(tx)
-		for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance} {
+		for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance} {
 			for _, sched := range syncSchedulesFor(provider) {
 				// Same initial watermark policy as upsertWithTx: epoch for
 				// time-kind schedules, now for cursor-kind ones.
@@ -610,6 +633,10 @@ func (s *Store) RecordSchedulePollFailure(ctx context.Context, configID uuid.UUI
 	var errStr string
 	if cause != nil {
 		errStr = cause.Error()
+		var shareable *oops.ShareableError
+		if errors.As(cause, &shareable) {
+			errStr = shareable.String()
+		}
 	}
 
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
