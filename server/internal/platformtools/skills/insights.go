@@ -265,7 +265,8 @@ func buildInsightsResult(rows []telemetryrepo.SkillInsightBucket, skills map[str
 		for skillID := range skills {
 			bySkill[skillID] = make(map[string]*insightAccumulator, len(versionCreatedAt))
 			for versionID := range versionCreatedAt {
-				bySkill[skillID][versionID] = &insightAccumulator{metrics: telemetryrepo.SkillInsightBucket{}, trend: nil}
+				var metrics telemetryrepo.SkillInsightBucket
+				bySkill[skillID][versionID] = &insightAccumulator{metrics: metrics, trend: nil}
 			}
 		}
 	}
@@ -281,7 +282,8 @@ func buildInsightsResult(rows []telemetryrepo.SkillInsightBucket, skills map[str
 		}
 		acc := versions[row.SkillVersionID]
 		if acc == nil {
-			acc = &insightAccumulator{metrics: telemetryrepo.SkillInsightBucket{}, trend: nil}
+			var metrics telemetryrepo.SkillInsightBucket
+			acc = &insightAccumulator{metrics: metrics, trend: nil}
 			versions[row.SkillVersionID] = acc
 		}
 		addInsightBucket(&acc.metrics, row)
@@ -292,7 +294,8 @@ func buildInsightsResult(rows []telemetryrepo.SkillInsightBucket, skills map[str
 	items := make([]skillInsight, 0, len(bySkill))
 	for skillID, versions := range bySkill {
 		skill := skills[skillID]
-		item := skillInsight{ID: skill.ID, Name: skill.Name, DisplayName: skill.DisplayName, Metrics: insightMetrics{}, Versions: make([]versionInsight, 0, len(versions))}
+		var metrics insightMetrics
+		item := skillInsight{ID: skill.ID, Name: skill.Name, DisplayName: skill.DisplayName, Metrics: metrics, Versions: make([]versionInsight, 0, len(versions))}
 		var skillTotal telemetryrepo.SkillInsightBucket
 		for versionID, acc := range versions {
 			addInsightBucket(&skillTotal, acc.metrics)
