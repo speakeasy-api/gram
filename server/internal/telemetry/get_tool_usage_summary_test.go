@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcpRepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -727,28 +728,24 @@ func TestGetToolUsageSummary_WindowBoundaryTraces(t *testing.T) {
 	insertHostedToolEventRow(t, ctx, ti, inWindowTraceID, now.Add(-10*time.Minute), "inwindow-set", "refund", "")
 	insertHostedToolEventRow(t, ctx, ti, inWindowTraceID, now.Add(5*time.Minute), "inwindow-set", "refund", "late-user")
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
-			From: from.Format(time.RFC3339),
-			To:   now.Format(time.RFC3339),
-		})
-		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
-			return
-		}
-		if !assert.NotNil(c, res) {
-			return
-		}
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-		assert.Equal(c, int64(1), res.Totals.EventCount, "only the in-window trace counts")
+	res, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+		From: from.Format(time.RFC3339),
+		To:   now.Format(time.RFC3339),
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, res)
 
-		targets := toolUsageTargetsByKey(res.Targets)
-		assert.Nil(c, targets["hosted_mcp_server:server:straddle-set"], "trace starting before the window must be excluded")
-		assert.NotNil(c, targets["hosted_mcp_server:server:inwindow-set"])
+	require.Equal(t, int64(1), res.Totals.EventCount, "only the in-window trace counts")
 
-		userKeys := make([]string, 0, len(res.Users))
-		for _, u := range res.Users {
-			userKeys = append(userKeys, u.UserKey)
-		}
-		assert.Contains(c, userKeys, "late-user", "rows landing after the window end (within slop) must still aggregate")
-	}, 10*time.Second, 200*time.Millisecond)
+	targets := toolUsageTargetsByKey(res.Targets)
+	require.Nil(t, targets["hosted_mcp_server:server:straddle-set"], "trace starting before the window must be excluded")
+	require.NotNil(t, targets["hosted_mcp_server:server:inwindow-set"])
+
+	userKeys := make([]string, 0, len(res.Users))
+	for _, u := range res.Users {
+		userKeys = append(userKeys, u.UserKey)
+	}
+	require.Contains(t, userKeys, "late-user", "rows landing after the window end (within slop) must still aggregate")
 }
