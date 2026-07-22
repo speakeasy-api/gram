@@ -21,7 +21,7 @@ func TestCommittedBenchSetMatchesProductionAndCoversEveryAnchor(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, efficacy.JudgePromptVersion, set.JudgePromptVersion)
 	require.Equal(t, efficacy.JudgeModel, set.JudgeModel)
-	require.Equal(t, 0.8, set.MinimumAgreement)
+	require.InEpsilon(t, 0.8, set.MinimumAgreement, 1e-9)
 	require.Len(t, set.Cases, 10)
 
 	for _, anchor := range []float64{0, 0.25, 0.5, 0.75, 1} {
@@ -82,8 +82,8 @@ func TestSummarizeUsesSuccessfulRunMedianAndReportsErrors(t *testing.T) {
 	summary := summarize(set, efficacy.JudgeModel, results)
 
 	require.Equal(t, 2, summary.AgreedCases)
-	require.Equal(t, 1.0, summary.Agreement)
-	require.Equal(t, 0.75, summary.RunAgreement)
+	require.InEpsilon(t, 1.0, summary.Agreement, 1e-9)
+	require.InEpsilon(t, 0.75, summary.RunAgreement, 1e-9)
 	require.Equal(t, 1, summary.Errors)
 	require.Equal(t, 2*time.Second, summary.P50)
 	require.Equal(t, 3*time.Second, summary.P95)
