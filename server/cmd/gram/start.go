@@ -1323,6 +1323,7 @@ func newStartCommand() *cli.Command {
 						K8sClient:                      k8sClient,
 						DefaultCustomDomainProvisioner: k8s.ProvisionerKind(c.String("custom-domain-provisioner")),
 						ExpectedTargetCNAME:            c.String("custom-domain-cname"),
+						SiteURL:                        siteURL,
 						BillingTracker:                 billingTracker,
 						BillingRepository:              billingRepo,
 						RedisClient:                    redisClient,

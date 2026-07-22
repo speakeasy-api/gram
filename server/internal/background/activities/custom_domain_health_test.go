@@ -10,9 +10,17 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 )
+
+func noopEmailService(t *testing.T) *email.Service {
+	t.Helper()
+	loopsClient := loops.New(t.Context(), testenv.NewLogger(t), nil, "")
+	return email.NewService(testenv.NewLogger(t), loopsClient)
+}
 
 type stubInfrastructureChecker struct {
 	resources []k8s.ManagedCustomDomainResource
@@ -31,7 +39,7 @@ func TestCustomDomainHealthCheckMissingDomainIsNoop(t *testing.T) {
 
 	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_missing")
 	require.NoError(t, err)
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, nil, "custom-domain.example.com")
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, nil, "custom-domain.example.com", noopEmailService(t), nil)
 
 	err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: uuid.New(),
@@ -58,7 +66,7 @@ func TestFindOrphanCustomDomainResourcesFlagsUnknownDomains(t *testing.T) {
 		{Kind: k8s.ProvisionerKindIngress, Name: "active-example-com", Domain: "active.example.com"},
 		{Kind: k8s.ProvisionerKindIngress, Name: "orphan-example-com", Domain: "orphan.example.com"},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com")
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", noopEmailService(t), nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
@@ -82,7 +90,7 @@ func TestFindOrphanCustomDomainResourcesAllResourcesAccountedFor(t *testing.T) {
 	stub := &stubInfrastructureChecker{resources: []k8s.ManagedCustomDomainResource{
 		{Kind: k8s.ProvisionerKindIngress, Name: "active-example-com", Domain: "active.example.com"},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com")
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", noopEmailService(t), nil)
 
 	require.NoError(t, checker.FindOrphanResources(t.Context()))
 }

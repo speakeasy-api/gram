@@ -106,3 +106,43 @@ func TestReconcileHealthStateIgnoresOlderObservation(t *testing.T) {
 
 	require.Equal(t, current, state)
 }
+
+func TestShouldNotifyUnhealthyTransitionFreshFailure(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, ShouldNotifyUnhealthyTransition(
+		HealthState{Status: HealthStatusHealthy},
+		HealthState{Status: HealthStatusUnhealthy, Issue: HealthIssueCertificateExpired},
+	))
+	require.True(t, ShouldNotifyUnhealthyTransition(
+		HealthState{Status: HealthStatusUnknown},
+		HealthState{Status: HealthStatusUnhealthy, Issue: HealthIssueDNSTargetMismatch},
+	))
+}
+
+func TestShouldNotifyUnhealthyTransitionAlreadyUnhealthyStaysQuiet(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, ShouldNotifyUnhealthyTransition(
+		HealthState{Status: HealthStatusUnhealthy, Issue: HealthIssueCertificateExpired},
+		HealthState{Status: HealthStatusUnhealthy, Issue: HealthIssueCertificateExpired},
+	))
+}
+
+func TestShouldNotifyUnhealthyTransitionHealthyResultStaysQuiet(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, ShouldNotifyUnhealthyTransition(
+		HealthState{Status: HealthStatusUnhealthy, Issue: HealthIssueDNSNotFound},
+		HealthState{Status: HealthStatusHealthy},
+	))
+}
+
+func TestShouldNotifyUnhealthyTransitionCheckFailedExcluded(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, ShouldNotifyUnhealthyTransition(
+		HealthState{Status: HealthStatusHealthy},
+		HealthState{Status: HealthStatusUnhealthy, Issue: HealthIssueCheckFailed},
+	))
+}

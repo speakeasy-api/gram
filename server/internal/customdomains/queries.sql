@@ -60,6 +60,24 @@ SELECT domain
 FROM custom_domains
 WHERE deleted IS FALSE;
 
+-- name: ListOrganizationUsersForHealthNotification :many
+-- Candidate recipients for domain health alerts; callers filter this down to
+-- organization admins via authz grants.
+SELECT users.id, users.email
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+ORDER BY users.email, users.id;
+
+-- name: GetOrganizationSlugForHealthNotification :one
+SELECT slug
+FROM organization_metadata
+WHERE id = @organization_id;
+
 -- name: GetCustomDomainByIDAndOrganizationForHealthUpdate :one
 SELECT *
 FROM custom_domains

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -70,6 +71,7 @@ type WorkerOptions struct {
 	K8sClient                      *k8s.KubernetesClients
 	DefaultCustomDomainProvisioner k8s.ProvisionerKind
 	ExpectedTargetCNAME            string
+	SiteURL                        *url.URL
 	BillingTracker                 billing.Tracker
 	BillingRepository              billing.Repository
 	RedisClient                    *redis.Client
@@ -126,6 +128,7 @@ func ForDeploymentProcessing(
 		K8sClient:                      nil,
 		DefaultCustomDomainProvisioner: k8s.ProvisionerKindIngress,
 		ExpectedTargetCNAME:            "",
+		SiteURL:                        nil,
 		BillingTracker:                 nil,
 		BillingRepository:              nil,
 		RagService:                     nil,
@@ -179,6 +182,7 @@ func NewTemporalWorker(
 		K8sClient:                      nil,
 		DefaultCustomDomainProvisioner: k8s.ProvisionerKindIngress,
 		ExpectedTargetCNAME:            "",
+		SiteURL:                        nil,
 		BillingTracker:                 nil,
 		BillingRepository:              nil,
 		RedisClient:                    nil,
@@ -222,6 +226,7 @@ func NewTemporalWorker(
 			K8sClient:                      conv.Default(o.K8sClient, opts.K8sClient),
 			DefaultCustomDomainProvisioner: conv.Default(o.DefaultCustomDomainProvisioner, opts.DefaultCustomDomainProvisioner),
 			ExpectedTargetCNAME:            conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			SiteURL:                        conv.Default(o.SiteURL, opts.SiteURL),
 			BillingTracker:                 conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:              conv.Default(o.BillingRepository, opts.BillingRepository),
 			RedisClient:                    conv.Default(o.RedisClient, opts.RedisClient),
@@ -303,6 +308,7 @@ func NewTemporalWorker(
 		opts.K8sClient,
 		opts.DefaultCustomDomainProvisioner,
 		opts.ExpectedTargetCNAME,
+		opts.SiteURL,
 		opts.BillingTracker,
 		opts.BillingRepository,
 		opts.PosthogClient,
