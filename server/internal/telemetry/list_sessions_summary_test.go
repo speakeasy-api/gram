@@ -326,6 +326,151 @@ func TestListSessions_SummaryPathFilters(t *testing.T) {
 	require.Equal(t, int64(2), coLocated.Sessions[0].MessageCount)
 }
 
+// TestListSessions_SummaryPathDropsPhantomBoundarySessions covers the
+// exact-window overlap guard: the summary path's hour buckets admit whole
+// boundary hours, but a session whose activity falls entirely outside the
+// requested window must not appear even when its bucket does.
+func TestListSessions_SummaryPathDropsPhantomBoundarySessions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	// Anchor the window end mid-hour so the trailing bucket is admitted by
+	// the bucket bound: the in-window chat sits before `to`, the phantom chat
+	// after it, both inside the same trailing hour bucket.
+	now := time.Now().UTC()
+	hourStart := now.Add(-2 * time.Hour).Truncate(time.Hour)
+	windowEnd := hourStart.Add(10 * time.Minute)
+	windowStart := windowEnd.Add(-(repo.SessionSummaryMinWindow + 24*time.Hour))
+
+	inWindowChatID := uuid.NewString()
+	phantomChatID := uuid.NewString()
+
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    hourStart.Add(5 * time.Minute),
+		chatID:       inWindowChatID,
+		email:        "in@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  100,
+		outputTokens: 50,
+		cost:         1.0,
+	})
+	// Same trailing hour bucket, but strictly after the window end.
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    hourStart.Add(30 * time.Minute),
+		chatID:       phantomChatID,
+		email:        "phantom@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  100,
+		outputTokens: 50,
+		cost:         2.0,
+	})
+
+	res := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From:   windowStart.Format(time.RFC3339),
+		To:     windowEnd.Format(time.RFC3339),
+		SortBy: "total_cost",
+		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 1 && res.Sessions[0].GramChatID == inWindowChatID
+	})
+	require.Len(t, res.Sessions, 1)
+	require.Equal(t, inWindowChatID, res.Sessions[0].GramChatID)
+}
+
+// TestListSessions_ArrayUnsetFilterAlignedAcrossPaths pins the role/group
+// "(unset)" semantics both paths now share: a chat matches "" only when NO
+// row carries a value — a chat mixing enriched and unenriched rows does not.
+func TestListSessions_ArrayUnsetFilterAlignedAcrossPaths(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Now().UTC()
+	mixedChatID := uuid.NewString()
+	rolelessChatID := uuid.NewString()
+
+	// A chat with an enriched row (roles present) plus an unenriched row.
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-10 * time.Minute),
+		chatID:       mixedChatID,
+		email:        "mixed@example.com",
+		roles:        []string{"dev"},
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  100,
+		outputTokens: 50,
+		cost:         1.0,
+	})
+	insertListSessionClaudeToolResultLog(t, ctx, listSessionLogParams{
+		projectID:  projectID,
+		timestamp:  now.Add(-9 * time.Minute),
+		chatID:     mixedChatID,
+		email:      "mixed@example.com",
+		statusCode: 200,
+	})
+	// A chat with no role value on any row.
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-8 * time.Minute),
+		chatID:       rolelessChatID,
+		email:        "roleless@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  100,
+		outputTokens: 50,
+		cost:         2.0,
+	})
+
+	unsetFilter := []*gen.QueryFilter{{Dimension: "role", Values: []string{""}}}
+	wideFrom, wideTo := summaryWindow(now)
+
+	rawRes := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From:    now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:      now.Add(1 * time.Hour).Format(time.RFC3339),
+		Filters: unsetFilter,
+		SortBy:  "total_cost",
+		Limit:   10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 1 && res.Sessions[0].GramChatID == rolelessChatID
+	})
+	require.Len(t, rawRes.Sessions, 1)
+
+	summaryRes := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From:    wideFrom,
+		To:      wideTo,
+		Filters: unsetFilter,
+		SortBy:  "total_cost",
+		Limit:   10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 1 && res.Sessions[0].GramChatID == rolelessChatID
+	})
+	require.Len(t, summaryRes.Sessions, 1)
+}
+
 // TestListSessions_SummaryPathCursorPagination mirrors the raw-path
 // pagination test over the summary route.
 func TestListSessions_SummaryPathCursorPagination(t *testing.T) {

@@ -202,11 +202,7 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 			}
 			sb = sb.Having(sessionScalarHaving(dim.column, f.Values))
 		case attributeDimArray:
-			inner, args, err := arrayDimFilter(dim.column, f.Values).ToSql()
-			if err != nil {
-				return sb, fmt.Errorf("building array filter for %q: %w", f.Dimension, err)
-			}
-			sb = sb.Having(squirrel.Expr("countIf("+inner+") > 0", args...))
+			sb = sb.Having(sessionArrayHaving(dim.column, f.Values))
 		default:
 			return sb, fmt.Errorf("unhandled dimension kind for filter %q", f.Dimension)
 		}
@@ -246,6 +242,34 @@ func sessionScalarRowPredicate(expr string, values []string) squirrel.Sqlizer {
 		args[i] = v
 	}
 	nonEmptyPred := squirrel.Expr(expr+" IN ("+placeholders+")", args...)
+	if !hasEmpty {
+		return nonEmptyPred
+	}
+	return squirrel.Or{nonEmptyPred, emptyPred}
+}
+
+// sessionArrayHaving matches a chat when any of its rows' array carries one
+// of the requested values. A requested "" (the "(unset)" bucket) matches
+// chats with NO value on any row — the same chat-level semantics as
+// sessionSummaryValuesHaving on the summary path (a per-row empty(...) check
+// would match any chat containing a single unenriched row, i.e. nearly all
+// of them).
+func sessionArrayHaving(colExpr string, values []string) squirrel.Sqlizer {
+	hasEmpty := false
+	nonEmpty := make([]string, 0, len(values))
+	for _, v := range values {
+		if v == "" {
+			hasEmpty = true
+			continue
+		}
+		nonEmpty = append(nonEmpty, v)
+	}
+
+	emptyPred := squirrel.Expr("countIf(notEmpty(" + colExpr + ")) = 0")
+	if len(nonEmpty) == 0 {
+		return emptyPred
+	}
+	nonEmptyPred := squirrel.Expr("countIf(hasAny("+colExpr+", ?)) > 0", nonEmpty)
 	if !hasEmpty {
 		return nonEmptyPred
 	}
@@ -442,6 +466,14 @@ func (q *Queries) listSessionsFromSummaries(ctx context.Context, arg ListSession
 	}
 
 	sb = sb.GroupBy("s.chat_id")
+
+	// The bucket bounds above admit whole boundary hours; this exact-window
+	// overlap guard (on the nanosecond-precise merged min/max) drops phantom
+	// sessions whose activity falls entirely OUTSIDE the requested window in
+	// a boundary hour. Sessions with genuine in-window activity keep their
+	// (edge-padded) totals.
+	sb = sb.Having("max(s.end_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(s.start_time_unix_nano) <= ?", arg.TimeEnd)
 
 	if arg.CursorSortValue != nil && arg.CursorGramChatID != "" {
 		sb = sb.Having("(sort_value, s.chat_id) < (?, ?)", *arg.CursorSortValue, arg.CursorGramChatID)
