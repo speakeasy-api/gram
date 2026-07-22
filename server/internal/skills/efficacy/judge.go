@@ -27,16 +27,16 @@ const (
 	// per-message risk judge (server/internal/scanners/promptpolicy/openrouter/judge.go:31)
 	// because this judge reads a whole session transcript plus the skill body.
 	judgeTimeout = 60 * time.Second
-	// defaultJudgeModel is a fast, cheap structured-output model, the same one the
+	// JudgeModel is a fast, cheap structured-output model, the same one the
 	// risk judge settled on (judge.go:38). Left unconfigurable here: efficacy
 	// scores are only comparable across skills when one model produced them, and
 	// the model that did is recorded on every row.
-	defaultJudgeModel = "google/gemini-3.1-flash-lite"
+	JudgeModel = "google/gemini-3.1-flash-lite"
 	// defaultJudgeTemperature keeps scores stable for a given transcript.
 	defaultJudgeTemperature = 0.0
 	// JudgePromptVersion is stored on every score row so a prompt change is
 	// visible as a break in the series rather than as a silent shift.
-	JudgePromptVersion = "v1"
+	JudgePromptVersion = "v2"
 )
 
 var (
@@ -66,7 +66,12 @@ Assess ONLY whether this skill's guidance improved this session:
 - If the skill was irrelevant to what the session was doing, that is a low score, not a penalty for the session.
 
 Return a JSON object:
-- "score": a number from 0 to 1. 0 means the skill did not help at all or made things worse; 1 means it clearly drove the outcome.
+- "score": a number from 0 to 1, calibrated against these anchors:
+  - 0.00: No help. The skill was irrelevant, ignored, misapplied, or made the outcome worse.
+  - 0.25: Slight help. Some applicable guidance appeared, but it had little demonstrated effect on progress or rework.
+  - 0.50: Moderate help. The skill was partly followed and produced a useful effect, with material omissions, corrections, or uncertainty remaining.
+  - 0.75: Strong help. The skill was mostly followed and clearly reduced wrong turns, corrections, or rework.
+  - 1.00: Decisive help. The skill's guidance directly and demonstrably drove the successful outcome or prevented substantial rework.
 - "rationale": one sentence, at most 200 characters, citing the concrete evidence you scored on. Do not echo secrets, credentials or raw payloads.
 - "est_turns_saved": your estimate of conversation turns the skill saved, or null when the transcript does not support an estimate. Never negative.
 - "est_minutes_saved": your estimate of wall-clock minutes the skill saved, or null when the transcript does not support an estimate. Never negative.
@@ -133,7 +138,7 @@ func (j *Judge) Judge(ctx context.Context, in JudgeInput) (JudgeResult, error) {
 	// A Store outage is not a throttle: proceed rather than stall the pipeline on
 	// limiter infrastructure. A real throttle is retryable - the unit keeps its
 	// reservation and its attempt budget.
-	switch res, err := j.limiter.Allow(ctx, openrouter.JudgeRateLimitKey(in.OrgID, defaultJudgeModel)); {
+	switch res, err := j.limiter.Allow(ctx, openrouter.JudgeRateLimitKey(in.OrgID, JudgeModel)); {
 	case err != nil:
 		j.logger.WarnContext(ctx, "judge rate limiter unavailable, allowing call",
 			attr.SlogError(err),
@@ -186,7 +191,7 @@ func (j *Judge) call(ctx context.Context, in JudgeInput) (JudgeResult, error) {
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		OrgID:        in.OrgID,
 		ProjectID:    in.ProjectID,
-		Model:        defaultJudgeModel,
+		Model:        JudgeModel,
 		SystemPrompt: SystemPrompt,
 		Prompt:       prompt,
 		Temperature:  &temperature,
@@ -233,7 +238,7 @@ func (j *Judge) call(ctx context.Context, in JudgeInput) (JudgeResult, error) {
 
 	return JudgeResult{
 		Verdict:       verdict,
-		Model:         conv.Default(response.Model, defaultJudgeModel),
+		Model:         conv.Default(response.Model, JudgeModel),
 		PromptVersion: JudgePromptVersion,
 	}, nil
 }
