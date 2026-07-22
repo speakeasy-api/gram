@@ -11,10 +11,10 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  TooltipProps,
+  TooltipContentProps,
 } from "recharts";
 
-const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
+const CustomTooltip = ({ active, payload }: TooltipContentProps) => {
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground shadow-sm">
@@ -104,7 +104,7 @@ export const AreaChart: FC<AreaChartProps> = ({
               axisLine={{ stroke: "var(--border)" }}
               tickLine={{ stroke: "var(--border)" }}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={CustomTooltip} />
             {showLegend && seriesKeys.length > 1 && (
               <Legend
                 wrapperStyle={{ color: "var(--foreground)" }}

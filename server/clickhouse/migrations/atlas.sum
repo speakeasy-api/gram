@@ -1,4 +1,4 @@
-h1:Llk4xd1Doo0zPbwK4L2FiBof4paoAGy/kacRJ8zVXuQ=
+h1:cMSDO4xuiHf0w4ZZq5F1S/G0K8xJg35KJfqtLMjJSww=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -74,3 +74,4 @@ h1:Llk4xd1Doo0zPbwK4L2FiBof4paoAGy/kacRJ8zVXuQ=
 20260720233837_claude-chat-usage-cost-metrics.sql h1:Xk/PNLb1JS2+OHqQDcWq+GSoPpQfS+WRxdaq6HFgORk=
 20260721110202_add-skill-efficacy-scores.sql h1:B8A2X03FibIVsEOv7qu5mNsJi+NGLhA0m4dmR4Pjb6Y=
 20260721123653_add-skill-session-versions.sql h1:0ocZHRhYgkwNjRsDV+yXZfNdPbqxz/sF4vAS9ZbHxMU=
+20260721203159_chat-session-summaries.sql h1:dJtkcCFo6XGthykx9aIlD74JWmwdu0M352l8Q8jdDpA=

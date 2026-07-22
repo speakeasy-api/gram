@@ -11,7 +11,10 @@ import {
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { shadowMCPInventoryActions } from "./shadowMCPInventoryActionItems";
+import {
+  ALLOW_RULE_POLICY_REQUIRED,
+  shadowMCPInventoryActions,
+} from "./shadowMCPInventoryActionItems";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
@@ -148,10 +151,12 @@ function initialPolicyIDsForAction(
 }
 
 export function ShadowMCPInventoryActionMenu({
+  canManageAllowRules,
   disabled,
   onOpenAction,
   server,
 }: {
+  canManageAllowRules: boolean;
   disabled: boolean;
   onOpenAction: (
     mode: InventoryActionMode,
@@ -159,7 +164,11 @@ export function ShadowMCPInventoryActionMenu({
   ) => void;
   server: ShadowMCPInventoryServer;
 }): JSX.Element {
-  const actions = shadowMCPInventoryActions(server, { disabled, onOpenAction });
+  const actions = shadowMCPInventoryActions(server, {
+    canManageAllowRules,
+    disabled,
+    onOpenAction,
+  });
 
   return (
     <DropdownMenu modal={false}>
@@ -182,13 +191,23 @@ export function ShadowMCPInventoryActionMenu({
       >
         {actions.map((action, index) => (
           <DropdownMenuItem
+            disabled={action.disabled}
             key={index}
             onSelect={(event) => {
               event.stopPropagation();
               action.onClick();
             }}
           >
-            {action.label}
+            {action.description ? (
+              <span className="flex min-w-0 flex-col">
+                <span>{action.label}</span>
+                <span className="text-muted-foreground text-xs">
+                  {action.description}
+                </span>
+              </span>
+            ) : (
+              action.label
+            )}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -198,6 +217,7 @@ export function ShadowMCPInventoryActionMenu({
 
 function PolicySelection({
   disabled,
+  emptyMessage,
   members,
   onSelectionChange,
   policies,
@@ -205,6 +225,7 @@ function PolicySelection({
   selectedPolicyIDs,
 }: {
   disabled: boolean;
+  emptyMessage: string;
   members: AccessMember[];
   onSelectionChange: (policyIDs: string[]) => void;
   policies: ShadowMCPPolicy[];
@@ -219,6 +240,11 @@ function PolicySelection({
         Policies
       </Type>
       <div className="space-y-2">
+        {policies.length === 0 && (
+          <Type muted small>
+            {emptyMessage}
+          </Type>
+        )}
         {policies.map((policy) => {
           const checked = selectedPolicyIDSet.has(policy.id);
           return (
@@ -265,6 +291,7 @@ export function ShadowMCPInventoryActionSheet({
   onOpenChange,
   onSubmit,
   open,
+  policyUnavailableMessage = ALLOW_RULE_POLICY_REQUIRED,
   roles,
   shadowMCPPolicies,
 }: {
@@ -278,6 +305,7 @@ export function ShadowMCPInventoryActionSheet({
     policyIDs: string[];
   }) => Promise<void>;
   open: boolean;
+  policyUnavailableMessage?: string;
   roles: Role[];
   shadowMCPPolicies: ShadowMCPPolicy[];
 }): JSX.Element | null {
@@ -391,6 +419,7 @@ export function ShadowMCPInventoryActionSheet({
           {needsPolicySelection && (
             <PolicySelection
               disabled={isSubmitting}
+              emptyMessage={policyUnavailableMessage}
               members={members}
               onSelectionChange={setSelectedPolicyIDs}
               policies={shadowMCPPolicies}

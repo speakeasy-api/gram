@@ -75,6 +75,7 @@ const breadcrumbSubstitutions = {
   elements: "Chat Elements",
   "add-openapi": "Add OpenAPI",
   "add-from-catalog": "Add from Catalog",
+  "ai-integrations": "AI Integrations",
   "api-keys": "API Keys",
   slack: "Assistants",
 };

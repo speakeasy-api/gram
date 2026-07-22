@@ -171,6 +171,27 @@ func TestResolveActivatedSkillClaudeFindsProjectAtGitRoot(t *testing.T) {
 	require.Equal(t, path, resolved.sourcePath)
 }
 
+func TestResolveActivatedSkillClaudeFollowsSymlinkedProjectSkill(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	repo := filepath.Join(t.TempDir(), "repo")
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".git"), 0o755))
+	targetDir := filepath.Join(repo, ".agents", "skills", "linked-skill")
+	writeSkillManifest(t, targetDir, []byte("agents skill body"))
+	skillsRoot := filepath.Join(repo, ".claude", "skills")
+	require.NoError(t, os.MkdirAll(skillsRoot, 0o755))
+	require.NoError(t, os.Symlink(filepath.Join("..", "..", ".agents", "skills", "linked-skill"), filepath.Join(skillsRoot, "linked-skill")))
+
+	resolved := resolveActivatedSkill(claudeSkillEvent(repo, "linked-skill"), activatedSkillPayload("linked-skill"))
+
+	require.Equal(t, "project", resolved.sourceLevel)
+	require.Equal(t, filepath.Join(skillsRoot, "linked-skill", "SKILL.md"), resolved.sourcePath)
+	require.Equal(t, "agents skill body", resolved.content)
+	require.Equal(t, sha256Hex([]byte("agents skill body")), resolved.rawSHA256)
+	require.True(t, resolved.captureReady)
+}
+
 func TestResolveActivatedSkillClaudeUsesConfigDirectory(t *testing.T) {
 	home := t.TempDir()
 	configRoot := filepath.Join(t.TempDir(), "custom-claude")
@@ -274,32 +295,33 @@ func TestResolveActivatedSkillCursorProjectCurrentKey(t *testing.T) {
 	require.Equal(t, path, resolved.sourcePath)
 }
 
-func TestResolveActivatedSkillRejectsSymlinkedManifestParent(t *testing.T) {
+func TestResolveActivatedSkillFollowsSymlinkedSkillDir(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	workspace := t.TempDir()
 	externalDir := filepath.Join(t.TempDir(), "external")
-	externalPath := writeSkillManifest(t, externalDir, []byte("private content"))
+	writeSkillManifest(t, externalDir, []byte("shared skill body"))
 	root := filepath.Join(workspace, ".cursor", "skills")
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	linkedDir := filepath.Join(root, "linked")
 	require.NoError(t, os.Symlink(externalDir, linkedDir))
-	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": filepath.Join(linkedDir, "SKILL.md")})
+	linkedPath := filepath.Join(linkedDir, "SKILL.md")
+	event := cursorReadEvent(t, workspace, []string{workspace}, map[string]string{"file_path": linkedPath})
 
 	resolved := resolveActivatedSkill(event, activatedSkillPayload("linked"))
 
 	require.Equal(t, "linked", resolved.name)
-	require.Empty(t, resolved.sourceLevel)
-	require.Empty(t, resolved.sourcePath)
-	require.Empty(t, resolved.content)
-	require.False(t, resolved.captureReady)
-	require.FileExists(t, externalPath)
+	require.Equal(t, "project", resolved.sourceLevel)
+	require.Equal(t, linkedPath, resolved.sourcePath)
+	require.Equal(t, "shared skill body", resolved.content)
+	require.Equal(t, sha256Hex([]byte("shared skill body")), resolved.rawSHA256)
+	require.True(t, resolved.captureReady)
 }
 
-func TestResolveActivatedSkillRejectsExternalManifestSymlink(t *testing.T) {
+func TestResolveActivatedSkillFollowsManifestSymlink(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	workspace := t.TempDir()
-	external := filepath.Join(t.TempDir(), "passwd")
-	require.NoError(t, os.WriteFile(external, []byte("sensitive"), 0o600))
+	external := filepath.Join(t.TempDir(), "guide.md")
+	require.NoError(t, os.WriteFile(external, []byte("shared guide body"), 0o644))
 	path := filepath.Join(workspace, ".cursor", "skills", "linked", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.Symlink(external, path))
@@ -308,11 +330,11 @@ func TestResolveActivatedSkillRejectsExternalManifestSymlink(t *testing.T) {
 	resolved := resolveActivatedSkill(event, activatedSkillPayload("linked"))
 
 	require.Equal(t, "linked", resolved.name)
-	require.Empty(t, resolved.sourceLevel)
-	require.Empty(t, resolved.sourcePath)
-	require.Empty(t, resolved.rawSHA256)
-	require.Empty(t, resolved.content)
-	require.False(t, resolved.captureReady)
+	require.Equal(t, "project", resolved.sourceLevel)
+	require.Equal(t, path, resolved.sourcePath)
+	require.Equal(t, "shared guide body", resolved.content)
+	require.Equal(t, sha256Hex([]byte("shared guide body")), resolved.rawSHA256)
+	require.True(t, resolved.captureReady)
 }
 
 func TestResolveActivatedSkillCursorPluginLegacyKey(t *testing.T) {
