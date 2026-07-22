@@ -21,6 +21,7 @@ import type { SearchUsersFilter } from "@gram/client/models/components/searchuse
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Button, Card, Icon } from "@speakeasy-api/moonshine";
@@ -254,7 +255,7 @@ export function ProjectDashboard(): JSX.Element {
       .slice(0, 5)
       .map((r) => ({
         key: r.groupValue,
-        label: r.groupValue,
+        label: formatPlatform(r.groupValue),
         value: r.measures.totalTokens,
       }));
   }, [usageByAgentData]);

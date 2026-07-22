@@ -1,3 +1,4 @@
+import { formatCost } from "@/lib/money";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
@@ -14,19 +15,13 @@ import {
 } from "./gridTable";
 import { EstimatedCostIndicator } from "@/components/estimated-cost";
 import { costMeasureLabel } from "@/components/estimated-cost-utils";
+import { formatPlatform } from "@/lib/formatPlatform";
 
 const PAGE_SIZE = 10;
 
 // The list arrives ranked by the server's sortBy (cost) and capped at this many
 // rows; surfaced so the footer can flag when the slice is truncated.
 const DEFAULT_LIMIT = 100;
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 function displayOrDash(value: string | undefined): string {
   return value && value.length > 0 ? value : "—";
@@ -154,7 +149,9 @@ const SESSION_COLUMNS: SessionColumn[] = [
     track: "minmax(max-content,1fr)",
     render: (s) => (
       <div className="flex min-w-0 items-center">
-        <span className="truncate">{displayOrDash(s.hookSource)}</span>
+        <span className="truncate">
+          {s.hookSource ? formatPlatform(s.hookSource) : "—"}
+        </span>
       </div>
     ),
   },

@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -604,6 +605,230 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 	}
 
 	return afterView, nil
+}
+
+// loadMigrationPair resolves the source and target issuers, both scoped to the
+// caller's organization, and validates the scope ladder between them. It is the
+// shared entry check for getIssuerMigratePreflight and migrateIssuer so the
+// dialog and the mutation agree on which pairs are addressable at all.
+//
+// forUpdate row-locks both issuers for the rest of the transaction. The mutation
+// passes true so that the scope and endpoint metadata it validates cannot be
+// rewritten by a concurrent moveIssuer or updateIssuer before it acts on them;
+// the read-only preflight passes false. Callers that lock must already hold the
+// advisory locks from lockIssuersForMigration, which order the row locks and so
+// keep two concurrent migrations of the same pair from deadlocking.
+func loadMigrationPair(ctx context.Context, r *repo.Queries, logger *slog.Logger, organizationID, sourceIDRaw, targetIDRaw string, forUpdate bool) (source, target repo.RemoteSessionIssuer, err error) {
+	sourceID, err := uuid.Parse(sourceIDRaw)
+	if err != nil {
+		return source, target, oops.E(oops.CodeBadRequest, err, "invalid source issuer id").LogError(ctx, logger)
+	}
+	targetID, err := uuid.Parse(targetIDRaw)
+	if err != nil {
+		return source, target, oops.E(oops.CodeBadRequest, err, "invalid target issuer id").LogError(ctx, logger)
+	}
+
+	if sourceID == targetID {
+		return source, target, oops.E(oops.CodeBadRequest, nil, "source and target issuer must differ").LogError(ctx, logger)
+	}
+
+	loadIssuer := func(id uuid.UUID) (repo.RemoteSessionIssuer, error) {
+		if forUpdate {
+			return r.GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx, repo.GetOrganizationRemoteSessionIssuerByIDForUpdateParams{
+				ID:             id,
+				OrganizationID: conv.ToPGText(organizationID),
+			})
+		}
+		return r.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+			ID:             id,
+			OrganizationID: conv.ToPGText(organizationID),
+		})
+	}
+
+	source, err = loadIssuer(sourceID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return source, target, oops.E(oops.CodeNotFound, err, "source remote session issuer not found").LogError(ctx, logger)
+		}
+		return source, target, oops.E(oops.CodeUnexpected, err, "get source remote session issuer").LogError(ctx, logger)
+	}
+
+	target, err = loadIssuer(targetID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return source, target, oops.E(oops.CodeNotFound, err, "target remote session issuer not found").LogError(ctx, logger)
+		}
+		return source, target, oops.E(oops.CodeUnexpected, err, "get target remote session issuer").LogError(ctx, logger)
+	}
+
+	var scopeErr migrationScopeError
+	if err := validateMigrationScope(source, target); errors.As(err, &scopeErr) {
+		return source, target, oops.E(oops.CodeBadRequest, err, "%s", scopeErr.reason).LogError(ctx, logger)
+	} else if err != nil {
+		return source, target, oops.E(oops.CodeUnexpected, err, "validate migration scope").LogError(ctx, logger)
+	}
+
+	return source, target, nil
+}
+
+// GetIssuerMigratePreflight reports what consolidating the source issuer onto
+// the target would do, and every blocker that would make it fail, so the
+// confirmation dialog is authoritative before the mutation runs.
+func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orgissuersgen.GetIssuerMigratePreflightPayload) (*orgissuersgen.OrganizationIssuerMigratePreflight, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	r := repo.New(s.db)
+
+	source, target, err := loadMigrationPair(ctx, r, logger, authCtx.ActiveOrganizationID, payload.SourceID, payload.TargetID, false)
+	if err != nil {
+		return nil, err
+	}
+
+	preflight, err := buildMigratePreflight(ctx, r, source, target)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)
+	}
+
+	return &orgissuersgen.OrganizationIssuerMigratePreflight{
+		ClientCount:               int(preflight.clientCount),
+		McpServerNames:            preflight.mcpServerNames,
+		EndpointMismatches:        preflight.endpointMismatches,
+		ConflictingMcpServerNames: preflight.conflictingMcpServerNames,
+		Warnings:                  preflight.warnings,
+		CanMigrate:                preflight.canMigrate(),
+	}, nil
+}
+
+// MigrateIssuer consolidates the source issuer onto the target: every active
+// client is re-pointed onto the target and the now-empty source is soft-deleted,
+// in one transaction. Remote sessions reference the client rather than the
+// issuer, so they survive the re-point untouched and no user re-authenticates.
+//
+// Re-pointing strictly precedes the soft-delete because the runtime resolution
+// query filters `i.deleted IS FALSE`: a client left on a tombstoned issuer stops
+// resolving. Holding both in one transaction removes the window entirely.
+func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.MigrateIssuerPayload) (*orgissuersgen.MigrateOrganizationRemoteSessionIssuerResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	// Establish that both issuers exist in the caller's organization before
+	// taking any lock, so a caller can never advisory-lock an issuer id that
+	// belongs to another organization.
+	source, target, err := loadMigrationPair(ctx, txRepo, logger, authCtx.ActiveOrganizationID, payload.SourceID, payload.TargetID, false)
+	if err != nil {
+		return nil, err
+	}
+
+	// Serialize against a concurrent client attach on either issuer before
+	// reading the conflict set, so the set we act on cannot go stale under us.
+	// Nothing in the schema enforces the one-client-per-(user_session_issuer,
+	// remote_session_issuer) invariant, so this advisory lock is the only thing
+	// standing between a racing attach and a duplicate binding.
+	if err := lockIssuersForMigration(ctx, txRepo, source.ID, target.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock issuers for migration").LogError(ctx, logger)
+	}
+
+	// Re-read both issuers under a row lock and re-validate the scope ladder.
+	// The advisory lock above only serializes writers that take it, and neither
+	// moveIssuer (which rewrites project_id) nor updateIssuer (which rewrites the
+	// endpoints) does. Without this the scope and parity guards below would run
+	// against rows a concurrent transaction could still change before we commit.
+	source, target, err = loadMigrationPair(ctx, txRepo, logger, authCtx.ActiveOrganizationID, payload.SourceID, payload.TargetID, true)
+	if err != nil {
+		return nil, err
+	}
+
+	preflight, err := buildMigratePreflight(ctx, txRepo, source, target)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)
+	}
+
+	if len(preflight.endpointMismatches) > 0 {
+		return nil, oops.E(oops.CodeConflict, nil, "source and target issuers describe different authorization servers (%s differ); migration would break existing sessions", strings.Join(preflight.endpointMismatches, ", ")).LogError(ctx, logger)
+	}
+
+	if len(preflight.conflictingMcpServerNames) > 0 {
+		return nil, oops.E(oops.CodeConflict, nil, "both issuers already have a client bound to the same MCP server (%s); detach one client per server and retry", strings.Join(preflight.conflictingMcpServerNames, ", ")).LogError(ctx, logger)
+	}
+
+	clientsMigrated, err := txRepo.UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionClientsToRemoteSessionIssuerParams{
+		TargetIssuerID: target.ID,
+		SourceIssuerID: source.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "repoint remote session clients to target issuer").LogError(ctx, logger)
+	}
+
+	// The source now has no active clients, so the delete guard that
+	// DeleteIssuer applies is satisfied by construction.
+	deleted, err := txRepo.DeleteOrganizationRemoteSessionIssuer(ctx, repo.DeleteOrganizationRemoteSessionIssuerParams{
+		ID:             source.ID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "soft-delete migrated remote session issuer").LogError(ctx, logger)
+	}
+
+	targetView := mv.BuildRemoteSessionIssuerView(target)
+
+	if err := s.auditLogger.LogRemoteSessionIssuerMigrate(ctx, dbtx, audit.LogRemoteSessionIssuerMigrateEvent{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      orgProjectID(deleted.ProjectID),
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		SourceRemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(deleted.ID),
+		SourceSlug:                   deleted.Slug,
+		SourceIssuerURL:              deleted.Issuer,
+		SourceName:                   conv.FromPGText[string](deleted.Name),
+
+		TargetRemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(target.ID),
+		TargetSlug:                   target.Slug,
+
+		ClientsMigrated: clientsMigrated,
+
+		SnapshotBefore: mv.BuildRemoteSessionIssuerView(source),
+		SnapshotAfter:  targetView,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log remote session issuer migration").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return &orgissuersgen.MigrateOrganizationRemoteSessionIssuerResult{
+		Issuer:          targetView,
+		ClientsMigrated: int(clientsMigrated),
+		SourceDeleted:   true,
+	}, nil
 }
 
 // orgProjectID flattens a nullable project id for audit events; org-level

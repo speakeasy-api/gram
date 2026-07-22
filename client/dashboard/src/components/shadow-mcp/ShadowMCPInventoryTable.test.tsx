@@ -1427,6 +1427,81 @@ describe("ShadowMCPInventoryTable", () => {
     });
   });
 
+  it("disables add when no allow-rule policy is eligible", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://observed.example.com/mcp",
+          serverName: "Observed MCP",
+        }),
+      ],
+    });
+
+    renderInventoryTable("project-id-1", "flagging", []);
+
+    const addButton = await screen.findByRole("button", {
+      name: /Add Allow Rule/,
+    });
+    expect((addButton as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText("An enabled blocking Shadow MCP policy is required."),
+    ).toBeTruthy();
+  });
+
+  it("allows denying a request when no allow-rule policy is eligible", async () => {
+    const resolveInventoryRequest = vi.fn().mockResolvedValue({});
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "blocked",
+          canonicalServerUrl: "https://requested.example.com/mcp",
+          latestRequest: {
+            id: "request-1",
+            policyId: "inactive-policy",
+            requestedAt: new Date("2026-01-04T11:30:00Z"),
+            requesterEmail: "requester@example.com",
+            requesterUserId: "user-1",
+          },
+          requestCount: 1,
+          serverName: "Requested MCP",
+        }),
+      ],
+    });
+    mocks.resolveInventoryRequestMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: resolveInventoryRequest,
+    });
+
+    renderInventoryTable("project-id-1", "flagging", []);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Review Request" }),
+    );
+
+    const sheet = within(await screen.findByTestId("shadow-mcp-action-sheet"));
+    expect(
+      (
+        sheet.getByRole("button", {
+          name: "Approve Request",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(sheet.getByRole("radio", { name: /Deny/ }));
+    fireEvent.click(sheet.getByRole("button", { name: "Deny Request" }));
+
+    await waitFor(() => {
+      expect(resolveInventoryRequest).toHaveBeenCalledWith({
+        request: {
+          resolveShadowMCPInventoryRequestForm: {
+            decision: "deny",
+            policyIds: undefined,
+            projectId: "project-id-1",
+            serverUrl: "https://requested.example.com/mcp",
+          },
+        },
+      });
+    });
+  });
+
   it("renders observed status when blocking is inactive", async () => {
     mockShadowMCPInventory({
       servers: [

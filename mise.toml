@@ -224,9 +224,6 @@ TEMPORAL_WEB_PORT = "8233"
 ## Set to 1 to disable air hot reload and run server/worker directly
 PUBSUB_EMULATOR_PORT = "8088"
 PUBSUB_EMULATOR_HOST = "localhost:{{env.PUBSUB_EMULATOR_PORT}}"
-## During local development, you can disable BigQuery writes to avoid the extra
-## dependency on a GCP project.
-DISABLE_BIGQUERY_WRITES = { default = "1" }
 
 ####################################
 ## Gram Functions runner settings ##
