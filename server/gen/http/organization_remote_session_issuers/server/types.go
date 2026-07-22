@@ -125,6 +125,17 @@ type MoveIssuerRequestBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 }
 
+// MigrateIssuerRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// request body.
+type MigrateIssuerRequestBody struct {
+	// The remote_session_issuer to migrate away from; soft-deleted on success.
+	SourceID *string `form:"source_id,omitempty" json:"source_id,omitempty" xml:"source_id,omitempty"`
+	// The remote_session_issuer to migrate onto; survives and adopts the source's
+	// clients.
+	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
+}
+
 // CreateIssuerResponseBody is the type of the
 // "organizationRemoteSessionIssuers" service "createIssuer" endpoint HTTP
 // response body.
@@ -348,6 +359,44 @@ type MoveIssuerResponseBody struct {
 	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
 	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// GetIssuerMigratePreflightResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP response body.
+type GetIssuerMigratePreflightResponseBody struct {
+	// Number of non-deleted remote_session_clients that would be re-pointed from
+	// the source issuer to the target issuer.
+	ClientCount int `form:"client_count" json:"client_count" xml:"client_count"`
+	// Display names of MCP servers attached to the source issuer's clients.
+	McpServerNames []string `form:"mcp_server_names" json:"mcp_server_names" xml:"mcp_server_names"`
+	// Names of the authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ between source and target. Non-empty
+	// blocks the migration.
+	EndpointMismatches []string `form:"endpoint_mismatches" json:"endpoint_mismatches" xml:"endpoint_mismatches"`
+	// Display names of MCP servers where both the source and the target issuer
+	// already have a client bound. Non-empty blocks the migration; detach one
+	// client per listed server and retry.
+	ConflictingMcpServerNames []string `form:"conflicting_mcp_server_names" json:"conflicting_mcp_server_names" xml:"conflicting_mcp_server_names"`
+	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
+	// issuer's values become authoritative for the migrated clients.
+	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
+	// TRUE when the migration would succeed: no endpoint mismatches and no
+	// conflicting MCP-server bindings.
+	CanMigrate bool `form:"can_migrate" json:"can_migrate" xml:"can_migrate"`
+}
+
+// MigrateIssuerResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// response body.
+type MigrateIssuerResponseBody struct {
+	// The surviving target remote_session_issuer.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer" json:"issuer" xml:"issuer"`
+	// Number of remote_session_clients re-pointed from the source issuer to the
+	// target issuer. Zero when the source had no active clients.
+	ClientsMigrated int `form:"clients_migrated" json:"clients_migrated" xml:"clients_migrated"`
+	// TRUE when the source issuer was soft-deleted.
+	SourceDeleted bool `form:"source_deleted" json:"source_deleted" xml:"source_deleted"`
 }
 
 // CreateIssuerUnauthorizedResponseBody is the type of the
@@ -1680,6 +1729,386 @@ type MoveIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetIssuerMigratePreflightUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP response body for the "unauthorized" error.
+type GetIssuerMigratePreflightUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetIssuerMigratePreflightForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP response body for the "forbidden" error.
+type GetIssuerMigratePreflightForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetIssuerMigratePreflightBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP response body for the "bad_request" error.
+type GetIssuerMigratePreflightBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetIssuerMigratePreflightNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP response body for the "not_found" error.
+type GetIssuerMigratePreflightNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetIssuerMigratePreflightConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP response body for the "conflict" error.
+type GetIssuerMigratePreflightConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetIssuerMigratePreflightUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP response body for the "unsupported_media" error.
+type GetIssuerMigratePreflightUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetIssuerMigratePreflightInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP response body for the "invalid" error.
+type GetIssuerMigratePreflightInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetIssuerMigratePreflightInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP response body for the "invariant_violation" error.
+type GetIssuerMigratePreflightInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetIssuerMigratePreflightUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP response body for the "unexpected" error.
+type GetIssuerMigratePreflightUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetIssuerMigratePreflightGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetIssuerMigratePreflightGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateIssuerUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type MigrateIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateIssuerForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type MigrateIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateIssuerBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type MigrateIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateIssuerNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type MigrateIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateIssuerConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type MigrateIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type MigrateIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateIssuerInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type MigrateIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateIssuerInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type MigrateIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateIssuerUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type MigrateIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateIssuerGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "migrateIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type MigrateIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // OrganizationRemoteSessionIssuerResponseBody is used to define fields on
 // response body types.
 type OrganizationRemoteSessionIssuerResponseBody struct {
@@ -1988,6 +2417,63 @@ func NewMoveIssuerResponseBody(res *types.RemoteSessionIssuer) *MoveIssuerRespon
 		for i, val := range res.TokenEndpointAuthMethodsSupported {
 			body.TokenEndpointAuthMethodsSupported[i] = val
 		}
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightResponseBody builds the HTTP response body from
+// the result of the "getIssuerMigratePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightResponseBody(res *organizationremotesessionissuers.OrganizationIssuerMigratePreflight) *GetIssuerMigratePreflightResponseBody {
+	body := &GetIssuerMigratePreflightResponseBody{
+		ClientCount: res.ClientCount,
+		CanMigrate:  res.CanMigrate,
+	}
+	if res.McpServerNames != nil {
+		body.McpServerNames = make([]string, len(res.McpServerNames))
+		for i, val := range res.McpServerNames {
+			body.McpServerNames[i] = val
+		}
+	} else {
+		body.McpServerNames = []string{}
+	}
+	if res.EndpointMismatches != nil {
+		body.EndpointMismatches = make([]string, len(res.EndpointMismatches))
+		for i, val := range res.EndpointMismatches {
+			body.EndpointMismatches[i] = val
+		}
+	} else {
+		body.EndpointMismatches = []string{}
+	}
+	if res.ConflictingMcpServerNames != nil {
+		body.ConflictingMcpServerNames = make([]string, len(res.ConflictingMcpServerNames))
+		for i, val := range res.ConflictingMcpServerNames {
+			body.ConflictingMcpServerNames[i] = val
+		}
+	} else {
+		body.ConflictingMcpServerNames = []string{}
+	}
+	if res.Warnings != nil {
+		body.Warnings = make([]string, len(res.Warnings))
+		for i, val := range res.Warnings {
+			body.Warnings[i] = val
+		}
+	} else {
+		body.Warnings = []string{}
+	}
+	return body
+}
+
+// NewMigrateIssuerResponseBody builds the HTTP response body from the result
+// of the "migrateIssuer" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewMigrateIssuerResponseBody(res *organizationremotesessionissuers.MigrateOrganizationRemoteSessionIssuerResult) *MigrateIssuerResponseBody {
+	body := &MigrateIssuerResponseBody{
+		ClientsMigrated: res.ClientsMigrated,
+		SourceDeleted:   res.SourceDeleted,
+	}
+	if res.Issuer != nil {
+		body.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(res.Issuer)
 	}
 	return body
 }
@@ -3042,6 +3528,306 @@ func NewMoveIssuerGatewayErrorResponseBody(res *goa.ServiceError) *MoveIssuerGat
 	return body
 }
 
+// NewGetIssuerMigratePreflightUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getIssuerMigratePreflight" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightUnauthorizedResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightUnauthorizedResponseBody {
+	body := &GetIssuerMigratePreflightUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightForbiddenResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightForbiddenResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightForbiddenResponseBody {
+	body := &GetIssuerMigratePreflightForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightBadRequestResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightBadRequestResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightBadRequestResponseBody {
+	body := &GetIssuerMigratePreflightBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightNotFoundResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightNotFoundResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightNotFoundResponseBody {
+	body := &GetIssuerMigratePreflightNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightConflictResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightConflictResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightConflictResponseBody {
+	body := &GetIssuerMigratePreflightConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getIssuerMigratePreflight" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightUnsupportedMediaResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightUnsupportedMediaResponseBody {
+	body := &GetIssuerMigratePreflightUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightInvalidResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightInvalidResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightInvalidResponseBody {
+	body := &GetIssuerMigratePreflightInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getIssuerMigratePreflight" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightInvariantViolationResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightInvariantViolationResponseBody {
+	body := &GetIssuerMigratePreflightInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getIssuerMigratePreflight" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightUnexpectedResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightUnexpectedResponseBody {
+	body := &GetIssuerMigratePreflightUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getIssuerMigratePreflight" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewGetIssuerMigratePreflightGatewayErrorResponseBody(res *goa.ServiceError) *GetIssuerMigratePreflightGatewayErrorResponseBody {
+	body := &GetIssuerMigratePreflightGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateIssuerUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "migrateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMigrateIssuerUnauthorizedResponseBody(res *goa.ServiceError) *MigrateIssuerUnauthorizedResponseBody {
+	body := &MigrateIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateIssuerForbiddenResponseBody builds the HTTP response body from the
+// result of the "migrateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMigrateIssuerForbiddenResponseBody(res *goa.ServiceError) *MigrateIssuerForbiddenResponseBody {
+	body := &MigrateIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateIssuerBadRequestResponseBody builds the HTTP response body from
+// the result of the "migrateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMigrateIssuerBadRequestResponseBody(res *goa.ServiceError) *MigrateIssuerBadRequestResponseBody {
+	body := &MigrateIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateIssuerNotFoundResponseBody builds the HTTP response body from the
+// result of the "migrateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMigrateIssuerNotFoundResponseBody(res *goa.ServiceError) *MigrateIssuerNotFoundResponseBody {
+	body := &MigrateIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateIssuerConflictResponseBody builds the HTTP response body from the
+// result of the "migrateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMigrateIssuerConflictResponseBody(res *goa.ServiceError) *MigrateIssuerConflictResponseBody {
+	body := &MigrateIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateIssuerUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "migrateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMigrateIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *MigrateIssuerUnsupportedMediaResponseBody {
+	body := &MigrateIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateIssuerInvalidResponseBody builds the HTTP response body from the
+// result of the "migrateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMigrateIssuerInvalidResponseBody(res *goa.ServiceError) *MigrateIssuerInvalidResponseBody {
+	body := &MigrateIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateIssuerInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "migrateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMigrateIssuerInvariantViolationResponseBody(res *goa.ServiceError) *MigrateIssuerInvariantViolationResponseBody {
+	body := &MigrateIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateIssuerUnexpectedResponseBody builds the HTTP response body from
+// the result of the "migrateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMigrateIssuerUnexpectedResponseBody(res *goa.ServiceError) *MigrateIssuerUnexpectedResponseBody {
+	body := &MigrateIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateIssuerGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "migrateIssuer" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewMigrateIssuerGatewayErrorResponseBody(res *goa.ServiceError) *MigrateIssuerGatewayErrorResponseBody {
+	body := &MigrateIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateIssuerPayload builds a organizationRemoteSessionIssuers service
 // createIssuer endpoint payload.
 func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.CreateIssuerPayload {
@@ -3202,6 +3988,32 @@ func NewMoveIssuerPayload(body *MoveIssuerRequestBody, sessionToken *string, api
 	return v
 }
 
+// NewGetIssuerMigratePreflightPayload builds a
+// organizationRemoteSessionIssuers service getIssuerMigratePreflight endpoint
+// payload.
+func NewGetIssuerMigratePreflightPayload(sourceID string, targetID string, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.GetIssuerMigratePreflightPayload {
+	v := &organizationremotesessionissuers.GetIssuerMigratePreflightPayload{}
+	v.SourceID = sourceID
+	v.TargetID = targetID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewMigrateIssuerPayload builds a organizationRemoteSessionIssuers service
+// migrateIssuer endpoint payload.
+func NewMigrateIssuerPayload(body *MigrateIssuerRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.MigrateIssuerPayload {
+	v := &organizationremotesessionissuers.MigrateIssuerPayload{
+		SourceID: *body.SourceID,
+		TargetID: *body.TargetID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
 // ValidateCreateIssuerRequestBody runs the validations defined on
 // CreateIssuerRequestBody
 func ValidateCreateIssuerRequestBody(body *CreateIssuerRequestBody) (err error) {
@@ -3246,6 +4058,24 @@ func ValidateMoveIssuerRequestBody(body *MoveIssuerRequestBody) (err error) {
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateMigrateIssuerRequestBody runs the validations defined on
+// MigrateIssuerRequestBody
+func ValidateMigrateIssuerRequestBody(body *MigrateIssuerRequestBody) (err error) {
+	if body.SourceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source_id", "body"))
+	}
+	if body.TargetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target_id", "body"))
+	}
+	if body.SourceID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_id", *body.SourceID, goa.FormatUUID))
+	}
+	if body.TargetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.target_id", *body.TargetID, goa.FormatUUID))
 	}
 	return
 }

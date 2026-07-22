@@ -1,4 +1,5 @@
 import { type DateRangePreset } from "@/elements";
+import { X } from "lucide-react";
 import { type ReactNode, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import {
@@ -10,6 +11,7 @@ import {
 import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { Page } from "@/components/page-layout";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import type {
   MultiSelectGroup,
@@ -213,12 +215,12 @@ export function ObserveFilterBar({
     }));
   }, [serverOptionGroups, serverOptions, serverNameMappings?.rawToDisplay]);
 
-  // The raw hook_source value (e.g. "claude-code") is shown verbatim — matching
-  // the table row — and paired with its brand icon.
+  // Keep the raw hook_source as the filter value while presenting the same
+  // normalized product-surface label used by charts and tables.
   const sourceOptionsWithIcons = useMemo(
     () =>
       sourceOptions.map((source) => ({
-        label: source,
+        label: formatPlatform(source),
         value: source,
         icon: ({ className: iconClassName }: { className?: string }) => (
           <HookSourceIcon source={source} className={iconClassName} />
@@ -414,6 +416,21 @@ export function ObserveFilterBar({
     );
   }, [setSearchParams]);
 
+  // The type filter defaults to excluding local tools on the tool-usage pages
+  // (see TOOL_USAGE_DEFAULT_TYPES), and the Type dimension is sheet-only, so
+  // without a cue the exclusion would be invisible. Surface it as a dismissible
+  // badge; the × opts local tools back in. Gated on the page actually offering
+  // a "local_tool" type so the hooks pages (different type vocabulary) are
+  // unaffected.
+  const localToolsExcluded =
+    typeOptions.some((option) => option.value === "local_tool") &&
+    selectedTypes.length > 0 &&
+    !selectedTypes.includes("local_tool");
+  const includeLocalTools = useCallback(
+    () => onTypesChange([...selectedTypes, "local_tool"]),
+    [onTypesChange, selectedTypes],
+  );
+
   // Compose the schema from the base filters plus whichever opt-in dimensions
   // the caller wired handlers for. defineFilters is an identity helper, so the
   // runtime array is all the toolbar needs (values/options are keyed by id).
@@ -439,6 +456,22 @@ export function ObserveFilterBar({
         onClearAll={handleClearAll}
         projectSlug={projectSlug}
         customBuilder={attributeSearchControl}
+        extraChips={
+          localToolsExcluded && (
+            <span className="border-border text-muted-foreground inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-dashed px-3 text-sm font-medium">
+              Local tools excluded
+              <button
+                type="button"
+                onClick={includeLocalTools}
+                aria-label="Include local tools"
+                title="Include local tools"
+                className="hover:text-foreground transition-colors"
+              >
+                <X className="size-4" />
+              </button>
+            </span>
+          )
+        }
       />
       {onRefresh && (
         <Page.Toolbar.Refresh

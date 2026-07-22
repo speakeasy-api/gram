@@ -15,7 +15,8 @@ import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Button } from "@speakeasy-api/moonshine";
 import { AlertCircle, ChevronDown, Plus, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { type ClipboardEvent, useCallback, useState } from "react";
+import { parseDotEnvPaste } from "./dotEnvUtils";
 import { EnvVarState } from "./environmentVariableUtils";
 
 interface Environment {
@@ -30,6 +31,14 @@ interface VariableEntry {
   state: EnvVarState;
   isSecret: boolean;
 }
+
+type DraftVariableEntry = Omit<VariableEntry, "state">;
+
+const EMPTY_ENTRY: DraftVariableEntry = {
+  key: "",
+  value: "",
+  isSecret: true,
+};
 
 interface AddVariableSheetProps {
   open: boolean;
@@ -50,12 +59,13 @@ export function AddVariableSheet({
 }: AddVariableSheetProps): JSX.Element {
   // Secret is on by default so an unattended value is never stored in the clear
   // by accident. This matches the server's default for new entries.
-  const emptyEntry = { key: "", value: "", isSecret: true };
-  const [entries, setEntries] = useState([{ ...emptyEntry }]);
+  const [entries, setEntries] = useState<DraftVariableEntry[]>([
+    { ...EMPTY_ENTRY },
+  ]);
   const [error, setError] = useState<string | null>(null);
 
   const resetForm = useCallback(() => {
-    setEntries([{ key: "", value: "", isSecret: true }]);
+    setEntries([{ ...EMPTY_ENTRY }]);
     setError(null);
   }, []);
 
@@ -106,7 +116,39 @@ export function AddVariableSheet({
   };
 
   const addEntry = () => {
-    setEntries((prev) => [...prev, { ...emptyEntry }]);
+    setEntries((prev) => [...prev, { ...EMPTY_ENTRY }]);
+  };
+
+  const handleDotEnvPaste = (
+    index: number,
+    event: ClipboardEvent<HTMLInputElement>,
+  ) => {
+    const parsed = parseDotEnvPaste(event.clipboardData.getData("text"));
+    if (!parsed) return;
+
+    event.preventDefault();
+    if (parsed.entries.length > 0) {
+      const importedEntries = parsed.entries.map(({ key, value }) => ({
+        key: key.toUpperCase(),
+        value,
+        isSecret: true,
+      }));
+      setEntries((prev) => [
+        ...prev.slice(0, index),
+        ...importedEntries,
+        ...prev.slice(index + 1),
+      ]);
+    }
+
+    if (parsed.invalidLineNumbers.length > 0) {
+      const lineLabel =
+        parsed.invalidLineNumbers.length === 1 ? "line" : "lines";
+      setError(
+        `Ignored invalid .env ${lineLabel}: ${parsed.invalidLineNumbers.join(", ")}.`,
+      );
+    } else {
+      setError(null);
+    }
   };
 
   const removeEntry = (index: number) => {
@@ -202,6 +244,7 @@ export function AddVariableSheet({
                   type="text"
                   value={entry.key}
                   onChange={(e) => updateEntry(index, "key", e.target.value)}
+                  onPaste={(e) => handleDotEnvPaste(index, e)}
                   placeholder="CLIENT_KEY..."
                   className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full rounded-md border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
                 />

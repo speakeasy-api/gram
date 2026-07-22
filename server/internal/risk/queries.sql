@@ -859,7 +859,17 @@ WHERE id = ANY(@message_ids::uuid[])
 -- attribution rule as ListRiskOverviewTopUsers: the message's own user_id
 -- wins, the chat owner's is the fallback — and a soft-deleted chat's owner
 -- never is (LEFT JOIN so the message still gets scanned, just unattributed).
-SELECT cm.id, cm.role, cm.content, cm.tool_calls,
+--
+-- created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
+-- the batch's own time range, keeping that query on the telemetry table's
+-- time-ordered primary key instead of scanning the full retention window.
+--
+-- source names the agent that recorded the message (Codex, Cursor, the ingest
+-- adapter, ...). The shadow-MCP scanner attributes its provenance-resolution
+-- metric to it, which is the one attribution available when the call resolved
+-- to no telemetry row at all — precisely the population that metric exists to
+-- measure.
+SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
   COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
 FROM chat_messages cm
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE

@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
+	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -24,8 +25,9 @@ const (
 )
 
 type PollCursorUsageMetrics struct {
-	integrations *aiintegrations.Store
-	usagePoller  *aiintegrations.UsagePollService
+	integrations    *aiintegrations.Store
+	telemetryLogger *telemetry.Logger
+	guardianPolicy  *guardian.Policy
 }
 
 func NewPollCursorUsageMetrics(
@@ -35,13 +37,11 @@ func NewPollCursorUsageMetrics(
 	telemetryLogger *telemetry.Logger,
 	guardianPolicy *guardian.Policy,
 ) *PollCursorUsageMetrics {
+	store := aiintegrations.NewStore(logger, db, encryptionClient)
 	return &PollCursorUsageMetrics{
-		integrations: aiintegrations.NewStore(logger, db, encryptionClient),
-		usagePoller: aiintegrations.NewUsagePollService(telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
-			activity.RecordHeartbeat(ctx, map[string]any{
-				"page": page,
-			})
-		}),
+		integrations:    store,
+		telemetryLogger: telemetryLogger,
+		guardianPolicy:  guardianPolicy,
 	}
 }
 
@@ -71,7 +71,7 @@ func (p *PollCursorUsageMetrics) Do(ctx context.Context, configID string) (err e
 		}
 	}()
 
-	cfg, err := p.integrations.GetUsagePollConfig(ctx, id)
+	cfg, err := p.integrations.GetUsagePollConfig(ctx, id, aiintegrations.ScheduleCursor)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load ai integration configuration")
 	}
@@ -80,7 +80,31 @@ func (p *PollCursorUsageMetrics) Do(ctx context.Context, configID string) (err e
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
 	}
 
-	if err := p.usagePoller.SyncCursorUsage(ctx, cfg, endTime); err != nil {
+	source, err := aiintegrations.NewCursorUsageSource(p.guardianPolicy, cfg, p.telemetryLogger.LogBulk, "", 0)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build cursor usage source")
+	}
+	poller := &timewindowpoller.Poller[[]telemetry.LogParams]{
+		Store:    p.integrations,
+		Schedule: aiintegrations.ScheduleCursor,
+		State: timewindowpoller.SyncState{
+			SyncID:      cfg.SyncID,
+			WatermarkAt: cfg.PollWatermarkAt,
+			Checkpoint:  cfg.PollCheckpoint,
+		},
+		Source:  source,
+		EndTime: endTime,
+		Heartbeat: func(ctx context.Context, page int) {
+			activity.RecordHeartbeat(ctx, map[string]any{
+				"page": page,
+			})
+		},
+		InitialLookback: aiintegrations.InitialUsagePollLookback,
+		MaxWindow:       0,
+		Granularity:     0,
+		ResumeOffset:    time.Millisecond,
+	}
+	if err := poller.Do(ctx); err != nil {
 		var httpErr *cursorapi.HTTPError
 		if errors.As(err, &httpErr) && httpErr.StatusCode == 401 {
 			return oops.E(oops.CodeUnauthorized, err, "cursor rejected the configured api key")
@@ -88,7 +112,7 @@ func (p *PollCursorUsageMetrics) Do(ctx context.Context, configID string) (err e
 		return oops.E(oops.CodeUnexpected, err, "fetch cursor usage window")
 	}
 
-	if err := p.integrations.RecordUsagePollSuccess(ctx, id, aiintegrations.ProviderCursor, endTime, cfg.LastCursor); err != nil {
+	if err := p.integrations.RecordUsagePollSuccess(ctx, cfg.SyncID, aiintegrations.ProviderCursor, endTime, cfg.LastCursor); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record usage poll success")
 	}
 

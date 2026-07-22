@@ -12,6 +12,7 @@ type AnalyzerConfig struct {
 	Presidio        *PresidioConfig        `json:"presidio,omitempty"`
 	BuiltinPresets  *BuiltinPresetsConfig  `json:"builtin_presets,omitempty"`
 	AccountIdentity *AccountIdentityConfig `json:"account_identity,omitempty"`
+	DetectionScopes []DetectionScopeConfig `json:"detection_scopes,omitempty"`
 }
 
 // PresidioConfig holds presidio-scanner options.
@@ -36,6 +37,15 @@ type AccountIdentityConfig struct {
 	// produce an identity.unapproved_domain finding. Empty means the domain
 	// rule is inert.
 	ApprovedEmailDomains []string `json:"approved_email_domains,omitempty"`
+}
+
+// DetectionScopeConfig specifies one category's detection scope. A specified
+// category replaces its registry recommendation; both fields empty means the
+// category scans every message surface.
+type DetectionScopeConfig struct {
+	Category     string `json:"category"`
+	ScopeInclude string `json:"scope_include,omitempty"`
+	ScopeExempt  string `json:"scope_exempt,omitempty"`
 }
 
 // ParseAnalyzerConfig decodes the JSONB blob, returning a zero config for
@@ -91,6 +101,12 @@ func ApprovedEmailDomainsFromConfig(b []byte) []string {
 	return nil
 }
 
+// DetectionScopesFromConfig returns the policy's specified per-category
+// detection scopes, or nil when none are specified.
+func DetectionScopesFromConfig(b []byte) []DetectionScopeConfig {
+	return ParseAnalyzerConfig(b).DetectionScopes
+}
+
 // WithApprovedEmailDomains returns analyzer_config JSON with
 // account_identity.approved_email_domains set to v, or cleared when v is
 // empty. Only fields known to AnalyzerConfig are round-tripped; any
@@ -104,6 +120,22 @@ func WithApprovedEmailDomains(base []byte, v []string) ([]byte, error) {
 		// ApprovedEmailDomains is account_identity's only field today; clearing
 		// it leaves the section empty, so drop it entirely.
 		c.AccountIdentity = nil
+	}
+	out, err := json.Marshal(c)
+	if err != nil {
+		return nil, fmt.Errorf("marshal analyzer config: %w", err)
+	}
+	return out, nil
+}
+
+// WithDetectionScopes returns analyzer_config JSON with detection_scopes set
+// to v, or cleared when v is empty. Only fields known to AnalyzerConfig are
+// round-tripped; any unrecognized keys in base are dropped.
+func WithDetectionScopes(base []byte, v []DetectionScopeConfig) ([]byte, error) {
+	c := ParseAnalyzerConfig(base)
+	c.DetectionScopes = v
+	if len(v) == 0 {
+		c.DetectionScopes = nil
 	}
 	out, err := json.Marshal(c)
 	if err != nil {

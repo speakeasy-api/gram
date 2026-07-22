@@ -611,6 +611,8 @@ tags:
     description: Managing toolset environments.
   - name: externalCredentials
     description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
+  - name: externalKeys
+    description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.
   - name: mcpRegistries
     description: External MCP registry operations
   - name: collections

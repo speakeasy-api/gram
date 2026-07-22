@@ -92,9 +92,9 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (policy *guardian.Policy, err error) {
+func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, redisClient redis.UniversalClient) (policy *guardian.Policy, err error) {
 	breaker := guardian.NewNoopBreaker(logger, meterProvider)
-	limiter := guardian.NewNoopLimiter(logger, meterProvider)
+	limiter := guardian.NewRedisRateLimiter(logger, meterProvider, redisClient)
 
 	// In local development, allow loopback addresses for internal tool-to-tool communication
 	if c.String("environment") == "local" {
@@ -768,6 +768,8 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 func newTelemetryLogger(
 	ctx context.Context,
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	cacheImpl cache.Cache,
 	chDB clickhouse.Conn,
@@ -784,7 +786,7 @@ func newTelemetryLogger(
 
 	users := telemetry.NewUserInfoResolver(logger, db, cacheImpl)
 
-	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled, users), shutdown
+	return telemetry.NewLogger(shutdownCtx, logger, tracerProvider, meterProvider, chDB, logsEnabled, toolIOLogsEnabled, users), shutdown
 }
 
 func newTriggersApp(

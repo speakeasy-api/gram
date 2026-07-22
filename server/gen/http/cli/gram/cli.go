@@ -33,6 +33,7 @@ import (
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
 	externalc "github.com/speakeasy-api/gram/server/gen/http/external/client"
 	externalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/external_credentials/client"
+	externalkeysc "github.com/speakeasy-api/gram/server/gen/http/external_keys/client"
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
@@ -87,7 +88,7 @@ func UsageCommands() []string {
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-approval-requests|create-shadow-mcp-approval-request|approve-shadow-mcp-approval-request|deny-shadow-mcp-approval-request|list-shadow-mcp-access-rules|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|resolve-shadow-mcp-inventory-request|create-shadow-mcp-access-rule|update-shadow-mcp-access-rule|delete-shadow-mcp-access-rule|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-members|list-organization-projects|list-organizations)",
 		"agent (get-plugins|list-synced-users)",
-		"ai-integrations (get-config|upsert-config|delete-config)",
+		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|get-managed-assistant|ensure-managed-assistant)",
@@ -100,6 +101,7 @@ func UsageCommands() []string {
 		"domains (get-domain|create-domain|update-domain|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|delete-aws-iam-credential|delete-gcp-iam-credential)",
+		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
@@ -121,7 +123,7 @@ func UsageCommands() []string {
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|clone-client-fromoauth-proxy-provider|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
-		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer)",
+		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer)",
 		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
@@ -398,6 +400,21 @@ func ParseEndpoint(
 		aiIntegrationsDeleteConfigBodyFlag         = aiIntegrationsDeleteConfigFlags.String("body", "REQUIRED", "")
 		aiIntegrationsDeleteConfigApikeyTokenFlag  = aiIntegrationsDeleteConfigFlags.String("apikey-token", "", "")
 		aiIntegrationsDeleteConfigSessionTokenFlag = aiIntegrationsDeleteConfigFlags.String("session-token", "", "")
+
+		aiIntegrationsListSchedulesFlags            = flag.NewFlagSet("list-schedules", flag.ExitOnError)
+		aiIntegrationsListSchedulesProviderFlag     = aiIntegrationsListSchedulesFlags.String("provider", "REQUIRED", "")
+		aiIntegrationsListSchedulesApikeyTokenFlag  = aiIntegrationsListSchedulesFlags.String("apikey-token", "", "")
+		aiIntegrationsListSchedulesSessionTokenFlag = aiIntegrationsListSchedulesFlags.String("session-token", "", "")
+
+		aiIntegrationsSetScheduleEnabledFlags            = flag.NewFlagSet("set-schedule-enabled", flag.ExitOnError)
+		aiIntegrationsSetScheduleEnabledBodyFlag         = aiIntegrationsSetScheduleEnabledFlags.String("body", "REQUIRED", "")
+		aiIntegrationsSetScheduleEnabledApikeyTokenFlag  = aiIntegrationsSetScheduleEnabledFlags.String("apikey-token", "", "")
+		aiIntegrationsSetScheduleEnabledSessionTokenFlag = aiIntegrationsSetScheduleEnabledFlags.String("session-token", "", "")
+
+		aiIntegrationsRetryScheduleFlags            = flag.NewFlagSet("retry-schedule", flag.ExitOnError)
+		aiIntegrationsRetryScheduleBodyFlag         = aiIntegrationsRetryScheduleFlags.String("body", "REQUIRED", "")
+		aiIntegrationsRetryScheduleApikeyTokenFlag  = aiIntegrationsRetryScheduleFlags.String("apikey-token", "", "")
+		aiIntegrationsRetryScheduleSessionTokenFlag = aiIntegrationsRetryScheduleFlags.String("session-token", "", "")
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
@@ -839,6 +856,50 @@ func ParseEndpoint(
 		externalCredentialsDeleteGcpIamCredentialFlags            = flag.NewFlagSet("delete-gcp-iam-credential", flag.ExitOnError)
 		externalCredentialsDeleteGcpIamCredentialIDFlag           = externalCredentialsDeleteGcpIamCredentialFlags.String("id", "REQUIRED", "")
 		externalCredentialsDeleteGcpIamCredentialSessionTokenFlag = externalCredentialsDeleteGcpIamCredentialFlags.String("session-token", "", "")
+
+		externalKeysFlags = flag.NewFlagSet("external-keys", flag.ContinueOnError)
+
+		externalKeysCreateAwsKmsKeyFlags            = flag.NewFlagSet("create-aws-kms-key", flag.ExitOnError)
+		externalKeysCreateAwsKmsKeyBodyFlag         = externalKeysCreateAwsKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysCreateAwsKmsKeySessionTokenFlag = externalKeysCreateAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysUpdateAwsKmsKeyFlags            = flag.NewFlagSet("update-aws-kms-key", flag.ExitOnError)
+		externalKeysUpdateAwsKmsKeyBodyFlag         = externalKeysUpdateAwsKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysUpdateAwsKmsKeySessionTokenFlag = externalKeysUpdateAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysCreateGcpKmsKeyFlags            = flag.NewFlagSet("create-gcp-kms-key", flag.ExitOnError)
+		externalKeysCreateGcpKmsKeyBodyFlag         = externalKeysCreateGcpKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysCreateGcpKmsKeySessionTokenFlag = externalKeysCreateGcpKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysUpdateGcpKmsKeyFlags            = flag.NewFlagSet("update-gcp-kms-key", flag.ExitOnError)
+		externalKeysUpdateGcpKmsKeyBodyFlag         = externalKeysUpdateGcpKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysUpdateGcpKmsKeySessionTokenFlag = externalKeysUpdateGcpKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysListExternalKeysFlags            = flag.NewFlagSet("list-external-keys", flag.ExitOnError)
+		externalKeysListExternalKeysProviderFlag     = externalKeysListExternalKeysFlags.String("provider", "", "")
+		externalKeysListExternalKeysSessionTokenFlag = externalKeysListExternalKeysFlags.String("session-token", "", "")
+
+		externalKeysListAwsKmsKeysFlags            = flag.NewFlagSet("list-aws-kms-keys", flag.ExitOnError)
+		externalKeysListAwsKmsKeysSessionTokenFlag = externalKeysListAwsKmsKeysFlags.String("session-token", "", "")
+
+		externalKeysListGcpKmsKeysFlags            = flag.NewFlagSet("list-gcp-kms-keys", flag.ExitOnError)
+		externalKeysListGcpKmsKeysSessionTokenFlag = externalKeysListGcpKmsKeysFlags.String("session-token", "", "")
+
+		externalKeysGetAwsKmsKeyFlags            = flag.NewFlagSet("get-aws-kms-key", flag.ExitOnError)
+		externalKeysGetAwsKmsKeyIDFlag           = externalKeysGetAwsKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysGetAwsKmsKeySessionTokenFlag = externalKeysGetAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysGetGcpKmsKeyFlags            = flag.NewFlagSet("get-gcp-kms-key", flag.ExitOnError)
+		externalKeysGetGcpKmsKeyIDFlag           = externalKeysGetGcpKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysGetGcpKmsKeySessionTokenFlag = externalKeysGetGcpKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysDeleteAwsKmsKeyFlags            = flag.NewFlagSet("delete-aws-kms-key", flag.ExitOnError)
+		externalKeysDeleteAwsKmsKeyIDFlag           = externalKeysDeleteAwsKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysDeleteAwsKmsKeySessionTokenFlag = externalKeysDeleteAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysDeleteGcpKmsKeyFlags            = flag.NewFlagSet("delete-gcp-kms-key", flag.ExitOnError)
+		externalKeysDeleteGcpKmsKeyIDFlag           = externalKeysDeleteGcpKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysDeleteGcpKmsKeySessionTokenFlag = externalKeysDeleteGcpKmsKeyFlags.String("session-token", "", "")
 
 		mcpRegistriesFlags = flag.NewFlagSet("mcp-registries", flag.ContinueOnError)
 
@@ -1592,6 +1653,17 @@ func ParseEndpoint(
 		organizationRemoteSessionIssuersMoveIssuerBodyFlag         = organizationRemoteSessionIssuersMoveIssuerFlags.String("body", "REQUIRED", "")
 		organizationRemoteSessionIssuersMoveIssuerSessionTokenFlag = organizationRemoteSessionIssuersMoveIssuerFlags.String("session-token", "", "")
 		organizationRemoteSessionIssuersMoveIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersMoveIssuerFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags            = flag.NewFlagSet("get-issuer-migrate-preflight", flag.ExitOnError)
+		organizationRemoteSessionIssuersGetIssuerMigratePreflightSourceIDFlag     = organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.String("source-id", "REQUIRED", "")
+		organizationRemoteSessionIssuersGetIssuerMigratePreflightTargetIDFlag     = organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.String("target-id", "REQUIRED", "")
+		organizationRemoteSessionIssuersGetIssuerMigratePreflightSessionTokenFlag = organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersGetIssuerMigratePreflightApikeyTokenFlag  = organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersMigrateIssuerFlags            = flag.NewFlagSet("migrate-issuer", flag.ExitOnError)
+		organizationRemoteSessionIssuersMigrateIssuerBodyFlag         = organizationRemoteSessionIssuersMigrateIssuerFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionIssuersMigrateIssuerSessionTokenFlag = organizationRemoteSessionIssuersMigrateIssuerFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersMigrateIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersMigrateIssuerFlags.String("apikey-token", "", "")
 
 		remoteSessionIssuersFlags = flag.NewFlagSet("remote-session-issuers", flag.ContinueOnError)
 
@@ -2659,6 +2731,9 @@ func ParseEndpoint(
 	aiIntegrationsGetConfigFlags.Usage = aiIntegrationsGetConfigUsage
 	aiIntegrationsUpsertConfigFlags.Usage = aiIntegrationsUpsertConfigUsage
 	aiIntegrationsDeleteConfigFlags.Usage = aiIntegrationsDeleteConfigUsage
+	aiIntegrationsListSchedulesFlags.Usage = aiIntegrationsListSchedulesUsage
+	aiIntegrationsSetScheduleEnabledFlags.Usage = aiIntegrationsSetScheduleEnabledUsage
+	aiIntegrationsRetryScheduleFlags.Usage = aiIntegrationsRetryScheduleUsage
 
 	assetsFlags.Usage = assetsUsage
 	assetsServeImageFlags.Usage = assetsServeImageUsage
@@ -2761,6 +2836,19 @@ func ParseEndpoint(
 	externalCredentialsGetGcpIamCredentialFlags.Usage = externalCredentialsGetGcpIamCredentialUsage
 	externalCredentialsDeleteAwsIamCredentialFlags.Usage = externalCredentialsDeleteAwsIamCredentialUsage
 	externalCredentialsDeleteGcpIamCredentialFlags.Usage = externalCredentialsDeleteGcpIamCredentialUsage
+
+	externalKeysFlags.Usage = externalKeysUsage
+	externalKeysCreateAwsKmsKeyFlags.Usage = externalKeysCreateAwsKmsKeyUsage
+	externalKeysUpdateAwsKmsKeyFlags.Usage = externalKeysUpdateAwsKmsKeyUsage
+	externalKeysCreateGcpKmsKeyFlags.Usage = externalKeysCreateGcpKmsKeyUsage
+	externalKeysUpdateGcpKmsKeyFlags.Usage = externalKeysUpdateGcpKmsKeyUsage
+	externalKeysListExternalKeysFlags.Usage = externalKeysListExternalKeysUsage
+	externalKeysListAwsKmsKeysFlags.Usage = externalKeysListAwsKmsKeysUsage
+	externalKeysListGcpKmsKeysFlags.Usage = externalKeysListGcpKmsKeysUsage
+	externalKeysGetAwsKmsKeyFlags.Usage = externalKeysGetAwsKmsKeyUsage
+	externalKeysGetGcpKmsKeyFlags.Usage = externalKeysGetGcpKmsKeyUsage
+	externalKeysDeleteAwsKmsKeyFlags.Usage = externalKeysDeleteAwsKmsKeyUsage
+	externalKeysDeleteGcpKmsKeyFlags.Usage = externalKeysDeleteGcpKmsKeyUsage
 
 	mcpRegistriesFlags.Usage = mcpRegistriesUsage
 	mcpRegistriesClearCacheFlags.Usage = mcpRegistriesClearCacheUsage
@@ -2939,6 +3027,8 @@ func ParseEndpoint(
 	organizationRemoteSessionIssuersUpdateIssuerFlags.Usage = organizationRemoteSessionIssuersUpdateIssuerUsage
 	organizationRemoteSessionIssuersDeleteIssuerFlags.Usage = organizationRemoteSessionIssuersDeleteIssuerUsage
 	organizationRemoteSessionIssuersMoveIssuerFlags.Usage = organizationRemoteSessionIssuersMoveIssuerUsage
+	organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.Usage = organizationRemoteSessionIssuersGetIssuerMigratePreflightUsage
+	organizationRemoteSessionIssuersMigrateIssuerFlags.Usage = organizationRemoteSessionIssuersMigrateIssuerUsage
 
 	remoteSessionIssuersFlags.Usage = remoteSessionIssuersUsage
 	remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.Usage = remoteSessionIssuersDiscoverRemoteSessionIssuerUsage
@@ -3195,6 +3285,8 @@ func ParseEndpoint(
 			svcf = environmentsFlags
 		case "external-credentials":
 			svcf = externalCredentialsFlags
+		case "external-keys":
+			svcf = externalKeysFlags
 		case "mcp-registries":
 			svcf = mcpRegistriesFlags
 		case "collections":
@@ -3453,6 +3545,15 @@ func ParseEndpoint(
 
 			case "delete-config":
 				epf = aiIntegrationsDeleteConfigFlags
+
+			case "list-schedules":
+				epf = aiIntegrationsListSchedulesFlags
+
+			case "set-schedule-enabled":
+				epf = aiIntegrationsSetScheduleEnabledFlags
+
+			case "retry-schedule":
+				epf = aiIntegrationsRetryScheduleFlags
 
 			}
 
@@ -3735,6 +3836,43 @@ func ParseEndpoint(
 
 			case "delete-gcp-iam-credential":
 				epf = externalCredentialsDeleteGcpIamCredentialFlags
+
+			}
+
+		case "external-keys":
+			switch epn {
+			case "create-aws-kms-key":
+				epf = externalKeysCreateAwsKmsKeyFlags
+
+			case "update-aws-kms-key":
+				epf = externalKeysUpdateAwsKmsKeyFlags
+
+			case "create-gcp-kms-key":
+				epf = externalKeysCreateGcpKmsKeyFlags
+
+			case "update-gcp-kms-key":
+				epf = externalKeysUpdateGcpKmsKeyFlags
+
+			case "list-external-keys":
+				epf = externalKeysListExternalKeysFlags
+
+			case "list-aws-kms-keys":
+				epf = externalKeysListAwsKmsKeysFlags
+
+			case "list-gcp-kms-keys":
+				epf = externalKeysListGcpKmsKeysFlags
+
+			case "get-aws-kms-key":
+				epf = externalKeysGetAwsKmsKeyFlags
+
+			case "get-gcp-kms-key":
+				epf = externalKeysGetGcpKmsKeyFlags
+
+			case "delete-aws-kms-key":
+				epf = externalKeysDeleteAwsKmsKeyFlags
+
+			case "delete-gcp-kms-key":
+				epf = externalKeysDeleteGcpKmsKeyFlags
 
 			}
 
@@ -4225,6 +4363,12 @@ func ParseEndpoint(
 
 			case "move-issuer":
 				epf = organizationRemoteSessionIssuersMoveIssuerFlags
+
+			case "get-issuer-migrate-preflight":
+				epf = organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags
+
+			case "migrate-issuer":
+				epf = organizationRemoteSessionIssuersMigrateIssuerFlags
 
 			}
 
@@ -4983,6 +5127,15 @@ func ParseEndpoint(
 			case "delete-config":
 				endpoint = c.DeleteConfig()
 				data, err = aiintegrationsc.BuildDeleteConfigPayload(*aiIntegrationsDeleteConfigBodyFlag, *aiIntegrationsDeleteConfigApikeyTokenFlag, *aiIntegrationsDeleteConfigSessionTokenFlag)
+			case "list-schedules":
+				endpoint = c.ListSchedules()
+				data, err = aiintegrationsc.BuildListSchedulesPayload(*aiIntegrationsListSchedulesProviderFlag, *aiIntegrationsListSchedulesApikeyTokenFlag, *aiIntegrationsListSchedulesSessionTokenFlag)
+			case "set-schedule-enabled":
+				endpoint = c.SetScheduleEnabled()
+				data, err = aiintegrationsc.BuildSetScheduleEnabledPayload(*aiIntegrationsSetScheduleEnabledBodyFlag, *aiIntegrationsSetScheduleEnabledApikeyTokenFlag, *aiIntegrationsSetScheduleEnabledSessionTokenFlag)
+			case "retry-schedule":
+				endpoint = c.RetrySchedule()
+				data, err = aiintegrationsc.BuildRetrySchedulePayload(*aiIntegrationsRetryScheduleBodyFlag, *aiIntegrationsRetryScheduleApikeyTokenFlag, *aiIntegrationsRetryScheduleSessionTokenFlag)
 			}
 		case "assets":
 			c := assetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5277,6 +5430,43 @@ func ParseEndpoint(
 			case "delete-gcp-iam-credential":
 				endpoint = c.DeleteGcpIamCredential()
 				data, err = externalcredentialsc.BuildDeleteGcpIamCredentialPayload(*externalCredentialsDeleteGcpIamCredentialIDFlag, *externalCredentialsDeleteGcpIamCredentialSessionTokenFlag)
+			}
+		case "external-keys":
+			c := externalkeysc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-aws-kms-key":
+				endpoint = c.CreateAwsKmsKey()
+				data, err = externalkeysc.BuildCreateAwsKmsKeyPayload(*externalKeysCreateAwsKmsKeyBodyFlag, *externalKeysCreateAwsKmsKeySessionTokenFlag)
+			case "update-aws-kms-key":
+				endpoint = c.UpdateAwsKmsKey()
+				data, err = externalkeysc.BuildUpdateAwsKmsKeyPayload(*externalKeysUpdateAwsKmsKeyBodyFlag, *externalKeysUpdateAwsKmsKeySessionTokenFlag)
+			case "create-gcp-kms-key":
+				endpoint = c.CreateGcpKmsKey()
+				data, err = externalkeysc.BuildCreateGcpKmsKeyPayload(*externalKeysCreateGcpKmsKeyBodyFlag, *externalKeysCreateGcpKmsKeySessionTokenFlag)
+			case "update-gcp-kms-key":
+				endpoint = c.UpdateGcpKmsKey()
+				data, err = externalkeysc.BuildUpdateGcpKmsKeyPayload(*externalKeysUpdateGcpKmsKeyBodyFlag, *externalKeysUpdateGcpKmsKeySessionTokenFlag)
+			case "list-external-keys":
+				endpoint = c.ListExternalKeys()
+				data, err = externalkeysc.BuildListExternalKeysPayload(*externalKeysListExternalKeysProviderFlag, *externalKeysListExternalKeysSessionTokenFlag)
+			case "list-aws-kms-keys":
+				endpoint = c.ListAwsKmsKeys()
+				data, err = externalkeysc.BuildListAwsKmsKeysPayload(*externalKeysListAwsKmsKeysSessionTokenFlag)
+			case "list-gcp-kms-keys":
+				endpoint = c.ListGcpKmsKeys()
+				data, err = externalkeysc.BuildListGcpKmsKeysPayload(*externalKeysListGcpKmsKeysSessionTokenFlag)
+			case "get-aws-kms-key":
+				endpoint = c.GetAwsKmsKey()
+				data, err = externalkeysc.BuildGetAwsKmsKeyPayload(*externalKeysGetAwsKmsKeyIDFlag, *externalKeysGetAwsKmsKeySessionTokenFlag)
+			case "get-gcp-kms-key":
+				endpoint = c.GetGcpKmsKey()
+				data, err = externalkeysc.BuildGetGcpKmsKeyPayload(*externalKeysGetGcpKmsKeyIDFlag, *externalKeysGetGcpKmsKeySessionTokenFlag)
+			case "delete-aws-kms-key":
+				endpoint = c.DeleteAwsKmsKey()
+				data, err = externalkeysc.BuildDeleteAwsKmsKeyPayload(*externalKeysDeleteAwsKmsKeyIDFlag, *externalKeysDeleteAwsKmsKeySessionTokenFlag)
+			case "delete-gcp-kms-key":
+				endpoint = c.DeleteGcpKmsKey()
+				data, err = externalkeysc.BuildDeleteGcpKmsKeyPayload(*externalKeysDeleteGcpKmsKeyIDFlag, *externalKeysDeleteGcpKmsKeySessionTokenFlag)
 			}
 		case "mcp-registries":
 			c := mcpregistriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5767,6 +5957,12 @@ func ParseEndpoint(
 			case "move-issuer":
 				endpoint = c.MoveIssuer()
 				data, err = organizationremotesessionissuersc.BuildMoveIssuerPayload(*organizationRemoteSessionIssuersMoveIssuerBodyFlag, *organizationRemoteSessionIssuersMoveIssuerSessionTokenFlag, *organizationRemoteSessionIssuersMoveIssuerApikeyTokenFlag)
+			case "get-issuer-migrate-preflight":
+				endpoint = c.GetIssuerMigratePreflight()
+				data, err = organizationremotesessionissuersc.BuildGetIssuerMigratePreflightPayload(*organizationRemoteSessionIssuersGetIssuerMigratePreflightSourceIDFlag, *organizationRemoteSessionIssuersGetIssuerMigratePreflightTargetIDFlag, *organizationRemoteSessionIssuersGetIssuerMigratePreflightSessionTokenFlag, *organizationRemoteSessionIssuersGetIssuerMigratePreflightApikeyTokenFlag)
+			case "migrate-issuer":
+				endpoint = c.MigrateIssuer()
+				data, err = organizationremotesessionissuersc.BuildMigrateIssuerPayload(*organizationRemoteSessionIssuersMigrateIssuerBodyFlag, *organizationRemoteSessionIssuersMigrateIssuerSessionTokenFlag, *organizationRemoteSessionIssuersMigrateIssuerApikeyTokenFlag)
 			}
 		case "remote-session-issuers":
 			c := remotesessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7375,6 +7571,9 @@ func aiIntegrationsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-config: Get the org-wide AI integration config for a provider. Returns an empty config (enabled=false, has_api_key=false) when none is set.`)
 	fmt.Fprintln(os.Stderr, `    upsert-config: Create or update the org-wide AI integration config for a provider.`)
 	fmt.Fprintln(os.Stderr, `    delete-config: Delete the org-wide AI integration config for a provider.`)
+	fmt.Fprintln(os.Stderr, `    list-schedules: List the sync schedules and their scheduler state for a provider's org-wide AI integration config. Returns an empty list when no config is set.`)
+	fmt.Fprintln(os.Stderr, `    set-schedule-enabled: Enable or disable one sync schedule of a provider's org-wide AI integration config. Disabled schedules are skipped by the poller until re-enabled.`)
+	fmt.Fprintln(os.Stderr, `    retry-schedule: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak. The scheduler picks it up on its next tick.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s ai-integrations COMMAND --help\n", os.Args[0])
@@ -7443,6 +7642,72 @@ func aiIntegrationsDeleteConfigUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations delete-config --body '{\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func aiIntegrationsListSchedulesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations list-schedules", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the sync schedules and their scheduler state for a provider's org-wide AI integration config. Returns an empty list when no config is set.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations list-schedules --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func aiIntegrationsSetScheduleEnabledUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations set-schedule-enabled", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Enable or disable one sync schedule of a provider's org-wide AI integration config. Disabled schedules are skipped by the poller until re-enabled.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations set-schedule-enabled --body '{\n      \"enabled\": false,\n      \"provider\": \"abc123\",\n      \"schedule\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func aiIntegrationsRetryScheduleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ai-integrations retry-schedule", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak. The scheduler picks it up on its next tick.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations retry-schedule --body '{\n      \"provider\": \"abc123\",\n      \"schedule\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.
@@ -9406,6 +9671,243 @@ func externalCredentialsDeleteGcpIamCredentialUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials delete-gcp-iam-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+// externalKeysUsage displays the usage of the external-keys command and its
+// subcommands.
+func externalKeysUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] external-keys COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-aws-kms-key: Create an AWS KMS external key. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-aws-kms-key: Replace an AWS KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    create-gcp-kms-key: Create a GCP KMS external key. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-gcp-kms-key: Replace a GCP KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-external-keys: List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-aws-kms-keys: List the organization's AWS KMS external keys. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-gcp-kms-keys: List the organization's GCP KMS external keys. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-aws-kms-key: Get an AWS KMS external key by ID. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-gcp-kms-key: Get a GCP KMS external key by ID. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    delete-aws-kms-key: Soft-delete an AWS KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    delete-gcp-kms-key: Soft-delete a GCP KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s external-keys COMMAND --help\n", os.Args[0])
+}
+func externalKeysCreateAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys create-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an AWS KMS external key. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys create-aws-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"key_arn\": \"abc123\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysUpdateAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys update-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace an AWS KMS external key's configuration. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-aws-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"key_arn\": \"abc123\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysCreateGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys create-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a GCP KMS external key. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys create-gcp-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysUpdateGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys update-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a GCP KMS external key's configuration. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-gcp-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysListExternalKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys list-external-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys list-external-keys --provider \"gcp_kms\" --session-token \"abc123\"")
+}
+
+func externalKeysListAwsKmsKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys list-aws-kms-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's AWS KMS external keys. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys list-aws-kms-keys --session-token \"abc123\"")
+}
+
+func externalKeysListGcpKmsKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys list-gcp-kms-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's GCP KMS external keys. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys list-gcp-kms-keys --session-token \"abc123\"")
+}
+
+func externalKeysGetAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys get-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an AWS KMS external key by ID. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys get-aws-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalKeysGetGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys get-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a GCP KMS external key by ID. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys get-gcp-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalKeysDeleteAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys delete-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete an AWS KMS external key by ID. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys delete-aws-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalKeysDeleteGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys delete-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a GCP KMS external key by ID. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys delete-gcp-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 // mcpRegistriesUsage displays the usage of the mcp-registries command and its
@@ -12622,6 +13124,8 @@ func organizationRemoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    update-issuer: Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-issuer: Soft-delete any remote_session_issuer (organizational or project-specific) in the caller's organization. Blocked when any remote_session_clients still reference it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    get-issuer-migrate-preflight: Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s organization-remote-session-issuers COMMAND --help\n", os.Args[0])
@@ -12780,6 +13284,52 @@ func organizationRemoteSessionIssuersMoveIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers move-issuer --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersGetIssuerMigratePreflightUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers get-issuer-migrate-preflight", os.Args[0])
+	fmt.Fprint(os.Stderr, " -source-id STRING")
+	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -source-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers get-issuer-migrate-preflight --source-id \"550e8400-e29b-41d4-a716-446655440000\" --target-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersMigrateIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers migrate-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers migrate-issuer --body '{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 // remoteSessionIssuersUsage displays the usage of the remote-session-issuers
@@ -13454,7 +14004,7 @@ func riskCreateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"score\": 5,\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"score\": 5,\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesUsage() {
@@ -13546,7 +14096,7 @@ func riskUpdateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"score\": 5,\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"score\": 5,\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteRiskPolicyUsage() {
