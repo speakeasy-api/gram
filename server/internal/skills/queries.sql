@@ -1288,9 +1288,11 @@ SELECT
   e.observed_at,
   e.state,
   e.reserved_on,
+  e.claim_token,
   e.attempts,
   e.last_error,
   e.scored_at,
+  e.failed_at,
   e.created_at,
   e.updated_at
 FROM skill_efficacy_evaluations e
@@ -1359,9 +1361,11 @@ RETURNING
   e.observed_at,
   e.state,
   e.reserved_on,
+  e.claim_token,
   e.attempts,
   e.last_error,
   e.scored_at,
+  e.failed_at,
   e.created_at,
   e.updated_at;
 

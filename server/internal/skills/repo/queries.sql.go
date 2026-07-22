@@ -1902,9 +1902,11 @@ SELECT
   e.observed_at,
   e.state,
   e.reserved_on,
+  e.claim_token,
   e.attempts,
   e.last_error,
   e.scored_at,
+  e.failed_at,
   e.created_at,
   e.updated_at
 FROM skill_efficacy_evaluations e
@@ -1986,9 +1988,11 @@ func (q *Queries) ListPendingSkillEfficacyEvaluations(ctx context.Context, arg L
 			&i.ObservedAt,
 			&i.State,
 			&i.ReservedOn,
+			&i.ClaimToken,
 			&i.Attempts,
 			&i.LastError,
 			&i.ScoredAt,
+			&i.FailedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -2923,9 +2927,11 @@ RETURNING
   e.observed_at,
   e.state,
   e.reserved_on,
+  e.claim_token,
   e.attempts,
   e.last_error,
   e.scored_at,
+  e.failed_at,
   e.created_at,
   e.updated_at
 `
@@ -2963,9 +2969,11 @@ func (q *Queries) LoadReservedSkillEfficacyEvaluations(ctx context.Context, arg 
 			&i.ObservedAt,
 			&i.State,
 			&i.ReservedOn,
+			&i.ClaimToken,
 			&i.Attempts,
 			&i.LastError,
 			&i.ScoredAt,
+			&i.FailedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

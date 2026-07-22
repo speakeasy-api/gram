@@ -544,7 +544,7 @@ ON skill_efficacy_evaluations (skill_version_id)
 WHERE reserved_on IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_stale_reserved_idx
-ON skill_efficacy_evaluations (updated_at)
+ON skill_efficacy_evaluations (project_id, updated_at, id)
 WHERE state = 'reserved';
 
 CREATE TABLE IF NOT EXISTS packages (
