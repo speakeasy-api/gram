@@ -21,7 +21,9 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
@@ -169,17 +171,19 @@ func (f efficacyFixture) writeSettings(t *testing.T, enabled bool, perSkillDaily
 }
 
 // reservedEvaluations reads the reserved rows back through the claim query,
-// which is also the only way to see updated_at. The lease is left null so the
-// read-back sees every reserved row rather than only the unclaimed ones.
+// which is also the only way to see updated_at. A zero lease makes every row
+// committed before the statement claimable.
 // RETURNING order is unspecified, so the rows are sorted the way the claim
 // selected them.
 func (f efficacyFixture) reservedEvaluations(t *testing.T, batchSize int32) []repo.SkillEfficacyEvaluation {
 	t.Helper()
 
 	rows, err := repo.New(f.db).LoadReservedSkillEfficacyEvaluations(t.Context(), repo.LoadReservedSkillEfficacyEvaluationsParams{
-		ProjectID:  f.projectID,
-		ClaimLease: pgtype.Interval{Microseconds: 0, Days: 0, Months: 0, Valid: false},
-		BatchSize:  batchSize,
+		ProjectID:     f.projectID,
+		ClaimToken:    uuid.New(),
+		ClaimLease:    pgtype.Interval{Microseconds: 0, Days: 0, Months: 0, Valid: true},
+		RecoveryAfter: pgtype.Interval{Microseconds: StaleReservationAfter.Microseconds(), Days: 0, Months: 0, Valid: true},
+		BatchSize:     batchSize,
 	})
 	require.NoError(t, err)
 
@@ -614,97 +618,211 @@ func TestReserveSkipsEvaluationsOfADeletedChat(t *testing.T) {
 	require.Empty(t, projects, "a deleted chat's pending row does not keep waking the project")
 }
 
-func TestResetStaleReservationsRejectsNonPositiveDurations(t *testing.T) {
+func TestRecoverStaleReservationsRejectsInvalidBounds(t *testing.T) {
 	t.Parallel()
-	fixture := newEfficacyFixture(t, "skill_efficacy_reserve_stale_duration")
-	skill := fixture.captureSkill(t, "efficacy-stale-duration")
-	fixture.seedUnits(t, skill, "stale-duration-session", 1, time.Now().UTC().Add(-2*time.Hour))
-	fixture.enqueueSeeded(t, 1)
-	reserved, _, err := Reserve(t.Context(), fixture.db, &stubFeatures{enabled: true}, fixture.projectID, PendingCursor{}, 1)
-	require.NoError(t, err)
-	require.Len(t, reserved, 1)
+	fixture := newEfficacyFixture(t, "skill_efficacy_recover_invalid_bounds")
 
 	for _, staleAfter := range []time.Duration{0, time.Nanosecond, -time.Second} {
-		reset, err := ResetStaleReservations(t.Context(), fixture.db, fixture.projectID, staleAfter)
+		result, err := RecoverStaleReservations(t.Context(), fixture.db, fixture.projectID, staleAfter, 1)
 		require.Error(t, err)
-		require.Zero(t, reset)
+		require.Equal(t, RecoveryResult{}, result)
 	}
-	require.Len(t, fixture.reservedEvaluations(t, 1), 1, "invalid durations leave the live reservation untouched")
+
+	for _, batchSize := range []int32{-1, 0, MaxRecoveryBatch + 1} {
+		result, err := RecoverStaleReservations(t.Context(), fixture.db, fixture.projectID, time.Hour, batchSize)
+		require.Error(t, err)
+		require.Equal(t, RecoveryResult{}, result)
+	}
 }
 
-func TestResetStaleReservationsFreesOnlyStaleRowsAndKeepsAttempts(t *testing.T) {
+func TestRecoverStaleReservationsRetriesWithoutRespending(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	fixture := newEfficacyFixture(t, "skill_efficacy_reserve_stale_reset")
+	fixture := newEfficacyFixture(t, "skill_efficacy_recover_retry")
+	fixture.writeSettings(t, true, 1, 1, 0)
 
-	skill := fixture.captureSkill(t, "efficacy-stale")
-	fixture.seedUnits(t, skill, "stale-session", 2, time.Now().UTC().Add(-6*time.Hour))
-	fixture.enqueueSeeded(t, 2)
+	skill := fixture.captureSkill(t, "efficacy-recover-retry")
+	fixture.seedUnits(t, skill, "recover-retry-session", 1, time.Now().UTC().Add(-6*time.Hour))
+	fixture.enqueueSeeded(t, 1)
 
-	reserved, _, err := Reserve(ctx, fixture.db, &stubFeatures{enabled: true}, fixture.projectID, PendingCursor{}, 2)
+	reserved, _, err := Reserve(ctx, fixture.db, &stubFeatures{enabled: true}, fixture.projectID, PendingCursor{}, 1)
 	require.NoError(t, err)
-	require.Len(t, reserved, 2)
+	require.Len(t, reserved, 1)
+	abandoned := reserved[0]
+	require.NotEqual(t, uuid.Nil, abandoned.ClaimToken)
 
-	// The abandoned row carries a model failure, which the reset must preserve
-	// so a poisonous unit still terminates at the attempt ceiling.
-	abandoned := reserved[1]
-	attempt, err := repo.New(fixture.db).RecordSkillEfficacyEvaluationAttempt(ctx, repo.RecordSkillEfficacyEvaluationAttemptParams{
-		LastError:   conv.ToPGText("model returned unparseable output"),
-		MaxAttempts: MaxModelAttempts,
-		ProjectID:   fixture.projectID,
-		ID:          abandoned.ID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, StateReserved, attempt.State)
-	require.Equal(t, int32(1), attempt.Attempts)
-
-	claimed := fixture.reservedEvaluations(t, 2)
-	require.Len(t, claimed, 2)
-	require.Equal(t, abandoned.ID, claimed[1].ID)
-	abandonedAt := claimed[1].UpdatedAt.Time
-
-	// The live row keeps being claimed, so its updated_at stays fresh while the
-	// abandoned one is frozen at abandonedAt. The loop runs until the two are a
-	// clear gap apart, which is where the staleness cutoff then lands. The claims
-	// are unleased so the loop measures staleness rather than the lease.
-	const gap = time.Second
+	var recovery RecoveryResult
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		live, claimErr := loadReserved(ctx, fixture.db, fixture.projectID, 1, 0)
-		assert.NoError(collect, claimErr)
-		assert.Len(collect, live, 1)
-		if len(live) == 1 {
-			assert.Equal(collect, reserved[0].ID, live[0].ID)
-		}
-		assert.GreaterOrEqual(collect, time.Since(abandonedAt), 2*gap)
-	}, 30*time.Second, 100*time.Millisecond)
-
-	fresh, err := ResetStaleReservations(ctx, fixture.db, fixture.projectID, StaleReservationAfter)
-	require.NoError(t, err)
-	require.Zero(t, fresh, "nothing has been reserved for a day")
-
-	// Re-claim immediately before the reset so the live row's freshness is not a
-	// function of when the loop above happened to stop.
-	live, err := loadReserved(ctx, fixture.db, fixture.projectID, 1, 0)
-	require.NoError(t, err)
-	require.Len(t, live, 1)
-	require.Equal(t, reserved[0].ID, live[0].ID)
-
-	// Cutoff = now - staleAfter, which sits a gap after the abandoned row's last
-	// bump and a gap before the live row's.
-	reset, err := ResetStaleReservations(ctx, fixture.db, fixture.projectID, time.Since(abandonedAt)-gap)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), reset)
+		var recoverErr error
+		recovery, recoverErr = RecoverStaleReservations(ctx, fixture.db, fixture.projectID, time.Millisecond, 1)
+		assert.NoError(collect, recoverErr)
+		assert.Equal(collect, RecoveryResult{Recovered: 1, DeadLettered: 0}, recovery)
+	}, 5*time.Second, 10*time.Millisecond)
 
 	pending := fixture.pendingEvaluations(t)
 	require.Len(t, pending, 1)
-	require.Equal(t, abandoned.ID, pending[0].ID)
+	retried := pending[0]
+	require.Equal(t, abandoned.ID, retried.ID)
 	require.Equal(t, StatePending, pending[0].State)
-	require.False(t, pending[0].ReservedOn.Valid, "the reset frees the budget slot")
-	require.Equal(t, int32(1), pending[0].Attempts, "attempts survive the reset")
+	require.Equal(t, abandoned.ReservedOn, retried.ReservedOn.Time, "recovery retains immutable spend history")
+	require.Equal(t, int32(1), retried.Attempts)
+	require.False(t, retried.ClaimToken.Valid)
+	require.Equal(t, staleReservationFailureClass, retried.LastError.String)
+	require.False(t, retried.FailedAt.Valid)
 
-	stillReserved := fixture.reservedEvaluations(t, seedBatchSize)
-	require.Len(t, stillReserved, 1)
-	require.Equal(t, reserved[0].ID, stillReserved[0].ID)
+	spend, err := repo.New(fixture.db).CountSkillEfficacyOrgSpendForProject(ctx, repo.CountSkillEfficacyOrgSpendForProjectParams{
+		ProjectID:  fixture.projectID,
+		ReservedOn: retried.ReservedOn,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), spend)
+
+	reservedAgain, _, err := Reserve(ctx, fixture.db, &stubFeatures{enabled: true}, fixture.projectID, PendingCursor{}, 1)
+	require.NoError(t, err)
+	require.Len(t, reservedAgain, 1, "a recovered row already owns its cap slot")
+	require.Equal(t, abandoned.ID, reservedAgain[0].ID)
+	require.Equal(t, abandoned.ReservedOn, reservedAgain[0].ReservedOn)
+	require.NotEqual(t, abandoned.ClaimToken, reservedAgain[0].ClaimToken)
+
+	spend, err = repo.New(fixture.db).CountSkillEfficacyOrgSpendForProject(ctx, repo.CountSkillEfficacyOrgSpendForProjectParams{
+		ProjectID:  fixture.projectID,
+		ReservedOn: retried.ReservedOn,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), spend, "re-reservation does not consume another slot")
+}
+
+func TestRecoverStaleReservationsDeadLettersAtTheAttemptCeiling(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	fixture := newEfficacyFixture(t, "skill_efficacy_recover_dead_letter")
+
+	skill := fixture.captureSkill(t, "efficacy-recover-dead-letter")
+	fixture.seedUnits(t, skill, "recover-dead-letter-session", 1, time.Now().UTC().Add(-6*time.Hour))
+	fixture.enqueueSeeded(t, 1)
+
+	reserved, _, err := Reserve(ctx, fixture.db, &stubFeatures{enabled: true}, fixture.projectID, PendingCursor{}, 1)
+	require.NoError(t, err)
+	require.Len(t, reserved, 1)
+
+	row := reserved[0]
+	for attempt := range MaxModelAttempts - 1 {
+		stored, attemptErr := repo.New(fixture.db).RecordSkillEfficacyEvaluationAttempt(ctx, repo.RecordSkillEfficacyEvaluationAttemptParams{
+			LastError:   conv.ToPGText("skill efficacy model failure"),
+			MaxAttempts: MaxModelAttempts,
+			ProjectID:   fixture.projectID,
+			ID:          row.ID,
+			ClaimToken:  row.ClaimToken,
+		})
+		require.NoError(t, attemptErr)
+		require.Equal(t, StateReserved, stored.State)
+		require.Equal(t, int32(attempt+1), stored.Attempts)
+		require.False(t, stored.FailedAt.Valid)
+	}
+
+	var recovery RecoveryResult
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		var recoverErr error
+		recovery, recoverErr = RecoverStaleReservations(ctx, fixture.db, fixture.projectID, time.Millisecond, 1)
+		assert.NoError(collect, recoverErr)
+		assert.Equal(collect, RecoveryResult{Recovered: 0, DeadLettered: 1}, recovery)
+	}, 5*time.Second, 10*time.Millisecond)
+
+	require.Empty(t, fixture.pendingEvaluations(t), "terminal work does not retry")
+	require.Empty(t, fixture.reservedEvaluations(t, 1), "dead-lettered work leaves reserved")
+}
+
+func TestRecoverStaleReservationsBoundsConcurrentBatches(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	fixture := newEfficacyFixture(t, "skill_efficacy_recover_concurrent")
+
+	skill := fixture.captureSkill(t, "efficacy-recover-concurrent")
+	fixture.seedUnits(t, skill, "recover-concurrent-session", 3, time.Now().UTC().Add(-6*time.Hour))
+	fixture.enqueueSeeded(t, 3)
+
+	reserved, _, err := Reserve(ctx, fixture.db, &stubFeatures{enabled: true}, fixture.projectID, PendingCursor{}, 3)
+	require.NoError(t, err)
+	require.Len(t, reserved, 3)
+
+	var first RecoveryResult
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		var recoverErr error
+		first, recoverErr = RecoverStaleReservations(ctx, fixture.db, fixture.projectID, time.Millisecond, 2)
+		assert.NoError(collect, recoverErr)
+		assert.Equal(collect, RecoveryResult{Recovered: 2, DeadLettered: 0}, first)
+	}, 5*time.Second, 10*time.Millisecond)
+	require.Len(t, fixture.pendingEvaluations(t), 2)
+	require.Len(t, fixture.reservedEvaluations(t, 3), 1, "one bounded row remains")
+
+	var group sync.WaitGroup
+	results := make([]RecoveryResult, 2)
+	errs := make([]error, 2)
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		for i := range results {
+			group.Go(func() {
+				results[i], errs[i] = RecoverStaleReservations(ctx, fixture.db, fixture.projectID, time.Millisecond, 2)
+			})
+		}
+		group.Wait()
+
+		assert.NoError(collect, errs[0])
+		assert.NoError(collect, errs[1])
+		assert.Equal(collect, int64(1), results[0].Recovered+results[1].Recovered)
+	}, 5*time.Second, 10*time.Millisecond)
+	require.Len(t, fixture.pendingEvaluations(t), 3)
+}
+
+func TestRecoverStaleReservationsIsProjectScoped(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	fixture := newEfficacyFixture(t, "skill_efficacy_recover_isolation")
+
+	newProject := func(name, organizationID string) efficacyFixture {
+		project, err := projectsrepo.New(fixture.db).CreateProject(ctx, projectsrepo.CreateProjectParams{
+			Name:           name,
+			Slug:           "efficacy-" + uuid.NewString()[:8],
+			OrganizationID: organizationID,
+		})
+		require.NoError(t, err)
+		return efficacyFixture{db: fixture.db, organizationID: organizationID, projectID: project.ID, skillVersionID: uuid.Nil}
+	}
+
+	otherOrganizationID := "skill-efficacy-recover-isolation-" + uuid.NewString()
+	_, err := orgrepo.New(fixture.db).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          otherOrganizationID,
+		Name:        otherOrganizationID,
+		Slug:        otherOrganizationID,
+		WorkosID:    pgtype.Text{String: "", Valid: false},
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+
+	projects := []efficacyFixture{
+		fixture,
+		newProject("skill-efficacy-recover-same-org", fixture.organizationID),
+		newProject("skill-efficacy-recover-other-org", otherOrganizationID),
+	}
+	for index := range projects {
+		skill := projects[index].captureSkill(t, "efficacy-recover-isolation-"+strconv.Itoa(index))
+		projects[index].seedUnits(t, skill, "recover-isolation-session-"+strconv.Itoa(index), 1, time.Now().UTC().Add(-6*time.Hour))
+		projects[index].enqueueSeeded(t, 1)
+		reserved, _, reserveErr := Reserve(ctx, projects[index].db, &stubFeatures{enabled: true}, projects[index].projectID, PendingCursor{}, 1)
+		require.NoError(t, reserveErr)
+		require.Len(t, reserved, 1)
+	}
+
+	var recovery RecoveryResult
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		var recoverErr error
+		recovery, recoverErr = RecoverStaleReservations(ctx, fixture.db, fixture.projectID, time.Millisecond, 1)
+		assert.NoError(collect, recoverErr)
+		assert.Equal(collect, RecoveryResult{Recovered: 1, DeadLettered: 0}, recovery)
+	}, 5*time.Second, 10*time.Millisecond)
+
+	require.Len(t, fixture.pendingEvaluations(t), 1)
+	require.Len(t, projects[1].reservedEvaluations(t, 1), 1, "same-organization project is isolated")
+	require.Len(t, projects[2].reservedEvaluations(t, 1), 1, "other organization is isolated")
 }
 
 func TestLoadReservedClaimsRecentFirstAndBumpsUpdatedAt(t *testing.T) {

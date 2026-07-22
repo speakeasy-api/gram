@@ -1683,9 +1683,11 @@ type SkillEfficacyEvaluation struct {
 	ObservedAt      pgtype.Timestamptz
 	State           string
 	ReservedOn      pgtype.Date
+	ClaimToken      uuid.NullUUID
 	Attempts        int32
 	LastError       pgtype.Text
 	ScoredAt        pgtype.Timestamptz
+	FailedAt        pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 }

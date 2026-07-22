@@ -4,19 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 )
 
 // SkillEfficacyPublisher judges a reserved batch and publishes its scores.
 // Satisfied by *efficacy.Publisher.
 type SkillEfficacyPublisher interface {
-	Publish(ctx context.Context, projectID uuid.UUID, ids []uuid.UUID, heartbeat func()) (efficacy.PublishResult, error)
+	Publish(ctx context.Context, projectID uuid.UUID, claimToken uuid.UUID, ids []uuid.UUID, heartbeat func()) (efficacy.PublishResult, error)
 }
 
 type EnqueueSkillEfficacyPageParams struct {
@@ -39,6 +42,7 @@ type ReserveSkillEfficacyEvaluationsParams struct {
 // worked through across passes instead of scanned from the head every time.
 type ReserveSkillEfficacyEvaluationsResult struct {
 	IDs        []uuid.UUID            `json:"ids"`
+	ClaimToken uuid.UUID              `json:"claim_token"`
 	NextCursor efficacy.PendingCursor `json:"next_cursor"`
 }
 
@@ -52,12 +56,14 @@ type LoadReservedSkillEfficacyEvaluationsParams struct {
 // are re-read inside the publication under the same project scope, so a batch
 // that goes stale between activities cannot be acted on from a snapshot.
 type SkillEfficacyBatch struct {
-	IDs []uuid.UUID `json:"ids"`
+	IDs        []uuid.UUID `json:"ids"`
+	ClaimToken uuid.UUID   `json:"claim_token"`
 }
 
 type PublishSkillEfficacyBatchParams struct {
-	ProjectID uuid.UUID   `json:"project_id"`
-	IDs       []uuid.UUID `json:"ids"`
+	ProjectID  uuid.UUID   `json:"project_id"`
+	ClaimToken uuid.UUID   `json:"claim_token"`
+	IDs        []uuid.UUID `json:"ids"`
 }
 
 type PublishSkillEfficacyBatchResult = efficacy.PublishResult
@@ -71,9 +77,7 @@ type ResetStaleSkillEfficacyReservationsParams struct {
 	ProjectID uuid.UUID `json:"project_id"`
 }
 
-type ResetStaleSkillEfficacyReservationsResult struct {
-	Reset int64 `json:"reset"`
-}
+type ResetStaleSkillEfficacyReservationsResult = efficacy.RecoveryResult
 
 type SignalSkillEfficacyCoordinatorParams struct {
 	ProjectID uuid.UUID `json:"project_id"`
@@ -85,19 +89,47 @@ type SignalSkillEfficacyCoordinatorParams struct {
 // the organization's budget lock, and the publication is guarded on the scores
 // already in ClickHouse.
 type SkillEfficacyScorer struct {
-	db        *pgxpool.Pool
-	features  efficacy.FeatureChecker
-	publisher SkillEfficacyPublisher
-	signaler  efficacy.Signaler
+	db           *pgxpool.Pool
+	features     efficacy.FeatureChecker
+	publisher    SkillEfficacyPublisher
+	signaler     efficacy.Signaler
+	recovered    metric.Int64Counter
+	deadLettered metric.Int64Counter
 }
 
+const (
+	meterSkillEfficacyReservationsRecovered    = "skill_efficacy.reservations.recovered"
+	meterSkillEfficacyReservationsDeadLettered = "skill_efficacy.reservations.dead_lettered"
+)
+
 func NewSkillEfficacyScorer(
+	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	features efficacy.FeatureChecker,
 	publisher SkillEfficacyPublisher,
 	signaler efficacy.Signaler,
 ) *SkillEfficacyScorer {
-	return &SkillEfficacyScorer{db: db, features: features, publisher: publisher, signaler: signaler}
+	meter := newMeter(meterProvider)
+	recovered, err := meter.Int64Counter(meterSkillEfficacyReservationsRecovered,
+		metric.WithDescription("Number of stale skill efficacy reservations returned to pending"),
+		metric.WithUnit("{evaluation}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(meterSkillEfficacyReservationsRecovered), attr.SlogError(err))
+	}
+	deadLettered, err := meter.Int64Counter(meterSkillEfficacyReservationsDeadLettered,
+		metric.WithDescription("Number of stale skill efficacy reservations dead-lettered"),
+		metric.WithUnit("{evaluation}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(meterSkillEfficacyReservationsDeadLettered), attr.SlogError(err))
+	}
+
+	return &SkillEfficacyScorer{
+		db: db, features: features, publisher: publisher, signaler: signaler,
+		recovered: recovered, deadLettered: deadLettered,
+	}
 }
 
 // EnqueueSkillEfficacyPage turns one bounded page of reconciled activations into
@@ -123,7 +155,7 @@ func (s *SkillEfficacyScorer) ReserveSkillEfficacyEvaluations(ctx context.Contex
 		return nil, fmt.Errorf("reserve skill efficacy evaluations: %w", err)
 	}
 
-	return &ReserveSkillEfficacyEvaluationsResult{IDs: evaluationIDs(evaluations), NextCursor: next}, nil
+	return &ReserveSkillEfficacyEvaluationsResult{IDs: evaluationIDs(evaluations), ClaimToken: evaluationClaimToken(evaluations), NextCursor: next}, nil
 }
 
 // LoadReservedSkillEfficacyEvaluations claims reserved evaluations whose owner
@@ -136,7 +168,7 @@ func (s *SkillEfficacyScorer) LoadReservedSkillEfficacyEvaluations(ctx context.C
 		return nil, fmt.Errorf("load reserved skill efficacy evaluations: %w", err)
 	}
 
-	return &SkillEfficacyBatch{IDs: evaluationIDs(evaluations)}, nil
+	return &SkillEfficacyBatch{IDs: evaluationIDs(evaluations), ClaimToken: evaluationClaimToken(evaluations)}, nil
 }
 
 // PublishSkillEfficacyBatch judges the batch and writes its scores. This is the
@@ -161,7 +193,7 @@ func (s *SkillEfficacyScorer) PublishSkillEfficacyBatch(ctx context.Context, par
 	if activity.IsActivity(ctx) {
 		heartbeat = func() { activity.RecordHeartbeat(ctx) }
 	}
-	result, err := s.publisher.Publish(ctx, params.ProjectID, params.IDs, heartbeat)
+	result, err := s.publisher.Publish(ctx, params.ProjectID, params.ClaimToken, params.IDs, heartbeat)
 	switch {
 	case err != nil && errors.Is(err, efficacy.ErrRetryable):
 		return nil, fmt.Errorf("publish skill efficacy batch: %w", err)
@@ -187,17 +219,21 @@ func (s *SkillEfficacyScorer) ListSkillEfficacyProjects(ctx context.Context, par
 	return projects, nil
 }
 
-// ResetStaleSkillEfficacyReservations returns a project's abandoned reservations
-// to the queue, re-opening the budget slot each one held. Staleness is the
-// domain's own threshold, orders of magnitude above the publication bound, so a
-// reset can only reach a row whose owner is genuinely gone.
+// ResetStaleSkillEfficacyReservations recovers a bounded batch of abandoned
+// reservations without releasing their spend slots.
 func (s *SkillEfficacyScorer) ResetStaleSkillEfficacyReservations(ctx context.Context, params ResetStaleSkillEfficacyReservationsParams) (*ResetStaleSkillEfficacyReservationsResult, error) {
-	reset, err := efficacy.ResetStaleReservations(ctx, s.db, params.ProjectID, efficacy.StaleReservationAfter)
+	result, err := efficacy.RecoverStaleReservations(ctx, s.db, params.ProjectID, efficacy.StaleReservationAfter, efficacy.MaxRecoveryBatch)
 	if err != nil {
-		return nil, fmt.Errorf("reset stale skill efficacy reservations: %w", err)
+		return nil, fmt.Errorf("recover stale skill efficacy reservations: %w", err)
+	}
+	if result.Recovered > 0 && s.recovered != nil {
+		s.recovered.Add(ctx, result.Recovered)
+	}
+	if result.DeadLettered > 0 && s.deadLettered != nil {
+		s.deadLettered.Add(ctx, result.DeadLettered)
 	}
 
-	return &ResetStaleSkillEfficacyReservationsResult{Reset: reset}, nil
+	return &ResetStaleSkillEfficacyReservationsResult{Recovered: result.Recovered, DeadLettered: result.DeadLettered}, nil
 }
 
 // SignalSkillEfficacyCoordinator wakes the project's coordinator, starting it if
@@ -219,4 +255,12 @@ func evaluationIDs(evaluations []efficacy.Evaluation) []uuid.UUID {
 	}
 
 	return ids
+}
+
+func evaluationClaimToken(evaluations []efficacy.Evaluation) uuid.UUID {
+	if len(evaluations) == 0 {
+		return uuid.Nil
+	}
+
+	return evaluations[0].ClaimToken
 }

@@ -185,8 +185,8 @@ func SkillEfficacyCoordinatorWorkflow(ctx workflow.Context, params SkillEfficacy
 		// walked to the end, which is what starts the walk over.
 		params.PendingCursor = reserved.NextCursor
 
-		ids := reserved.IDs
-		if len(ids) == 0 {
+		batch := activities.SkillEfficacyBatch{IDs: reserved.IDs, ClaimToken: reserved.ClaimToken}
+		if len(batch.IDs) == 0 {
 			// Claim any reservation an earlier owner never published before deciding
 			// whether this empty result exhausted the queue or merely advanced past
 			// capped candidates.
@@ -197,10 +197,10 @@ func SkillEfficacyCoordinatorWorkflow(ctx workflow.Context, params SkillEfficacy
 			}).Get(ctx, &claimed); err != nil {
 				return fmt.Errorf("load reserved skill efficacy evaluations: %w", err)
 			}
-			ids = claimed.IDs
+			batch = claimed
 		}
 
-		if len(ids) == 0 {
+		if len(batch.IDs) == 0 {
 			if reserved.NextCursor != (efficacy.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil}) && reserved.NextCursor != pendingCursor {
 				continue
 			}
@@ -210,8 +210,9 @@ func SkillEfficacyCoordinatorWorkflow(ctx workflow.Context, params SkillEfficacy
 
 		var published activities.PublishSkillEfficacyBatchResult
 		if err := workflow.ExecuteActivity(publishCtx, a.PublishSkillEfficacyBatch, activities.PublishSkillEfficacyBatchParams{
-			ProjectID: params.ProjectID,
-			IDs:       ids,
+			ProjectID:  params.ProjectID,
+			ClaimToken: batch.ClaimToken,
+			IDs:        batch.IDs,
 		}).Get(ctx, &published); err != nil {
 			return fmt.Errorf("publish skill efficacy batch: %w", err)
 		}

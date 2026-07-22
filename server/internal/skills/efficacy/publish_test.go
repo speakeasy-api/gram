@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -113,15 +112,15 @@ func (c crashingSink) InsertSkillEfficacyScores(ctx context.Context, rows []tele
 	return nil
 }
 
-// stealingJudge answers as its delegate does, and first returns the named
-// evaluation to pending — which is what a stale-reservation reset does to a row
-// this pass is still working through.
+// stealingJudge answers as its delegate does, and first recovers and re-reserves
+// the named evaluation under a new owner.
 type stealingJudge struct {
 	JudgeClient
-	db           *pgxpool.Pool
-	projectID    uuid.UUID
-	evaluationID uuid.UUID
-	surface      string
+	db            *pgxpool.Pool
+	projectID     uuid.UUID
+	evaluationID  uuid.UUID
+	newClaimToken uuid.UUID
+	surface       string
 }
 
 func (s stealingJudge) Judge(ctx context.Context, in JudgeInput) (JudgeResult, error) {
@@ -133,15 +132,25 @@ func (s stealingJudge) Judge(ctx context.Context, in JudgeInput) (JudgeResult, e
 		return result, nil
 	}
 
-	reset, err := testrepo.New(s.db).ResetSkillEfficacyReservationFixture(ctx, testrepo.ResetSkillEfficacyReservationFixtureParams{
-		ProjectID: s.projectID,
-		ID:        s.evaluationID,
+	recovered, err := RecoverStaleReservations(ctx, s.db, s.projectID, time.Microsecond, 1)
+	if err != nil {
+		return JudgeResult{}, fmt.Errorf("stealing judge recover: %w", err)
+	}
+	if recovered != (RecoveryResult{Recovered: 1, DeadLettered: 0}) {
+		return JudgeResult{}, fmt.Errorf("stealing judge recover: got %+v", recovered)
+	}
+
+	reserved, err := repo.New(s.db).ReserveSkillEfficacyEvaluations(ctx, repo.ReserveSkillEfficacyEvaluationsParams{
+		ReservedOn: today(),
+		ClaimToken: s.newClaimToken,
+		ProjectID:  s.projectID,
+		Ids:        []uuid.UUID{s.evaluationID},
 	})
 	if err != nil {
-		return JudgeResult{}, fmt.Errorf("stealing judge reset: %w", err)
+		return JudgeResult{}, fmt.Errorf("stealing judge reserve: %w", err)
 	}
-	if reset != 1 {
-		return JudgeResult{}, fmt.Errorf("stealing judge reset: reset %d evaluations", reset)
+	if reserved != 1 {
+		return JudgeResult{}, fmt.Errorf("stealing judge reserve: reserved %d evaluations", reserved)
 	}
 
 	result, err := s.JudgeClient.Judge(ctx, in)
@@ -229,9 +238,10 @@ func (f *flakyChats) ListChatTranscriptMessagesPage(ctx context.Context, arg cha
 }
 
 type publishHarness struct {
-	fixture efficacyFixture
-	scores  *telemetryrepo.Queries
-	judge   *stubJudge
+	fixture    efficacyFixture
+	scores     *telemetryrepo.Queries
+	judge      *stubJudge
+	claimToken uuid.UUID
 }
 
 func newPublishHarness(t *testing.T, name string) publishHarness {
@@ -241,7 +251,7 @@ func newPublishHarness(t *testing.T, name string) publishHarness {
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	return publishHarness{fixture: fixture, scores: telemetryrepo.New(conn), judge: newStubJudge()}
+	return publishHarness{fixture: fixture, scores: telemetryrepo.New(conn), judge: newStubJudge(), claimToken: uuid.New()}
 }
 
 func (h publishHarness) publisher(t *testing.T, scores ScoreSink) *Publisher {
@@ -268,14 +278,14 @@ func daysAgo(days int) pgtype.Date {
 // reserve enqueues one quiet session's activation and takes it through the
 // reservation transition, which is what publication consumes. provider picks the
 // surface, which is how a test tells the stub judge one session from another.
-func (h publishHarness) reserve(t *testing.T, sessionID string, provider string) repo.SkillEfficacyEvaluation {
+func (h publishHarness) reserve(t *testing.T, sessionID string, provider string) Evaluation {
 	t.Helper()
 
 	return h.reserveOn(t, sessionID, provider, today())
 }
 
 // reserveOn is reserve with an explicit reservation day.
-func (h publishHarness) reserveOn(t *testing.T, sessionID string, provider string, reservedOn pgtype.Date) repo.SkillEfficacyEvaluation {
+func (h publishHarness) reserveOn(t *testing.T, sessionID string, provider string, reservedOn pgtype.Date) Evaluation {
 	t.Helper()
 	ctx := t.Context()
 
@@ -295,20 +305,22 @@ func (h publishHarness) reserveOn(t *testing.T, sessionID string, provider strin
 
 	reserved, err := repo.New(h.fixture.db).ReserveSkillEfficacyEvaluations(ctx, repo.ReserveSkillEfficacyEvaluationsParams{
 		ReservedOn: reservedOn,
+		ClaimToken: h.claimToken,
 		ProjectID:  h.fixture.projectID,
 		Ids:        []uuid.UUID{target.ID},
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), reserved)
 
-	return target
+	target.ClaimToken = uuid.NullUUID{UUID: h.claimToken, Valid: true}
+	return NewEvaluation(target)
 }
 
 // reserveSharedChat reserves the two evaluations one session produces when it
 // is seen on both surfaces: distinct scoring units bound to the same chat, which
 // is the batch shape the per-chat transcript cache exists for. A UUID session id
 // resolves straight to the chat id, which is what the assistant surface requires.
-func (h publishHarness) reserveSharedChat(t *testing.T, sessionID string) (repo.SkillEfficacyEvaluation, repo.SkillEfficacyEvaluation) {
+func (h publishHarness) reserveSharedChat(t *testing.T, sessionID string) (Evaluation, Evaluation) {
 	t.Helper()
 	ctx := t.Context()
 
@@ -330,21 +342,30 @@ func (h publishHarness) reserveSharedChat(t *testing.T, sessionID string) (repo.
 
 	reserved, err := repo.New(h.fixture.db).ReserveSkillEfficacyEvaluations(ctx, repo.ReserveSkillEfficacyEvaluationsParams{
 		ReservedOn: today(),
+		ClaimToken: h.claimToken,
 		ProjectID:  h.fixture.projectID,
 		Ids:        ids,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), reserved)
 
-	return surfaces[SurfaceDev], surfaces[SurfaceAssistant]
+	dev := surfaces[SurfaceDev]
+	dev.ClaimToken = uuid.NullUUID{UUID: h.claimToken, Valid: true}
+	assistant := surfaces[SurfaceAssistant]
+	assistant.ClaimToken = uuid.NullUUID{UUID: h.claimToken, Valid: true}
+
+	return NewEvaluation(dev), NewEvaluation(assistant)
 }
 
-func (h publishHarness) reservedByID(t *testing.T, id uuid.UUID) (repo.SkillEfficacyEvaluation, bool) {
+func (h publishHarness) reservedByID(t *testing.T, id uuid.UUID, claimToken uuid.UUID) (repo.SkillEfficacyEvaluation, bool) {
 	t.Helper()
 
 	rows, err := repo.New(h.fixture.db).LoadReservedSkillEfficacyEvaluations(t.Context(), repo.LoadReservedSkillEfficacyEvaluationsParams{
-		ProjectID: h.fixture.projectID,
-		BatchSize: 50,
+		ClaimToken:    claimToken,
+		ProjectID:     h.fixture.projectID,
+		ClaimLease:    pgtype.Interval{Microseconds: 0, Days: 0, Months: 0, Valid: true},
+		RecoveryAfter: pgtype.Interval{Microseconds: StaleReservationAfter.Microseconds(), Days: 0, Months: 0, Valid: true},
+		BatchSize:     50,
 	})
 	require.NoError(t, err)
 
@@ -357,8 +378,19 @@ func (h publishHarness) reservedByID(t *testing.T, id uuid.UUID) (repo.SkillEffi
 	return repo.SkillEfficacyEvaluation{}, false
 }
 
-// spend counts the rows still holding a budget slot (reserved or scored) today,
-// which is how a failed evaluation is told apart from a scored one.
+func (h publishHarness) failedAt(t *testing.T, id uuid.UUID) pgtype.Timestamptz {
+	t.Helper()
+
+	state, err := repo.New(h.fixture.db).GetSkillEfficacyEvaluationState(t.Context(), repo.GetSkillEfficacyEvaluationStateParams{
+		ProjectID: h.fixture.projectID,
+		ID:        id,
+	})
+	require.NoError(t, err)
+
+	return state.FailedAt
+}
+
+// spend counts every row whose immutable reservation day holds a budget slot.
 func (h publishHarness) spend(t *testing.T) int64 {
 	t.Helper()
 
@@ -375,7 +407,7 @@ func (h publishHarness) spend(t *testing.T) int64 {
 // so a duplicated publication shows up as a repeated id rather than as a single
 // one. The guard read is keyed the way publication keys it: the evaluations'
 // skill and skill version ids alongside their score ids.
-func (h publishHarness) publishedIDs(t *testing.T, evaluations ...repo.SkillEfficacyEvaluation) []string {
+func (h publishHarness) publishedIDs(t *testing.T, evaluations ...Evaluation) []string {
 	t.Helper()
 
 	wanted := make([]string, 0, len(evaluations))
@@ -410,7 +442,7 @@ func TestPublishScoresReservedEvaluationOnce(t *testing.T) {
 	h.judge.results[SurfaceDev] = okVerdict()
 
 	publisher := h.publisher(t, h.scores)
-	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 	require.Equal(t, 1, h.judge.calls[SurfaceDev])
@@ -421,13 +453,13 @@ func TestPublishScoresReservedEvaluationOnce(t *testing.T) {
 	require.Equal(t, urn.NewSkill(evaluation.SkillID).String(), h.judge.inputs[0].SkillURN)
 
 	// Scored: no longer reserved, no longer pending, still holding its slot.
-	_, stillReserved := h.reservedByID(t, evaluation.ID)
+	_, stillReserved := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 	require.False(t, stillReserved)
 	require.Empty(t, h.fixture.pendingEvaluations(t))
 	require.Equal(t, int64(1), h.spend(t))
 
 	// A replayed batch resolves nothing, because the row left the reserved state.
-	replay, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	replay, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 0, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0}, replay)
 	require.Equal(t, 1, h.judge.calls[SurfaceDev], "a replay must not pay for inference again")
@@ -454,19 +486,20 @@ func TestPublishSkipsEvaluationWhoseChatWasDeleted(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, deleted.Deleted)
 
-	result, err := h.publisher(t, h.scores).Publish(ctx, h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := h.publisher(t, h.scores).Publish(ctx, h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 0, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 	require.Zero(t, h.judge.calls[SurfaceDev], "a deleted chat is never judged")
 	require.Empty(t, h.publishedIDs(t, evaluation), "a deleted chat is never scored")
 
-	_, stillReserved := h.reservedByID(t, evaluation.ID)
+	_, stillReserved := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 	require.True(t, stillReserved, "publication invents no terminal state for the row")
 
-	reset, err := ResetStaleReservations(ctx, h.fixture.db, h.fixture.projectID, time.Microsecond)
+	recovered, err := RecoverStaleReservations(ctx, h.fixture.db, h.fixture.projectID, time.Microsecond, 1)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), reset)
+	require.Equal(t, RecoveryResult{Recovered: 1, DeadLettered: 0}, recovered)
 	require.Empty(t, h.fixture.pendingEvaluations(t), "the row returns to pending and stays ineligible")
+	require.Equal(t, int64(1), h.spend(t), "recovery retains the row's spend reservation")
 }
 
 func TestPublishRetryAfterFailureBetweenInsertAndMark(t *testing.T) {
@@ -501,13 +534,13 @@ func TestPublishRetryAfterFailureBetweenInsertAndMark(t *testing.T) {
 		JudgePromptVersion: committed.PromptVersion,
 	}}))
 
-	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 1, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 	require.Zero(t, h.judge.calls[SurfaceDev], "the guard must run before the judge")
 	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation), "the retry inserts nothing")
 
-	_, stillReserved := h.reservedByID(t, evaluation.ID)
+	_, stillReserved := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 	require.False(t, stillReserved)
 	require.Equal(t, int64(1), h.spend(t))
 }
@@ -525,30 +558,30 @@ func TestPublishRetryFindsScoreOfReservationOlderThanGuardSlack(t *testing.T) {
 	crashCtx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	crashed, err := h.publisher(t, crashingSink{ScoreSink: h.scores, cancel: cancel}).Publish(crashCtx, h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	crashed, err := h.publisher(t, crashingSink{ScoreSink: h.scores, cancel: cancel}).Publish(crashCtx, h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.ErrorIs(t, err, ErrRetryable)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 1}, crashed)
 	require.Equal(t, 1, h.judge.calls[SurfaceDev])
 	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
 
-	row, ok := h.reservedByID(t, evaluation.ID)
+	row, ok := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 	require.True(t, ok, "the mark never ran, so the row is still reserved")
 	require.Equal(t, StateReserved, row.State)
 
 	// The retry's guard has to see the committed score even though it was stamped
 	// long after the reservation day.
-	retry, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	retry, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 1, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, retry)
 	require.Equal(t, 1, h.judge.calls[SurfaceDev], "the retry must not pay for inference again")
 	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation), "the retry inserts nothing")
 
-	_, stillReserved := h.reservedByID(t, evaluation.ID)
+	_, stillReserved := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 	require.False(t, stillReserved)
 	require.Empty(t, h.fixture.pendingEvaluations(t))
 }
 
-func TestPublishRetryFindsScoreAfterStaleResetMovedReservationDay(t *testing.T) {
+func TestPublishRetryFindsScoreAfterRecoveryRetainsReservationDay(t *testing.T) {
 	t.Parallel()
 	h := newPublishHarness(t, "skill_efficacy_publish_stale_reset")
 	ctx := t.Context()
@@ -561,39 +594,44 @@ func TestPublishRetryFindsScoreAfterStaleResetMovedReservationDay(t *testing.T) 
 	crashCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	crashed, err := h.publisher(t, crashingSink{ScoreSink: h.scores, cancel: cancel}).Publish(crashCtx, h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	crashed, err := h.publisher(t, crashingSink{ScoreSink: h.scores, cancel: cancel}).Publish(crashCtx, h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.ErrorIs(t, err, ErrRetryable)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 1}, crashed)
 	require.Equal(t, 1, h.judge.calls[SurfaceDev])
 
-	// The reservation then goes stale and returns to the queue.
-	reset, err := queries.ResetStaleSkillEfficacyReservations(ctx, repo.ResetStaleSkillEfficacyReservationsParams{
-		ProjectID:  h.fixture.projectID,
-		StaleAfter: pgtype.Interval{Microseconds: 0, Days: 0, Months: 0, Valid: true},
-	})
+	// The reservation then goes stale and returns to the queue. Recovery charges
+	// the abandoned attempt but retains the original spend day.
+	recovered, err := RecoverStaleReservations(ctx, h.fixture.db, h.fixture.projectID, time.Microsecond, 1)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), reset)
+	require.Equal(t, RecoveryResult{Recovered: 1, DeadLettered: 0}, recovered)
+	require.Equal(t, int64(1), h.spend(t))
 
-	// A later pass re-reserves it against the UTC day it is running on, which is
-	// past the day the committed score was stamped on. daysAgo(-1) stands in for
-	// that later day without the test having to wait for midnight.
+	// A later pass re-reserves it on a later UTC day. reserved_on remains the day
+	// the immutable spend was first taken.
+	newClaimToken := uuid.New()
 	reserved, err := queries.ReserveSkillEfficacyEvaluations(ctx, repo.ReserveSkillEfficacyEvaluationsParams{
 		ReservedOn: daysAgo(-1),
+		ClaimToken: newClaimToken,
 		ProjectID:  h.fixture.projectID,
 		Ids:        []uuid.UUID{evaluation.ID},
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), reserved)
+	row, ok := h.reservedByID(t, evaluation.ID, newClaimToken)
+	require.True(t, ok)
+	require.Equal(t, today().Time, row.ReservedOn.Time)
+	require.Equal(t, int32(1), row.Attempts)
+	require.Equal(t, newClaimToken, row.ClaimToken.UUID)
 
-	// A window anchored on reserved_on now starts after the committed score and
-	// would pay for inference again; the evaluation's created_at does not move.
-	retry, err := h.publisher(t, h.scores).Publish(ctx, h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	// The evaluation's created_at guard finds the committed score and the new
+	// owner completes the row without paying for inference again.
+	retry, err := h.publisher(t, h.scores).Publish(ctx, h.fixture.projectID, newClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 1, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, retry)
 	require.Equal(t, 1, h.judge.calls[SurfaceDev], "the guard must find the score the crashed pass wrote")
 	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation), "the retry inserts no duplicate")
 
-	_, stillReserved := h.reservedByID(t, evaluation.ID)
+	_, stillReserved := h.reservedByID(t, evaluation.ID, newClaimToken)
 	require.False(t, stillReserved)
 	require.Empty(t, h.fixture.pendingEvaluations(t))
 }
@@ -610,35 +648,36 @@ func TestPublishModelFailuresChargeAttemptsAndBatchContinues(t *testing.T) {
 	publisher := h.publisher(t, h.scores)
 	batch := []uuid.UUID{failing.ID, healthy.ID}
 
-	first, err := publisher.Publish(t.Context(), h.fixture.projectID, batch, nil)
+	first, err := publisher.Publish(t.Context(), h.fixture.projectID, failing.ClaimToken, batch, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 2, AlreadyPublished: 0, Scored: 1, ModelFailures: 1, Failed: 0, Retryable: 0}, first)
 	require.Equal(t, []string{healthy.ID.String()}, h.publishedIDs(t, failing, healthy))
 
 	// Non-terminal: still reserved, so its budget slot stays spent and no second
 	// reservation can re-spend the unit.
-	row, ok := h.reservedByID(t, failing.ID)
+	row, ok := h.reservedByID(t, failing.ID, failing.ClaimToken)
 	require.True(t, ok)
 	require.Equal(t, StateReserved, row.State)
 	require.Equal(t, int32(1), row.Attempts)
 
-	second, err := publisher.Publish(t.Context(), h.fixture.projectID, batch, nil)
+	second, err := publisher.Publish(t.Context(), h.fixture.projectID, failing.ClaimToken, batch, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 1, Failed: 0, Retryable: 0}, second)
-	row, ok = h.reservedByID(t, failing.ID)
+	row, ok = h.reservedByID(t, failing.ID, failing.ClaimToken)
 	require.True(t, ok)
 	require.Equal(t, StateReserved, row.State)
 	require.Equal(t, int32(2), row.Attempts)
 
-	third, err := publisher.Publish(t.Context(), h.fixture.projectID, batch, nil)
+	third, err := publisher.Publish(t.Context(), h.fixture.projectID, failing.ClaimToken, batch, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 1, Retryable: 0}, third)
 
-	_, ok = h.reservedByID(t, failing.ID)
+	_, ok = h.reservedByID(t, failing.ID, failing.ClaimToken)
 	require.False(t, ok, "the third model failure is terminal")
 	require.Empty(t, h.fixture.pendingEvaluations(t), "a failed evaluation never returns to pending")
 	require.Equal(t, []string{healthy.ID.String()}, h.publishedIDs(t, failing, healthy), "a failed judge writes no score")
-	require.Equal(t, int64(1), h.spend(t), "the failed row released its budget slot")
+	require.Equal(t, int64(2), h.spend(t), "terminal failure retains both spend reservations")
+	require.True(t, h.failedAt(t, failing.ID).Valid)
 	require.Equal(t, 3, h.judge.calls[SurfaceDev])
 	require.Equal(t, 1, h.judge.calls[SurfaceAssistant])
 }
@@ -650,11 +689,11 @@ func TestPublishRateLimitLeavesEvaluationUntouched(t *testing.T) {
 	evaluation := h.reserve(t, "claude-session-ratelimit", "claude-code")
 	h.judge.errs[SurfaceDev] = fmt.Errorf("skill efficacy judge call: %w", ErrRetryable)
 
-	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.ErrorIs(t, err, ErrRetryable)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 1}, result)
 
-	row, ok := h.reservedByID(t, evaluation.ID)
+	row, ok := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 	require.True(t, ok)
 	require.Equal(t, StateReserved, row.State)
 	require.Zero(t, row.Attempts, "infrastructure failures charge no attempt")
@@ -676,29 +715,31 @@ func TestPublishClickHouseFailureRetriesUnderABoundedAttemptBudget(t *testing.T)
 	batch := []uuid.UUID{evaluation.ID}
 
 	for attempt := 1; attempt < MaxModelAttempts; attempt++ {
-		result, err := publisher.Publish(t.Context(), h.fixture.projectID, batch, nil)
+		result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, batch, nil)
 		require.ErrorIs(t, err, ErrRetryable)
 		require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 1}, result)
 
-		row, ok := h.reservedByID(t, evaluation.ID)
+		row, ok := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 		require.True(t, ok)
 		require.Equal(t, StateReserved, row.State, "a sink failure is still infrastructure, so the row stays claimable")
 		require.Equal(t, int32(attempt), row.Attempts)
 	}
 
-	final, err := publisher.Publish(t.Context(), h.fixture.projectID, batch, nil)
+	final, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, batch, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 1, Retryable: 0}, final)
 
-	_, ok := h.reservedByID(t, evaluation.ID)
+	_, ok := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 	require.False(t, ok, "the attempt ceiling terminates the row rather than paying for it again")
 	require.Empty(t, h.fixture.pendingEvaluations(t), "a failed evaluation never returns to pending")
 	require.Empty(t, h.publishedIDs(t, evaluation))
+	require.Equal(t, int64(1), h.spend(t), "terminal failure retains its spend reservation")
+	require.True(t, h.failedAt(t, evaluation.ID).Valid)
 	require.Equal(t, MaxModelAttempts, h.judge.calls[SurfaceDev], "a broken sink cannot buy the same inference forever")
 
 	// A row the ceiling terminated is out of the batch, so a later pass judges
 	// nothing at all for it.
-	after, err := publisher.Publish(t.Context(), h.fixture.projectID, batch, nil)
+	after, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, batch, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 0, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0}, after)
 	require.Equal(t, MaxModelAttempts, h.judge.calls[SurfaceDev])
@@ -714,7 +755,7 @@ func TestPublishClickHouseConstraintFailureTerminatesOnlyInvalidRow(t *testing.T
 	h.judge.results[SurfaceAssistant] = okVerdict()
 
 	result, err := h.publisher(t, invalidDevSink{ScoreSink: h.scores}).Publish(
-		t.Context(), h.fixture.projectID, []uuid.UUID{invalid.ID, healthy.ID}, nil,
+		t.Context(), h.fixture.projectID, invalid.ClaimToken, []uuid.UUID{invalid.ID, healthy.ID}, nil,
 	)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 2, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 1, Retryable: 0}, result)
@@ -722,8 +763,10 @@ func TestPublishClickHouseConstraintFailureTerminatesOnlyInvalidRow(t *testing.T
 	require.Equal(t, 1, h.judge.calls[SurfaceAssistant])
 	require.Equal(t, []string{healthy.ID.String()}, h.publishedIDs(t, invalid, healthy))
 
-	_, stillReserved := h.reservedByID(t, invalid.ID)
+	_, stillReserved := h.reservedByID(t, invalid.ID, invalid.ClaimToken)
 	require.False(t, stillReserved)
+	require.Equal(t, int64(2), h.spend(t), "terminal validation failure retains both spend reservations")
+	require.True(t, h.failedAt(t, invalid.ID).Valid)
 }
 
 func TestPublishNormalizesJudgeClientOutputBeforeTheSink(t *testing.T) {
@@ -745,45 +788,66 @@ func TestPublishNormalizesJudgeClientOutputBeforeTheSink(t *testing.T) {
 		PromptVersion: JudgePromptVersion,
 	}
 
-	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
 }
 
-// The attempt charge writes through a :one query, and a row another owner has
-// already moved out of reserved returns nothing. That is an outcome, not an
-// error: failing it here would drop the whole batch over a row this pass no
-// longer owns.
-func TestPublishChargingAnEvaluationThatLeftReservedDoesNotFailTheBatch(t *testing.T) {
+func TestPublishClaimsLegacyTokenlessReservation(t *testing.T) {
+	t.Parallel()
+	h := newPublishHarness(t, "skill_efficacy_publish_legacy_claim")
+
+	evaluation := h.reserve(t, "claude-session-legacy-claim", "claude-code")
+	cleared, err := repo.New(h.fixture.db).ClearSkillEfficacyClaimTokenFixture(t.Context(), repo.ClearSkillEfficacyClaimTokenFixtureParams{
+		ProjectID: h.fixture.projectID,
+		ID:        evaluation.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), cleared)
+	h.judge.results[SurfaceDev] = okVerdict()
+
+	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, uuid.Nil, []uuid.UUID{evaluation.ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
+	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
+}
+
+// A recovered row can be re-reserved while its old publisher is still judging.
+// The old claim token must not publish or otherwise mutate the new owner's row.
+func TestPublishStaleClaimCannotPublishNewlyOwnedReservation(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	h := newPublishHarness(t, "skill_efficacy_publish_charge_unreserved")
 
 	stolen := h.reserve(t, "claude-session-charge-unreserved", "claude-code")
 	healthy := h.reserve(t, uuid.NewString(), "assistants")
-	h.judge.errs[SurfaceDev] = fmt.Errorf("unparseable judge output: %w", ErrModelFailure)
+	h.judge.results[SurfaceDev] = okVerdict()
 	h.judge.results[SurfaceAssistant] = okVerdict()
 
 	publisher := h.publisher(t, h.scores)
+	newClaimToken := uuid.New()
 	publisher.judge = stealingJudge{
-		JudgeClient:  publisher.judge,
-		db:           h.fixture.db,
-		projectID:    h.fixture.projectID,
-		evaluationID: stolen.ID,
-		surface:      SurfaceDev,
+		JudgeClient:   publisher.judge,
+		db:            h.fixture.db,
+		projectID:     h.fixture.projectID,
+		evaluationID:  stolen.ID,
+		newClaimToken: newClaimToken,
+		surface:       SurfaceDev,
 	}
 
-	result, err := publisher.Publish(ctx, h.fixture.projectID, []uuid.UUID{stolen.ID, healthy.ID}, nil)
+	result, err := publisher.Publish(ctx, h.fixture.projectID, stolen.ClaimToken, []uuid.UUID{stolen.ID, healthy.ID}, nil)
 	require.NoError(t, err)
-	require.Equal(t, PublishResult{Loaded: 2, AlreadyPublished: 0, Scored: 1, ModelFailures: 1, Failed: 0, Retryable: 0}, result,
-		"the charge is a no-op and the rest of the batch still runs")
+	require.Equal(t, PublishResult{Loaded: 2, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result,
+		"the stale score write is a no-op and the rest of the batch still runs")
 	require.Equal(t, []string{healthy.ID.String()}, h.publishedIDs(t, stolen, healthy))
 
-	pending := h.fixture.pendingEvaluations(t)
-	require.Len(t, pending, 1)
-	require.Equal(t, stolen.ID, pending[0].ID)
-	require.Zero(t, pending[0].Attempts, "the owner that took the row is the one that accounts for it")
+	row, ok := h.reservedByID(t, stolen.ID, newClaimToken)
+	require.True(t, ok)
+	require.Equal(t, StateReserved, row.State)
+	require.Equal(t, int32(1), row.Attempts, "only recovery charges the abandoned owner")
+	require.Equal(t, newClaimToken, row.ClaimToken.UUID)
+	require.False(t, row.FailedAt.Valid)
 }
 
 func TestPublishReadsSharedChatTranscriptOncePerPass(t *testing.T) {
@@ -798,7 +862,7 @@ func TestPublishReadsSharedChatTranscriptOncePerPass(t *testing.T) {
 	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, counts: map[uuid.UUID]int{}, rows: 0}
 	publisher.chats = chats
 
-	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{dev.ID, assistant.ID}, nil)
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, dev.ClaimToken, []uuid.UUID{dev.ID, assistant.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 2, AlreadyPublished: 0, Scored: 2, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 
@@ -823,7 +887,7 @@ func TestPublishDoesNotCacheAFailedTranscriptRead(t *testing.T) {
 	chats := &flakyChats{TranscriptSource: publisher.chats, loads: 0}
 	publisher.chats = chats
 
-	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{dev.ID, assistant.ID}, nil)
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, dev.ClaimToken, []uuid.UUID{dev.ID, assistant.ID}, nil)
 	require.ErrorIs(t, err, ErrRetryable)
 	require.Equal(t, PublishResult{Loaded: 2, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 1}, result)
 	require.Equal(t, 2, chats.loads, "the second evaluation re-reads rather than inheriting the failure")
@@ -837,7 +901,7 @@ func TestPublishDoesNotCacheAFailedTranscriptRead(t *testing.T) {
 	if published[0] == dev.ID.String() {
 		unread = assistant.ID
 	}
-	row, ok := h.reservedByID(t, unread)
+	row, ok := h.reservedByID(t, unread, dev.ClaimToken)
 	require.True(t, ok)
 	require.Equal(t, StateReserved, row.State)
 	require.Zero(t, row.Attempts, "a failed transcript read charges no attempt")
@@ -856,11 +920,11 @@ func TestPublishTimesOutAHungJudge(t *testing.T) {
 	publisher.evaluationTimeout = 100 * time.Millisecond
 	publisher.judge = blockingJudge{}
 
-	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.ErrorIs(t, err, ErrRetryable, "a hang is infrastructure, so the same rows are retried")
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 1}, result)
 
-	row, ok := h.reservedByID(t, evaluation.ID)
+	row, ok := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 	require.True(t, ok)
 	require.Equal(t, StateReserved, row.State)
 	require.Zero(t, row.Attempts, "a hang charges no attempt")
@@ -878,12 +942,12 @@ func TestPublishTimesOutAHungSink(t *testing.T) {
 	publisher := h.publisher(t, blockingSink{ScoreSink: h.scores})
 	publisher.evaluationTimeout = 100 * time.Millisecond
 
-	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.ErrorIs(t, err, ErrRetryable)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 1}, result)
 	require.Equal(t, 1, h.judge.calls[SurfaceDev])
 
-	row, ok := h.reservedByID(t, evaluation.ID)
+	row, ok := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 	require.True(t, ok)
 	require.Equal(t, StateReserved, row.State)
 	require.Zero(t, row.Attempts)
@@ -905,11 +969,11 @@ func TestPublishModelFailureRecordsClassNotProviderDetail(t *testing.T) {
 	var logs bytes.Buffer
 	publisher := NewPublisher(slog.New(slog.NewJSONHandler(&logs, nil)), testenv.NewTracerProvider(t), h.fixture.db, h.scores, h.judge)
 
-	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 0, ModelFailures: 1, Failed: 0, Retryable: 0}, result)
 
-	row, ok := h.reservedByID(t, evaluation.ID)
+	row, ok := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 	require.True(t, ok)
 	require.Equal(t, int32(1), row.Attempts)
 	require.Equal(t, modelFailureClass, row.LastError.String)
@@ -1021,7 +1085,7 @@ func TestPublishPagedTranscriptMatchesAWholeChatRead(t *testing.T) {
 	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, counts: map[uuid.UUID]int{}, rows: 0}
 	publisher.chats = chats
 
-	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 
@@ -1058,7 +1122,7 @@ func TestPublishBoundsPagesForALongTranscript(t *testing.T) {
 	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, counts: map[uuid.UUID]int{}, rows: 0}
 	publisher.chats = chats
 
-	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 
@@ -1100,7 +1164,7 @@ func TestPublishTranscriptIgnoresAnotherProjectsMessages(t *testing.T) {
 		3,
 	)
 
-	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 
@@ -1137,7 +1201,7 @@ func TestPublishLoadsEveryShortMessageThatFitsTheTranscriptBudget(t *testing.T) 
 	chats := &countingChats{TranscriptSource: publisher.chats, loads: map[uuid.UUID]int{}, counts: map[uuid.UUID]int{}, rows: 0}
 	publisher.chats = chats
 
-	result, err := publisher.Publish(t.Context(), h.fixture.projectID, []uuid.UUID{evaluation.ID}, nil)
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 
@@ -1172,7 +1236,7 @@ func TestPublishHeartbeatsEachEvaluationAndStopsWhenCancelled(t *testing.T) {
 	batch := []uuid.UUID{first.ID, second.ID}
 
 	beats := 0
-	result, err := publisher.Publish(t.Context(), h.fixture.projectID, batch, func() { beats++ })
+	result, err := publisher.Publish(t.Context(), h.fixture.projectID, first.ClaimToken, batch, func() { beats++ })
 	require.NoError(t, err)
 	require.Equal(t, PublishResult{Loaded: 2, AlreadyPublished: 0, Scored: 2, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
 	require.Equal(t, 2, beats, "one report per evaluation")
@@ -1187,13 +1251,13 @@ func TestPublishHeartbeatsEachEvaluationAndStopsWhenCancelled(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	stopped, err := replay.publisher(t, replay.scores).Publish(ctx, replay.fixture.projectID, []uuid.UUID{cancelled.ID, other.ID}, cancel)
+	stopped, err := replay.publisher(t, replay.scores).Publish(ctx, replay.fixture.projectID, cancelled.ClaimToken, []uuid.UUID{cancelled.ID, other.ID}, cancel)
 	require.ErrorIs(t, err, ErrRetryable)
 	require.Zero(t, stopped.Scored, "the pass stops before it pays for anything")
 	require.Empty(t, replay.judge.inputs, "a revoked lease buys no inference")
 
-	for _, evaluation := range []repo.SkillEfficacyEvaluation{cancelled, other} {
-		row, ok := replay.reservedByID(t, evaluation.ID)
+	for _, evaluation := range []Evaluation{cancelled, other} {
+		row, ok := replay.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
 		require.True(t, ok)
 		require.Equal(t, StateReserved, row.State)
 		require.Zero(t, row.Attempts, "a cancelled pass charges nothing")
