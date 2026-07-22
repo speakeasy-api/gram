@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -98,26 +100,8 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 			skillIDs = append(skillIDs, id)
 		}
 	}
-	from, to, err := resolveInsightsWindow(payload.From, payload.To)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := s.insights.QuerySkillInsights(ctx, telemetryrepo.QuerySkillInsightsParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       authCtx.ProjectID.String(),
-		SkillIDs:        skillIDs,
-		SkillVersionIDs: nil,
-		From:            from,
-		To:              to,
-		IntervalSeconds: int64((24 * time.Hour).Seconds()),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "query skill efficacy insights").LogError(ctx, logger)
-	}
-	result := buildInsightsView(skillIDs, rows, payload.IncludeVersions != nil && *payload.IncludeVersions)
-	result.From = from.Format(time.RFC3339)
-	result.To = to.Format(time.RFC3339)
-	if payload.IncludeScoredSessions != nil && *payload.IncludeScoredSessions {
+	includeScoredSessions := payload.IncludeScoredSessions != nil && *payload.IncludeScoredSessions
+	if includeScoredSessions {
 		if len(skillIDs) == 0 {
 			return nil, oops.E(oops.CodeInvalid, nil, "skill_ids are required when including scored sessions")
 		}
@@ -129,6 +113,43 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 		}); err != nil {
 			return nil, err
 		}
+	}
+	from, to, err := resolveInsightsWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, err
+	}
+	responseSkillIDs := skillIDs
+	if len(responseSkillIDs) == 0 {
+		activeSkills, err := skillsrepo.New(s.db).ListSkills(ctx, skillsrepo.ListSkillsParams{
+			ProjectID: *authCtx.ProjectID, CursorName: pgtype.Text{}, PageLimit: math.MaxInt32,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list active project skills").LogError(ctx, logger)
+		}
+		responseSkillIDs = make([]string, 0, len(activeSkills))
+		for _, skill := range activeSkills {
+			responseSkillIDs = append(responseSkillIDs, skill.Skill.ID.String())
+		}
+	}
+	var rows []telemetryrepo.SkillInsightBucket
+	if len(responseSkillIDs) > 0 {
+		rows, err = s.insights.QuerySkillInsights(ctx, telemetryrepo.QuerySkillInsightsParams{
+			OrganizationID:  authCtx.ActiveOrganizationID,
+			ProjectID:       authCtx.ProjectID.String(),
+			SkillIDs:        skillIDs,
+			SkillVersionIDs: nil,
+			From:            from,
+			To:              to,
+			IntervalSeconds: int64((24 * time.Hour).Seconds()),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "query skill efficacy insights").LogError(ctx, logger)
+		}
+	}
+	result := buildInsightsView(responseSkillIDs, rows, payload.IncludeVersions != nil && *payload.IncludeVersions)
+	result.From = from.Format(time.RFC3339)
+	result.To = to.Format(time.RFC3339)
+	if includeScoredSessions {
 		scores, err := s.insights.ListSkillEfficacyScoreSessions(ctx, telemetryrepo.ListSkillEfficacyScoreSessionsParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			ProjectID:      authCtx.ProjectID.String(),
@@ -192,16 +213,6 @@ type insightTotals struct {
 }
 
 func buildInsightsView(skillIDs []string, rows []telemetryrepo.SkillInsightBucket, includeVersions bool) *gen.SkillEfficacyInsightsResult {
-	if len(skillIDs) == 0 {
-		seen := make(map[string]struct{}, len(rows))
-		for _, row := range rows {
-			if _, ok := seen[row.SkillID]; ok {
-				continue
-			}
-			seen[row.SkillID] = struct{}{}
-			skillIDs = append(skillIDs, row.SkillID)
-		}
-	}
 	bySkill := make(map[string]map[string]*insightTotals, len(skillIDs))
 	for _, id := range skillIDs {
 		bySkill[id] = map[string]*insightTotals{}

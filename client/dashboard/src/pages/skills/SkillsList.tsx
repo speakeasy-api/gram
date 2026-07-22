@@ -111,6 +111,8 @@ export default function SkillsList(): JSX.Element {
     deferredSearch.trim().length > 0 ||
     filters.values.sourceKind.length > 0 ||
     filters.values.classification.length > 0;
+  const insightsUnavailable = !!insightsQuery.error && !insightsQuery.data;
+  const effectiveSort = insightsUnavailable ? "updated" : sort;
   const visibleSkills = useMemo(
     () =>
       sortSkills(
@@ -121,7 +123,7 @@ export default function SkillsList(): JSX.Element {
           filters.values.classification,
         ),
         metricsBySkill,
-        sort,
+        effectiveSort,
       ),
     [
       deferredSearch,
@@ -129,12 +131,12 @@ export default function SkillsList(): JSX.Element {
       filters.values.sourceKind,
       metricsBySkill,
       skills,
-      sort,
+      effectiveSort,
     ],
   );
 
   useDrainSkillPages({
-    active,
+    active: true,
     hasNextPage: query.hasNextPage,
     isFetchingNextPage: query.isFetchingNextPage,
     isFetchNextPageError: query.isFetchNextPageError,
@@ -277,7 +279,7 @@ export default function SkillsList(): JSX.Element {
     loadedCount: skills.length,
     resultCount: visibleSkills.length,
   });
-  const draining = active && query.hasNextPage && !query.isFetchNextPageError;
+  const draining = query.hasNextPage && !query.isFetchNextPageError;
 
   if (legacySkillId) {
     return <Navigate to={routes.skills.detail.href(legacySkillId)} replace />;
@@ -334,7 +336,7 @@ export default function SkillsList(): JSX.Element {
                   />
                   <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
                   <Page.Toolbar.SortBy
-                    value={sort}
+                    value={effectiveSort}
                     onChange={(value) => {
                       setSort(value as SkillSort);
                       setDisplayCount(RESULT_PAGE_SIZE);
@@ -358,8 +360,24 @@ export default function SkillsList(): JSX.Element {
 
               {draining && (
                 <Type small muted role="status" aria-live="polite">
-                  Loading all skills to finish this search...
+                  Loading all skills to finish this view...
                 </Type>
+              )}
+
+              {insightsUnavailable && (
+                <div className="space-y-2">
+                  <ErrorAlert
+                    title="Unable to load skill insights"
+                    error={insightsQuery.error}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void insightsQuery.refetch()}
+                  >
+                    Retry insights
+                  </Button>
+                </div>
               )}
 
               {query.isPending && !query.data && <SkeletonTable />}
@@ -374,7 +392,7 @@ export default function SkillsList(): JSX.Element {
               {isEmptyProject && (
                 <SkillsEmptyState onAdd={() => setDialogOpen(true)} />
               )}
-              {query.data && !isEmptyProject && (
+              {query.data && !isEmptyProject && !draining && (
                 <div className="overflow-x-auto">
                   <Table
                     columns={columns}
@@ -397,7 +415,7 @@ export default function SkillsList(): JSX.Element {
                 <LoadMoreError onRetry={() => void query.fetchNextPage()} />
               )}
 
-              {displayedSkills.length < visibleSkills.length && (
+              {!draining && displayedSkills.length < visibleSkills.length && (
                 <div className="flex justify-center">
                   <Button
                     variant="outline"
@@ -406,18 +424,6 @@ export default function SkillsList(): JSX.Element {
                     }
                   >
                     Show more results
-                  </Button>
-                </div>
-              )}
-
-              {query.hasNextPage && !query.isFetchNextPageError && (
-                <div className="flex justify-center">
-                  <Button
-                    variant="outline"
-                    disabled={query.isFetchingNextPage}
-                    onClick={() => void query.fetchNextPage()}
-                  >
-                    {query.isFetchingNextPage ? "Loading..." : "Load more"}
                   </Button>
                 </div>
               )}

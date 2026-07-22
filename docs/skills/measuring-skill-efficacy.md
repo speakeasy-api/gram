@@ -16,7 +16,7 @@ An automated judge reads the authored skill version and the eligible session tra
 
 ## Sampling
 
-Efficacy scoring is sampled. By default, Gram evaluates up to 10 sessions per skill per UTC day, 100 sessions per organization per UTC day, and a lifetime burst of 25 sessions for each new skill version. Organization administrators can change these limits or disable scoring.
+Efficacy scoring is sampled. By default, Gram evaluates up to 10 sessions per skill per UTC day and 100 sessions per organization per UTC day. Each new skill version also receives a lifetime burst of up to 25 sessions. While burst capacity remains, those sessions may exceed the per-skill daily cap, but they count toward that day's skill spend and always count toward the organization daily cap. Organization administrators can change these limits or disable scoring.
 
 An efficacy percentage averages only sessions that received a score. An unscored session is not treated as zero efficacy, and a missing efficacy value means that no sampled score is available for the selected window.
 

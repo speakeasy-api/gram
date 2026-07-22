@@ -1,10 +1,12 @@
 import { ChartCard } from "@/components/chart/ChartCard";
 import { CHART_COLORS } from "@/components/billing/breakdown-options";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import { useRoutes } from "@/routes";
@@ -113,6 +115,11 @@ export function SkillInsightsSection({
     undefined,
     { throwOnError: false },
   );
+  useDrainInfiniteQuery(versionsQuery);
+  const versionsLoading =
+    versionsQuery.isPending ||
+    versionsQuery.hasNextPage ||
+    versionsQuery.isFetchingNextPage;
   const versions =
     versionsQuery.data?.pages.flatMap((page) => page.result.versions) ?? [];
   const versionLabels = new Map(
@@ -137,14 +144,22 @@ export function SkillInsightsSection({
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          {query.isPending && <InsightsLoading />}
           {query.error && !query.data && (
             <ErrorAlert
               title="Unable to load skill insights"
               error={query.error}
             />
           )}
-          {query.data && (
+          {versionsQuery.error && (
+            <ErrorAlert
+              title="Unable to load skill versions"
+              error={versionsQuery.error}
+            />
+          )}
+          {(query.isPending || (query.data && versionsLoading)) && (
+            <InsightsLoading />
+          )}
+          {query.data && !versionsLoading && !versionsQuery.error && (
             <InsightsContent
               insight={query.data.insights[0]}
               scoredSessions={query.data.scoredSessions}
@@ -199,7 +214,12 @@ function InsightsContent({
           detail={`${formatCount(insight.metrics.activatedSessions)} sessions`}
         />
         <InsightMetric
-          label="Sampled efficacy"
+          label={
+            <span className="inline-flex items-center gap-2">
+              Sampled efficacy
+              <ReleaseStageBadge stage="beta" noTooltip />
+            </span>
+          }
           value={efficacy ? formatPercent(efficacy.averageScore) : "Not scored"}
           detail={
             efficacy
@@ -290,7 +310,7 @@ function InsightMetric({
   value,
   detail,
 }: {
-  label: string;
+  label: ReactNode;
   value: string;
   detail: ReactNode;
 }): JSX.Element {
@@ -325,6 +345,7 @@ function TrendChart({
     new Date(timestamp).toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
+      timeZone: "UTC",
     }),
   );
   const datasets = versions.map((version, index) => {

@@ -11,8 +11,12 @@ import SkillsList from "./SkillsList";
 
 const testState = vi.hoisted(() => ({
   fetchNextPage: vi.fn().mockResolvedValue(undefined),
+  hasNextPage: false,
   isFetchNextPageError: false,
   error: null as Error | null,
+  insightsError: null as Error | null,
+  insightsData: { insights: [] } as { insights: unknown[] } | undefined,
+  insightsRefetch: vi.fn().mockResolvedValue(undefined),
   skills: [] as Array<Record<string, unknown>>,
   unknownEnabled: false,
 }));
@@ -51,7 +55,7 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
     isFetching: false,
     isFetchingNextPage: false,
     isFetchNextPageError: testState.isFetchNextPageError,
-    hasNextPage: true,
+    hasNextPage: testState.hasNextPage,
     error: testState.error,
     fetchNextPage: testState.fetchNextPage,
     refetch: vi.fn(),
@@ -59,9 +63,10 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
 }));
 vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
   useSkillEfficacyInsights: () => ({
-    data: { insights: [] },
+    data: testState.insightsData,
+    error: testState.insightsError,
     isFetching: false,
-    refetch: vi.fn(),
+    refetch: testState.insightsRefetch,
   }),
 }));
 vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
@@ -157,8 +162,13 @@ function makeSkills(count: number): Array<Record<string, unknown>> {
 beforeEach(() => {
   testState.fetchNextPage.mockReset();
   testState.fetchNextPage.mockResolvedValue(undefined);
+  testState.hasNextPage = false;
   testState.isFetchNextPageError = false;
   testState.error = null;
+  testState.insightsError = null;
+  testState.insightsData = { insights: [] };
+  testState.insightsRefetch.mockReset();
+  testState.insightsRefetch.mockResolvedValue(undefined);
   testState.skills = makeSkills(250);
   testState.unknownEnabled = false;
 });
@@ -178,6 +188,7 @@ describe("SkillsList pagination surfaces", () => {
   });
 
   it("keeps loaded rows visible and exposes an explicit retry after a page failure", () => {
+    testState.hasNextPage = true;
     testState.isFetchNextPageError = true;
     testState.error = new Error("next page failed");
     render(<SkillsList />);
@@ -190,6 +201,7 @@ describe("SkillsList pagination surfaces", () => {
 
   it("does not claim an incomplete failed search has no matches", () => {
     testState.skills = [];
+    testState.hasNextPage = true;
     testState.isFetchNextPageError = true;
     testState.error = new Error("next page failed");
     render(<SkillsList />);
@@ -209,5 +221,27 @@ describe("SkillsList pagination surfaces", () => {
     );
     expect(testState.unknownEnabled).toBe(true);
     expect(screen.getByText("No unknown activations found.")).toBeTruthy();
+  });
+
+  it("loads every skill page before presenting a sorted view", async () => {
+    testState.hasNextPage = true;
+    render(<SkillsList />);
+
+    await waitFor(() => expect(testState.fetchNextPage).toHaveBeenCalledOnce());
+    expect(
+      screen.getByText("Loading all skills to finish this view..."),
+    ).toBeTruthy();
+    expect(screen.queryByTestId("skill-row")).toBeNull();
+  });
+
+  it("shows and retries an insights failure without hiding loaded skills", () => {
+    testState.insightsData = undefined;
+    testState.insightsError = new Error("insights unavailable");
+    render(<SkillsList />);
+
+    expect(screen.getByText("Unable to load skill insights")).toBeTruthy();
+    expect(screen.getAllByTestId("skill-row")).toHaveLength(200);
+    fireEvent.click(screen.getByRole("button", { name: "Retry insights" }));
+    expect(testState.insightsRefetch).toHaveBeenCalledOnce();
   });
 });
