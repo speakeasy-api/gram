@@ -3399,31 +3399,6 @@ func (q *Queries) ReserveSkillEfficacyEvaluations(ctx context.Context, arg Reser
 	return result.RowsAffected(), nil
 }
 
-const resolveSkillEfficacyClaimToken = `-- name: ResolveSkillEfficacyClaimToken :one
-SELECT (array_agg(DISTINCT claim_token))[1]::uuid AS claim_token
-FROM skill_efficacy_evaluations
-WHERE project_id = $1
-  AND id = ANY($2::uuid[])
-  AND state = 'reserved'
-  AND claim_token IS NOT NULL
-HAVING count(DISTINCT claim_token) = 1
-`
-
-type ResolveSkillEfficacyClaimTokenParams struct {
-	ProjectID uuid.UUID
-	Ids       []uuid.UUID
-}
-
-// Rolling-deploy compatibility: an old workflow worker can drop the token a new
-// reservation activity returned. Resolve it only when every still-reserved row
-// has the same owner; mixed ownership remains fenced out.
-func (q *Queries) ResolveSkillEfficacyClaimToken(ctx context.Context, arg ResolveSkillEfficacyClaimTokenParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, resolveSkillEfficacyClaimToken, arg.ProjectID, arg.Ids)
-	var claim_token uuid.UUID
-	err := row.Scan(&claim_token)
-	return claim_token, err
-}
-
 const resolveSkillObservationVersions = `-- name: ResolveSkillObservationVersions :many
 SELECT srh.raw_sha256, candidate.skill_id, candidate.skill_version_id
 FROM skill_raw_hashes srh

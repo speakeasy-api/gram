@@ -813,17 +813,19 @@ func TestPublishClaimsLegacyTokenlessReservation(t *testing.T) {
 	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
 }
 
-func TestPublishResolvesClaimDroppedByOldWorkflowWorker(t *testing.T) {
+func TestPublishTokenlessWorkerCannotAdoptClaimedReservation(t *testing.T) {
 	t.Parallel()
-	h := newPublishHarness(t, "skill_efficacy_publish_rolling_claim")
+	h := newPublishHarness(t, "skill_efficacy_publish_tokenless_fence")
 
-	evaluation := h.reserve(t, "claude-session-rolling-claim", "claude-code")
+	evaluation := h.reserve(t, "claude-session-tokenless-fence", "claude-code")
 	h.judge.results[SurfaceDev] = okVerdict()
 
 	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, uuid.Nil, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
-	require.Equal(t, PublishResult{Loaded: 1, AlreadyPublished: 0, Scored: 1, ModelFailures: 0, Failed: 0, Retryable: 0}, result)
-	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
+	require.Equal(t, PublishResult{}, result)
+	require.Empty(t, h.publishedIDs(t, evaluation))
+	_, stillReserved := h.reservedByID(t, evaluation.ID, evaluation.ClaimToken)
+	require.True(t, stillReserved, "a tokenless worker must not adopt another owner's claim")
 }
 
 // A recovered row can be re-reserved while its old publisher is still judging.

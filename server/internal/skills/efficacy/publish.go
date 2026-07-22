@@ -170,16 +170,7 @@ func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, claimToken
 			return result, fmt.Errorf("claim legacy skill efficacy evaluations: %w: %w", ErrRetryable, err)
 		}
 		if claimed == 0 {
-			claimToken, err = queries.ResolveSkillEfficacyClaimToken(ctx, repo.ResolveSkillEfficacyClaimTokenParams{
-				ProjectID: projectID,
-				Ids:       ids,
-			})
-			switch {
-			case errors.Is(err, pgx.ErrNoRows):
-				return result, nil
-			case err != nil:
-				return result, fmt.Errorf("resolve skill efficacy claim token: %w: %w", ErrRetryable, err)
-			}
+			return result, nil
 		}
 	}
 	// Project-scoped and state-scoped: rows another worker already failed or
