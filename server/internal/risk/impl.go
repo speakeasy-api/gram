@@ -2453,7 +2453,7 @@ CEL environment for "detection_expr":
   - assistant — the body of an assistant message (empty otherwise).
   - tool_result — the output of a tool response message (empty otherwise). Singular: one response carries one tool's output.
 - tool_calls — the tool calls on a tool-request message (plural: one request can fan out parallel calls). Iterate with tool_calls.exists(t, <predicate on t>). Each t has correlated fields: t.name (raw tool-call name, e.g. mcp__mise__run_task), t.server (MCP server name, "" for native tools like Bash), t.function (bare function name, e.g. run_task), t.args (the raw tool arguments JSON).
-- kind — message type string (user_message, assistant_message, tool_request, tool_response). Usually unnecessary because the body fields are already auto-scoped.
+- kind — message type string (user_message, assistant_message, tool_request, tool_response, prompt_attachment). Usually unnecessary because the body fields are already auto-scoped.
 
 Matchers (call as a method on a field; all return bool):
 - field.matchRegex(pattern)  — RE2 regex match. Use for secret/PII/text patterns.

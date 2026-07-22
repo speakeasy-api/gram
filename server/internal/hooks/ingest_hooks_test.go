@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -963,6 +964,67 @@ func TestIngest_LinksChatToUserAccount(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.Equal(t, chat.UserID.String, msgs[0].UserID.String)
 	require.Equal(t, chat.ExternalUserID.String, msgs[0].ExternalUserID.String)
+}
+
+func TestIngest_PersistsPromptAttachmentsAsScannableToolRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "prompt-attachment-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	promptID := "prompt-" + uuid.NewString()
+	entryUUID := "attachment-" + uuid.NewString()
+	displayPath := "marker.txt"
+	filePath := "/repo/marker.txt"
+	content := "MARKER_abc123\n"
+	timestamp := "2026-07-22T09:38:49.652Z"
+	numLines := 1
+	totalLines := 1
+	startLine := 1
+
+	payload := canonicalIngestPayload("claude", "assistant.responded", sessionID)
+	payload.Data = &gen.HookIngestData{
+		PromptAttachments: []*gen.HookPromptAttachmentEntry{{
+			EntryUUID:      entryUUID,
+			PromptID:       &promptID,
+			FilePath:       &filePath,
+			DisplayPath:    &displayPath,
+			AttachmentKind: "file",
+			Content:        content,
+			NumLines:       &numLines,
+			TotalLines:     &totalLines,
+			StartLine:      &startLine,
+			Timestamp:      &timestamp,
+		}},
+	}
+
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, "tool", msgs[0].Role)
+	require.Equal(t, content, msgs[0].Content)
+	require.Equal(t, message.PromptAttachment, msgs[0].MessageType.String)
+	require.Equal(t, entryUUID, msgs[0].MessageID.String)
+	require.Equal(t, promptID, msgs[0].PromptID.String)
+	require.Equal(t, displayPath, msgs[0].DisplayPath.String)
+	require.Equal(t, "file", msgs[0].AttachmentKind.String)
+	require.False(t, msgs[0].ToolCallID.Valid)
+	require.False(t, msgs[0].Origin.Valid)
+	require.True(t, msgs[0].CreatedAt.Valid)
+	require.Equal(t, int64(2026), int64(msgs[0].CreatedAt.Time.Year()))
 }
 
 // TestIngest_StampsAccountAttributionOnTelemetry confirms canonical hook rows

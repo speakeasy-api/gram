@@ -251,6 +251,21 @@ var HookMCPAttributionEntry = Type("HookMCPAttributionEntry", func() {
 	Attribute("mcp_tool", String, "Unredacted MCP tool name from the transcript.")
 })
 
+var HookPromptAttachmentEntry = Type("HookPromptAttachmentEntry", func() {
+	Description("Transcript-derived content that a provider attached to a submitted prompt, such as Claude Code @file and @directory mentions.")
+	Required("entry_uuid", "attachment_kind", "content")
+	Attribute("entry_uuid", String, "Provider transcript entry UUID. Used as the stable attachment identifier.")
+	Attribute("prompt_id", String, "Prompt identifier of the user turn this attachment belongs to, when the transcript parent chain resolves.")
+	Attribute("file_path", String, "Absolute provider-reported file or directory path, when available.")
+	Attribute("display_path", String, "Provider display path for the attachment, when available.")
+	Attribute("attachment_kind", String, "Provider attachment kind, such as file or directory.")
+	Attribute("content", String, "Attachment text visible to the model.")
+	Attribute("num_lines", Int, "Number of lines included in the attachment window, when reported.")
+	Attribute("total_lines", Int, "Total source file lines, when reported.")
+	Attribute("start_line", Int, "First one-based source line included in the attachment window, when reported.")
+	Attribute("timestamp", String, "Provider transcript timestamp for this attachment, when available.")
+})
+
 var HookIngestData = Type("HookIngestData", func() {
 	Description("Feature-specific payloads. Hooks populate only the blocks needed for the event.")
 	Attribute("prompt", HookPromptData)
@@ -262,6 +277,7 @@ var HookIngestData = Type("HookIngestData", func() {
 	Attribute("skill", HookSkillData)
 	Attribute("notification", HookNotificationData)
 	Attribute("mcp_attribution", ArrayOf(HookMCPAttributionEntry), "Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).")
+	Attribute("prompt_attachments", ArrayOf(HookPromptAttachmentEntry), "Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).")
 })
 
 var IngestHookPayload = Type("IngestHookPayload", func() {

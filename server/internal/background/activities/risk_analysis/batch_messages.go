@@ -69,7 +69,7 @@ const malformedToolCallsName = "tool_calls"
 func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetMessageContentBatchRow) []batchMessage {
 	messages := make([]batchMessage, 0, len(rows))
 	for _, row := range rows {
-		msg, ok := newBatchMessage(ctx, logger, row.ID, row.Role, row.Content, row.ToolCalls)
+		msg, ok := newBatchMessage(ctx, logger, row.ID, row.Role, row.MessageType.String, row.Content, row.ToolCalls)
 		if !ok {
 			continue
 		}
@@ -87,8 +87,8 @@ func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetM
 // applying the same role→type mapping and tool-call parsing every batch scanner
 // and the eval-guardrail replay share. ok is false for roles the analyzer does
 // not evaluate.
-func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, role, content string, toolCalls []byte) (batchMessage, bool) {
-	messageType, ok := messageTypeForRole(role, toolCalls)
+func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, role, explicitType, content string, toolCalls []byte) (batchMessage, bool) {
+	messageType, ok := messageTypeForRole(role, explicitType, toolCalls)
 	if !ok {
 		var zero batchMessage
 		return zero, false
@@ -138,10 +138,16 @@ func filterMessagesByMessageTypes(messages []repo.GetMessageContentBatchRow, mes
 }
 
 func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bool) {
-	return messageTypeForRole(msg.Role, msg.ToolCalls)
+	return messageTypeForRole(msg.Role, msg.MessageType.String, msg.ToolCalls)
 }
 
-func messageTypeForRole(role string, toolCalls []byte) (message.Type, bool) {
+func messageTypeForRole(role, explicitType string, toolCalls []byte) (message.Type, bool) {
+	if explicitType = strings.TrimSpace(explicitType); explicitType != "" {
+		if message.IsTypeValid(explicitType) {
+			return explicitType, true
+		}
+		return "", false
+	}
 	switch role {
 	case "user":
 		return message.User, true

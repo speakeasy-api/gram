@@ -284,6 +284,9 @@ type HookIngestData struct {
 	Notification *HookNotificationData
 	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
 	McpAttribution []*HookMCPAttributionEntry
+	// Transcript-derived prompt attachment content (Claude
+	// Stop/SubagentStop/SessionEnd).
+	PromptAttachments []*HookPromptAttachmentEntry
 }
 
 // Canonical Gram feature event.
@@ -369,6 +372,32 @@ type HookNotificationData struct {
 	Title *string
 	// Notification message.
 	Message *string
+}
+
+// Transcript-derived content that a provider attached to a submitted prompt,
+// such as Claude Code @file and @directory mentions.
+type HookPromptAttachmentEntry struct {
+	// Provider transcript entry UUID. Used as the stable attachment identifier.
+	EntryUUID string
+	// Prompt identifier of the user turn this attachment belongs to, when the
+	// transcript parent chain resolves.
+	PromptID *string
+	// Absolute provider-reported file or directory path, when available.
+	FilePath *string
+	// Provider display path for the attachment, when available.
+	DisplayPath *string
+	// Provider attachment kind, such as file or directory.
+	AttachmentKind string
+	// Attachment text visible to the model.
+	Content string
+	// Number of lines included in the attachment window, when reported.
+	NumLines *int
+	// Total source file lines, when reported.
+	TotalLines *int
+	// First one-based source line included in the attachment window, when reported.
+	StartLine *int
+	// Provider transcript timestamp for this attachment, when available.
+	Timestamp *string
 }
 
 // Prompt feature payload.

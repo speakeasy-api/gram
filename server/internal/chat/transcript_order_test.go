@@ -185,10 +185,17 @@ func TestChatMessageWriter_BatchKeepsInsertionOrder(t *testing.T) {
 	params := make([]repo.CreateChatMessageParams, 0, len(roles))
 	for _, role := range roles {
 		params = append(params, repo.CreateChatMessageParams{
-			ChatID:    chatID,
-			ProjectID: ti.projectID,
-			Role:      role,
-			Content:   "batch order " + role,
+			ChatID:         chatID,
+			ProjectID:      ti.projectID,
+			Role:           role,
+			Content:        "batch order " + role,
+			Model:          conv.ToPGTextEmpty(""),
+			MessageType:    conv.ToPGTextEmpty(""),
+			MessageID:      conv.ToPGTextEmpty(""),
+			PromptID:       conv.ToPGTextEmpty(""),
+			DisplayPath:    conv.ToPGTextEmpty(""),
+			AttachmentKind: conv.ToPGTextEmpty(""),
+			ToolCallID:     conv.ToPGTextEmpty(""),
 		})
 	}
 	_, err := writer.Write(ctx, ti.projectID, params)

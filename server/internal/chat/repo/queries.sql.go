@@ -339,7 +339,11 @@ type CreateChatMessageParams struct {
 	ContentAssetUrl  pgtype.Text
 	StorageError     pgtype.Text
 	Model            pgtype.Text
+	MessageType      pgtype.Text
 	MessageID        pgtype.Text
+	PromptID         pgtype.Text
+	DisplayPath      pgtype.Text
+	AttachmentKind   pgtype.Text
 	ToolCallID       pgtype.Text
 	UserID           pgtype.Text
 	ExternalUserID   pgtype.Text
@@ -957,7 +961,7 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, chatID uuid.UUID)
 }
 
 const getToolCallMessages = `-- name: GetToolCallMessages :many
-SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_type, message_id, prompt_id, display_path, attachment_kind, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages
 WHERE chat_id = $1
   AND role = 'tool'
 ORDER BY created_at ASC
@@ -982,7 +986,11 @@ func (q *Queries) GetToolCallMessages(ctx context.Context, chatID uuid.UUID) ([]
 			&i.ContentRaw,
 			&i.ContentAssetUrl,
 			&i.Model,
+			&i.MessageType,
 			&i.MessageID,
+			&i.PromptID,
+			&i.DisplayPath,
+			&i.AttachmentKind,
 			&i.FinishReason,
 			&i.ToolCalls,
 			&i.PromptTokens,
@@ -1206,7 +1214,7 @@ func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIInt
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_type, message_id, prompt_id, display_path, attachment_kind, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, replayed, created_at, risk_analyzed_at FROM chat_messages
 WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
 ORDER BY created_at ASC, seq ASC
 `
@@ -1238,7 +1246,11 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 			&i.ContentRaw,
 			&i.ContentAssetUrl,
 			&i.Model,
+			&i.MessageType,
 			&i.MessageID,
+			&i.PromptID,
+			&i.DisplayPath,
+			&i.AttachmentKind,
 			&i.FinishReason,
 			&i.ToolCalls,
 			&i.PromptTokens,
@@ -1273,7 +1285,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 }
 
 const listChatMessagesAfterPage = `-- name: ListChatMessagesAfterPage :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_type, cm.message_id, cm.prompt_id, cm.display_path, cm.attachment_kind, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
@@ -1338,7 +1350,11 @@ func (q *Queries) ListChatMessagesAfterPage(ctx context.Context, arg ListChatMes
 			&i.ContentRaw,
 			&i.ContentAssetUrl,
 			&i.Model,
+			&i.MessageType,
 			&i.MessageID,
+			&i.PromptID,
+			&i.DisplayPath,
+			&i.AttachmentKind,
 			&i.FinishReason,
 			&i.ToolCalls,
 			&i.PromptTokens,
@@ -1373,7 +1389,7 @@ func (q *Queries) ListChatMessagesAfterPage(ctx context.Context, arg ListChatMes
 }
 
 const listChatMessagesBeforePage = `-- name: ListChatMessagesBeforePage :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_type, cm.message_id, cm.prompt_id, cm.display_path, cm.attachment_kind, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
@@ -1443,7 +1459,11 @@ func (q *Queries) ListChatMessagesBeforePage(ctx context.Context, arg ListChatMe
 			&i.ContentRaw,
 			&i.ContentAssetUrl,
 			&i.Model,
+			&i.MessageType,
 			&i.MessageID,
+			&i.PromptID,
+			&i.DisplayPath,
+			&i.AttachmentKind,
 			&i.FinishReason,
 			&i.ToolCalls,
 			&i.PromptTokens,
@@ -1478,7 +1498,7 @@ func (q *Queries) ListChatMessagesBeforePage(ctx context.Context, arg ListChatMe
 }
 
 const listChatMessagesByGeneration = `-- name: ListChatMessagesByGeneration :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_type, cm.message_id, cm.prompt_id, cm.display_path, cm.attachment_kind, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
@@ -1513,7 +1533,11 @@ func (q *Queries) ListChatMessagesByGeneration(ctx context.Context, arg ListChat
 			&i.ContentRaw,
 			&i.ContentAssetUrl,
 			&i.Model,
+			&i.MessageType,
 			&i.MessageID,
+			&i.PromptID,
+			&i.DisplayPath,
+			&i.AttachmentKind,
 			&i.FinishReason,
 			&i.ToolCalls,
 			&i.PromptTokens,
@@ -2087,7 +2111,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 }
 
 const listLatestGenerationChatMessages = `-- name: ListLatestGenerationChatMessages :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_type, cm.message_id, cm.prompt_id, cm.display_path, cm.attachment_kind, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = $1)
@@ -2119,7 +2143,11 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 			&i.ContentRaw,
 			&i.ContentAssetUrl,
 			&i.Model,
+			&i.MessageType,
 			&i.MessageID,
+			&i.PromptID,
+			&i.DisplayPath,
+			&i.AttachmentKind,
 			&i.FinishReason,
 			&i.ToolCalls,
 			&i.PromptTokens,
@@ -2156,7 +2184,7 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 const listRiskWindowedMessages = `-- name: ListRiskWindowedMessages :many
 WITH ordered AS (
   SELECT
-    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at,
+    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_type, cm.message_id, cm.prompt_id, cm.display_path, cm.attachment_kind, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at,
     row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
     count(*) OVER () AS total
   FROM chat_messages cm
@@ -2180,7 +2208,7 @@ risk_rns AS (
   )
 )
 SELECT
-  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.replayed, o.created_at, o.risk_analyzed_at, o.rn, o.total,
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_type, o.message_id, o.prompt_id, o.display_path, o.attachment_kind, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.replayed, o.created_at, o.risk_analyzed_at, o.rn, o.total,
   EXISTS (SELECT 1 FROM risk_rns r WHERE r.rn = o.rn) AS is_risk
 FROM ordered o
 WHERE EXISTS (
@@ -2207,7 +2235,11 @@ type ListRiskWindowedMessagesRow struct {
 	ContentRaw        []byte
 	ContentAssetUrl   pgtype.Text
 	Model             pgtype.Text
+	MessageType       pgtype.Text
 	MessageID         pgtype.Text
+	PromptID          pgtype.Text
+	DisplayPath       pgtype.Text
+	AttachmentKind    pgtype.Text
 	FinishReason      pgtype.Text
 	ToolCalls         []byte
 	PromptTokens      int64
@@ -2268,7 +2300,11 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 			&i.ContentRaw,
 			&i.ContentAssetUrl,
 			&i.Model,
+			&i.MessageType,
 			&i.MessageID,
+			&i.PromptID,
+			&i.DisplayPath,
+			&i.AttachmentKind,
 			&i.FinishReason,
 			&i.ToolCalls,
 			&i.PromptTokens,
@@ -2308,7 +2344,7 @@ func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWind
 const listSearchWindowedMessages = `-- name: ListSearchWindowedMessages :many
 WITH ordered AS (
   SELECT
-    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at,
+    cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_type, cm.message_id, cm.prompt_id, cm.display_path, cm.attachment_kind, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at,
     row_number() OVER (ORDER BY cm.created_at, cm.seq) AS rn,
     count(*) OVER () AS total
   FROM chat_messages cm
@@ -2325,7 +2361,7 @@ match_rns AS (
   LIMIT $6::integer
 )
 SELECT
-  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.replayed, o.created_at, o.risk_analyzed_at, o.rn, o.total,
+  o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_type, o.message_id, o.prompt_id, o.display_path, o.attachment_kind, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.content_hash, o.generation, o.replayed, o.created_at, o.risk_analyzed_at, o.rn, o.total,
   EXISTS (SELECT 1 FROM match_rns m WHERE m.rn = o.rn) AS is_match
 FROM ordered o
 WHERE EXISTS (
@@ -2354,7 +2390,11 @@ type ListSearchWindowedMessagesRow struct {
 	ContentRaw        []byte
 	ContentAssetUrl   pgtype.Text
 	Model             pgtype.Text
+	MessageType       pgtype.Text
 	MessageID         pgtype.Text
+	PromptID          pgtype.Text
+	DisplayPath       pgtype.Text
+	AttachmentKind    pgtype.Text
 	FinishReason      pgtype.Text
 	ToolCalls         []byte
 	PromptTokens      int64
@@ -2418,7 +2458,11 @@ func (q *Queries) ListSearchWindowedMessages(ctx context.Context, arg ListSearch
 			&i.ContentRaw,
 			&i.ContentAssetUrl,
 			&i.Model,
+			&i.MessageType,
 			&i.MessageID,
+			&i.PromptID,
+			&i.DisplayPath,
+			&i.AttachmentKind,
 			&i.FinishReason,
 			&i.ToolCalls,
 			&i.PromptTokens,

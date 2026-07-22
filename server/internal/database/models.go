@@ -333,7 +333,11 @@ type ChatMessage struct {
 	ContentRaw        []byte
 	ContentAssetUrl   pgtype.Text
 	Model             pgtype.Text
+	MessageType       pgtype.Text
 	MessageID         pgtype.Text
+	PromptID          pgtype.Text
+	DisplayPath       pgtype.Text
+	AttachmentKind    pgtype.Text
 	FinishReason      pgtype.Text
 	ToolCalls         []byte
 	PromptTokens      int64
