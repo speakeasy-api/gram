@@ -1680,8 +1680,7 @@ SELECT
   cm.tool_call_id,
   cm.tool_urn,
   cm.tool_outcome,
-  cm.tool_outcome_notes,
-  (count(*) OVER ())::bigint AS total_count
+  cm.tool_outcome_notes
 FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
@@ -1717,7 +1716,6 @@ type ListChatTranscriptMessagesPageRow struct {
 	ToolUrn          urn.Tool
 	ToolOutcome      pgtype.Text
 	ToolOutcomeNotes pgtype.Text
-	TotalCount       int64
 }
 
 // Keyset page of one chat's messages, newest first, carrying only the columns
@@ -1729,9 +1727,8 @@ type ListChatTranscriptMessagesPageRow struct {
 // too.
 //
 // The same project filter as ListChatMessages, so a page can never cross a
-// project boundary. total_count is the window over the WHERE clause, which
-// includes the cursor, so it counts the rows this page did not return AND
-// everything older than them - exactly what the omission marker owes.
+// project boundary. CountChatMessages supplies the total once per transcript;
+// repeating a windowed count on every page makes long transcripts quadratic.
 //
 // The cursor is the full transcript key (created_at, seq, id): created_at and
 // seq alone are not unique, and a tie split across a page boundary would either
@@ -1763,7 +1760,6 @@ func (q *Queries) ListChatTranscriptMessagesPage(ctx context.Context, arg ListCh
 			&i.ToolUrn,
 			&i.ToolOutcome,
 			&i.ToolOutcomeNotes,
-			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}

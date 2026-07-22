@@ -314,6 +314,25 @@ func TestEnqueuePageFoldsActivationsIntoOneUnitAndIsIdempotent(t *testing.T) {
 	require.Len(t, fixture.pendingEvaluations(t), 1)
 }
 
+func TestEnqueuePageDeduplicatesUserIDAndEmailBindingsForSameScoringUnit(t *testing.T) {
+	t.Parallel()
+	fixture := newEfficacyFixture(t, "efficacy_enqueue_actor_dedup")
+
+	sessionID := "claude-session-actor-deduplication"
+	fixture.seedChat(t, sessionID, 2, 90*time.Minute)
+	older := time.Now().UTC().Add(-3 * time.Hour)
+	newer := time.Now().UTC().Add(-2 * time.Hour)
+	fixture.observeAs(t, sessionID, "claude-code", actor{userID: defaultActor.userID, email: ""}, older)
+	fixture.observeAs(t, sessionID, "claude-code", actor{userID: "", email: defaultActor.email}, newer)
+
+	result := fixture.firstPage(t, 50)
+	require.Equal(t, enqueueCounts{Scanned: 2, Units: 2, Confirmed: 2, Stamped: 2}, countsOf(result))
+
+	rows := fixture.pendingEvaluations(t)
+	require.Len(t, rows, 1)
+	require.WithinDuration(t, newer, rows[0].ObservedAt.Time, time.Second)
+}
+
 func TestEnqueuePageSkipsSessionWithRecentMessage(t *testing.T) {
 	t.Parallel()
 	fixture := newEfficacyFixture(t, "skill_efficacy_enqueue_recent")

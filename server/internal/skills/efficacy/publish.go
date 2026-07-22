@@ -59,6 +59,7 @@ const validationFailureClass = "skill efficacy row validation failure"
 // TranscriptSource reads one chat's messages a page at a time, newest first.
 // Satisfied by *chatrepo.Queries.
 type TranscriptSource interface {
+	CountChatMessages(ctx context.Context, arg chatrepo.CountChatMessagesParams) (int64, error)
 	ListChatTranscriptMessagesPage(ctx context.Context, arg chatrepo.ListChatTranscriptMessagesPageParams) ([]chatrepo.ListChatTranscriptMessagesPageRow, error)
 }
 
@@ -447,11 +448,15 @@ func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, cha
 		Lim:             transcriptPageSize,
 	}
 
-	var loaded []TranscriptInput
+	unread, err := p.chats.CountChatMessages(ctx, chatrepo.CountChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	if err != nil {
+		return Transcript{}, fmt.Errorf("count skill efficacy transcript: %w: %w", ErrRetryable, err)
+	}
+
+	loaded := make([]TranscriptInput, 0, min(unread, int64(transcriptPageSize)))
 	// Rendered up front so a chat with no messages leaves the same empty
 	// rendering a whole-chat read produced rather than a zero Transcript.
 	transcript := RenderTranscript(nil)
-	unread := int64(0)
 	for {
 		rows, err := p.chats.ListChatTranscriptMessagesPage(ctx, page)
 		if err != nil {
@@ -464,15 +469,13 @@ func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, cha
 			break
 		}
 
-		// The window counts every row the cursor still admits, so subtracting
-		// this page leaves exactly what sits older than it.
-		unread = rows[0].TotalCount - int64(len(rows))
-
-		older := make([]TranscriptInput, 0, len(rows))
-		for i := len(rows) - 1; i >= 0; i-- {
-			older = append(older, transcriptPageMessage(rows[i]))
+		unread -= int64(len(rows))
+		if unread < 0 {
+			unread = 0
 		}
-		loaded = append(older, loaded...)
+		for _, row := range rows {
+			loaded = append(loaded, transcriptPageMessage(row))
+		}
 
 		oldest := rows[len(rows)-1]
 		page.CursorCreatedAt = oldest.CreatedAt
