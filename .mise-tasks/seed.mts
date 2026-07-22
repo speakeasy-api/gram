@@ -2685,9 +2685,12 @@ async function seedPersonalAccounts(init: {
   const usageSessionIdList = usageSessionIds.map((id) => `'${id}'`).join(", ");
   const toolSessionIdList = toolSessionIds.map((id) => `'${id}'`).join(", ");
   // This phase runs after seedObservabilityData's chat_session_summaries
-  // backfill, and its rows sit before the chat_session_summaries_mv cutoff —
-  // so the summary rows for exactly this phase's chats are rebuilt here
-  // (delete + scoped backfill; an unscoped re-backfill would double the
+  // backfill, so the summary rows for exactly this phase's chats are rebuilt
+  // here. The summary DELETE must run BEFORE the telemetry INSERT: rows with
+  // event times past the MV cutoff are summarized by the MV at insert time,
+  // and a delete placed after the insert would wipe those fresh rows with
+  // nothing to restore them — the scoped backfill below covers only
+  // pre-cutoff rows (an unscoped re-backfill would double the
   // already-aggregated chats).
   const personalChatIdList = [...usageSessionIds, ...toolSessionIds]
     .map((id) => `'${id}'`)
@@ -2696,9 +2699,9 @@ async function seedPersonalAccounts(init: {
     SET mutations_sync = 1;
     ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}' AND gram_urn IN (${usageUrnList}) AND gram_chat_id IN (${usageSessionIdList});
     ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}' AND gram_chat_id IN (${toolSessionIdList});
+    ALTER TABLE chat_session_summaries DELETE WHERE gram_project_id = '${projectId}' AND chat_id IN (${personalChatIdList});
     INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chRows.concat(toolRows).join(",\n")};
-    ALTER TABLE chat_session_summaries DELETE WHERE gram_project_id = '${projectId}' AND chat_id IN (${personalChatIdList});
     ${chatSessionBackfillSQL(projectId, "telemetry_logs", `time_unix_nano < chat_session_cutoff_unix_nano AND chat_id IN (${personalChatIdList})`)}
   `;
 

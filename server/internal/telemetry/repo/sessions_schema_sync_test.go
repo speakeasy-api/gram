@@ -84,3 +84,28 @@ func TestSessionPredicates_SchemaMVStaysInSync(t *testing.T) {
 			"session* Go constants drifted from the pinned predicate fragment — apply the change on every path (Go constants, MV via MODIFY QUERY + backfill, seed)")
 	}
 }
+
+// TestSessionPredicates_SeedBackfillStaysInSync covers the third live copy of
+// the session predicates: chatSessionBackfillSQL in the local seed, which
+// re-derives chat_session_summaries for pre-cutoff seeded rows. (The prod
+// backfill runbook under clickhouse/local/backfill/ is a one-time executed
+// artifact and is deliberately not covered — drift after its execution is
+// inert.)
+func TestSessionPredicates_SeedBackfillStaysInSync(t *testing.T) {
+	t.Parallel()
+
+	seed, err := os.ReadFile("../../../../.mise-tasks/seed.mts")
+	require.NoError(t, err)
+
+	seedText := string(seed)
+	start := strings.Index(seedText, "function chatSessionBackfillSQL")
+	require.Positive(t, start, "chatSessionBackfillSQL not found in seed.mts")
+	end := strings.Index(seedText[start:], "\nfunction ")
+	require.Positive(t, end, "expected a declaration after chatSessionBackfillSQL")
+	backfillSQL := normalizeSQL(seedText[start : start+end])
+
+	for _, fragment := range sessionSharedPredicateFragments {
+		require.Contains(t, backfillSQL, normalizeSQL(fragment),
+			"seed.mts chatSessionBackfillSQL drifted from the pinned session predicate fragment — apply the change on every path (Go constants, MV via MODIFY QUERY + backfill, seed)")
+	}
+}
