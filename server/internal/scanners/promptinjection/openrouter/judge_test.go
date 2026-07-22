@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,7 +37,7 @@ func req(texts ...string) promptinjection.Request {
 			ToolCalls:   nil,
 		}
 	}
-	return promptinjection.Request{Messages: msgs, OrgID: "org-a", ProjectID: "proj", UserIDs: nil}
+	return promptinjection.Request{Messages: msgs, Trajectories: nil, OrgID: "org-a", ProjectID: "proj", UserIDs: nil}
 }
 
 // TestClassifyBillsInternalKeyAndAttributesScannedUser pins the PI judge's
@@ -206,12 +207,14 @@ func drainLimiter(t *testing.T, c *Engine, org string) {
 // records the last prompt it saw so tests can assert the injection-resistant
 // payload shape.
 type fakeCompletionClient struct {
-	calls     atomic.Int64
-	err       error
-	responder func(text string) string
+	calls              atomic.Int64
+	err                error
+	responder          func(text string) string
+	blockUntilCanceled bool
 
 	mu       sync.Mutex
 	prompts  []string
+	requests []openrouter.CompletionRequest
 	keyTypes []openrouter.KeyType
 	userIDs  []string
 }
@@ -225,8 +228,12 @@ func (c *fakeCompletionClient) lastPrompt() string {
 	return c.prompts[len(c.prompts)-1]
 }
 
-func (c *fakeCompletionClient) GetCompletion(_ context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+func (c *fakeCompletionClient) GetCompletion(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	c.calls.Add(1)
+	if c.blockUntilCanceled {
+		<-ctx.Done()
+		return nil, fmt.Errorf("blocked completion: %w", ctx.Err())
+	}
 	// The judge sends [system, user]; the user message carries the payload JSON.
 	prompt := ""
 	if n := len(request.Messages); n > 0 {
@@ -234,6 +241,7 @@ func (c *fakeCompletionClient) GetCompletion(_ context.Context, request openrout
 	}
 	c.mu.Lock()
 	c.prompts = append(c.prompts, prompt)
+	c.requests = append(c.requests, request)
 	c.keyTypes = append(c.keyTypes, request.KeyType)
 	c.userIDs = append(c.userIDs, request.UserID)
 	c.mu.Unlock()
