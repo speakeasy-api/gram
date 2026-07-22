@@ -229,6 +229,13 @@ TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated trace summaries for fast trace-level queries without needing to scan all logs';
 
+-- The sort key is (gram_project_id, trace_id), so time-windowed reads cannot
+-- prune by the primary key and would otherwise scan a project's full 90-day
+-- history. Rows arrive roughly chronologically, so parts are time-clustered
+-- and a minmax index on the partial per-part start time prunes granules
+-- effectively once readers add a WHERE start_time_unix_nano pre-filter.
+CREATE INDEX IF NOT EXISTS idx_trace_summaries_start_time ON trace_summaries (start_time_unix_nano) TYPE minmax GRANULARITY 1;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS trace_summaries_mv TO trace_summaries AS
 SELECT
     trace_id,
