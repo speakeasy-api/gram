@@ -69,4 +69,22 @@ describe("DetectorCard", () => {
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip.textContent).toBe(reason);
   });
+
+  it("shows a disabled switch reason when its tooltip trigger is focused", async () => {
+    const reason = "Turn off other built-in rules to select Shadow MCP.";
+    renderCard({ disabledReason: reason });
+
+    const toggle = screen.getByRole("switch", {
+      name: "Shadow MCP built-in rule",
+    });
+    const trigger = toggle.closest<HTMLElement>(
+      '[data-slot="tooltip-trigger"]',
+    );
+
+    expect(trigger).not.toBeNull();
+
+    fireEvent.focus(trigger!);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toBe(reason);
+  });
 });
