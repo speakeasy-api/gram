@@ -165,6 +165,9 @@ func (t *Insights) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		if err != nil {
 			return fmt.Errorf("get skill: %w", err)
 		}
+		if got.Skill == nil {
+			return fmt.Errorf("get skill returned no skill")
+		}
 		skillByID[got.Skill.ID] = got.Skill
 		skillIDs = []string{got.Skill.ID}
 		versions, err := t.skills.ListVersions(ctx, &genskills.ListVersionsPayload{ID: got.Skill.ID, Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
@@ -208,6 +211,23 @@ func (t *Insights) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 	}
 
 	result := buildInsightsResult(rows, skillByID, versionCreatedAt, input.SortBy, input.Limit)
+	if input.SkillID == nil {
+		for i := range result.Skills {
+			versions, err := t.skills.ListVersions(ctx, &genskills.ListVersionsPayload{ID: result.Skills[i].ID, Cursor: nil, Limit: 50, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+			if err != nil {
+				return fmt.Errorf("list skill versions: %w", err)
+			}
+			truncated = truncated || versions.NextCursor != nil
+			createdAt := make(map[string]string, len(versions.Versions))
+			for _, version := range versions.Versions {
+				createdAt[version.ID] = version.CreatedAt
+			}
+			for j := range result.Skills[i].Versions {
+				result.Skills[i].Versions[j].CreatedAt = createdAt[result.Skills[i].Versions[j].ID]
+			}
+			sortVersionInsights(result.Skills[i].Versions)
+		}
+	}
 	result.From = from.Format(time.RFC3339)
 	result.To = to.Format(time.RFC3339)
 	result.SkillsTruncated = truncated
@@ -279,12 +299,7 @@ func buildInsightsResult(rows []telemetryrepo.SkillInsightBucket, skills map[str
 			item.Versions = append(item.Versions, versionInsight{ID: versionID, CreatedAt: versionCreatedAt[versionID], Metrics: metricsFromBucket(acc.metrics), Trend: acc.trend})
 		}
 		item.Metrics = metricsFromBucket(skillTotal)
-		sort.Slice(item.Versions, func(i, j int) bool {
-			if item.Versions[i].CreatedAt == item.Versions[j].CreatedAt {
-				return item.Versions[i].ID < item.Versions[j].ID
-			}
-			return item.Versions[i].CreatedAt > item.Versions[j].CreatedAt
-		})
+		sortVersionInsights(item.Versions)
 		items = append(items, item)
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -306,6 +321,15 @@ func buildInsightsResult(rows []telemetryrepo.SkillInsightBucket, skills map[str
 		ScoreCoverage:   "Efficacy and estimated savings summarize sampled scored sessions only; missing scores are not zero efficacy.",
 		Skills:          items,
 	}
+}
+
+func sortVersionInsights(versions []versionInsight) {
+	sort.Slice(versions, func(i, j int) bool {
+		if versions[i].CreatedAt == versions[j].CreatedAt {
+			return versions[i].ID < versions[j].ID
+		}
+		return versions[i].CreatedAt > versions[j].CreatedAt
+	})
 }
 
 func addInsightBucket(dst *telemetryrepo.SkillInsightBucket, src telemetryrepo.SkillInsightBucket) {
