@@ -3278,37 +3278,37 @@ func (q *Queries) GetToolUsageSummary(ctx context.Context, arg GetToolUsageSumma
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		var err error
-		summary.Totals, err = q.getToolUsageTotals(egCtx, arg)
+		summary.Totals, err = q.GetToolUsageTotals(egCtx, arg)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		summary.Targets, err = q.getToolUsageTargets(egCtx, arg)
+		summary.Targets, err = q.GetToolUsageTargets(egCtx, arg)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		summary.Users, err = q.getToolUsageUsers(egCtx, arg)
+		summary.Users, err = q.GetToolUsageUsers(egCtx, arg)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		summary.TargetTimeSeries, err = q.getToolUsageTargetTimeSeries(egCtx, arg)
+		summary.TargetTimeSeries, err = q.GetToolUsageTargetTimeSeries(egCtx, arg)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		summary.UserTimeSeries, err = q.getToolUsageUserTimeSeries(egCtx, arg)
+		summary.UserTimeSeries, err = q.GetToolUsageUserTimeSeries(egCtx, arg)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		summary.UsersByTarget, err = q.getToolUsageUsersByTarget(egCtx, arg)
+		summary.UsersByTarget, err = q.GetToolUsageUsersByTarget(egCtx, arg)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		summary.TargetToolBreakdown, err = q.getToolUsageTargetToolBreakdown(egCtx, arg)
+		summary.TargetToolBreakdown, err = q.GetToolUsageTargetToolBreakdown(egCtx, arg)
 		return err
 	})
 	if err := eg.Wait(); err != nil {
@@ -3502,7 +3502,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageTotals(ctx context.Context, arg GetToolUsageSummaryParams) (ToolUsageTotalsRow, error) {
+func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummaryParams) (ToolUsageTotalsRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"count() AS event_count",
 		"sum(success) AS success_count",
@@ -3551,7 +3551,7 @@ func (q *Queries) getToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageTargets(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetSummaryRow, error) {
+func (q *Queries) GetToolUsageTargets(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetSummaryRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",
@@ -3674,7 +3674,7 @@ func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActi
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageUsers(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserSummaryRow, error) {
+func (q *Queries) GetToolUsageUsers(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserSummaryRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"user_key",
 		"user_label",
@@ -3719,7 +3719,7 @@ func (q *Queries) getToolUsageUsers(ctx context.Context, arg GetToolUsageSummary
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageTargetTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetTimeSeriesPointRow, error) {
+func (q *Queries) GetToolUsageTargetTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetTimeSeriesPointRow, error) {
 	bucketExpr := fmt.Sprintf("intDiv(event_time_ns, %d) * %d AS bucket_start_ns", arg.BucketSizeNs, arg.BucketSizeNs)
 	sb, err := toolUsageFilteredSelect(arg,
 		bucketExpr,
@@ -3764,7 +3764,7 @@ func (q *Queries) getToolUsageTargetTimeSeries(ctx context.Context, arg GetToolU
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserTimeSeriesPointRow, error) {
+func (q *Queries) GetToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserTimeSeriesPointRow, error) {
 	bucketExpr := fmt.Sprintf("intDiv(event_time_ns, %d) * %d AS bucket_start_ns", arg.BucketSizeNs, arg.BucketSizeNs)
 	sb, err := toolUsageFilteredSelect(arg,
 		bucketExpr,
@@ -3808,7 +3808,7 @@ func (q *Queries) getToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsa
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageUsersByTarget(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUsersByTargetRow, error) {
+func (q *Queries) GetToolUsageUsersByTarget(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUsersByTargetRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",
@@ -3854,7 +3854,7 @@ func (q *Queries) getToolUsageUsersByTarget(ctx context.Context, arg GetToolUsag
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageTargetToolBreakdown(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetToolBreakdownRow, error) {
+func (q *Queries) GetToolUsageTargetToolBreakdown(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetToolBreakdownRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",

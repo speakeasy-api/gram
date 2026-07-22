@@ -749,3 +749,97 @@ func TestGetToolUsageSummary_WindowBoundaryTraces(t *testing.T) {
 	}
 	require.Contains(t, userKeys, "late-user", "rows landing after the window end (within slop) must still aggregate")
 }
+
+// TestGetToolUsageGranularEndpoints_MatchSummary verifies each per-panel endpoint
+// returns exactly the section the aggregate summary carries, so the split-out
+// dashboard queries stay consistent with the one-shot summary.
+func TestGetToolUsageGranularEndpoints_MatchSummary(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-20 * time.Minute),
+		toolsetSlug: "payments",
+		toolName:    "charge",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-18 * time.Minute),
+		toolsetSlug: "payments",
+		toolName:    "refund",
+		userEmail:   "bob@example.com",
+		statusCode:  500,
+	})
+	// A skill event so the equality checks cover the skill target type that feeds
+	// the "Users per Skill" and "Skill Usage Over Time" dashboard panels.
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-15 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "carol@example.com",
+		hookSource:     "local",
+		toolName:       "Skill",
+		skillName:      "golang",
+		result:         `"ok"`,
+		conversationID: "conv-skill",
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	summary, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+
+	// Sanity: the fixtures produced rows so the equality checks below are meaningful.
+	require.Equal(t, int64(3), summary.Totals.EventCount)
+	hasSkillUsersByTarget := false
+	for _, row := range summary.UsersByTarget {
+		if row.TargetType == "skill" {
+			hasSkillUsersByTarget = true
+			break
+		}
+	}
+	require.True(t, hasSkillUsersByTarget,
+		"skill rows must reach users-by-target so the granular endpoint's equality check covers them")
+	require.NotEmpty(t, summary.Targets)
+	require.NotEmpty(t, summary.Users)
+
+	totals, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.Totals, totals.Totals)
+
+	targets, err := ti.service.GetToolUsageTargets(ctx, &gen.GetToolUsageTargetsPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.Targets, targets.Targets)
+
+	users, err := ti.service.GetToolUsageUsers(ctx, &gen.GetToolUsageUsersPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.Users, users.Users)
+
+	targetSeries, err := ti.service.GetToolUsageTargetTimeSeries(ctx, &gen.GetToolUsageTargetTimeSeriesPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.TargetTimeSeries, targetSeries.TargetTimeSeries)
+
+	userSeries, err := ti.service.GetToolUsageUserTimeSeries(ctx, &gen.GetToolUsageUserTimeSeriesPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.UserTimeSeries, userSeries.UserTimeSeries)
+
+	usersByTarget, err := ti.service.GetToolUsageUsersByTarget(ctx, &gen.GetToolUsageUsersByTargetPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.UsersByTarget, usersByTarget.UsersByTarget)
+
+	breakdown, err := ti.service.GetToolUsageTargetToolBreakdown(ctx, &gen.GetToolUsageTargetToolBreakdownPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, summary.TargetToolBreakdown, breakdown.TargetToolBreakdown)
+}
