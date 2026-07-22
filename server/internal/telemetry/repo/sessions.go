@@ -399,7 +399,7 @@ func (q *Queries) listSessionsFromRawLogs(ctx context.Context, arg ListSessionsP
 		return nil, fmt.Errorf("building list sessions query: %w", err)
 	}
 
-	rows, err := q.conn.Query(chQueryContext(ctx), query, args...)
+	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -495,7 +495,7 @@ func (q *Queries) listSessionsFromSummaries(ctx context.Context, arg ListSession
 		return nil, fmt.Errorf("building list sessions summary query: %w", err)
 	}
 
-	rows, err := q.conn.Query(chQueryContext(ctx), query, args...)
+	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
