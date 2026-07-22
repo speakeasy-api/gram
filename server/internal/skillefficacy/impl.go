@@ -121,7 +121,7 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 	responseSkillIDs := skillIDs
 	if len(responseSkillIDs) == 0 {
 		activeSkills, err := skillsrepo.New(s.db).ListSkills(ctx, skillsrepo.ListSkillsParams{
-			ProjectID: *authCtx.ProjectID, CursorName: pgtype.Text{}, PageLimit: math.MaxInt32,
+			ProjectID: *authCtx.ProjectID, CursorName: pgtype.Text{String: "", Valid: false}, PageLimit: math.MaxInt32,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list active project skills").LogError(ctx, logger)
@@ -225,7 +225,7 @@ func buildInsightsView(skillIDs []string, rows []telemetryrepo.SkillInsightBucke
 		}
 		total := versions[row.SkillVersionID]
 		if total == nil {
-			total = &insightTotals{}
+			total = new(insightTotals)
 			versions[row.SkillVersionID] = total
 		}
 		addInsightRow(&total.row, row)

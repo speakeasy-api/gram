@@ -12,6 +12,7 @@ import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useSlugs } from "@/contexts/Sdk";
+import { useOrgRoutes } from "@/routes";
 import { toast } from "sonner";
 import { codeToHtml, type BundledLanguage } from "shiki";
 import {
@@ -36,6 +37,7 @@ const CODEX_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CODEX_PLUGIN_NAME}}";
 const CLAUDE_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CLAUDE_PLUGIN_NAME}}";
 const CURSOR_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CURSOR_PLUGIN_NAME}}";
 const MARKETPLACE_NAME_PLACEHOLDER = "{{GRAM_MARKETPLACE_NAME}}";
+const DEVICE_AGENT_URL_PLACEHOLDER = "{{GRAM_DEVICE_AGENT_URL}}";
 
 function HighlightedCode({
   code,
@@ -136,6 +138,7 @@ export function PlatformInstrumentationSheet({
   const { data: publishStatus } = usePublishStatus();
   const { data: marketplaceSettings } = useMarketplaceSettings();
   const { orgSlug = "" } = useSlugs();
+  const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
   const repoOwner = publishStatus?.repoOwner ?? "";
   const repoName = publishStatus?.repoName ?? "";
   const marketplaceUrl = publishStatus?.marketplaceUrl ?? "";
@@ -452,12 +455,28 @@ export function PlatformInstrumentationSheet({
                 [CLAUDE_PLUGIN_NAME_PLACEHOLDER, claudePluginName],
                 [CURSOR_PLUGIN_NAME_PLACEHOLDER, cursorPluginName],
                 [MARKETPLACE_NAME_PLACEHOLDER, marketplaceName],
+                [DEVICE_AGENT_URL_PLACEHOLDER, deviceAgentUrl],
               ];
+              const applySubstitutions = (
+                input: string,
+                subs: Array<[string, string]> = substitutions,
+              ): string => {
+                let out = input;
+                for (const [marker, value] of subs) {
+                  out = out.split(marker).join(value);
+                }
+                return out;
+              };
+              // The API key is a live secret and must never be interpolated
+              // into a URL — an href leaks it via the address bar, Referer
+              // header, browser history, and server logs. helpLink URLs use a
+              // secret-free subset of the substitutions.
+              const urlSubstitutions = substitutions.filter(
+                ([marker]) => marker !== API_KEY_PLACEHOLDER,
+              );
               let displayCode = step.code;
               if (displayCode) {
-                for (const [marker, value] of substitutions) {
-                  displayCode = displayCode.split(marker).join(value);
-                }
+                displayCode = applySubstitutions(displayCode);
               }
               // Don't render the code block when a step depends on the API key
               // and we haven't yet minted one, or references the marketplace
@@ -510,7 +529,7 @@ export function PlatformInstrumentationSheet({
                         <p className="text-muted-foreground text-sm leading-relaxed">
                           {before}
                           <Link
-                            href={url}
+                            href={applySubstitutions(url, urlSubstitutions)}
                             target="_blank"
                             rel="noopener noreferrer"
                             size="sm"

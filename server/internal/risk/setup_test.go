@@ -156,7 +156,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore, nil)
 	auditLogger := audit.NewLogger()
 	flags := &feature.InMemory{}
 

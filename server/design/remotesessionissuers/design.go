@@ -380,6 +380,66 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "move")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MoveOrganizationRemoteSessionIssuer"}`)
 	})
+
+	Method("getIssuerMigratePreflight", func() {
+		Description("Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.")
+
+		Payload(func() {
+			Attribute("source_id", String, "The remote_session_issuer to migrate away from.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("target_id", String, "The remote_session_issuer to migrate onto.", func() {
+				Format(FormatUUID)
+			})
+			Required("source_id", "target_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(OrganizationIssuerMigratePreflight)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.getMigratePreflight")
+			Param("source_id")
+			Param("target_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationRemoteSessionIssuerMigratePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMigratePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuerMigratePreflight"}`)
+	})
+
+	Method("migrateIssuer", func() {
+		Description("Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("source_id", String, "The remote_session_issuer to migrate away from; soft-deleted on success.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("target_id", String, "The remote_session_issuer to migrate onto; survives and adopts the source's clients.", func() {
+				Format(FormatUUID)
+			})
+			Required("source_id", "target_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(MigrateOrganizationRemoteSessionIssuerResult)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.migrate")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "migrateOrganizationRemoteSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "migrate")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MigrateOrganizationRemoteSessionIssuer"}`)
+	})
 })
 
 var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func() {

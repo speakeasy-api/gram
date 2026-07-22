@@ -42,10 +42,15 @@ import (
 //
 // excludeClientID skips a row so an update of the same client passes; pass
 // uuid.Nil to exclude nothing (the create paths). Must run inside the attach
-// transaction. No database constraint enforces the per-pair uniqueness, so a
-// narrow window remains between concurrent attaches; the runtime resolver's
-// invariant (ResolveAccessTokens) is the backstop that surfaces any drift at
-// serve time.
+// transaction.
+//
+// No database constraint enforces the per-pair uniqueness — remote_session_issuer_id
+// lives on remote_session_clients, not on the join table, so no unique index over
+// the join table can express the pair. The guard instead takes a transaction-scoped
+// advisory lock on the remote issuer before reading, which serializes it against
+// both a concurrent attach and migrateIssuer's client re-point. The runtime
+// resolver's invariant (ResolveAccessTokens) remains the backstop that surfaces
+// any drift at serve time.
 //
 // organizationID lets the conflict scan see organization-level clients
 // (project_id NULL) already bound to the user_session_issuer, so an org-level
@@ -58,6 +63,12 @@ func (s *Service) guardSingleClientPerRemoteIssuer(
 	organizationID string,
 	projectID, userSessionIssuerID, remoteSessionIssuerID, excludeClientID uuid.UUID,
 ) error {
+	// Serialize against any other writer binding a client to this remote issuer,
+	// including migrateIssuer's re-point, before reading the current bindings.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, remoteSessionIssuerID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
 	// Two rows are enough to detect a conflict: at most one row can be
 	// excludeClientID, so a second row guarantees another client is already
 	// bound to the pair.
@@ -256,6 +267,18 @@ func (s *Service) validateNewClientIssuers(
 	issuerID uuid.UUID,
 	userIssuerIDs []uuid.UUID,
 ) (repo.RemoteSessionIssuer, error) {
+	// Serialize against migrateIssuer before reading the issuer, so the
+	// deleted-IS-FALSE check below reflects committed migration state. Without
+	// the lock a concurrent migration could soft-delete this issuer in the window
+	// between the read and the client insert, leaving a client bound to a
+	// tombstoned issuer that resolves nowhere. Under the lock the read either
+	// sees the migration already committed (and 404s) or blocks it until this
+	// client is inserted and the migration re-points it. The per-user-issuer
+	// guard below re-acquires the same lock, which is a harmless no-op.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return repo.RemoteSessionIssuer{}, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
 	// The lookup accepts both the project's own issuers and organization-level
 	// issuers, so a client can't be attached to another tenant's issuer.
 	issuer, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
@@ -410,6 +433,14 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 	clientID, clientSecret, err := resolveProxyClientCredentials(ctx, s.environments, provider.ProjectID, provider.Secrets)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "oauth proxy provider client credentials unavailable for clone").LogError(ctx, logger)
+	}
+
+	// Serialize against migrateIssuer before the reachability read, so a
+	// concurrent migration cannot soft-delete this issuer between the read and
+	// the client insert and leave the clone bound to a tombstoned issuer. See the
+	// matching lock in validateNewClientIssuers for the full rationale.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
 	}
 
 	// Confirm the issuer the caller named is reachable from the caller's

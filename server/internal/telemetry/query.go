@@ -473,7 +473,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
 	}
 
-	items, err := s.chRepo.ListSessions(ctx, repo.ListSessionsParams{
+	params := repo.ListSessionsParams{
 		ProjectIDs:       projectIDs,
 		TimeStart:        timeStart,
 		TimeEnd:          timeEnd,
@@ -482,7 +482,10 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 		CursorSortValue:  cursorSortValue,
 		CursorGramChatID: cursorGramChatID,
 		Limit:            limit + 1,
-	})
+	}
+	// Wide windows are served from chat_session_summaries, narrow ones from
+	// raw telemetry_logs (repo.ListSessionsParams.UsesSummaryPath).
+	items, err := s.chRepo.ListSessions(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing sessions")
 	}

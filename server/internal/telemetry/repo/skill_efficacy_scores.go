@@ -172,7 +172,7 @@ func (q *Queries) ListSkillEfficacyScoreSessions(ctx context.Context, arg ListSk
 	if err != nil {
 		return nil, fmt.Errorf("querying scored sessions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var result []SkillEfficacyScoreSession
 	for rows.Next() {
 		var row SkillEfficacyScoreSession
@@ -181,7 +181,11 @@ func (q *Queries) ListSkillEfficacyScoreSessions(ctx context.Context, arg ListSk
 		}
 		result = append(result, row)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating scored sessions: %w", err)
+	}
+
+	return result, nil
 }
 
 // SkillInsightBucket is one activation-time bucket for a skill version. Score
@@ -335,7 +339,7 @@ func (q *Queries) QuerySkillInsights(ctx context.Context, arg QuerySkillInsights
 	if err != nil {
 		return nil, fmt.Errorf("querying skill insights: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var result []SkillInsightBucket
 	for rows.Next() {

@@ -1,4 +1,5 @@
 import { Type } from "@/components/ui/type";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
@@ -106,7 +107,7 @@ export function AssistantSessionsList({
                           source={chat.source}
                           className="size-3"
                         />
-                        {chat.source}
+                        {formatPlatform(chat.source)}
                       </span>
                     </>
                   )}

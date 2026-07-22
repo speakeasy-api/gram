@@ -11,8 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-const hooksBinaryVersion = "0.1.1"
-
 type hooksBinaryTarget struct {
 	URL    string `json:"url"`
 	SHA256 string `json:"sha256"`
@@ -37,14 +35,7 @@ func hooksReleaseTargets(version string, sha256s map[string]string) map[string]h
 // hooksServedTargets, because customer environments (notably Claude Cowork's
 // sandbox) often cannot reach GitHub while the Gram domain is already
 // allowlisted for ingest.
-var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, map[string]string{
-	"darwin-amd64":  "ff5fda9b48e9ff33a789bf92563f1f93822e17411e9de36584198eaa704cb5c0",
-	"darwin-arm64":  "a61c5cc2721f1637262c91a710299941b0cd1316882c7338916c1349b56cccc5",
-	"linux-amd64":   "4127504a2d01d3e07dc4f6852e8e1551f404a98bf14f60a766d8dae110d361d3",
-	"linux-arm64":   "1f791adf002c71ac8fef7e6cd086f875a957115669c1d991a45f6a7a0a935311",
-	"windows-amd64": "c2f8b4ee64ad9a22f13c59bfdf7ac39339dd124431f7b0d659acce9cf4c6989e",
-	"windows-arm64": "b4e4f18a01ed531e840e1d4b5a4b7afc92e07d7401a390c0a4d61fc50bb818d1",
-})
+var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, hooksBinarySHA256s)
 
 func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 	b, err := json.MarshalIndent(relay.FileConfig{

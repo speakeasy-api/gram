@@ -99,7 +99,21 @@ EOF
 fi
 echo ""
 
-if [ "${usage_local:-}" = "true" ] || ! git diff --quiet main -- server/internal/plugins/ server/cmd/export-hook-plugin/; then
+if [ "${usage_local:-}" = "true" ]; then
+  plugin_out="$(mktemp -d)"
+  hooks_binary="${plugin_out}/speakeasy-hooks"
+  echo "Building local hooks binary: ${hooks_binary}"
+  go build -o "$hooks_binary" ./hooks/cmd/speakeasy-hooks
+  "$hooks_binary" install \
+    --provider=claude \
+    --dir="${plugin_out}/plugin-claude" \
+    --server-url="$GRAM_SERVER_URL" \
+    --project="$project_slug" \
+    --browser-login \
+    --binary="$hooks_binary"
+  echo ""
+  exec claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude" --debug
+elif ! git diff --quiet main -- server/internal/plugins/ server/cmd/export-hook-plugin/; then
   plugin_out="$(mktemp -d)"
   echo "Rendering local plugin into: ${plugin_out}"
   (cd server && go run ./cmd/export-hook-plugin -out "$plugin_out" >/dev/null)

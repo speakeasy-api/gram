@@ -3,6 +3,7 @@ import {
   providerLabel,
   unsetLabel,
 } from "@/components/observe/account-display-utils";
+import { formatPlatform } from "@/lib/formatPlatform";
 
 export { unsetLabel };
 
@@ -444,6 +445,7 @@ export function datasetDefaultGroupBy(
 export function displayName(dim: Dimension, value: string): string {
   if (value === "") return unsetLabel(dim);
   if (dim === Dimension.Provider) return providerLabel(value);
+  if (dim === Dimension.HookSource) return formatPlatform(value);
   if (dim === Dimension.AccountType) {
     return value.charAt(0).toUpperCase() + value.slice(1);
   }

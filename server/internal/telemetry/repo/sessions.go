@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/Masterminds/squirrel"
 )
 
@@ -30,10 +32,14 @@ const (
 		sessionClaudeOTELRowPredicate + " AND " +
 		"(toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')" +
 		")"
-	// sessionAgentUsageRowPredicate matches Codex/Cursor usage rows — their only
-	// token/cost source. Gram-hosted chat completions and claude-code:usage rows
-	// are deliberately excluded: the summaries cover agent surfaces only.
-	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage'))"
+	// sessionAgentUsageRowPredicate matches Codex/Cursor/Claude-Chat usage
+	// rows — their only token/cost source. claude_chat:usage rows carry Claude
+	// Chat (web/desktop) token usage and claude_chat:cost rows the matching
+	// spend, both polled from the Admin Analytics API. Gram-hosted chat
+	// completions and claude-code:usage rows are deliberately excluded: the
+	// summaries cover agent surfaces only, and claude-code:usage duplicates
+	// the OTEL api_request stream.
+	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost'))"
 	// sessionAgentToolCallPredicate matches Codex/Cursor completed tool-call hook
 	// rows (they have no OTEL stream). The hook.event guard excludes the
 	// PreToolUse companion row; provider names are not tool calls.
@@ -145,6 +151,14 @@ type ListSessionsParams struct {
 	Limit            int
 }
 
+// UsesSummaryPath reports whether the requested window is wide enough to be
+// served from chat_session_summaries instead of the raw telemetry_logs scan.
+// Exposed so callers (the service-layer query span) can label which path a
+// request routed to without duplicating the threshold comparison.
+func (p ListSessionsParams) UsesSummaryPath() bool {
+	return p.TimeEnd-p.TimeStart >= SessionSummaryMinWindow.Nanoseconds()
+}
+
 type SessionSummary struct {
 	GramChatID        string  `ch:"gram_chat_id"`
 	ProjectID         string  `ch:"project_id"`
@@ -196,11 +210,7 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 			}
 			sb = sb.Having(sessionScalarHaving(dim.column, f.Values))
 		case attributeDimArray:
-			inner, args, err := arrayDimFilter(dim.column, f.Values).ToSql()
-			if err != nil {
-				return sb, fmt.Errorf("building array filter for %q: %w", f.Dimension, err)
-			}
-			sb = sb.Having(squirrel.Expr("countIf("+inner+") > 0", args...))
+			sb = sb.Having(sessionArrayHaving(dim.column, f.Values))
 		default:
 			return sb, fmt.Errorf("unhandled dimension kind for filter %q", f.Dimension)
 		}
@@ -246,6 +256,34 @@ func sessionScalarRowPredicate(expr string, values []string) squirrel.Sqlizer {
 	return squirrel.Or{nonEmptyPred, emptyPred}
 }
 
+// sessionArrayHaving matches a chat when any of its rows' array carries one
+// of the requested values. A requested "" (the "(unset)" bucket) matches
+// chats with NO value on any row — the same chat-level semantics as
+// sessionSummaryValuesHaving on the summary path (a per-row empty(...) check
+// would match any chat containing a single unenriched row, i.e. nearly all
+// of them).
+func sessionArrayHaving(colExpr string, values []string) squirrel.Sqlizer {
+	hasEmpty := false
+	nonEmpty := make([]string, 0, len(values))
+	for _, v := range values {
+		if v == "" {
+			hasEmpty = true
+			continue
+		}
+		nonEmpty = append(nonEmpty, v)
+	}
+
+	emptyPred := squirrel.Expr("countIf(notEmpty(" + colExpr + ")) = 0")
+	if len(nonEmpty) == 0 {
+		return emptyPred
+	}
+	nonEmptyPred := squirrel.Expr("countIf(hasAny("+colExpr+", ?)) > 0", nonEmpty)
+	if !hasEmpty {
+		return nonEmptyPred
+	}
+	return squirrel.Or{nonEmptyPred, emptyPred}
+}
+
 // sessionScalarHaving matches a chat when any of its rows carries one of the
 // requested scalar values. A requested "" (the "(unset)" bucket) matches chats
 // that have no non-empty value for the dimension on any row, mirroring how the
@@ -278,18 +316,40 @@ func sessionScalarHaving(expr string, values []string) squirrel.Sqlizer {
 	return squirrel.Or{nonEmptyPred, emptyPred}
 }
 
+// SessionSummaryMinWindow routes ListSessions between the raw telemetry_logs
+// scan and the pre-aggregated chat_session_summaries read (INC-417). The
+// summary is hour-bucketed, so its window edges snap to bucket boundaries —
+// up to ~1h of slop, which is noise on multi-day windows but unacceptable on
+// the sub-day presets (15m/1h/4h). Short windows are also exactly where the
+// raw scan is already cheap (the primary key prunes it to the window's
+// granules), so they stay on the raw path. Exported so tests derive their
+// window widths from it instead of encoding the threshold as magic numbers.
+const SessionSummaryMinWindow = 48 * time.Hour
+
 // ListSessions retrieves org-scoped session summaries grouped by chat_id from
 // the same source-event classes as attribute_metrics_summaries: Claude OTEL
 // api_request/tool_result rows and Codex/Cursor usage plus tool-call hook
 // rows. Pagination is based on the selected sort measure plus chat_id so
 // ordering stays stable across pages.
 //
-//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+// Wide windows read the pre-aggregated chat_session_summaries table; narrow
+// windows scan raw telemetry_logs (see SessionSummaryMinWindow).
 func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]SessionSummary, error) {
 	if len(arg.ProjectIDs) == 0 {
 		return nil, nil
 	}
+	if arg.UsesSummaryPath() {
+		return q.listSessionsFromSummaries(ctx, arg)
+	}
+	return q.listSessionsFromRawLogs(ctx, arg)
+}
 
+// listSessionsFromRawLogs derives session summaries by scanning raw
+// telemetry_logs — exact to the nanosecond, but per-row JSON extraction makes
+// it expensive on wide windows.
+//
+//nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) listSessionsFromRawLogs(ctx context.Context, arg ListSessionsParams) ([]SessionSummary, error) {
 	sortExpr, ok := sessionMeasureSelects[arg.SortBy]
 	if !ok {
 		return nil, fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
@@ -343,17 +403,197 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 	if err != nil {
 		return nil, err
 	}
+	return scanSessionSummaries(rows)
+}
+
+// sessionSummaryMeasureSelects maps the public sort measures onto merged
+// aggregates over chat_session_summaries. Keep the key set identical to
+// sessionMeasureSelects so both paths accept the same sort_by values. The
+// s. qualifier pins identifiers to the source columns: several output aliases
+// (total_cost, total_tokens, ...) share the column names, and ClickHouse
+// prefers aliases when resolving unqualified identifiers, which would nest
+// aggregates (ILLEGAL_AGGREGATION).
+//
+// #nosec G101 -- These are allowlisted SQL measure expressions, not credentials.
+var sessionSummaryMeasureSelects = map[string]string{
+	"total_cost":                  "sum(s.total_cost)",
+	"total_input_tokens":          "sum(s.total_input_tokens)",
+	"total_output_tokens":         "sum(s.total_output_tokens)",
+	"total_tokens":                "sum(s.total_tokens)",
+	"cache_read_input_tokens":     "sum(s.cache_read_input_tokens)",
+	"cache_creation_input_tokens": "sum(s.cache_creation_input_tokens)",
+	"tool_call_count":             "uniqExactIfMerge(s.tool_call_count)",
+	"message_count":               "uniqExactIfMerge(s.message_count)",
+	"duration_seconds":            "toFloat64(max(s.end_time_unix_nano) - min(s.start_time_unix_nano)) / 1000000000.0",
+	// Kept as a service-level compatibility alias; the public listSessions API
+	// uses tool_call_count.
+	"total_tool_calls": "uniqExactIfMerge(s.tool_call_count)",
+}
+
+// listSessionsFromSummaries serves the session list from the pre-aggregated
+// chat_session_summaries table: one row per (project, hour bucket, chat),
+// merged per chat over the buckets inside the window. The window snaps to
+// hour-bucket boundaries (start rounds down), so edges carry up to ~1h of
+// slop relative to the raw path — acceptable on the wide windows routed here.
+//
+//nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) listSessionsFromSummaries(ctx context.Context, arg ListSessionsParams) ([]SessionSummary, error) {
+	sortExpr, ok := sessionSummaryMeasureSelects[arg.SortBy]
+	if !ok {
+		return nil, fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
+	}
+
+	sb := sq.Select(
+		"s.chat_id as gram_chat_id",
+		"toString(any(s.gram_project_id)) as project_id",
+		// max() so '' loses to a non-empty value, matching the summary
+		// columns' merge semantics.
+		"max(s.session_user_email) as session_user_email",
+		"max(s.session_hook_source) as session_hook_source",
+		"argMaxIfMerge(s.session_model) as session_model",
+		"min(s.start_time_unix_nano) as start_time_unix_nano",
+		"max(s.end_time_unix_nano) as end_time_unix_nano",
+		"toFloat64(max(s.end_time_unix_nano) - min(s.start_time_unix_nano)) / 1000000000.0 as duration_seconds",
+		"toInt64(uniqExactIfMerge(s.message_count)) as message_count",
+		"toInt64(uniqExactIfMerge(s.tool_call_count)) as tool_call_count",
+		"sum(s.total_input_tokens) as total_input_tokens",
+		"sum(s.total_output_tokens) as total_output_tokens",
+		"sum(s.total_tokens) as total_tokens",
+		"sum(s.total_cost) as total_cost",
+		"if(sum(s.failed_tool_call_count) > 0, 'error', 'success') as status",
+		"toFloat64("+sortExpr+") as sort_value",
+	).
+		From("chat_session_summaries s").
+		Where(squirrel.Eq{"s.gram_project_id": arg.ProjectIDs}).
+		Where("s.time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?, 'UTC'))", arg.TimeStart).
+		Where("s.time_bucket <= fromUnixTimestamp64Nano(?, 'UTC')", arg.TimeEnd)
+
+	sb, err := applySessionSummaryFilters(sb, arg.Filters)
+	if err != nil {
+		return nil, err
+	}
+
+	sb = sb.GroupBy("s.chat_id")
+
+	// The bucket bounds above admit whole boundary hours; this exact-window
+	// overlap guard (on the nanosecond-precise merged min/max) drops phantom
+	// sessions whose activity falls entirely OUTSIDE the requested window in
+	// a boundary hour. Sessions with genuine in-window activity keep their
+	// (edge-padded) totals.
+	sb = sb.Having("max(s.end_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(s.start_time_unix_nano) <= ?", arg.TimeEnd)
+
+	if arg.CursorSortValue != nil && arg.CursorGramChatID != "" {
+		sb = sb.Having("(sort_value, s.chat_id) < (?, ?)", *arg.CursorSortValue, arg.CursorGramChatID)
+	}
+
+	sb = sb.OrderBy("sort_value DESC", "gram_chat_id DESC").
+		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is validated by the service layer.
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list sessions summary query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return scanSessionSummaries(rows)
+}
+
+// applySessionSummaryFilters translates the per-chat "any row matches" filter
+// semantics of applySessionFilters onto the summary table's merged
+// distinct-value arrays. Scalar and array dimensions match via
+// hasAny/arrayExists over groupUniqArrayArray of the dimension's column; the
+// co-located Claude attribution dimensions match a single per-row tuple in
+// attribution_tuples, preserving drill-down semantics from the aggregate
+// cost table.
+func applySessionSummaryFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter) (squirrel.SelectBuilder, error) {
+	var tuplePredicates []string
+	var tupleArgs []any
+
+	for _, f := range filters {
+		if len(f.Values) == 0 {
+			continue
+		}
+		dim, ok := sessionSummaryDimensionRegistry[f.Dimension]
+		if !ok {
+			return sb, fmt.Errorf("unknown filter dimension %q", f.Dimension)
+		}
+		switch {
+		case dim.kind == attributeDimProject:
+			sb = sb.Where(squirrel.Eq{"s." + dim.column: f.Values})
+		case dim.coLocateSessionFilters:
+			// The dimension key doubles as the field name in the
+			// attribution_tuples named tuple (enforced by the registry
+			// bindings test), and sessionScalarRowPredicate supplies the same
+			// per-row value semantics the raw path uses — t is the arrayExists
+			// lambda argument.
+			pred, args, err := sessionScalarRowPredicate("tupleElement(t, '"+f.Dimension+"')", f.Values).ToSql()
+			if err != nil {
+				return sb, fmt.Errorf("building co-located session summary filter for %q: %w", f.Dimension, err)
+			}
+			tuplePredicates = append(tuplePredicates, pred)
+			tupleArgs = append(tupleArgs, args...)
+		default:
+			sb = sb.Having(sessionSummaryValuesHaving("s."+dim.column, f.Values))
+		}
+	}
+
+	if len(tuplePredicates) > 0 {
+		sb = sb.Having(squirrel.Expr(
+			"arrayExists(t -> "+strings.Join(tuplePredicates, " AND ")+", groupUniqArrayArray(s.attribution_tuples))",
+			tupleArgs...,
+		))
+	}
+	return sb, nil
+}
+
+// sessionSummaryValuesHaving matches a chat when the merged distinct values
+// of a dimension column contain one of the requested values. A requested ""
+// (the "(unset)" bucket) matches chats with no non-empty value anywhere,
+// mirroring sessionScalarHaving. For array dimensions (roles/groups) this
+// means "no value on any row", a deliberate tightening of the raw path's
+// per-row empty(...) check, which matches any chat containing a single
+// unenriched row.
+func sessionSummaryValuesHaving(colExpr string, values []string) squirrel.Sqlizer {
+	merged := "groupUniqArrayArray(" + colExpr + ")"
+
+	hasEmpty := false
+	nonEmpty := make([]string, 0, len(values))
+	for _, v := range values {
+		if v == "" {
+			hasEmpty = true
+			continue
+		}
+		nonEmpty = append(nonEmpty, v)
+	}
+
+	emptyPred := squirrel.Expr("NOT arrayExists(x -> x != '', " + merged + ")")
+	if len(nonEmpty) == 0 {
+		return emptyPred
+	}
+	nonEmptyPred := squirrel.Expr("hasAny("+merged+", ?)", nonEmpty)
+	if !hasEmpty {
+		return nonEmptyPred
+	}
+	return squirrel.Or{nonEmptyPred, emptyPred}
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func scanSessionSummaries(rows driver.Rows) ([]SessionSummary, error) {
 	defer rows.Close()
 
 	var sessions []SessionSummary
 	for rows.Next() {
 		var session SessionSummary
-		if err = rows.ScanStruct(&session); err != nil {
+		if err := rows.ScanStruct(&session); err != nil {
 			return nil, fmt.Errorf("scanning session row: %w", err)
 		}
 		sessions = append(sessions, session)
 	}
-	if err = rows.Err(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return sessions, nil
