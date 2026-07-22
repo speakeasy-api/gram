@@ -8,7 +8,7 @@ dependencies = [
   "aiocop>=1.1.4",
   "anyio>=4.14.1",
   "asyncer>=0.0.17",
-  "click>=8.4.1",
+  "click>=8.4.2",
   "en-core-web-lg",
   "gram-infra",
   "maxminddb>=3.1.1",
