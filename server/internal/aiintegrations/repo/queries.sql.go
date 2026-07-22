@@ -138,12 +138,12 @@ WITH inserted AS (
     , $5
   )
   ON CONFLICT (ai_integration_config_id, schedule) DO UPDATE SET updated_at = ai_integration_syncs.updated_at
-  RETURNING created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+  RETURNING created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, auto_paused_at, disabled_at, id
 )
-SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, auto_paused_at, disabled_at, id
 FROM inserted
 UNION ALL
-SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, id
+SELECT created_at, updated_at, ai_integration_config_id, schedule, kind, poll_watermark_at, poll_checkpoint, last_cursor_id, next_poll_after, last_poll_error, last_poll_failed_at, last_poll_success_at, consecutive_failures, auto_paused_at, disabled_at, id
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = $1
   AND schedule = $2
@@ -172,6 +172,8 @@ type EnsureSyncRow struct {
 	LastPollFailedAt      pgtype.Timestamptz
 	LastPollSuccessAt     pgtype.Timestamptz
 	ConsecutiveFailures   int32
+	AutoPausedAt          pgtype.Timestamptz
+	DisabledAt            pgtype.Timestamptz
 	ID                    uuid.UUID
 }
 
@@ -198,6 +200,8 @@ func (q *Queries) EnsureSync(ctx context.Context, arg EnsureSyncParams) (EnsureS
 		&i.LastPollFailedAt,
 		&i.LastPollSuccessAt,
 		&i.ConsecutiveFailures,
+		&i.AutoPausedAt,
+		&i.DisabledAt,
 		&i.ID,
 	)
 	return i, err

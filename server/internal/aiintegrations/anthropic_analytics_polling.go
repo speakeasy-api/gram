@@ -266,6 +266,12 @@ func (src *anthropicUsageReportSource) UpperBound(ctx context.Context, endTime t
 	if err != nil {
 		return time.Time{}, err //nolint:wrapcheck // Preserve HTTPError for the access-denied classification upstream.
 	}
+	// An empty data_refreshed_at means Anthropic has not finalized any
+	// analytics data for this org yet. Report a zero upper bound so the
+	// poller no-ops the run instead of failing on an unparseable watermark.
+	if page.DataRefreshedAt == "" {
+		return time.Time{}, nil
+	}
 	refreshedAt, err := time.Parse(time.RFC3339, page.DataRefreshedAt)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("parse usage report data_refreshed_at: %w", err)
@@ -314,6 +320,12 @@ func (src *anthropicCostReportSource) UpperBound(ctx context.Context, endTime ti
 	page, err := src.client.GetUserCostReport(ctx, analyticsProbeParams(endTime))
 	if err != nil {
 		return time.Time{}, err //nolint:wrapcheck // Preserve HTTPError for the access-denied classification upstream.
+	}
+	// An empty data_refreshed_at means Anthropic has not finalized any
+	// analytics data for this org yet. Report a zero upper bound so the
+	// poller no-ops the run instead of failing on an unparseable watermark.
+	if page.DataRefreshedAt == "" {
+		return time.Time{}, nil
 	}
 	refreshedAt, err := time.Parse(time.RFC3339, page.DataRefreshedAt)
 	if err != nil {

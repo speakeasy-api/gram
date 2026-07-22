@@ -158,6 +158,43 @@ func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
 	require.Equal(t, int64(1), countAIIntegrationConfigs(t, ctx, conn, orgID, false))
 }
 
+func TestUpsertWithTxStartsSingleCodexSchedule(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	externalOrgID := "org-openai"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCodexCompliance, "codex-key", true, true, &externalOrgID, nil)
+
+	require.Equal(t, map[string]string{
+		ScheduleCodexCompliance: SyncKindTime,
+	}, listSyncSchedules(t, ctx, conn, created.Config.ID))
+}
+
+func TestUpsertWithTxRequiresCodexOrganizationID(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	workspaceID := "75179082-77da-4127-8031-fce17dddb623"
+	require.Error(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderCodexCompliance, "codex-key", true, true, &workspaceID, nil, nil)
+		return err
+	}))
+}
+
+func TestUpsertWithTxRejectsCodexPathLikeOrganizationID(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+
+	externalOrgID := "org-openai/../other"
+	require.Error(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		_, err := store.upsertWithTx(ctx, tx, orgID, ProviderCodexCompliance, "codex-key", true, true, &externalOrgID, nil, nil)
+		return err
+	}))
+}
+
 func upsertConfigWithTx(
 	t *testing.T,
 	ctx context.Context,
