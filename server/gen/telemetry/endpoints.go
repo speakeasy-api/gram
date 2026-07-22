@@ -16,27 +16,34 @@ import (
 
 // Endpoints wraps the "telemetry" service endpoints.
 type Endpoints struct {
-	SearchLogs                goa.Endpoint
-	SearchToolCalls           goa.Endpoint
-	SearchChats               goa.Endpoint
-	SearchUsers               goa.Endpoint
-	CaptureEvent              goa.Endpoint
-	GetProjectMetricsSummary  goa.Endpoint
-	GetUserMetricsSummary     goa.Endpoint
-	GetEmployeeDataFlowGraph  goa.Endpoint
-	GetObservabilityOverview  goa.Endpoint
-	GetProjectOverview        goa.Endpoint
-	Query                     goa.Endpoint
-	QueryTumDetails           goa.Endpoint
-	ListSessions              goa.Endpoint
-	ListFilterOptions         goa.Endpoint
-	ListAttributeKeys         goa.Endpoint
-	GetHooksSummary           goa.Endpoint
-	GetToolUsageSummary       goa.Endpoint
-	ListToolUsageTraces       goa.Endpoint
-	GetToolUsageFilterOptions goa.Endpoint
-	GetMcpServerActivity      goa.Endpoint
-	ListHooksTraces           goa.Endpoint
+	SearchLogs                      goa.Endpoint
+	SearchToolCalls                 goa.Endpoint
+	SearchChats                     goa.Endpoint
+	SearchUsers                     goa.Endpoint
+	CaptureEvent                    goa.Endpoint
+	GetProjectMetricsSummary        goa.Endpoint
+	GetUserMetricsSummary           goa.Endpoint
+	GetEmployeeDataFlowGraph        goa.Endpoint
+	GetObservabilityOverview        goa.Endpoint
+	GetProjectOverview              goa.Endpoint
+	Query                           goa.Endpoint
+	QueryTumDetails                 goa.Endpoint
+	ListSessions                    goa.Endpoint
+	ListFilterOptions               goa.Endpoint
+	ListAttributeKeys               goa.Endpoint
+	GetHooksSummary                 goa.Endpoint
+	GetToolUsageSummary             goa.Endpoint
+	GetToolUsageTotals              goa.Endpoint
+	GetToolUsageTargets             goa.Endpoint
+	GetToolUsageUsers               goa.Endpoint
+	GetToolUsageTargetTimeSeries    goa.Endpoint
+	GetToolUsageUserTimeSeries      goa.Endpoint
+	GetToolUsageUsersByTarget       goa.Endpoint
+	GetToolUsageTargetToolBreakdown goa.Endpoint
+	ListToolUsageTraces             goa.Endpoint
+	GetToolUsageFilterOptions       goa.Endpoint
+	GetMcpServerActivity            goa.Endpoint
+	ListHooksTraces                 goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "telemetry" service with endpoints.
@@ -44,27 +51,34 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		SearchLogs:                NewSearchLogsEndpoint(s, a.APIKeyAuth),
-		SearchToolCalls:           NewSearchToolCallsEndpoint(s, a.APIKeyAuth),
-		SearchChats:               NewSearchChatsEndpoint(s, a.APIKeyAuth),
-		SearchUsers:               NewSearchUsersEndpoint(s, a.APIKeyAuth),
-		CaptureEvent:              NewCaptureEventEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		GetProjectMetricsSummary:  NewGetProjectMetricsSummaryEndpoint(s, a.APIKeyAuth),
-		GetUserMetricsSummary:     NewGetUserMetricsSummaryEndpoint(s, a.APIKeyAuth),
-		GetEmployeeDataFlowGraph:  NewGetEmployeeDataFlowGraphEndpoint(s, a.APIKeyAuth),
-		GetObservabilityOverview:  NewGetObservabilityOverviewEndpoint(s, a.APIKeyAuth),
-		GetProjectOverview:        NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
-		Query:                     NewQueryEndpoint(s, a.APIKeyAuth),
-		QueryTumDetails:           NewQueryTumDetailsEndpoint(s, a.APIKeyAuth),
-		ListSessions:              NewListSessionsEndpoint(s, a.APIKeyAuth),
-		ListFilterOptions:         NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
-		ListAttributeKeys:         NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
-		GetHooksSummary:           NewGetHooksSummaryEndpoint(s, a.APIKeyAuth),
-		GetToolUsageSummary:       NewGetToolUsageSummaryEndpoint(s, a.APIKeyAuth),
-		ListToolUsageTraces:       NewListToolUsageTracesEndpoint(s, a.APIKeyAuth),
-		GetToolUsageFilterOptions: NewGetToolUsageFilterOptionsEndpoint(s, a.APIKeyAuth),
-		GetMcpServerActivity:      NewGetMcpServerActivityEndpoint(s, a.APIKeyAuth),
-		ListHooksTraces:           NewListHooksTracesEndpoint(s, a.APIKeyAuth),
+		SearchLogs:                      NewSearchLogsEndpoint(s, a.APIKeyAuth),
+		SearchToolCalls:                 NewSearchToolCallsEndpoint(s, a.APIKeyAuth),
+		SearchChats:                     NewSearchChatsEndpoint(s, a.APIKeyAuth),
+		SearchUsers:                     NewSearchUsersEndpoint(s, a.APIKeyAuth),
+		CaptureEvent:                    NewCaptureEventEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		GetProjectMetricsSummary:        NewGetProjectMetricsSummaryEndpoint(s, a.APIKeyAuth),
+		GetUserMetricsSummary:           NewGetUserMetricsSummaryEndpoint(s, a.APIKeyAuth),
+		GetEmployeeDataFlowGraph:        NewGetEmployeeDataFlowGraphEndpoint(s, a.APIKeyAuth),
+		GetObservabilityOverview:        NewGetObservabilityOverviewEndpoint(s, a.APIKeyAuth),
+		GetProjectOverview:              NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
+		Query:                           NewQueryEndpoint(s, a.APIKeyAuth),
+		QueryTumDetails:                 NewQueryTumDetailsEndpoint(s, a.APIKeyAuth),
+		ListSessions:                    NewListSessionsEndpoint(s, a.APIKeyAuth),
+		ListFilterOptions:               NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
+		ListAttributeKeys:               NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
+		GetHooksSummary:                 NewGetHooksSummaryEndpoint(s, a.APIKeyAuth),
+		GetToolUsageSummary:             NewGetToolUsageSummaryEndpoint(s, a.APIKeyAuth),
+		GetToolUsageTotals:              NewGetToolUsageTotalsEndpoint(s, a.APIKeyAuth),
+		GetToolUsageTargets:             NewGetToolUsageTargetsEndpoint(s, a.APIKeyAuth),
+		GetToolUsageUsers:               NewGetToolUsageUsersEndpoint(s, a.APIKeyAuth),
+		GetToolUsageTargetTimeSeries:    NewGetToolUsageTargetTimeSeriesEndpoint(s, a.APIKeyAuth),
+		GetToolUsageUserTimeSeries:      NewGetToolUsageUserTimeSeriesEndpoint(s, a.APIKeyAuth),
+		GetToolUsageUsersByTarget:       NewGetToolUsageUsersByTargetEndpoint(s, a.APIKeyAuth),
+		GetToolUsageTargetToolBreakdown: NewGetToolUsageTargetToolBreakdownEndpoint(s, a.APIKeyAuth),
+		ListToolUsageTraces:             NewListToolUsageTracesEndpoint(s, a.APIKeyAuth),
+		GetToolUsageFilterOptions:       NewGetToolUsageFilterOptionsEndpoint(s, a.APIKeyAuth),
+		GetMcpServerActivity:            NewGetMcpServerActivityEndpoint(s, a.APIKeyAuth),
+		ListHooksTraces:                 NewListHooksTracesEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -87,6 +101,13 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListAttributeKeys = m(e.ListAttributeKeys)
 	e.GetHooksSummary = m(e.GetHooksSummary)
 	e.GetToolUsageSummary = m(e.GetToolUsageSummary)
+	e.GetToolUsageTotals = m(e.GetToolUsageTotals)
+	e.GetToolUsageTargets = m(e.GetToolUsageTargets)
+	e.GetToolUsageUsers = m(e.GetToolUsageUsers)
+	e.GetToolUsageTargetTimeSeries = m(e.GetToolUsageTargetTimeSeries)
+	e.GetToolUsageUserTimeSeries = m(e.GetToolUsageUserTimeSeries)
+	e.GetToolUsageUsersByTarget = m(e.GetToolUsageUsersByTarget)
+	e.GetToolUsageTargetToolBreakdown = m(e.GetToolUsageTargetToolBreakdown)
 	e.ListToolUsageTraces = m(e.ListToolUsageTraces)
 	e.GetToolUsageFilterOptions = m(e.GetToolUsageFilterOptions)
 	e.GetMcpServerActivity = m(e.GetMcpServerActivity)
@@ -997,6 +1018,419 @@ func NewGetToolUsageSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.GetToolUsageSummary(ctx, p)
+	}
+}
+
+// NewGetToolUsageTotalsEndpoint returns an endpoint function that calls the
+// method "getToolUsageTotals" of service "telemetry".
+func NewGetToolUsageTotalsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageTotalsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageTotals(ctx, p)
+	}
+}
+
+// NewGetToolUsageTargetsEndpoint returns an endpoint function that calls the
+// method "getToolUsageTargets" of service "telemetry".
+func NewGetToolUsageTargetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageTargetsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageTargets(ctx, p)
+	}
+}
+
+// NewGetToolUsageUsersEndpoint returns an endpoint function that calls the
+// method "getToolUsageUsers" of service "telemetry".
+func NewGetToolUsageUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageUsersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageUsers(ctx, p)
+	}
+}
+
+// NewGetToolUsageTargetTimeSeriesEndpoint returns an endpoint function that
+// calls the method "getToolUsageTargetTimeSeries" of service "telemetry".
+func NewGetToolUsageTargetTimeSeriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageTargetTimeSeriesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageTargetTimeSeries(ctx, p)
+	}
+}
+
+// NewGetToolUsageUserTimeSeriesEndpoint returns an endpoint function that
+// calls the method "getToolUsageUserTimeSeries" of service "telemetry".
+func NewGetToolUsageUserTimeSeriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageUserTimeSeriesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageUserTimeSeries(ctx, p)
+	}
+}
+
+// NewGetToolUsageUsersByTargetEndpoint returns an endpoint function that calls
+// the method "getToolUsageUsersByTarget" of service "telemetry".
+func NewGetToolUsageUsersByTargetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageUsersByTargetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageUsersByTarget(ctx, p)
+	}
+}
+
+// NewGetToolUsageTargetToolBreakdownEndpoint returns an endpoint function that
+// calls the method "getToolUsageTargetToolBreakdown" of service "telemetry".
+func NewGetToolUsageTargetToolBreakdownEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageTargetToolBreakdownPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageTargetToolBreakdown(ctx, p)
 	}
 }
 
