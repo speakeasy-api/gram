@@ -22,6 +22,7 @@ import { compactForModel } from "@/elements/lib/contextCompaction";
 import { describeStreamError } from "@/elements/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
+import elementsSystemPrompt from "@/elements/prompts/system.txt?raw";
 import { ElementsConfig, Model } from "@/elements/types";
 import { Plugin } from "@/elements/types/plugins";
 import {
@@ -119,16 +120,6 @@ export interface ElementsProviderProps {
   config: ElementsConfig;
 }
 
-const BASE_SYSTEM_PROMPT = `You are a helpful assistant that can answer questions and help with tasks.
-
-Tool Result Display:
-Some tools have custom visual components that automatically render their results (you'll see a rich card/widget appear). For these, do not repeat the data - just add brief context or a follow-up question if needed.
-
-For tools WITHOUT custom components, you should present the data clearly - either as plain text for simple results, or using the UI code block format for structured data like lists of items, categories, or dashboards.
-
-UI Widget Guidelines:
-IMPORTANT: Only render ONE generative UI widget (chart, dashboard, visualization) per response. Never render multiple widgets in a single message - this causes layout shifts during streaming and overwhelms the user. If you have multiple visualizations to show, render the most important one and explicitly offer to show others as follow-ups (e.g., "Would you like to see a breakdown by status as well?").`;
-
 function mergeInternalSystemPromptWith(
   userSystemPrompt: string | undefined,
   plugins: Plugin[],
@@ -140,7 +131,7 @@ function mergeInternalSystemPromptWith(
       : "";
 
   return `
-  ${BASE_SYSTEM_PROMPT}${customToolsSection}
+  ${elementsSystemPrompt}${customToolsSection}
 
   User-provided System Prompt:
   ${userSystemPrompt ?? "None provided"}

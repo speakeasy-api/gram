@@ -47,6 +47,7 @@ func TestComposeInstructions_SlackIncludesRespondDecisionGuidance(t *testing.T) 
 	require.Contains(t, instructions, "end the turn without posting anything")
 	require.Contains(t, instructions, "Never post a message explaining a tool error")
 	require.NotContains(t, instructions, "calling platform_slack_set_thread_status with status set to an empty string")
+	require.NotContains(t, instructions, "## Elements visualizations")
 }
 
 func TestComposeInstructions_IncludesSkillsBeforeMCPAuthInOrder(t *testing.T) {
@@ -75,6 +76,32 @@ func TestComposeInstructions_IncludesSkillsBeforeMCPAuthInOrder(t *testing.T) {
 	auth := strings.Index(instructions, "## MCP authentication")
 	require.True(t, base >= 0 && skills > base && alpha > skills && beta > alpha && auth > beta)
 	require.Contains(t, instructions, `Call mcp__p-assistants_skills_load with name "alpha" before relying on this skill.`)
+}
+
+func TestComposeInstructions_DashboardIncludesElementsPrompts(t *testing.T) {
+	t.Parallel()
+
+	thread := assistantThreadRecord{
+		ID:            uuid.New(),
+		AssistantID:   uuid.New(),
+		ProjectID:     uuid.New(),
+		CorrelationID: "dashboard:test",
+		ChatID:        uuid.New(),
+		SourceKind:    sourceKindDashboard,
+		SourceRefJSON: []byte(`{}`),
+		LastEventAt:   time.Now(),
+	}
+
+	instructions, err := composeInstructions("Base instructions.", thread, nil)
+	require.NoError(t, err)
+	require.Contains(t, instructions, "## Elements visualizations")
+	require.Contains(t, instructions, "The code fence language must be exactly `chart` or `ui`")
+	require.Contains(t, instructions, elementsSystemPrompt)
+	require.Contains(t, instructions, elementsChartPrompt)
+	require.Contains(t, instructions, elementsGenerativeUIPrompt)
+	require.Contains(t, instructions, "Only render ONE generative UI widget")
+	require.Contains(t, instructions, "BarChart")
+	require.Contains(t, instructions, "```ui code blocks")
 }
 
 func TestComposeInstructions_SanitizesAndCapsSkillMetadata(t *testing.T) {
