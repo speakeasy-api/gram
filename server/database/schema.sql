@@ -505,9 +505,11 @@ CREATE TABLE IF NOT EXISTS skill_efficacy_evaluations (
 
   state TEXT NOT NULL DEFAULT 'pending',
   reserved_on date,
+  claim_token uuid,
   attempts integer NOT NULL DEFAULT 0,
   last_error TEXT,
   scored_at timestamptz,
+  failed_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -526,23 +528,27 @@ CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_pending_idx
 ON skill_efficacy_evaluations (project_id, observed_at DESC, id DESC)
 WHERE state = 'pending';
 
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_recovered_pending_idx
+ON skill_efficacy_evaluations (project_id, observed_at DESC, id DESC)
+WHERE state = 'pending' AND reserved_on IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_organization_id_idx
 ON skill_efficacy_evaluations (organization_id);
 
 CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_org_spend_idx
 ON skill_efficacy_evaluations (organization_id, reserved_on)
-WHERE state IN ('reserved', 'scored');
+WHERE reserved_on IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_skill_spend_idx
 ON skill_efficacy_evaluations (skill_id, reserved_on)
-WHERE state IN ('reserved', 'scored');
+WHERE reserved_on IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_version_lifetime_spend_idx
 ON skill_efficacy_evaluations (skill_version_id)
-WHERE state IN ('reserved', 'scored');
+WHERE reserved_on IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_stale_reserved_idx
-ON skill_efficacy_evaluations (updated_at)
+ON skill_efficacy_evaluations (project_id, updated_at, id)
 WHERE state = 'reserved';
 
 CREATE TABLE IF NOT EXISTS packages (
