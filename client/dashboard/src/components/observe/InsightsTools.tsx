@@ -1863,9 +1863,11 @@ function HooksAnalytics({
 }) {
   const targets = summaryData?.targets;
   // targetFiltersByLabel (below) is built from the targets section, which loads
-  // independently from the panels that trigger filtering. Until it resolves,
-  // suppress server-row clicks rather than apply the wrong fallback filter.
-  const targetsPending = sectionStatus.targets.pending;
+  // independently from the panels that trigger filtering. Until it resolves —
+  // and if it fails to resolve — suppress server-row clicks rather than apply
+  // the wrong fallback filter.
+  const targetsUnavailable =
+    sectionStatus.targets.pending || sectionStatus.targets.error;
   const users = summaryData?.users ?? [];
   const timeSeries = summaryData?.targetTimeSeries ?? [];
   const userTimeSeries = summaryData?.userTimeSeries ?? [];
@@ -1931,9 +1933,9 @@ function HooksAnalytics({
         if (!value || value === "unknown") return;
         if (filterType === "server") {
           // Skill/local-tool/hosted routing needs targetFiltersByLabel; if the
-          // targets section is still loading, ignore the click instead of
-          // misrouting it to a raw server filter.
-          if (targetsPending) return;
+          // targets section is still loading or failed, ignore the click instead
+          // of misrouting it to a raw server filter.
+          if (targetsUnavailable) return;
           if (value === localToolsDisplayName) {
             onHookTypesChange(["local_tool"]);
             return;
@@ -1975,7 +1977,7 @@ function HooksAnalytics({
       serverNameMappings.rawToDisplay,
       serverNameMappings.displayToRaws,
       targetFiltersByLabel,
-      targetsPending,
+      targetsUnavailable,
     ],
   );
 
