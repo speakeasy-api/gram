@@ -13,6 +13,7 @@ import { formatChartLabel } from "@/components/chart/chartUtils";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { useInsightsState } from "@/components/insights-context";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -1631,6 +1632,9 @@ function AccountsCard({ accounts }: { accounts: UserAccount[] }) {
           </p>
         )}
       </div>
+      <p className="text-muted-foreground mt-3 text-xs">
+        {PERSONAL_ACCOUNT_GOVERNANCE_NOTE}
+      </p>
     </section>
   );
 }

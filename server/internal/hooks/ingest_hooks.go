@@ -55,6 +55,7 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	eventType := ""
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
+	ctx, riskScanned := withRiskScanTracker(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
@@ -63,7 +64,7 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		if res != nil {
 			decision = res.Decision
 		}
-		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, source, eventType, outcome, decision, orgSlug, *riskScanned, time.Since(start))
 	}()
 
 	if err := validateCanonicalIngestPayload(payload); err != nil {

@@ -15,6 +15,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -53,6 +55,8 @@ func WithOTELMetadata(params LogParams, observedTimestamp time.Time, resourceAtt
 type Logger struct {
 	shutdownCtx       func() context.Context
 	logger            *slog.Logger
+	tracer            trace.Tracer
+	metrics           *chWriteMetrics
 	chConn            clickhouse.Conn
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
@@ -62,14 +66,19 @@ type Logger struct {
 func NewLogger(
 	shutdownCtx context.Context,
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	chConn clickhouse.Conn,
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
 	users *UserInfoResolver,
 ) *Logger {
+	logger = logger.With(attr.SlogComponent("telemetry_logger"))
 	return &Logger{
 		shutdownCtx:       func() context.Context { return shutdownCtx },
-		logger:            logger.With(attr.SlogComponent("telemetry_logger")),
+		logger:            logger,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
+		metrics:           newCHWriteMetrics(meterProvider, logger),
 		chConn:            chConn,
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
@@ -84,6 +93,8 @@ func NewStub(logger *slog.Logger) *Logger {
 	return &Logger{
 		shutdownCtx:       context.Background,
 		logger:            logger.With(attr.SlogComponent("telemetry_logger_stub")),
+		tracer:            nil,
+		metrics:           nil,
 		chConn:            nil,
 		logsEnabled:       disabled,
 		toolIOLogsEnabled: disabled,
@@ -146,7 +157,10 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 	if len(logParams) == 0 {
 		return nil
 	}
-	if err := repo.New(l.chConn).InsertTelemetryLogs(l.shutdownCtx(), logParams); err != nil {
+	err := l.observeCHWrite(ctx, "telemetry.insertLogs", chWriteOperationInsertLogs, len(logParams), func(writeCtx context.Context) error {
+		return repo.New(l.chConn).InsertTelemetryLogs(writeCtx, logParams)
+	})
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
 	}
 	return nil
@@ -162,7 +176,10 @@ func (l *Logger) LogBulkStaging(ctx context.Context, params []LogParams) error {
 	if len(logParams) == 0 {
 		return nil
 	}
-	if err := repo.New(l.chConn).InsertTelemetryLogsStaging(l.shutdownCtx(), logParams); err != nil {
+	err := l.observeCHWrite(ctx, "telemetry.insertLogsStaging", chWriteOperationInsertLogsStaging, len(logParams), func(writeCtx context.Context) error {
+		return repo.New(l.chConn).InsertTelemetryLogsStaging(writeCtx, logParams)
+	})
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "insert staged telemetry logs")
 	}
 	return nil

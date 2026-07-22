@@ -28,7 +28,7 @@ INSERT INTO custom_domains (
     $5,
     $6
 )
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateCustomDomainParams struct {
@@ -60,6 +60,12 @@ func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomain
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -81,7 +87,7 @@ func (q *Queries) DeleteCustomDomain(ctx context.Context, organizationID string)
 }
 
 const getCustomDomainByDomain = `-- name: GetCustomDomainByDomain :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE domain = $1
   AND deleted IS FALSE
@@ -100,6 +106,12 @@ func (q *Queries) GetCustomDomainByDomain(ctx context.Context, domain string) (C
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -109,7 +121,7 @@ func (q *Queries) GetCustomDomainByDomain(ctx context.Context, domain string) (C
 }
 
 const getCustomDomainByID = `-- name: GetCustomDomainByID :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE id = $1
   AND deleted IS FALSE
@@ -128,6 +140,12 @@ func (q *Queries) GetCustomDomainByID(ctx context.Context, id uuid.UUID) (Custom
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -137,7 +155,7 @@ func (q *Queries) GetCustomDomainByID(ctx context.Context, id uuid.UUID) (Custom
 }
 
 const getCustomDomainByIDAndOrganization = `-- name: GetCustomDomainByIDAndOrganization :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE id = $1
   AND organization_id = $2
@@ -166,6 +184,12 @@ func (q *Queries) GetCustomDomainByIDAndOrganization(ctx context.Context, arg Ge
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -175,7 +199,7 @@ func (q *Queries) GetCustomDomainByIDAndOrganization(ctx context.Context, arg Ge
 }
 
 const getCustomDomainByOrganization = `-- name: GetCustomDomainByOrganization :one
-SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -195,6 +219,12 @@ func (q *Queries) GetCustomDomainByOrganization(ctx context.Context, organizatio
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -214,7 +244,7 @@ SET
     updated_at = clock_timestamp()
 WHERE id = $6
   AND deleted IS FALSE
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainParams struct {
@@ -246,6 +276,12 @@ func (q *Queries) UpdateCustomDomain(ctx context.Context, arg UpdateCustomDomain
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -261,7 +297,7 @@ SET
     updated_at = clock_timestamp()
 WHERE organization_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainIPAllowlistParams struct {
@@ -282,6 +318,12 @@ func (q *Queries) UpdateCustomDomainIPAllowlist(ctx context.Context, arg UpdateC
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

@@ -54,7 +54,6 @@ type Service struct {
 	policyBypass       *risk.PolicyBypassEvaluator
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
-	serverURL          *url.URL
 	siteURL            *url.URL
 	jwtSecret          string
 	// nowFunc supplies the event timestamp for ingest paths that stamp
@@ -169,7 +168,6 @@ func NewService(
 	policyBypass *risk.PolicyBypassEvaluator,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
-	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
 ) *Service {
@@ -190,7 +188,6 @@ func NewService(
 		policyBypass:       policyBypass,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
-		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
 		nowFunc:            time.Now,

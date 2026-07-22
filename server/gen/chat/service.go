@@ -121,6 +121,10 @@ type Chat struct {
 	UserID *string
 	// The ID of the external user who created the chat
 	ExternalUserID *string
+	// The ID of the assistant that produced this chat, if any
+	AssistantID *string
+	// The name of the assistant that produced this chat, if any
+	AssistantName *string
 	// The number of messages in the chat
 	NumMessages int
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -198,6 +202,10 @@ type ChatOverview struct {
 	UserID *string
 	// The ID of the external user who created the chat
 	ExternalUserID *string
+	// The ID of the assistant that produced this chat, if any
+	AssistantID *string
+	// The name of the assistant that produced this chat, if any
+	AssistantName *string
 	// The number of messages in the chat
 	NumMessages int
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -345,7 +353,7 @@ type ListChatsPayload struct {
 	SessionToken      *string
 	ProjectSlugInput  *string
 	ChatSessionsToken *string
-	// Search query (searches chat ID, user ID, and title)
+	// Search query (searches chat ID, user ID, user name, and title)
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string

@@ -343,6 +343,15 @@ const (
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 	HookHasPluginAuthKey        = attribute.Key("gram.hook.has_plugin_auth")
 	HookHostnameKey             = attribute.Key("gram.hook.hostname")
+	// HookRiskScannedKey marks hook duration metrics where a risk enforcement
+	// scan actually executed (as opposed to short-circuiting on missing
+	// context or no policies), so gating latency can be separated from the
+	// no-scan baseline.
+	HookRiskScannedKey = attribute.Key("gram.hook.risk_scanned")
+	// TelemetryCHOperationKey names the synchronous ClickHouse write measured
+	// on telemetry.clickhouse.write.duration spans and metrics.
+	TelemetryCHOperationKey = attribute.Key("gram.telemetry.operation")
+	TelemetryCHRowCountKey  = attribute.Key("gram.telemetry.row_count")
 	// HookReplayedKey is set (true) on telemetry rows for events redelivered
 	// from a device's offline spool after control-plane downtime, so
 	// dashboards can separate downtime backlog from live traffic. The row's
@@ -350,6 +359,20 @@ const (
 	// carried one; envelopes without it fall back to arrival time
 	// (canonicalEventTime), so a replayed row can also be now-stamped.
 	HookReplayedKey = attribute.Key("gram.hook.replayed")
+	// Device telemetry the speakeasy-hooks binary stamps on its requests via
+	// X-Gram-Device-* headers, lifted onto hook endpoint spans so hook issues
+	// can be diagnosed per platform, harness, and binary build. ElapsedMs is
+	// the on-device time from hook process start to the request leaving the
+	// machine — the binary's own overhead, measured on the device clock. On
+	// spool-drain replays (HookReplayedKey set) it is time into the drain run
+	// instead, and the harness attributes are absent.
+	HookDeviceOSKey             = attribute.Key("gram.hook.device.os")
+	HookDeviceArchKey           = attribute.Key("gram.hook.device.arch")
+	HookDeviceBinaryVersionKey  = attribute.Key("gram.hook.device.binary_version")
+	HookDeviceHarnessKey        = attribute.Key("gram.hook.device.harness")
+	HookDeviceHarnessVariantKey = attribute.Key("gram.hook.device.harness_variant")
+	HookDeviceHarnessVersionKey = attribute.Key("gram.hook.device.harness_version")
+	HookDeviceElapsedMsKey      = attribute.Key("gram.hook.device.elapsed_ms")
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -420,10 +443,29 @@ const (
 	CursorUsageEventHashKey = attribute.Key("cursor.event_hash")
 	CursorChargedCentsKey   = attribute.Key("cursor.charged_cents")
 
+	// ClaudeChatEventHashKey fingerprints one Admin Analytics report row
+	// (aggregation key + values) so consumers needing exact-once sums can
+	// dedupe re-ingested windows by (gram_project_id, claude_chat.event_hash).
+	ClaudeChatEventHashKey = attribute.Key("claude_chat.event_hash")
+
+	// CodexComplianceEventHashKey fingerprints one OpenAI Compliance Logs COSTS
+	// event so consumers can dedupe re-ingested windows by
+	// (gram_project_id, codex.compliance.event_hash).
+	CodexComplianceEventHashKey = attribute.Key("codex.compliance.event_hash")
+
 	// CodexUsageToolTokensKey stores Codex's tool_token_count verbatim for
 	// fidelity. It equals input + output, so it is intentionally not summed
 	// into any total downstream.
-	CodexUsageToolTokensKey = attribute.Key("codex.usage.tool_tokens")
+	CodexUsageToolTokensKey       = attribute.Key("codex.usage.tool_tokens")
+	CodexComplianceEventIDKey     = attribute.Key("codex.compliance.event_id")
+	CodexComplianceLogIDKey       = attribute.Key("codex.compliance.log_id")
+	CodexComplianceCostUnitKey    = attribute.Key("codex.compliance.cost_unit")
+	CodexComplianceClientKey      = attribute.Key("codex.compliance.client")
+	CodexComplianceSurfaceKey     = attribute.Key("codex.compliance.surface")
+	CodexComplianceServiceTierKey = attribute.Key("codex.compliance.service_tier")
+	CodexComplianceReasoningKey   = attribute.Key("codex.compliance.reasoning")
+	CodexComplianceProductKey     = attribute.Key("codex.compliance.product")
+	CodexComplianceBillingSKUsKey = attribute.Key("codex.compliance.billing_skus")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
@@ -448,6 +490,7 @@ const (
 	GitHubUsernameKey = attribute.Key("gram.github.username")
 
 	AIIntegrationConfigIDKey           = attribute.Key("gram.ai_integration.config_id")
+	AIIntegrationSyncScheduleKey       = attribute.Key("gram.ai_integration.sync_schedule")
 	AIIntegrationUsagePollNextAfterKey = attribute.Key("gram.ai_integration.usage_poll.next_after")
 
 	ResilienceBreakerStateKey           = attribute.Key("gram.circuit_breaker.state")
@@ -588,6 +631,11 @@ func SlogHookServerNameOverrideID(v string) slog.Attr {
 }
 
 func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
+
+func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool(v) }
+
+func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
+func TelemetryCHRowCount(v int) attribute.KeyValue     { return TelemetryCHRowCountKey.Int(v) }
 
 func HookEvent(v string) attribute.KeyValue { return HookEventKey.String(v) }
 func SlogHookEvent(v string) slog.Attr      { return slog.String(string(HookEventKey), v) }
@@ -1825,6 +1873,13 @@ func SlogGitHubUsername(v string) slog.Attr      { return slog.String(string(Git
 func AIIntegrationConfigID(v string) attribute.KeyValue { return AIIntegrationConfigIDKey.String(v) }
 func SlogAIIntegrationConfigID(v string) slog.Attr {
 	return slog.String(string(AIIntegrationConfigIDKey), v)
+}
+
+func AIIntegrationSyncSchedule(v string) attribute.KeyValue {
+	return AIIntegrationSyncScheduleKey.String(v)
+}
+func SlogAIIntegrationSyncSchedule(v string) slog.Attr {
+	return slog.String(string(AIIntegrationSyncScheduleKey), v)
 }
 
 func AIIntegrationUsagePollNextAfter(v time.Time) attribute.KeyValue {

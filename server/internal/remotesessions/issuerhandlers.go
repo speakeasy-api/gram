@@ -67,10 +67,10 @@ func (s *Service) DiscoverRemoteSessionIssuer(ctx context.Context, payload *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
+	// No project:read/write check: this handler never reads or writes any
+	// project-owned data, it only fetches and reflects back the caller-supplied
+	// issuer's own public RFC 8414 discovery document (nothing persisted, see
+	// the doc comment above). There is no project resource here to gate.
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	issuerURL := strings.TrimSpace(payload.Issuer)

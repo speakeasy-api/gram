@@ -93,6 +93,10 @@ type LoadChatResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the chat
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// The ID of the assistant that produced this chat, if any
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// The name of the assistant that produced this chat, if any
+	AssistantName *string `form:"assistant_name,omitempty" json:"assistant_name,omitempty" xml:"assistant_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -1611,6 +1615,10 @@ type ChatOverviewResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the chat
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// The ID of the assistant that produced this chat, if any
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// The name of the assistant that produced this chat, if any
+	AssistantName *string `form:"assistant_name,omitempty" json:"assistant_name,omitempty" xml:"assistant_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages *int `form:"num_messages,omitempty" json:"num_messages,omitempty" xml:"num_messages,omitempty"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -1980,6 +1988,8 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		Title:                *body.Title,
 		UserID:               body.UserID,
 		ExternalUserID:       body.ExternalUserID,
+		AssistantID:          body.AssistantID,
+		AssistantName:        body.AssistantName,
 		NumMessages:          *body.NumMessages,
 		Source:               body.Source,
 		CreatedAt:            *body.CreatedAt,
