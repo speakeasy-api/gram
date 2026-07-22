@@ -36,11 +36,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
   Stack,
   Table,
 } from "@speakeasy-api/moonshine";
-import type { BadgeProps, IconName } from "@speakeasy-api/moonshine";
+import type { BadgeProps } from "@speakeasy-api/moonshine";
 import {
   Plus,
   Shield,
@@ -95,7 +94,6 @@ import { Outlet } from "react-router";
 import {
   ACTION_OPTIONS,
   ALL_POLICY_MESSAGE_TYPES,
-  AVAILABLE_CATEGORIES,
   categoriesToPayload,
   policyMessageTypesForForm,
   policyToCategories,
@@ -106,83 +104,6 @@ import {
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
 import { SeverityBadge } from "./risk-ui";
-
-/** One built-in detector as a toggleable card (Detect step). "Customize" opens
- *  a side-sheet to pick which rules in the category are active. */
-export function DetectorCard({
-  category,
-  selected,
-  disabledRules,
-  onToggle,
-  onCustomize,
-}: {
-  category: RuleCategory;
-  selected: boolean;
-  disabledRules: Set<string>;
-  onToggle: (checked: boolean) => void;
-  onCustomize: () => void;
-}): JSX.Element {
-  const meta = RULE_CATEGORY_META[category];
-  const available = AVAILABLE_CATEGORIES.has(category);
-  const rules = DETECTION_RULES[category].filter((r) => !r.hidden);
-  const customizable = available && rules.length > 1;
-  const enabledCount = rules.filter((r) => !disabledRules.has(r.id)).length;
-  const customized = selected && enabledCount < rules.length;
-  return (
-    <div
-      className={cn(
-        "flex gap-3 rounded-lg border p-3 transition-colors",
-        selected ? "border-foreground bg-muted/40" : "border-border",
-      )}
-    >
-      <Icon
-        name={meta.icon as IconName}
-        className="text-muted-foreground mt-0.5 size-5 shrink-0"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{meta.label}</span>
-          {!available && (
-            <Badge variant="neutral">
-              <Badge.Text>Coming soon</Badge.Text>
-            </Badge>
-          )}
-        </div>
-        <p className="text-muted-foreground mt-0.5 text-xs">
-          {meta.description}
-        </p>
-        <div className="mt-2 flex items-center gap-3 text-xs">
-          {rules.length > 0 && (
-            <span
-              className={cn(
-                "bg-muted rounded-full px-2 py-0.5",
-                customized ? "text-foreground" : "text-muted-foreground",
-              )}
-            >
-              {customized
-                ? `${enabledCount} of ${rules.length} rules`
-                : `${rules.length} rules`}
-            </span>
-          )}
-          {selected && customizable && (
-            <button
-              type="button"
-              onClick={onCustomize}
-              className="text-primary hover:underline"
-            >
-              Customize
-            </button>
-          )}
-        </div>
-      </div>
-      <Switch
-        checked={selected}
-        disabled={!available}
-        onCheckedChange={onToggle}
-      />
-    </div>
-  );
-}
 
 /** Per-policy config for the Non-Corporate Accounts category: the list of
  *  email domains treated as corporate. Rendered inside the category's

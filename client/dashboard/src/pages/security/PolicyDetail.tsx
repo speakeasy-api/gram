@@ -95,10 +95,10 @@ import {
 import {
   ActionPicker,
   CustomizeRulesSheet,
-  DetectorCard,
   PolicyAudiencePicker,
   RuleSelectList,
 } from "./PolicyCenter";
+import { DetectorCard } from "./DetectorCard";
 import {
   ALL_CATEGORIES,
   CATEGORY_LEVEL_DETECTORS,
