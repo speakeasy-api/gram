@@ -2445,14 +2445,25 @@ type SearchUsersParams struct {
 	SortOrder        string // "asc" or "desc"
 	Cursor           string // user identifier to paginate from
 	Limit            int
-	// MetricsDetail selects how many aggregates to compute. "basic" projects only
-	// identity, first/last activity, input/output token sums, and raw_user_ids —
-	// skipping the per-tool/hook-source map aggregations and chat/cost/cache/avg
-	// columns, which are the bulk of the per-row work. Any other value ("" or
-	// "full") computes the complete set. The employee enrollment list uses "basic"
-	// because it renders only the lean fields.
+	// MetricsDetail selects how many aggregates to compute: one of the
+	// MetricsDetail* constants. MetricsDetailBasic projects only identity,
+	// first/last activity, input/output token sums, and raw_user_ids — skipping
+	// the per-tool/hook-source map aggregations and chat/cost/cache/avg columns,
+	// which are the bulk of the per-row work. Any other value (including the empty
+	// zero value) computes the complete set, so full is the safe default. The
+	// employee enrollment list uses MetricsDetailBasic because it renders only the
+	// lean fields.
 	MetricsDetail string
 }
+
+// MetricsDetail levels for SearchUsersParams.MetricsDetail. The string values
+// match the telemetry.searchUsers `metrics` API enum. Basic is the only value
+// that trims the projection; every other value (including "") means full, so a
+// caller can never silently lose aggregates by omitting it.
+const (
+	MetricsDetailFull  = "full"
+	MetricsDetailBasic = "basic"
+)
 
 // SearchUsers retrieves aggregated usage metrics grouped by user identifier.
 //
@@ -2491,9 +2502,10 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 	// The heavy aggregates — per-tool and per-hook-source maps (sumMapIf), chat
 	// cardinality (uniqExactIf), and cost/cache/avg — dominate the per-row work.
-	// They are only computed for the full detail level; "basic" leaves the
-	// corresponding UserSummary fields zero/empty.
-	if arg.MetricsDetail != "basic" {
+	// They are only computed for the full detail level; MetricsDetailBasic leaves
+	// the corresponding UserSummary fields zero/empty. Full is the safe default:
+	// only an explicit MetricsDetailBasic trims the projection.
+	if arg.MetricsDetail != MetricsDetailBasic {
 		tc := toolCallExprsFor(arg.EventSource)
 		columns = append(columns,
 			// Chat metrics

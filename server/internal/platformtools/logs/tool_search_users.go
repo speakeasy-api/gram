@@ -85,7 +85,8 @@ func (s *SearchUsers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 		Cursor:           input.Cursor,
 		Sort:             input.Sort,
 		Limit:            input.Limit,
-		Metrics:          "full", // platform tool surfaces the complete per-user metrics
+		Metrics:          "full", // API metrics level; surfaces the complete per-user metrics
+
 	})
 	if err != nil {
 		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {
