@@ -550,7 +550,7 @@ function versionColumns({
     {
       key: "hash",
       header: "Version",
-      width: "230px",
+      width: "280px",
       render: (version) => (
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm">

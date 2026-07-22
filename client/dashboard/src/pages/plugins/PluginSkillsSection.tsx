@@ -340,7 +340,7 @@ function AddSkillOption({
   return (
     <label
       className={cn(
-        "flex items-start gap-2 rounded-sm px-2 py-1.5 text-sm",
+        "flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm",
         isDistributable ? "hover:bg-accent cursor-pointer" : "opacity-70",
       )}
     >
@@ -348,7 +348,6 @@ function AddSkillOption({
         checked={checked}
         disabled={disabled || !isDistributable}
         onCheckedChange={onToggle}
-        className="mt-0.5"
       />
       <div className="flex min-w-0 flex-col">
         <span className="truncate">{skill.displayName}</span>
