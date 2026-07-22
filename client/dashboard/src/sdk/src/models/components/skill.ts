@@ -29,6 +29,10 @@ export type Skill = {
    */
   firstSeenAt?: Date | undefined;
   /**
+   * Whether the skill has at least one valid version available to distribute.
+   */
+  hasValidVersion: boolean;
+  /**
    * The skill ID.
    */
   id: string;
@@ -82,6 +86,7 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
     first_seen_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    has_valid_version: z.boolean(),
     id: z.string(),
     last_seen_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -103,6 +108,7 @@ export const Skill$inboundSchema: z.ZodMiniType<Skill, unknown> = z.pipe(
       "created_at": "createdAt",
       "display_name": "displayName",
       "first_seen_at": "firstSeenAt",
+      "has_valid_version": "hasValidVersion",
       "last_seen_at": "lastSeenAt",
       "latest_version_id": "latestVersionId",
       "project_id": "projectId",

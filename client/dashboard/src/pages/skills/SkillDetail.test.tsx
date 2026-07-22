@@ -268,7 +268,8 @@ describe("SkillDetail", () => {
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Edit SKILL.md" })).toBeNull();
     expect(screen.queryByText("Version history")).toBeNull();
-    expect(screen.queryByText("Distribution banner")).toBeNull();
+    // The banner stays visible so it can explain why distribution is blocked.
+    expect(screen.getByText("Distribution banner")).toBeTruthy();
     expect(screen.queryByText("Distribution controls")).toBeNull();
   });
 

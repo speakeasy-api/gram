@@ -159,16 +159,16 @@ func manifestErrorMessage(err error) string {
 	}
 }
 
-func loadDerivedSkillState(ctx context.Context, queries *repo.Queries, projectID, skillID uuid.UUID) (uuid.UUID, int64, error) {
+func loadDerivedSkillState(ctx context.Context, queries *repo.Queries, projectID, skillID uuid.UUID) (repo.GetSkillStateRow, error) {
 	state, err := queries.GetSkillState(ctx, repo.GetSkillStateParams{
 		ProjectID: projectID,
 		SkillID:   skillID,
 	})
 	if err != nil {
-		return uuid.Nil, 0, fmt.Errorf("get skill state: %w", err)
+		return repo.GetSkillStateRow{LatestVersionID: uuid.Nil, VersionCount: 0, HasValidVersion: false}, fmt.Errorf("get skill state: %w", err)
 	}
 
-	return state.LatestVersionID, state.VersionCount, nil
+	return state, nil
 }
 
 func buildSkillAuditSnapshot(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64) *audit.SkillSnapshot {
@@ -285,12 +285,12 @@ func (s *Service) recordVersion(
 
 	var beforeSnapshot *audit.SkillSnapshot
 	if !createdSkill {
-		latestBeforeID, countBefore, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		stateBefore, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
 		}
 		if err == nil {
-			beforeSnapshot = buildSkillAuditSnapshot(skill, latestBeforeID, countBefore)
+			beforeSnapshot = buildSkillAuditSnapshot(skill, stateBefore.LatestVersionID, stateBefore.VersionCount)
 		}
 	}
 
@@ -323,7 +323,7 @@ func (s *Service) recordVersion(
 			return nil, oops.E(oops.CodeUnexpected, deleteErr, "promote captured skill version to manual").LogError(ctx, logger)
 		}
 
-		latestID, count, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		state, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 		if stateErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, stateErr, "load current skill state after version no-op").LogError(ctx, logger)
 		}
@@ -341,7 +341,7 @@ func (s *Service) recordVersion(
 		}
 
 		return &gen.RecordSkillResult{
-			Skill:          mv.BuildSkillView(skill, latestID, count),
+			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion),
 			Version:        matchedView,
 			CreatedSkill:   false,
 			CreatedVersion: false,
@@ -361,19 +361,22 @@ func (s *Service) recordVersion(
 		}
 	}
 
-	updated, err := queries.TouchSkill(ctx, repo.TouchSkillParams{
+	// The new version becomes the skill's current version, so the registry
+	// summary follows its manifest description.
+	updated, err := queries.SyncSkillSummary(ctx, repo.SyncSkillSummaryParams{
 		ProjectID: *authCtx.ProjectID,
 		ID:        skill.ID,
+		Summary:   conv.PtrToPGText(parsed.Description),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update skill after adding version").LogError(ctx, logger)
 	}
 
-	latestID, count, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
 	}
-	afterView := mv.BuildSkillView(updated, latestID, count)
+	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion)
 	versionView, err := mv.BuildSkillVersionView(version, derivedFromVersionID, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
 		FirstSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		LastSeenAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -396,7 +399,7 @@ func (s *Service) recordVersion(
 			SkillDisplayName: updated.DisplayName,
 		})
 	} else {
-		afterSnapshot := buildSkillAuditSnapshot(updated, latestID, count)
+		afterSnapshot := buildSkillAuditSnapshot(updated, state.LatestVersionID, state.VersionCount)
 		err = s.audit.LogSkillAddVersion(ctx, dbtx, audit.LogSkillAddVersionEvent{
 			OrganizationID:      authCtx.ActiveOrganizationID,
 			ProjectID:           *authCtx.ProjectID,
@@ -474,9 +477,9 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve skill by manifest name").LogError(ctx, logger)
 	}
 	if !createdSkill && skill.SourceKind == "captured" {
-		_, versionCount, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		observedState, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 		switch {
-		case stateErr == nil && versionCount == 0, errors.Is(stateErr, pgx.ErrNoRows):
+		case stateErr == nil && observedState.VersionCount == 0, errors.Is(stateErr, pgx.ErrNoRows):
 			skill, err = queries.PromoteObservedSkillToManual(ctx, repo.PromoteObservedSkillToManualParams{
 				ProjectID: *authCtx.ProjectID,
 				ID:        skill.ID,
@@ -603,7 +606,7 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "get skill for update").LogError(ctx, logger)
 	}
-	latestVersionID, versionCount, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state before update").LogError(ctx, logger)
 	}
@@ -632,8 +635,8 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		SkillURN:            urn.NewSkill(updated.ID),
 		SkillName:           updated.Name,
 		SkillDisplayName:    updated.DisplayName,
-		SkillSnapshotBefore: buildSkillAuditSnapshot(skill, latestVersionID, versionCount),
-		SkillSnapshotAfter:  buildSkillAuditSnapshot(updated, latestVersionID, versionCount),
+		SkillSnapshotBefore: buildSkillAuditSnapshot(skill, state.LatestVersionID, state.VersionCount),
+		SkillSnapshotAfter:  buildSkillAuditSnapshot(updated, state.LatestVersionID, state.VersionCount),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log skill update").LogError(ctx, logger)
 	}
@@ -641,7 +644,7 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		return nil, oops.E(oops.CodeUnexpected, err, "commit update skill transaction").LogError(ctx, logger)
 	}
 
-	return mv.BuildSkillView(updated, latestVersionID, versionCount), nil
+	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion), nil
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {
@@ -781,7 +784,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	return &gen.GetSkillResult{
-		Skill:          mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount),
+		Skill:          mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion),
 		LatestVersion:  latestView,
 		AssistantCount: details.AssistantCount,
 		Adoption: &gen.SkillAdoption{
@@ -1259,11 +1262,11 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 		return oops.E(oops.CodeUnexpected, err, "get skill for archive").LogError(ctx, logger)
 	}
 
-	latestID, count, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load skill state before archive").LogError(ctx, logger)
 	}
-	beforeSnapshot := buildSkillAuditSnapshot(skill, latestID, count)
+	beforeSnapshot := buildSkillAuditSnapshot(skill, state.LatestVersionID, state.VersionCount)
 
 	revokedDistributions, err := queries.RevokeAllSkillDistributionsBySkill(ctx, repo.RevokeAllSkillDistributionsBySkillParams{
 		ProjectID: *authCtx.ProjectID,
@@ -1299,7 +1302,7 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "archive skill").LogError(ctx, logger)
 	}
-	afterSnapshot := buildSkillAuditSnapshot(archived, latestID, count)
+	afterSnapshot := buildSkillAuditSnapshot(archived, state.LatestVersionID, state.VersionCount)
 
 	if err := s.audit.LogSkillArchive(ctx, dbtx, audit.LogSkillArchiveEvent{
 		OrganizationID:      authCtx.ActiveOrganizationID,

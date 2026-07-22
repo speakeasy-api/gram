@@ -371,9 +371,10 @@ FROM skill_raw_hashes
 WHERE project_id = @project_id
   AND raw_sha256 = @raw_sha256;
 
--- name: TouchSkill :one
+-- name: SyncSkillSummary :one
 UPDATE skills
-SET updated_at = clock_timestamp()
+SET summary = sqlc.narg(summary)::text,
+    updated_at = clock_timestamp()
 WHERE project_id = @project_id
   AND id = @id
   AND archived_at IS NULL
@@ -413,6 +414,10 @@ SELECT
   sqlc.embed(s),
   COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
   COALESCE(state.version_count, 0)::bigint AS version_count,
+  EXISTS (
+    SELECT 1 FROM skill_versions sv
+    WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
+  )::boolean AS has_valid_version,
   (
     SELECT COUNT(*)::bigint
     FROM skill_distributions sd
@@ -444,7 +449,11 @@ WHERE s.project_id = @project_id
 -- name: GetSkillState :one
 SELECT
   COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
-  COALESCE(state.version_count, 0)::bigint AS version_count
+  COALESCE(state.version_count, 0)::bigint AS version_count,
+  EXISTS (
+    SELECT 1 FROM skill_versions sv
+    WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
+  )::boolean AS has_valid_version
 FROM skills s
 LEFT JOIN LATERAL (
   SELECT
@@ -463,7 +472,11 @@ WHERE s.project_id = @project_id
 SELECT
   sqlc.embed(s),
   COALESCE(latest.id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
-  COALESCE(latest.version_count, 0)::bigint AS version_count
+  COALESCE(latest.version_count, 0)::bigint AS version_count,
+  EXISTS (
+    SELECT 1 FROM skill_versions sv
+    WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
+  )::boolean AS has_valid_version
 FROM skills s
 LEFT JOIN LATERAL (
   SELECT

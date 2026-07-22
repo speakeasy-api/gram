@@ -1,6 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button as UiButton } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { DotCard } from "@/components/ui/dot-card";
 import { DotRow } from "@/components/ui/dot-row";
@@ -11,6 +12,7 @@ import type { ViewMode } from "@/components/ui/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
+import type { Skill } from "@gram/client/models/components/skill.js";
 import type { SkillDistribution } from "@gram/client/models/components/skilldistribution.js";
 import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";
 import {
@@ -19,7 +21,7 @@ import {
 } from "@gram/client/react-query/skillDistributions.js";
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge, Button, cn, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -86,37 +88,55 @@ export function PluginSkillsSection({
   });
   useDrainInfiniteQuery(skillsQuery, isAddSkillOpen);
   const isSkillListLoading = skillsQuery.isPending || skillsQuery.hasNextPage;
+  // Skills without a valid version stay listed but disabled: the distribute
+  // endpoint rejects them, so the picker explains why and links to the fix.
   const availableSkills = useMemo(() => {
     const distributedSkillIds = new Set(distributions.map((d) => d.skillId));
     return (
       skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
-    ).filter(
-      (skill) =>
-        skill.latestVersionId != null && !distributedSkillIds.has(skill.id),
-    );
+    ).filter((skill) => !distributedSkillIds.has(skill.id));
   }, [distributions, skillsQuery.data?.pages]);
 
   const distribute = useDistributeSkillMutation();
   const undistribute = useUndistributeSkillMutation();
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
 
-  const handleAddSkill: React.FormEventHandler<HTMLFormElement> = (e) => {
-    e.preventDefault();
-    const skillId = new FormData(e.currentTarget).get("skillId") as string;
-    if (!skillId) return;
-    distribute.mutate(
-      {
-        request: { distributeSkillRequestBody: { id: skillId, pluginId } },
-      },
-      {
-        onSuccess: () => {
-          setIsAddSkillOpen(false);
-          void invalidateAllSkillDistributions(queryClient);
-          onMutated("Skill added to plugin");
-        },
-        onError: () => {
-          toast.error("Unable to add skill to plugin");
-        },
-      },
+  const openAddSkillDialog = (open: boolean) => {
+    setIsAddSkillOpen(open);
+    if (open) setSelectedSkillIds([]);
+  };
+
+  const toggleSkill = (skillId: string) => {
+    setSelectedSkillIds((prev) =>
+      prev.includes(skillId)
+        ? prev.filter((id) => id !== skillId)
+        : [...prev, skillId],
+    );
+  };
+
+  const handleAddSkills = async () => {
+    if (selectedSkillIds.length === 0) return;
+    // allSettled + unconditional invalidation: some mutations in the batch
+    // may succeed even when others fail, and the cache must reflect what the
+    // server actually committed.
+    const results = await Promise.allSettled(
+      selectedSkillIds.map((skillId) =>
+        distribute.mutateAsync({
+          request: { distributeSkillRequestBody: { id: skillId, pluginId } },
+        }),
+      ),
+    );
+    await invalidateAllSkillDistributions(queryClient);
+    const firstFailure = results.find((result) => result.status === "rejected");
+    if (firstFailure) {
+      toast.error("Unable to add skill to plugin");
+      return;
+    }
+    setIsAddSkillOpen(false);
+    onMutated(
+      selectedSkillIds.length > 1
+        ? `${selectedSkillIds.length} skills added to plugin`
+        : "Skill added to plugin",
     );
   };
 
@@ -244,62 +264,113 @@ export function PluginSkillsSection({
       <div className="mb-8">{listContent}</div>
 
       {/* Add Skill Dialog */}
-      <Dialog open={isAddSkillOpen} onOpenChange={setIsAddSkillOpen}>
+      <Dialog open={isAddSkillOpen} onOpenChange={openAddSkillDialog}>
         <Dialog.Content>
           <Dialog.Header>
-            <Dialog.Title>Add Skill</Dialog.Title>
+            <Dialog.Title>Add Skills</Dialog.Title>
             <Dialog.Description>
-              Distribute a project skill to this plugin bundle.
+              Distribute project skills to this plugin bundle.
             </Dialog.Description>
           </Dialog.Header>
-          <form onSubmit={handleAddSkill} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Skill</label>
-              {isSkillListLoading ? (
-                <Skeleton className="h-9 w-full" />
-              ) : availableSkills.length > 0 ? (
-                <select
-                  name="skillId"
-                  className="bg-background rounded-md border px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="">Select a skill</option>
-                  {availableSkills.map((skill) => (
-                    <option key={skill.id} value={skill.id}>
-                      {skill.displayName}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Type muted small>
-                  No skills available to add. Record a skill in this project
-                  first.
-                </Type>
-              )}
-            </div>
-            <Dialog.Footer>
-              <Button
-                variant="secondary"
-                onClick={() => setIsAddSkillOpen(false)}
-                type="button"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  distribute.isPending ||
-                  isSkillListLoading ||
-                  availableSkills.length === 0
-                }
-              >
-                Add
-              </Button>
-            </Dialog.Footer>
-          </form>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">Skills</label>
+            {isSkillListLoading ? (
+              <Skeleton className="h-24 w-full" />
+            ) : availableSkills.length > 0 ? (
+              <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto rounded-md border p-1">
+                {availableSkills.map((skill) => (
+                  <AddSkillOption
+                    key={skill.id}
+                    skill={skill}
+                    checked={selectedSkillIds.includes(skill.id)}
+                    disabled={distribute.isPending}
+                    onToggle={() => toggleSkill(skill.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Type muted small>
+                No skills available to add. Record a skill in this project
+                first.
+              </Type>
+            )}
+          </div>
+          <Dialog.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => setIsAddSkillOpen(false)}
+              type="button"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                distribute.isPending ||
+                isSkillListLoading ||
+                selectedSkillIds.length === 0
+              }
+              onClick={() => void handleAddSkills()}
+            >
+              {selectedSkillIds.length > 1
+                ? `Add ${selectedSkillIds.length} skills`
+                : "Add"}
+            </Button>
+          </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
     </>
+  );
+}
+
+function AddSkillOption({
+  skill,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  skill: Skill;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}): JSX.Element {
+  const routes = useRoutes();
+  const isDistributable = skill.hasValidVersion;
+
+  return (
+    <label
+      className={cn(
+        "flex items-start gap-2 rounded-sm px-2 py-1.5 text-sm",
+        isDistributable ? "hover:bg-accent cursor-pointer" : "opacity-70",
+      )}
+    >
+      <Checkbox
+        checked={checked}
+        disabled={disabled || !isDistributable}
+        onCheckedChange={onToggle}
+        className="mt-0.5"
+      />
+      <div className="flex min-w-0 flex-col">
+        <span className="truncate">{skill.displayName}</span>
+        <span className="text-muted-foreground truncate font-mono text-xs">
+          {skill.name}
+        </span>
+        {!isDistributable && (
+          <span className="text-muted-foreground text-xs">
+            {skill.versionCount === 0
+              ? "No versions recorded"
+              : "No valid version"}
+            {" · "}
+            <Link
+              to={routes.skills.detail.href(skill.id)}
+              className="text-foreground underline underline-offset-2"
+            >
+              Fix
+            </Link>
+          </span>
+        )}
+      </div>
+    </label>
   );
 }
 

@@ -928,6 +928,10 @@ SELECT
   s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
   COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
   COALESCE(state.version_count, 0)::bigint AS version_count,
+  EXISTS (
+    SELECT 1 FROM skill_versions sv
+    WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
+  )::boolean AS has_valid_version,
   (
     SELECT COUNT(*)::bigint
     FROM skill_distributions sd
@@ -966,6 +970,7 @@ type GetSkillDetailsRow struct {
 	Skill           Skill
 	LatestVersionID uuid.UUID
 	VersionCount    int64
+	HasValidVersion bool
 	AssistantCount  int64
 }
 
@@ -988,6 +993,7 @@ func (q *Queries) GetSkillDetails(ctx context.Context, arg GetSkillDetailsParams
 		&i.Skill.UpdatedAt,
 		&i.LatestVersionID,
 		&i.VersionCount,
+		&i.HasValidVersion,
 		&i.AssistantCount,
 	)
 	return i, err
@@ -1075,7 +1081,11 @@ func (q *Queries) GetSkillRawHash(ctx context.Context, arg GetSkillRawHashParams
 const getSkillState = `-- name: GetSkillState :one
 SELECT
   COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
-  COALESCE(state.version_count, 0)::bigint AS version_count
+  COALESCE(state.version_count, 0)::bigint AS version_count,
+  EXISTS (
+    SELECT 1 FROM skill_versions sv
+    WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
+  )::boolean AS has_valid_version
 FROM skills s
 LEFT JOIN LATERAL (
   SELECT
@@ -1099,12 +1109,13 @@ type GetSkillStateParams struct {
 type GetSkillStateRow struct {
 	LatestVersionID uuid.UUID
 	VersionCount    int64
+	HasValidVersion bool
 }
 
 func (q *Queries) GetSkillState(ctx context.Context, arg GetSkillStateParams) (GetSkillStateRow, error) {
 	row := q.db.QueryRow(ctx, getSkillState, arg.ProjectID, arg.SkillID)
 	var i GetSkillStateRow
-	err := row.Scan(&i.LatestVersionID, &i.VersionCount)
+	err := row.Scan(&i.LatestVersionID, &i.VersionCount, &i.HasValidVersion)
 	return i, err
 }
 
@@ -1701,7 +1712,11 @@ const listSkills = `-- name: ListSkills :many
 SELECT
   s.id, s.project_id, s.name, s.display_name, s.summary, s.source_kind, s.classification, s.first_seen_at, s.last_seen_at, s.seen_count, s.archived_at, s.created_at, s.updated_at,
   COALESCE(latest.id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
-  COALESCE(latest.version_count, 0)::bigint AS version_count
+  COALESCE(latest.version_count, 0)::bigint AS version_count,
+  EXISTS (
+    SELECT 1 FROM skill_versions sv
+    WHERE sv.skill_id = s.id AND sv.spec_valid IS TRUE
+  )::boolean AS has_valid_version
 FROM skills s
 LEFT JOIN LATERAL (
   SELECT
@@ -1732,6 +1747,7 @@ type ListSkillsRow struct {
 	Skill           Skill
 	LatestVersionID uuid.UUID
 	VersionCount    int64
+	HasValidVersion bool
 }
 
 func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListSkillsRow, error) {
@@ -1759,6 +1775,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 			&i.Skill.UpdatedAt,
 			&i.LatestVersionID,
 			&i.VersionCount,
+			&i.HasValidVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -2116,22 +2133,24 @@ func (q *Queries) StoreSkillRawHashAlias(ctx context.Context, arg StoreSkillRawH
 	return matches, err
 }
 
-const touchSkill = `-- name: TouchSkill :one
+const syncSkillSummary = `-- name: SyncSkillSummary :one
 UPDATE skills
-SET updated_at = clock_timestamp()
-WHERE project_id = $1
-  AND id = $2
+SET summary = $1::text,
+    updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND id = $3
   AND archived_at IS NULL
 RETURNING id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
 `
 
-type TouchSkillParams struct {
+type SyncSkillSummaryParams struct {
+	Summary   pgtype.Text
 	ProjectID uuid.UUID
 	ID        uuid.UUID
 }
 
-func (q *Queries) TouchSkill(ctx context.Context, arg TouchSkillParams) (Skill, error) {
-	row := q.db.QueryRow(ctx, touchSkill, arg.ProjectID, arg.ID)
+func (q *Queries) SyncSkillSummary(ctx context.Context, arg SyncSkillSummaryParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, syncSkillSummary, arg.Summary, arg.ProjectID, arg.ID)
 	var i Skill
 	err := row.Scan(
 		&i.ID,

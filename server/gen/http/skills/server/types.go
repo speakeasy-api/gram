@@ -130,6 +130,8 @@ type UpdateResponseBody struct {
 	LatestVersionID *string `form:"latest_version_id,omitempty" json:"latest_version_id,omitempty" xml:"latest_version_id,omitempty"`
 	// The number of immutable versions recorded for the skill.
 	VersionCount int64 `form:"version_count" json:"version_count" xml:"version_count"`
+	// Whether the skill has at least one valid version available to distribute.
+	HasValidVersion bool `form:"has_valid_version" json:"has_valid_version" xml:"has_valid_version"`
 	// When this skill was first activated.
 	FirstSeenAt *string `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
 	// When this skill was most recently activated.
@@ -2247,6 +2249,8 @@ type SkillResponseBody struct {
 	LatestVersionID *string `form:"latest_version_id,omitempty" json:"latest_version_id,omitempty" xml:"latest_version_id,omitempty"`
 	// The number of immutable versions recorded for the skill.
 	VersionCount int64 `form:"version_count" json:"version_count" xml:"version_count"`
+	// Whether the skill has at least one valid version available to distribute.
+	HasValidVersion bool `form:"has_valid_version" json:"has_valid_version" xml:"has_valid_version"`
 	// When this skill was first activated.
 	FirstSeenAt *string `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
 	// When this skill was most recently activated.
@@ -2444,6 +2448,7 @@ func NewUpdateResponseBody(res *types.Skill) *UpdateResponseBody {
 		Classification:  res.Classification,
 		LatestVersionID: res.LatestVersionID,
 		VersionCount:    res.VersionCount,
+		HasValidVersion: res.HasValidVersion,
 		FirstSeenAt:     res.FirstSeenAt,
 		LastSeenAt:      res.LastSeenAt,
 		SeenCount:       res.SeenCount,

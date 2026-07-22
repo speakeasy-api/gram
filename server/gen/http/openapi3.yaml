@@ -56574,6 +56574,9 @@ components:
                     type: string
                     description: When this skill was first activated.
                     format: date-time
+                has_valid_version:
+                    type: boolean
+                    description: Whether the skill has at least one valid version available to distribute.
                 id:
                     type: string
                     description: The skill ID.
@@ -56620,6 +56623,7 @@ components:
                 - source_kind
                 - classification
                 - version_count
+                - has_valid_version
                 - seen_count
                 - created_at
                 - updated_at
