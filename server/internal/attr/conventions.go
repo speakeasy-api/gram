@@ -449,10 +449,6 @@ const (
 	// (gram_project_id, codex.compliance.event_hash).
 	CodexComplianceEventHashKey = attribute.Key("codex.compliance.event_hash")
 
-	// CodexUsageToolTokensKey stores Codex's tool_token_count verbatim for
-	// fidelity. It equals input + output, so it is intentionally not summed
-	// into any total downstream.
-	CodexUsageToolTokensKey       = attribute.Key("codex.usage.tool_tokens")
 	CodexComplianceEventIDKey     = attribute.Key("codex.compliance.event_id")
 	CodexComplianceLogIDKey       = attribute.Key("codex.compliance.log_id")
 	CodexComplianceCostUnitKey    = attribute.Key("codex.compliance.cost_unit")

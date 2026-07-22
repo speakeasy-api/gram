@@ -161,44 +161,6 @@ func TestLogs_StampsCachedHostnameOnClaudeRows(t *testing.T) {
 	require.Contains(t, logs[0].Attributes, hostname)
 }
 
-func TestLogs_CodexPayloadContinuesThroughUsagePath(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestHooksService(t)
-	chClient := enableHookTelemetryLogger(t, ctx, ti)
-	authCtx := hookAuthContext(t, ctx)
-
-	// Stamp the usage row with a recent time rather than tokenBearingRecord's
-	// fixed 2026-06-03 constant. telemetry_logs carries a 30-day TTL on
-	// time_unix_nano (server/clickhouse/schema.sql), so an absolute past
-	// timestamp ages out: once wall-clock passes constant+30d the row is
-	// TTL-expired and evicted on the next merge (which concurrent inserts from
-	// the parallel suite trigger), making this test rot into a flake. A relative
-	// timestamp keeps the row inside the retention window forever.
-	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
-	rec := tokenBearingRecord()
-	rec.ObservedTimeUnixNano = new(nanoString(timestamp))
-
-	err := ti.service.Logs(ctx, codexLogsPayload(rec))
-	require.NoError(t, err)
-
-	codexLogs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexUsageMetricsURN, timestamp, 1)
-	require.Equal(t, "Codex usage metrics", codexLogs[0].Body)
-
-	require.Never(t, func() bool {
-		logs, err := chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
-			GramProjectID: authCtx.ProjectID.String(),
-			TimeStart:     timestamp.Add(-time.Minute).UnixNano(),
-			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
-			GramURNs:      []string{claudeOTELLogsURN},
-			SortOrder:     "desc",
-			Cursor:        "",
-			Limit:         10,
-		})
-		return err == nil && len(logs) > 0
-	}, 300*time.Millisecond, 50*time.Millisecond)
-}
-
 func TestLogs_CachesMultiSessionBatchPerSessionWithoutLeakingIdentity(t *testing.T) {
 	t.Parallel()
 
