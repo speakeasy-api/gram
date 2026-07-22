@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -1224,11 +1226,20 @@ func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testD
 	return uuid.Nil
 }
 
+// stubProvenanceLookup resolves no MCP provenance, so shadow_mcp scans in
+// these tests exercise the signature fallback. A nil lookup would be a nil
+// interface call the moment a test selects the shadow_mcp source.
+type stubProvenanceLookup struct{}
+
+func (stubProvenanceLookup) LookupMCPProvenanceByToolCallID(_ context.Context, _ uuid.UUID, _ []string, _ time.Time) (map[string]telemetryrepo.MCPProvenance, error) {
+	return map[string]telemetryrepo.MCPProvenance{}, nil
+}
+
 func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageIDs []uuid.UUID, sources []string) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
 
 	accessStore := accesscontrol.NewRedisStore(cache.NoopCache, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, accessStore)
+	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, accessStore, nil)
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
@@ -1237,7 +1248,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		&risk_analysis.StubPIIScanner{},
 		nil,
 		shadowMCPClient,
-		nil,
+		stubProvenanceLookup{},
 		nil,
 		nil,
 		newPresidioPub(),

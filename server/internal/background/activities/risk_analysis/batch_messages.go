@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -24,6 +25,12 @@ type batchMessage struct {
 	// UserID is the scanned chat's owner (empty for unattributed sessions),
 	// carried onto judge completions for scanning-volume attribution.
 	UserID string
+	// CreatedAt is when the message was recorded. The shadow-MCP scanner uses
+	// the batch's oldest value to bound its ClickHouse provenance lookup.
+	CreatedAt time.Time
+	// Source is the agent that recorded the message (Codex, Cursor, ...). The
+	// shadow-MCP scanner attributes unresolved provenance to it.
+	Source string
 }
 
 // scanSurface is the text content scanners (gitleaks, presidio) evaluate:
@@ -67,6 +74,10 @@ func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetM
 			continue
 		}
 		msg.UserID = row.ChatUserID
+		if row.CreatedAt.Valid {
+			msg.CreatedAt = row.CreatedAt.Time
+		}
+		msg.Source = row.Source.String
 		messages = append(messages, msg)
 	}
 	return messages
@@ -90,6 +101,8 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 		RawToolCalls: toolCalls,
 		ToolCalls:    []recordedToolCall{},
 		UserID:       "",
+		CreatedAt:    time.Time{},
+		Source:       "",
 	}
 	if messageType == message.ToolRequest && len(toolCalls) > 0 {
 		msg.ToolCalls = parseRecordedToolCalls(ctx, logger, toolCalls)
