@@ -32,13 +32,30 @@ func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, orgID string
 	go func() {
 		asyncCtx, cancel := context.WithTimeout(detachedCtx, shadowMCPInventoryUpsertTimeout)
 		defer cancel()
+		// One custom-domain lookup covers every entry — the per-entry
+		// IsGramHostedMCPURLForOrg variant would re-query custom_domains for
+		// each external URL in the inventory.
+		//
+		// Without the host list every Gram-hosted entry would read as external
+		// and be recorded as shadow inventory. This capture is best-effort
+		// telemetry, so skipping the batch beats writing wrong rows.
+		trustedHosts, err := s.shadowMCPClient.TrustedMCPHostsForOrg(asyncCtx, orgID)
+		if err != nil {
+			s.logger.WarnContext(asyncCtx, "skipping shadow MCP inventory capture: trusted host resolution failed",
+				attr.SlogEvent("shadow_mcp_inventory_trusted_hosts_failed"),
+				attr.SlogError(err),
+				attr.SlogOrganizationID(orgID),
+				attr.SlogProjectID(projectID),
+			)
+			return
+		}
 
 		inventoryURLs := make([]telemetry.ShadowMCPInventoryURL, 0, len(entries))
 		for _, entry := range entries {
 			if entry.URL == "" {
 				continue
 			}
-			if s.shadowMCPClient.IsGramHostedMCPURLForOrg(asyncCtx, entry.URL, orgID) {
+			if shadowmcp.IsGramHostedMCPURL(entry.URL, trustedHosts...) {
 				continue
 			}
 			invURL, ok := shadowmcp.CanonicalizeInventoryURL(entry.URL)

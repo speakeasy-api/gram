@@ -78,7 +78,7 @@ type Validator interface {
 // organization's custom-domain lookup to a single database round-trip per
 // batch instead of one per scanned call.
 type HostedChecker interface {
-	TrustedMCPHostsForOrg(ctx context.Context, orgID string) []string
+	TrustedMCPHostsForOrg(ctx context.Context, orgID string) ([]string, error)
 }
 
 // ProvenanceLookup replays the server identity the hook recorded for a set of
@@ -142,10 +142,23 @@ func (s *Scanner) Scan(ctx context.Context, orgID string, projectID uuid.UUID, m
 	}
 
 	provenance := s.lookupProvenance(ctx, projectID, ids, oldest)
+
 	// Resolved once for the whole batch: the custom-domain lookup behind this
 	// is a database round-trip whose result is invariant for the organization,
 	// and a batch can hold hundreds of calls.
-	trustedHosts := s.hosted.TrustedMCPHostsForOrg(ctx, orgID)
+	//
+	// A failure here means we cannot tell a Gram host from a third-party one,
+	// so every call takes the unresolved path rather than being judged against
+	// an incomplete host list. Judging anyway would classify calls to an org's
+	// own verified custom domain as shadow MCP and persist that as findings.
+	trustedHosts, err := s.hosted.TrustedMCPHostsForOrg(ctx, orgID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "shadow_mcp scan: trusted host resolution failed; falling back to signature validation",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		provenance = map[string]telemetryrepo.MCPProvenance{}
+	}
 
 	for i, calls := range messages {
 		var findings []scanners.Finding
@@ -364,18 +377,17 @@ func mcpRemoteTarget(command string) (string, bool) {
 	return "", false
 }
 
-// isMCPRemoteSpec reports whether an argument is an npm package spec for
-// mcp-remote, tolerating a version suffix (`mcp-remote@0.1.25`) and a scope
-// prefix (`@scope/mcp-remote`).
+// isMCPRemoteSpec reports whether an argument is the canonical npm package
+// spec for mcp-remote, tolerating only a version suffix (`mcp-remote@0.1.25`).
+//
+// The scope is deliberately significant. Accepting any package whose last path
+// segment is "mcp-remote" would let `@evil/mcp-remote` — a package that can
+// connect anywhere — launder a Gram URL argument into a hosted verdict.
+// Unscoped mcp-remote is the only package Gram's own install snippets emit, so
+// a fork has to be added here explicitly to be trusted.
 func isMCPRemoteSpec(field string) bool {
-	spec := strings.TrimPrefix(field, "@")
-	if i := strings.LastIndex(spec, "@"); i > 0 {
-		spec = spec[:i]
-	}
-	if i := strings.LastIndex(spec, "/"); i >= 0 {
-		spec = spec[i+1:]
-	}
-	return spec == "mcp-remote"
+	name, _, _ := strings.Cut(field, "@")
+	return name == "mcp-remote"
 }
 
 // parseToolInput parses a recorded tool call's raw arguments into a value the

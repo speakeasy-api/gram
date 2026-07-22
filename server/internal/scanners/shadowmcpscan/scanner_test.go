@@ -43,11 +43,15 @@ func (f *fakeValidator) ValidateToolsetCall(_ context.Context, _ any, toolName s
 // containing a Gram hostname anywhere in it.
 type fakeHosted struct {
 	calls int
+	err   error
 }
 
-func (f *fakeHosted) TrustedMCPHostsForOrg(_ context.Context, _ string) []string {
+func (f *fakeHosted) TrustedMCPHostsForOrg(_ context.Context, _ string) ([]string, error) {
 	f.calls++
-	return nil
+	if f.err != nil {
+		return nil, f.err
+	}
+	return nil, nil
 }
 
 // fakeProvenance returns provenance for the ids it is configured with, or an
@@ -90,7 +94,7 @@ func (f *fakeCoverage) RecordShadowMCPResolution(_ context.Context, _ string, ho
 }
 
 func gramHosted() *fakeHosted {
-	return &fakeHosted{}
+	return &fakeHosted{calls: 0, err: nil}
 }
 
 // A call whose provenance resolves to a Gram-hosted URL is clean even though
@@ -460,7 +464,12 @@ func TestIsHostedIdentity(t *testing.T) {
 		{"gram mcp-remote snippet", "npx mcp-remote@0.1.25 https://app.getgram.ai/mcp/team-foo", true},
 		{"mcp-remote with -y launcher flag", "npx -y mcp-remote https://app.getgram.ai/mcp/x", true},
 		{"mcp-remote with headers", "npx mcp-remote https://app.getgram.ai/mcp/x --header Authorization:${TOKEN}", true},
-		{"scoped mcp-remote spec", "npx @speakeasy/mcp-remote@1.2.3 https://app.getgram.ai/mcp/x", true},
+		// A scoped package is a different package. Trusting any name ending in
+		// "mcp-remote" would let @evil/mcp-remote, which can connect anywhere,
+		// launder a Gram URL argument into a hosted verdict.
+		{"scoped lookalike rejected", "npx @evil/mcp-remote https://app.getgram.ai/mcp/x", false},
+		{"scoped vendor fork rejected", "npx @speakeasy/mcp-remote@1.2.3 https://app.getgram.ai/mcp/x", false},
+		{"path lookalike rejected", "npx foo/mcp-remote https://app.getgram.ai/mcp/x", false},
 		{"mcp-remote to third party", "npx mcp-remote https://evil.example/mcp", false},
 		// A Gram-shaped path on a foreign host stays shadow: the hosted check
 		// is on the host, never the path.
@@ -513,6 +522,58 @@ func TestScanner_ResolvesTrustedHostsOncePerScan(t *testing.T) {
 	})
 
 	require.Equal(t, 1, hosted.calls)
+}
+
+// Without a trusted-host list the scanner cannot tell a Gram host from a third
+// party, so it must not judge on the incomplete list. Judging anyway would
+// persist shadow findings for calls to an org's own verified custom domain.
+func TestScanner_HostResolutionFailureFallsBackToSignature(t *testing.T) {
+	t.Parallel()
+
+	hosted := gramHosted()
+	hosted.err = errors.New("boom")
+	validator := &fakeValidator{denied: map[string]bool{"delete": true}, orgIDs: nil}
+	prov := &fakeProvenance{
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://mcp.customer.example/mcp", ServerURL: "https://mcp.customer.example/mcp", HookSource: "claude"}},
+		err:       nil,
+		gotIDs:    nil,
+		gotSince:  time.Time{},
+		callCount: 0,
+	}
+	coverage := &fakeCoverage{got: nil}
+	s := NewScanner(discardLogger(), validator, hosted, prov, coverage)
+
+	out := s.Scan(t.Context(), "org-1", uuid.New(), [][]ToolCall{
+		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Claude"}},
+	})
+
+	require.Len(t, out[0], 1, "the signature check still denies this call")
+	require.Equal(t, "db", out[0][0].Match, "decided by the fallback, not by provenance")
+	require.Equal(t, []string{"org-1"}, validator.orgIDs, "host resolution failure must reach the signature validator")
+	require.Equal(t, []recordedResolution{{hookSource: "claude", resolution: ResolutionUnresolved}}, coverage.got)
+}
+
+// The same failure must not manufacture findings for calls the signature check
+// clears.
+func TestScanner_HostResolutionFailureDoesNotFlagSignedCalls(t *testing.T) {
+	t.Parallel()
+
+	hosted := gramHosted()
+	hosted.err = errors.New("boom")
+	prov := &fakeProvenance{
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://mcp.customer.example/mcp", ServerURL: "https://mcp.customer.example/mcp", HookSource: "claude"}},
+		err:       nil,
+		gotIDs:    nil,
+		gotSince:  time.Time{},
+		callCount: 0,
+	}
+	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, prov, nil)
+
+	out := s.Scan(t.Context(), "org-1", uuid.New(), [][]ToolCall{
+		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	})
+
+	require.Empty(t, out[0])
 }
 
 // No MCP calls means neither the provenance query nor the trusted-host lookup
