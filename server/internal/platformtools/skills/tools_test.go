@@ -16,20 +16,36 @@ type stubSkillsService struct {
 	getPayload               *genskills.GetPayload
 	listVersionsPayload      *genskills.ListVersionsPayload
 	listDistributionsPayload *genskills.ListDistributionsPayload
+	listResult               *genskills.ListSkillsResult
+	getResult                *genskills.GetSkillResult
+	getErr                   error
+	listVersionsResult       *genskills.ListSkillVersionsResult
 }
 
 func (s *stubSkillsService) List(_ context.Context, payload *genskills.ListPayload) (*genskills.ListSkillsResult, error) {
 	s.listPayload = payload
+	if s.listResult != nil {
+		return s.listResult, nil
+	}
 	return &genskills.ListSkillsResult{Skills: nil, NextCursor: nil}, nil
 }
 
 func (s *stubSkillsService) Get(_ context.Context, payload *genskills.GetPayload) (*genskills.GetSkillResult, error) {
 	s.getPayload = payload
+	if s.getErr != nil {
+		return nil, s.getErr
+	}
+	if s.getResult != nil {
+		return s.getResult, nil
+	}
 	return &genskills.GetSkillResult{Skill: nil, LatestVersion: nil}, nil
 }
 
 func (s *stubSkillsService) ListVersions(_ context.Context, payload *genskills.ListVersionsPayload) (*genskills.ListSkillVersionsResult, error) {
 	s.listVersionsPayload = payload
+	if s.listVersionsResult != nil {
+		return s.listVersionsResult, nil
+	}
 	return &genskills.ListSkillVersionsResult{Versions: nil, NextCursor: nil}, nil
 }
 
