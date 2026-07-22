@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
@@ -174,6 +175,7 @@ function OrgLogsInner() {
         enabled, tool calls and traces are recorded for debugging and analytics.
         These power the insights and logs page on the platform.
       </Type>
+      <LogDataRetentionBanner />
       <div className="border-border bg-card rounded-lg border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
