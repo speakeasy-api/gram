@@ -284,14 +284,15 @@ func sessionScalarHaving(expr string, values []string) squirrel.Sqlizer {
 	return squirrel.Or{nonEmptyPred, emptyPred}
 }
 
-// sessionSummaryMinWindow routes ListSessions between the raw telemetry_logs
+// SessionSummaryMinWindow routes ListSessions between the raw telemetry_logs
 // scan and the pre-aggregated chat_session_summaries read (INC-417). The
 // summary is hour-bucketed, so its window edges snap to bucket boundaries —
 // up to ~1h of slop, which is noise on multi-day windows but unacceptable on
 // the sub-day presets (15m/1h/4h). Short windows are also exactly where the
 // raw scan is already cheap (the primary key prunes it to the window's
-// granules), so they stay on the raw path.
-const sessionSummaryMinWindow = 48 * time.Hour
+// granules), so they stay on the raw path. Exported so tests derive their
+// window widths from it instead of encoding the threshold as magic numbers.
+const SessionSummaryMinWindow = 48 * time.Hour
 
 // ListSessions retrieves org-scoped session summaries grouped by chat_id from
 // the same source-event classes as attribute_metrics_summaries: Claude OTEL
@@ -300,12 +301,12 @@ const sessionSummaryMinWindow = 48 * time.Hour
 // ordering stays stable across pages.
 //
 // Wide windows read the pre-aggregated chat_session_summaries table; narrow
-// windows scan raw telemetry_logs (see sessionSummaryMinWindow).
+// windows scan raw telemetry_logs (see SessionSummaryMinWindow).
 func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]SessionSummary, error) {
 	if len(arg.ProjectIDs) == 0 {
 		return nil, nil
 	}
-	if arg.TimeEnd-arg.TimeStart >= sessionSummaryMinWindow.Nanoseconds() {
+	if arg.TimeEnd-arg.TimeStart >= SessionSummaryMinWindow.Nanoseconds() {
 		return q.listSessionsFromSummaries(ctx, arg)
 	}
 	return q.listSessionsFromRawLogs(ctx, arg)
@@ -412,7 +413,7 @@ func (q *Queries) listSessionsFromSummaries(ctx context.Context, arg ListSession
 
 	sb := sq.Select(
 		"s.chat_id as gram_chat_id",
-		"any(toString(s.gram_project_id)) as project_id",
+		"toString(any(s.gram_project_id)) as project_id",
 		// max() so '' loses to a non-empty value, matching the summary
 		// columns' merge semantics.
 		"max(s.session_user_email) as session_user_email",
@@ -484,7 +485,15 @@ func applySessionSummaryFilters(sb squirrel.SelectBuilder, filters []AttributeMe
 		case dim.kind == attributeDimProject:
 			sb = sb.Where(squirrel.Eq{"s." + dim.column: f.Values})
 		case dim.coLocateSessionFilters:
-			pred, args := sessionSummaryTupleFieldPredicate(dim.summaryTupleField, f.Values)
+			// The dimension key doubles as the field name in the
+			// attribution_tuples named tuple (enforced by the registry
+			// bindings test), and sessionScalarRowPredicate supplies the same
+			// per-row value semantics the raw path uses — t is the arrayExists
+			// lambda argument.
+			pred, args, err := sessionScalarRowPredicate("tupleElement(t, '"+f.Dimension+"')", f.Values).ToSql()
+			if err != nil {
+				return sb, fmt.Errorf("building co-located session summary filter for %q: %w", f.Dimension, err)
+			}
 			tuplePredicates = append(tuplePredicates, pred)
 			tupleArgs = append(tupleArgs, args...)
 		default:
@@ -530,41 +539,6 @@ func sessionSummaryValuesHaving(colExpr string, values []string) squirrel.Sqlize
 		return nonEmptyPred
 	}
 	return squirrel.Or{nonEmptyPred, emptyPred}
-}
-
-// sessionSummaryTupleFieldPredicate matches one attribution field of a
-// per-row tuple inside the arrayExists lambda (t is the lambda argument). A
-// requested "" means the row carried no value for the field, mirroring
-// sessionScalarRowPredicate. The field name comes from the compile-time
-// dimension registry, never from user input.
-func sessionSummaryTupleFieldPredicate(field string, values []string) (string, []any) {
-	fieldExpr := "tupleElement(t, '" + field + "')"
-
-	hasEmpty := false
-	nonEmpty := make([]string, 0, len(values))
-	for _, v := range values {
-		if v == "" {
-			hasEmpty = true
-			continue
-		}
-		nonEmpty = append(nonEmpty, v)
-	}
-
-	emptyPred := fieldExpr + " = ''"
-	if len(nonEmpty) == 0 {
-		return emptyPred, nil
-	}
-
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(nonEmpty)), ",")
-	args := make([]any, len(nonEmpty))
-	for i, v := range nonEmpty {
-		args[i] = v
-	}
-	nonEmptyPred := fieldExpr + " IN (" + placeholders + ")"
-	if !hasEmpty {
-		return nonEmptyPred, args
-	}
-	return "(" + nonEmptyPred + " OR " + emptyPred + ")", args
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule

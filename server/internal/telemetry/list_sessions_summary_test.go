@@ -9,18 +9,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/stretchr/testify/require"
 )
 
-// Windows at least 48h wide route ListSessions onto chat_session_summaries
-// (sessionSummaryMinWindow); the ±1h windows used by list_sessions_test.go
-// stay on the raw telemetry_logs path. These tests insert rows at recent
+// Windows at least repo.SessionSummaryMinWindow wide route ListSessions onto
+// chat_session_summaries; the ±1h windows used by list_sessions_test.go stay
+// on the raw telemetry_logs path. These tests insert rows at recent
 // timestamps (inside the MV's live-ingestion range) and query them through
-// wide windows so the summary path serves them.
-//
-// summaryFrom/summaryTo build such a window around now.
+// wide windows so the summary path serves them. The window width derives from
+// the routing constant so a retuned threshold cannot silently flip these
+// tests back onto the raw path.
 func summaryWindow(now time.Time) (string, string) {
-	return now.Add(-72 * time.Hour).Format(time.RFC3339), now.Add(1 * time.Hour).Format(time.RFC3339)
+	return now.Add(-(repo.SessionSummaryMinWindow + 24*time.Hour)).Format(time.RFC3339),
+		now.Add(1 * time.Hour).Format(time.RFC3339)
 }
 
 // TestListSessions_SummaryPathMatchesRawPath asserts the two ListSessions

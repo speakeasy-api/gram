@@ -18,7 +18,6 @@ type attributeDimension struct {
 	kind                   attributeDimensionKind
 	coLocateSessionFilters bool
 	emptyIsNotApplicable   bool
-	summaryTupleField      string
 }
 
 type telemetryDimension struct {
@@ -38,12 +37,10 @@ type telemetryDimension struct {
 	// dimension's per-chat distinct values (a groupUniqArrayArray-merged
 	// Array(String) for scalar/array dimensions; the key column for
 	// project_id). Empty for the co-located Claude attribution dimensions,
-	// which are matched through summaryTupleField instead.
+	// whose registry key doubles as their field name in the
+	// attribution_tuples named tuple (enforced by the registry bindings
+	// test in sessions_schema_sync_test.go).
 	summaryColumn string
-	// summaryTupleField names the dimension's field inside the
-	// chat_session_summaries attribution_tuples named tuple, for the
-	// co-located Claude attribution dimensions.
-	summaryTupleField string
 }
 
 // telemetryDimensionRegistry is the single allowlist for public telemetry
@@ -58,7 +55,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "department_names",
-		summaryTupleField:      "",
 	},
 	"job_title": {
 		aggregateColumn:        "job_title",
@@ -67,7 +63,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "job_titles",
-		summaryTupleField:      "",
 	},
 	"employee_type": {
 		aggregateColumn:        "employee_type",
@@ -76,7 +71,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "employee_types",
-		summaryTupleField:      "",
 	},
 	"division_name": {
 		aggregateColumn:        "division_name",
@@ -85,7 +79,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "division_names",
-		summaryTupleField:      "",
 	},
 	"cost_center_name": {
 		aggregateColumn:        "cost_center_name",
@@ -94,7 +87,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "cost_center_names",
-		summaryTupleField:      "",
 	},
 	"email": {
 		// The user breakdown falls back to the device hostname when a session
@@ -111,7 +103,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "emails",
-		summaryTupleField:      "",
 	},
 	"hostname": {
 		// The device hostname the Go hooks report on every event
@@ -124,7 +115,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "hostnames",
-		summaryTupleField:      "",
 	},
 	"model": {
 		aggregateColumn: "model",
@@ -137,7 +127,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "models",
-		summaryTupleField:      "",
 	},
 	"hook_source": {
 		aggregateColumn:        "hook_source",
@@ -146,7 +135,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "hook_sources",
-		summaryTupleField:      "",
 	},
 	"account_type": {
 		// AI account classification: 'team' | 'personal' | '' (unclassified).
@@ -158,7 +146,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "account_types",
-		summaryTupleField:      "",
 	},
 	"provider": {
 		// AI provider for the account: 'anthropic' | 'openai' | 'cursor' | ''.
@@ -170,7 +157,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "providers",
-		summaryTupleField:      "",
 	},
 	"billing_mode": {
 		// How the account is billed: 'metered' (pay-per-token; cost is real spend)
@@ -184,7 +170,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "billing_modes",
-		summaryTupleField:      "",
 	},
 	"query_source": {
 		aggregateColumn:        "query_source",
@@ -193,7 +178,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: true,
 		emptyIsNotApplicable:   true,
 		summaryColumn:          "",
-		summaryTupleField:      "query_source",
 	},
 	"skill_name": {
 		aggregateColumn:        "skill_name",
@@ -202,7 +186,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: true,
 		emptyIsNotApplicable:   true,
 		summaryColumn:          "",
-		summaryTupleField:      "skill_name",
 	},
 	"agent_name": {
 		aggregateColumn:        "agent_name",
@@ -211,7 +194,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: true,
 		emptyIsNotApplicable:   true,
 		summaryColumn:          "",
-		summaryTupleField:      "agent_name",
 	},
 	"mcp_server_name": {
 		aggregateColumn:        "mcp_server_name",
@@ -220,7 +202,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: true,
 		emptyIsNotApplicable:   true,
 		summaryColumn:          "",
-		summaryTupleField:      "mcp_server_name",
 	},
 	"mcp_tool_name": {
 		aggregateColumn:        "mcp_tool_name",
@@ -229,7 +210,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: true,
 		emptyIsNotApplicable:   true,
 		summaryColumn:          "",
-		summaryTupleField:      "mcp_tool_name",
 	},
 	"role": {
 		aggregateColumn:        "roles",
@@ -238,7 +218,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "roles",
-		summaryTupleField:      "",
 	},
 	"group": {
 		aggregateColumn:        "groups",
@@ -247,7 +226,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "groups",
-		summaryTupleField:      "",
 	},
 	"project_id": {
 		aggregateColumn:        "gram_project_id",
@@ -256,7 +234,6 @@ var telemetryDimensionRegistry = map[string]telemetryDimension{
 		coLocateSessionFilters: false,
 		emptyIsNotApplicable:   false,
 		summaryColumn:          "gram_project_id",
-		summaryTupleField:      "",
 	},
 }
 
@@ -268,7 +245,6 @@ func buildDimensionRegistry(columnFor func(telemetryDimension) string) map[strin
 			kind:                   dim.kind,
 			coLocateSessionFilters: dim.coLocateSessionFilters,
 			emptyIsNotApplicable:   dim.emptyIsNotApplicable,
-			summaryTupleField:      dim.summaryTupleField,
 		}
 	}
 	return out
@@ -284,8 +260,8 @@ var sessionDimensionRegistry = buildDimensionRegistry(func(dim telemetryDimensio
 
 // sessionSummaryDimensionRegistry resolves dimensions against the
 // chat_session_summaries columns for the summary-backed ListSessions path.
-// Co-located attribution dimensions resolve to "" here and are matched via
-// summaryTupleField instead.
+// Co-located attribution dimensions resolve to "" here; their registry key is
+// their field name in the attribution_tuples named tuple.
 var sessionSummaryDimensionRegistry = buildDimensionRegistry(func(dim telemetryDimension) string {
 	return dim.summaryColumn
 })
