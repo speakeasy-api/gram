@@ -113,7 +113,7 @@ func (q *Queries) ListSkillEfficacyScoreSessions(ctx context.Context, arg ListSk
 	if err != nil {
 		return nil, fmt.Errorf("querying scored sessions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var result []SkillEfficacyScoreSession
 	for rows.Next() {
 		var row SkillEfficacyScoreSession
