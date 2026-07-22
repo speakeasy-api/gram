@@ -21,11 +21,16 @@ export function ChatOwnerLabel({
 }): JSX.Element {
   const owner = chatOwnerDisplay(members, chat, currentUser, accountEmail);
 
-  if (owner.resolved) return <>{owner.label}</>;
+  // While the members query is still loading, matching hasn't been attempted
+  // yet — render plainly instead of claiming the user couldn't be matched.
+  if (owner.resolved || !members) return <>{owner.label}</>;
 
   return (
     <SimpleTooltip tooltip={unresolvedChatOwnerTooltip(chat)}>
-      <span className="cursor-help underline decoration-dotted underline-offset-2">
+      <span
+        tabIndex={0}
+        className="cursor-help underline decoration-dotted underline-offset-2"
+      >
         {owner.label}
       </span>
     </SimpleTooltip>
