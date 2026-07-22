@@ -40,8 +40,6 @@ minimumReleaseAgeExclude:
 
 overrides:
   glob@>=10.0 <10.5.0: 10.5.0
-  # Without this, @polar-sh/ui resolves Recharts v3 while Elements/Tremor stay on v2.
-  recharts: 2.15.4
   # Radix sub-packages pin exact react-dismissable-layer versions, so mixed Radix
   # releases load multiple copies with separate layer-stack contexts — nested dismiss
   # layers then can't see each other (e.g. the filter sheet closing when dismissing a

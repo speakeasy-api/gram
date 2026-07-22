@@ -59,13 +59,13 @@
     "@logtape/logtape": "^2.2.4",
     "@logtape/pretty": "^2.2.4",
     "@stricli/core": "^1.2.9",
-    "archiver": "^7.0.1",
+    "archiver": "^8.0.0",
     "esbuild": "^0.27.7",
     "zod": "^4",
     "zx": "8.8.5-lite"
   },
   "devDependencies": {
-    "@types/archiver": "^6.0.4",
+    "@types/archiver": "^8.0.0",
     "vitest": "^4.1.10"
   }
 }

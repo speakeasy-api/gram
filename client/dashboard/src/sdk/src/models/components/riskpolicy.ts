@@ -9,6 +9,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  RiskDetectionScope,
+  RiskDetectionScope$inboundSchema,
+} from "./riskdetectionscope.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$inboundSchema,
 } from "./riskpolicymodelconfig.js";
@@ -79,6 +83,10 @@ export type RiskPolicy = {
    * Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.
    */
   customRuleIds?: Array<string> | undefined;
+  /**
+   * Per-category detection scopes specified for this policy. The scan surface merges these with the recommended scopes, the specified scope winning on category conflict. Empty means every recommendation applies unchanged.
+   */
+  detectionScopes?: Array<RiskDetectionScope> | undefined;
   /**
    * Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.
    */
@@ -194,6 +202,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         z.transform(v => new Date(v)),
       ),
       custom_rule_ids: z.optional(z.array(z.string())),
+      detection_scopes: z.optional(z.array(RiskDetectionScope$inboundSchema)),
       disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
       id: z.string(),
@@ -227,6 +236,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "auto_name": "autoName",
         "created_at": "createdAt",
         "custom_rule_ids": "customRuleIds",
+        "detection_scopes": "detectionScopes",
         "disabled_rules": "disabledRules",
         "message_types": "messageTypes",
         "model_config": "modelConfig",

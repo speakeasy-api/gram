@@ -493,7 +493,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -656,7 +656,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -1448,6 +1448,16 @@ jobs:
           NODE_ENV: production
         run: mise exec --env viteprod -- pnpm build
 
+      # Published for upload-dashboard-assets so the CDN bucket receives the
+      # exact assets this image ships with (a rebuild there could hash
+      # differently, e.g. GRAM_GIT_SHA is only set in this job).
+      - name: Upload built assets artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dashboard-assets
+          path: client/dashboard/dist/assets
+          retention-days: 2
+
       - name: Upload source maps to DataDog
         env:
           DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
@@ -1495,6 +1505,62 @@ jobs:
       - name: Prune PNPM store
         if: success()
         run: pnpm store prune
+
+  upload-dashboard-assets:
+    name: Upload dashboard assets to CDN bucket (${{ matrix.environment }})
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: [docker-build-client]
+    # Syncs the dist/assets the dashboard image was built from (via artifact,
+    # not a rebuild) into the private GCS buckets that will become the CDN
+    # origins (gram-infra: infra/terraform/k8s/cdn-bucket.tf). Runs on PRs too
+    # so preview images' hashed assets are already in the buckets before any
+    # deploy references them. Forks and dependabot are skipped: their runs
+    # cannot mint the OIDC token needed for workload identity auth.
+    if: |
+      !cancelled() &&
+      needs.docker-build-client.result == 'success' &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      !github.event.pull_request.head.repo.fork
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: dev
+            bucket_secret: ASSET_BUCKET_DEV
+            workload_identity_provider_secret: GCP_WORKLOAD_IDENTITY_PROVIDER_DEV
+            service_account_secret: ASSET_BUCKET_SERVICE_ACCOUNT_DEV
+          - environment: prod
+            bucket_secret: ASSET_BUCKET_PROD
+            workload_identity_provider_secret: GCP_WORKLOAD_IDENTITY_PROVIDER_PROD
+            service_account_secret: ASSET_BUCKET_SERVICE_ACCOUNT_PROD
+    steps:
+      - name: Download built assets artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dashboard-assets
+          path: dist/assets
+
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ secrets[matrix.workload_identity_provider_secret] }}
+          service_account: ${{ secrets[matrix.service_account_secret] }}
+
+      - name: Upload assets to bucket
+        uses: google-github-actions/upload-cloud-storage@6397bd7208e18d13ba2619ee21b9873edc94427a # v3.0.0
+        with:
+          path: dist/assets
+          destination: ${{ secrets[matrix.bucket_secret] }}/assets
+          parent: false
+          # The CDN compresses at the edge (compression_mode AUTOMATIC) and
+          # skips responses that are already content-encoded, so objects must
+          # be stored uncompressed.
+          gzip: false
+          process_gcloudignore: false
+          # Filenames are content-hashed, so they are safe to cache forever.
+          headers: |-
+            cache-control: public, max-age=31536000, immutable
 
   client-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1830,7 +1896,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -1941,6 +2007,7 @@ jobs:
       - server-test
       - docker-build-server
       - docker-build-client
+      - upload-dashboard-assets
       - docker-build-pystreams
       - client-build-lint
       - client-test
