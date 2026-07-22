@@ -13775,6 +13775,959 @@ paths:
             x-speakeasy-name-override: updateGcpIam
             x-speakeasy-react-hook:
                 name: UpdateGcpIamCredential
+    /rpc/externalKeys.createAwsKms:
+        post:
+            description: Create an AWS KMS external key. Requires org:admin.
+            operationId: createAwsKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateAwsKmsKeyForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AwsKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createAwsKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: createAwsKms
+            x-speakeasy-react-hook:
+                name: CreateAwsKmsKey
+    /rpc/externalKeys.createGcpKms:
+        post:
+            description: Create a GCP KMS external key. Requires org:admin.
+            operationId: createGcpKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateGcpKmsKeyForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createGcpKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: createGcpKms
+            x-speakeasy-react-hook:
+                name: CreateGcpKmsKey
+    /rpc/externalKeys.deleteAwsKms:
+        delete:
+            description: Soft-delete an AWS KMS external key by ID. Requires org:admin.
+            operationId: deleteAwsKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to delete.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to delete.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteAwsKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: deleteAwsKms
+            x-speakeasy-react-hook:
+                name: DeleteAwsKmsKey
+    /rpc/externalKeys.deleteGcpKms:
+        delete:
+            description: Soft-delete a GCP KMS external key by ID. Requires org:admin.
+            operationId: deleteGcpKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to delete.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to delete.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteGcpKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: deleteGcpKms
+            x-speakeasy-react-hook:
+                name: DeleteGcpKmsKey
+    /rpc/externalKeys.getAwsKms:
+        get:
+            description: Get an AWS KMS external key by ID. Requires org:read.
+            operationId: getAwsKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to get.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to get.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AwsKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getAwsKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: getAwsKms
+            x-speakeasy-react-hook:
+                name: GetAwsKmsKey
+    /rpc/externalKeys.getGcpKms:
+        get:
+            description: Get a GCP KMS external key by ID. Requires org:read.
+            operationId: getGcpKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to get.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to get.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getGcpKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: getGcpKms
+            x-speakeasy-react-hook:
+                name: GetGcpKmsKey
+    /rpc/externalKeys.list:
+        get:
+            description: List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.
+            operationId: listExternalKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: Only return keys for this provider.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Only return keys for this provider.
+                    enum:
+                        - aws_kms
+                        - gcp_kms
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExternalKeysResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listExternalKeys externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: ListExternalKeys
+    /rpc/externalKeys.listAwsKms:
+        get:
+            description: List the organization's AWS KMS external keys. Requires org:read.
+            operationId: listAwsKmsKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExternalKeysResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listAwsKmsKeys externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: listAwsKms
+            x-speakeasy-react-hook:
+                name: ListAwsKmsKeys
+    /rpc/externalKeys.listGcpKms:
+        get:
+            description: List the organization's GCP KMS external keys. Requires org:read.
+            operationId: listGcpKmsKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExternalKeysResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listGcpKmsKeys externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: listGcpKms
+            x-speakeasy-react-hook:
+                name: ListGcpKmsKeys
+    /rpc/externalKeys.updateAwsKms:
+        post:
+            description: Replace an AWS KMS external key's configuration. Requires org:admin.
+            operationId: updateAwsKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateAwsKmsKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AwsKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateAwsKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: updateAwsKms
+            x-speakeasy-react-hook:
+                name: UpdateAwsKmsKey
+    /rpc/externalKeys.updateGcpKms:
+        post:
+            description: Replace a GCP KMS external key's configuration. Requires org:admin.
+            operationId: updateGcpKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateGcpKmsKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateGcpKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: updateGcpKms
+            x-speakeasy-react-hook:
+                name: UpdateGcpKmsKey
     /rpc/hooks.claude:
         post:
             tags:
@@ -43921,6 +44874,60 @@ components:
                 - name
                 - created_at
                 - updated_at
+        AwsKmsKey:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                created_at:
+                    type: string
+                    description: When the key was created.
+                    format: date-time
+                customer_grant_reference:
+                    type: string
+                    description: The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key.
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the external key.
+                    format: uuid
+                key_arn:
+                    type: string
+                    description: The ARN of the AWS KMS key.
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                organization_id:
+                    type: string
+                    description: The organization that owns the key.
+                provider:
+                    type: string
+                    description: The cloud KMS provider of the key.
+                    enum:
+                        - aws_kms
+                        - gcp_kms
+                updated_at:
+                    type: string
+                    description: When the key was last updated.
+                    format: date-time
+            description: An AWS KMS external key.
+            required:
+                - key_arn
+                - id
+                - organization_id
+                - external_credential_id
+                - provider
+                - algorithm
+                - name
+                - created_at
+                - updated_at
         BaseResourceAttributes:
             type: object
             properties:
@@ -45031,6 +46038,33 @@ components:
                     description: Optional STS region override.
             required:
                 - name
+        CreateAwsKmsKeyForm:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    format: uuid
+                key_arn:
+                    type: string
+                    description: The ARN of the AWS KMS key.
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+            required:
+                - key_arn
+                - external_credential_id
+                - algorithm
+                - name
         CreateCimdForm:
             type: object
             properties:
@@ -45246,6 +46280,29 @@ components:
                 - organization_id
                 - name
                 - entries
+        CreateExternalKeyFields:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+            required:
+                - external_credential_id
+                - algorithm
+                - name
         CreateGcpIamCredentialForm:
             type: object
             properties:
@@ -45265,6 +46322,33 @@ components:
                     type: string
                     description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
             required:
+                - name
+        CreateGcpKmsKeyForm:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                resource_name:
+                    type: string
+                    description: The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
+            required:
+                - resource_name
+                - external_credential_id
+                - algorithm
                 - name
         CreateGlobalRemoteSessionClientForm:
             type: object
@@ -47251,6 +48335,56 @@ components:
                 - name
                 - created_at
                 - updated_at
+        ExternalKeySummary:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                created_at:
+                    type: string
+                    description: When the key was created.
+                    format: date-time
+                customer_grant_reference:
+                    type: string
+                    description: The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key.
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the external key.
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                organization_id:
+                    type: string
+                    description: The organization that owns the key.
+                provider:
+                    type: string
+                    description: The cloud KMS provider of the key.
+                    enum:
+                        - aws_kms
+                        - gcp_kms
+                updated_at:
+                    type: string
+                    description: When the key was last updated.
+                    format: date-time
+            description: Provider-independent summary of an external key.
+            required:
+                - id
+                - organization_id
+                - external_credential_id
+                - provider
+                - algorithm
+                - name
+                - created_at
+                - updated_at
         ExternalMCPHeaderDefinition:
             type: object
             properties:
@@ -47890,6 +49024,60 @@ components:
                 - id
                 - organization_id
                 - provider
+                - name
+                - created_at
+                - updated_at
+        GcpKmsKey:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                created_at:
+                    type: string
+                    description: When the key was created.
+                    format: date-time
+                customer_grant_reference:
+                    type: string
+                    description: The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key.
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the external key.
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                organization_id:
+                    type: string
+                    description: The organization that owns the key.
+                provider:
+                    type: string
+                    description: The cloud KMS provider of the key.
+                    enum:
+                        - aws_kms
+                        - gcp_kms
+                resource_name:
+                    type: string
+                    description: The resource name of the GCP KMS key.
+                updated_at:
+                    type: string
+                    description: When the key was last updated.
+                    format: date-time
+            description: A GCP KMS external key.
+            required:
+                - resource_name
+                - id
+                - organization_id
+                - external_credential_id
+                - provider
+                - algorithm
                 - name
                 - created_at
                 - updated_at
@@ -49931,6 +51119,16 @@ components:
                     description: The organization's external credentials.
             required:
                 - credentials
+        ListExternalKeysResult:
+            type: object
+            properties:
+                keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalKeySummary'
+                    description: The organization's external keys.
+            required:
+                - keys
         ListFilterOptionsPayload:
             type: object
             properties:
@@ -59574,6 +60772,38 @@ components:
             required:
                 - id
                 - name
+        UpdateAwsKmsKeyRequestBody:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the key to update.
+                    format: uuid
+                key_arn:
+                    type: string
+                    description: The ARN of the AWS KMS key.
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+            required:
+                - id
+                - key_arn
+                - external_credential_id
+                - algorithm
+                - name
         UpdateCustomDetectionRuleRequestBody:
             type: object
             properties:
@@ -59691,6 +60921,38 @@ components:
                     description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
             required:
                 - id
+                - name
+        UpdateGcpKmsKeyRequestBody:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the key to update.
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                resource_name:
+                    type: string
+                    description: The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
+            required:
+                - id
+                - resource_name
+                - external_credential_id
+                - algorithm
                 - name
         UpdateInviteRoleRequestBody:
             type: object
@@ -61403,6 +62665,8 @@ tags:
       description: Managing toolset environments.
     - name: externalCredentials
       description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
+    - name: externalKeys
+      description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.
     - name: mcpRegistries
       description: External MCP registry operations
     - name: collections

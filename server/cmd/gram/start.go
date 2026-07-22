@@ -63,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
+	"github.com/speakeasy-api/gram/server/internal/externalkeys"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -1107,6 +1108,7 @@ func newStartCommand() *cli.Command {
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
 			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))

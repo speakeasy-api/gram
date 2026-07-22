@@ -33,6 +33,7 @@ import (
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
 	externalc "github.com/speakeasy-api/gram/server/gen/http/external/client"
 	externalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/external_credentials/client"
+	externalkeysc "github.com/speakeasy-api/gram/server/gen/http/external_keys/client"
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
@@ -100,6 +101,7 @@ func UsageCommands() []string {
 		"domains (get-domain|create-domain|update-domain|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|delete-aws-iam-credential|delete-gcp-iam-credential)",
+		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
@@ -854,6 +856,50 @@ func ParseEndpoint(
 		externalCredentialsDeleteGcpIamCredentialFlags            = flag.NewFlagSet("delete-gcp-iam-credential", flag.ExitOnError)
 		externalCredentialsDeleteGcpIamCredentialIDFlag           = externalCredentialsDeleteGcpIamCredentialFlags.String("id", "REQUIRED", "")
 		externalCredentialsDeleteGcpIamCredentialSessionTokenFlag = externalCredentialsDeleteGcpIamCredentialFlags.String("session-token", "", "")
+
+		externalKeysFlags = flag.NewFlagSet("external-keys", flag.ContinueOnError)
+
+		externalKeysCreateAwsKmsKeyFlags            = flag.NewFlagSet("create-aws-kms-key", flag.ExitOnError)
+		externalKeysCreateAwsKmsKeyBodyFlag         = externalKeysCreateAwsKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysCreateAwsKmsKeySessionTokenFlag = externalKeysCreateAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysUpdateAwsKmsKeyFlags            = flag.NewFlagSet("update-aws-kms-key", flag.ExitOnError)
+		externalKeysUpdateAwsKmsKeyBodyFlag         = externalKeysUpdateAwsKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysUpdateAwsKmsKeySessionTokenFlag = externalKeysUpdateAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysCreateGcpKmsKeyFlags            = flag.NewFlagSet("create-gcp-kms-key", flag.ExitOnError)
+		externalKeysCreateGcpKmsKeyBodyFlag         = externalKeysCreateGcpKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysCreateGcpKmsKeySessionTokenFlag = externalKeysCreateGcpKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysUpdateGcpKmsKeyFlags            = flag.NewFlagSet("update-gcp-kms-key", flag.ExitOnError)
+		externalKeysUpdateGcpKmsKeyBodyFlag         = externalKeysUpdateGcpKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysUpdateGcpKmsKeySessionTokenFlag = externalKeysUpdateGcpKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysListExternalKeysFlags            = flag.NewFlagSet("list-external-keys", flag.ExitOnError)
+		externalKeysListExternalKeysProviderFlag     = externalKeysListExternalKeysFlags.String("provider", "", "")
+		externalKeysListExternalKeysSessionTokenFlag = externalKeysListExternalKeysFlags.String("session-token", "", "")
+
+		externalKeysListAwsKmsKeysFlags            = flag.NewFlagSet("list-aws-kms-keys", flag.ExitOnError)
+		externalKeysListAwsKmsKeysSessionTokenFlag = externalKeysListAwsKmsKeysFlags.String("session-token", "", "")
+
+		externalKeysListGcpKmsKeysFlags            = flag.NewFlagSet("list-gcp-kms-keys", flag.ExitOnError)
+		externalKeysListGcpKmsKeysSessionTokenFlag = externalKeysListGcpKmsKeysFlags.String("session-token", "", "")
+
+		externalKeysGetAwsKmsKeyFlags            = flag.NewFlagSet("get-aws-kms-key", flag.ExitOnError)
+		externalKeysGetAwsKmsKeyIDFlag           = externalKeysGetAwsKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysGetAwsKmsKeySessionTokenFlag = externalKeysGetAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysGetGcpKmsKeyFlags            = flag.NewFlagSet("get-gcp-kms-key", flag.ExitOnError)
+		externalKeysGetGcpKmsKeyIDFlag           = externalKeysGetGcpKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysGetGcpKmsKeySessionTokenFlag = externalKeysGetGcpKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysDeleteAwsKmsKeyFlags            = flag.NewFlagSet("delete-aws-kms-key", flag.ExitOnError)
+		externalKeysDeleteAwsKmsKeyIDFlag           = externalKeysDeleteAwsKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysDeleteAwsKmsKeySessionTokenFlag = externalKeysDeleteAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysDeleteGcpKmsKeyFlags            = flag.NewFlagSet("delete-gcp-kms-key", flag.ExitOnError)
+		externalKeysDeleteGcpKmsKeyIDFlag           = externalKeysDeleteGcpKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysDeleteGcpKmsKeySessionTokenFlag = externalKeysDeleteGcpKmsKeyFlags.String("session-token", "", "")
 
 		mcpRegistriesFlags = flag.NewFlagSet("mcp-registries", flag.ContinueOnError)
 
@@ -2791,6 +2837,19 @@ func ParseEndpoint(
 	externalCredentialsDeleteAwsIamCredentialFlags.Usage = externalCredentialsDeleteAwsIamCredentialUsage
 	externalCredentialsDeleteGcpIamCredentialFlags.Usage = externalCredentialsDeleteGcpIamCredentialUsage
 
+	externalKeysFlags.Usage = externalKeysUsage
+	externalKeysCreateAwsKmsKeyFlags.Usage = externalKeysCreateAwsKmsKeyUsage
+	externalKeysUpdateAwsKmsKeyFlags.Usage = externalKeysUpdateAwsKmsKeyUsage
+	externalKeysCreateGcpKmsKeyFlags.Usage = externalKeysCreateGcpKmsKeyUsage
+	externalKeysUpdateGcpKmsKeyFlags.Usage = externalKeysUpdateGcpKmsKeyUsage
+	externalKeysListExternalKeysFlags.Usage = externalKeysListExternalKeysUsage
+	externalKeysListAwsKmsKeysFlags.Usage = externalKeysListAwsKmsKeysUsage
+	externalKeysListGcpKmsKeysFlags.Usage = externalKeysListGcpKmsKeysUsage
+	externalKeysGetAwsKmsKeyFlags.Usage = externalKeysGetAwsKmsKeyUsage
+	externalKeysGetGcpKmsKeyFlags.Usage = externalKeysGetGcpKmsKeyUsage
+	externalKeysDeleteAwsKmsKeyFlags.Usage = externalKeysDeleteAwsKmsKeyUsage
+	externalKeysDeleteGcpKmsKeyFlags.Usage = externalKeysDeleteGcpKmsKeyUsage
+
 	mcpRegistriesFlags.Usage = mcpRegistriesUsage
 	mcpRegistriesClearCacheFlags.Usage = mcpRegistriesClearCacheUsage
 	mcpRegistriesListRegistriesFlags.Usage = mcpRegistriesListRegistriesUsage
@@ -3226,6 +3285,8 @@ func ParseEndpoint(
 			svcf = environmentsFlags
 		case "external-credentials":
 			svcf = externalCredentialsFlags
+		case "external-keys":
+			svcf = externalKeysFlags
 		case "mcp-registries":
 			svcf = mcpRegistriesFlags
 		case "collections":
@@ -3775,6 +3836,43 @@ func ParseEndpoint(
 
 			case "delete-gcp-iam-credential":
 				epf = externalCredentialsDeleteGcpIamCredentialFlags
+
+			}
+
+		case "external-keys":
+			switch epn {
+			case "create-aws-kms-key":
+				epf = externalKeysCreateAwsKmsKeyFlags
+
+			case "update-aws-kms-key":
+				epf = externalKeysUpdateAwsKmsKeyFlags
+
+			case "create-gcp-kms-key":
+				epf = externalKeysCreateGcpKmsKeyFlags
+
+			case "update-gcp-kms-key":
+				epf = externalKeysUpdateGcpKmsKeyFlags
+
+			case "list-external-keys":
+				epf = externalKeysListExternalKeysFlags
+
+			case "list-aws-kms-keys":
+				epf = externalKeysListAwsKmsKeysFlags
+
+			case "list-gcp-kms-keys":
+				epf = externalKeysListGcpKmsKeysFlags
+
+			case "get-aws-kms-key":
+				epf = externalKeysGetAwsKmsKeyFlags
+
+			case "get-gcp-kms-key":
+				epf = externalKeysGetGcpKmsKeyFlags
+
+			case "delete-aws-kms-key":
+				epf = externalKeysDeleteAwsKmsKeyFlags
+
+			case "delete-gcp-kms-key":
+				epf = externalKeysDeleteGcpKmsKeyFlags
 
 			}
 
@@ -5332,6 +5430,43 @@ func ParseEndpoint(
 			case "delete-gcp-iam-credential":
 				endpoint = c.DeleteGcpIamCredential()
 				data, err = externalcredentialsc.BuildDeleteGcpIamCredentialPayload(*externalCredentialsDeleteGcpIamCredentialIDFlag, *externalCredentialsDeleteGcpIamCredentialSessionTokenFlag)
+			}
+		case "external-keys":
+			c := externalkeysc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-aws-kms-key":
+				endpoint = c.CreateAwsKmsKey()
+				data, err = externalkeysc.BuildCreateAwsKmsKeyPayload(*externalKeysCreateAwsKmsKeyBodyFlag, *externalKeysCreateAwsKmsKeySessionTokenFlag)
+			case "update-aws-kms-key":
+				endpoint = c.UpdateAwsKmsKey()
+				data, err = externalkeysc.BuildUpdateAwsKmsKeyPayload(*externalKeysUpdateAwsKmsKeyBodyFlag, *externalKeysUpdateAwsKmsKeySessionTokenFlag)
+			case "create-gcp-kms-key":
+				endpoint = c.CreateGcpKmsKey()
+				data, err = externalkeysc.BuildCreateGcpKmsKeyPayload(*externalKeysCreateGcpKmsKeyBodyFlag, *externalKeysCreateGcpKmsKeySessionTokenFlag)
+			case "update-gcp-kms-key":
+				endpoint = c.UpdateGcpKmsKey()
+				data, err = externalkeysc.BuildUpdateGcpKmsKeyPayload(*externalKeysUpdateGcpKmsKeyBodyFlag, *externalKeysUpdateGcpKmsKeySessionTokenFlag)
+			case "list-external-keys":
+				endpoint = c.ListExternalKeys()
+				data, err = externalkeysc.BuildListExternalKeysPayload(*externalKeysListExternalKeysProviderFlag, *externalKeysListExternalKeysSessionTokenFlag)
+			case "list-aws-kms-keys":
+				endpoint = c.ListAwsKmsKeys()
+				data, err = externalkeysc.BuildListAwsKmsKeysPayload(*externalKeysListAwsKmsKeysSessionTokenFlag)
+			case "list-gcp-kms-keys":
+				endpoint = c.ListGcpKmsKeys()
+				data, err = externalkeysc.BuildListGcpKmsKeysPayload(*externalKeysListGcpKmsKeysSessionTokenFlag)
+			case "get-aws-kms-key":
+				endpoint = c.GetAwsKmsKey()
+				data, err = externalkeysc.BuildGetAwsKmsKeyPayload(*externalKeysGetAwsKmsKeyIDFlag, *externalKeysGetAwsKmsKeySessionTokenFlag)
+			case "get-gcp-kms-key":
+				endpoint = c.GetGcpKmsKey()
+				data, err = externalkeysc.BuildGetGcpKmsKeyPayload(*externalKeysGetGcpKmsKeyIDFlag, *externalKeysGetGcpKmsKeySessionTokenFlag)
+			case "delete-aws-kms-key":
+				endpoint = c.DeleteAwsKmsKey()
+				data, err = externalkeysc.BuildDeleteAwsKmsKeyPayload(*externalKeysDeleteAwsKmsKeyIDFlag, *externalKeysDeleteAwsKmsKeySessionTokenFlag)
+			case "delete-gcp-kms-key":
+				endpoint = c.DeleteGcpKmsKey()
+				data, err = externalkeysc.BuildDeleteGcpKmsKeyPayload(*externalKeysDeleteGcpKmsKeyIDFlag, *externalKeysDeleteGcpKmsKeySessionTokenFlag)
 			}
 		case "mcp-registries":
 			c := mcpregistriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -9536,6 +9671,243 @@ func externalCredentialsDeleteGcpIamCredentialUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials delete-gcp-iam-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+// externalKeysUsage displays the usage of the external-keys command and its
+// subcommands.
+func externalKeysUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] external-keys COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-aws-kms-key: Create an AWS KMS external key. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-aws-kms-key: Replace an AWS KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    create-gcp-kms-key: Create a GCP KMS external key. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-gcp-kms-key: Replace a GCP KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-external-keys: List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-aws-kms-keys: List the organization's AWS KMS external keys. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-gcp-kms-keys: List the organization's GCP KMS external keys. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-aws-kms-key: Get an AWS KMS external key by ID. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-gcp-kms-key: Get a GCP KMS external key by ID. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    delete-aws-kms-key: Soft-delete an AWS KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    delete-gcp-kms-key: Soft-delete a GCP KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s external-keys COMMAND --help\n", os.Args[0])
+}
+func externalKeysCreateAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys create-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an AWS KMS external key. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys create-aws-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"key_arn\": \"abc123\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysUpdateAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys update-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace an AWS KMS external key's configuration. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-aws-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"key_arn\": \"abc123\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysCreateGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys create-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a GCP KMS external key. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys create-gcp-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysUpdateGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys update-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a GCP KMS external key's configuration. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-gcp-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysListExternalKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys list-external-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys list-external-keys --provider \"gcp_kms\" --session-token \"abc123\"")
+}
+
+func externalKeysListAwsKmsKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys list-aws-kms-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's AWS KMS external keys. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys list-aws-kms-keys --session-token \"abc123\"")
+}
+
+func externalKeysListGcpKmsKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys list-gcp-kms-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's GCP KMS external keys. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys list-gcp-kms-keys --session-token \"abc123\"")
+}
+
+func externalKeysGetAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys get-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an AWS KMS external key by ID. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys get-aws-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalKeysGetGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys get-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a GCP KMS external key by ID. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys get-gcp-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalKeysDeleteAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys delete-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete an AWS KMS external key by ID. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys delete-aws-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalKeysDeleteGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys delete-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a GCP KMS external key by ID. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys delete-gcp-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 // mcpRegistriesUsage displays the usage of the mcp-registries command and its
