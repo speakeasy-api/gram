@@ -348,10 +348,6 @@ const (
 	// context or no policies), so gating latency can be separated from the
 	// no-scan baseline.
 	HookRiskScannedKey = attribute.Key("gram.hook.risk_scanned")
-	// TelemetryCHOperationKey names the synchronous ClickHouse write measured
-	// on telemetry.clickhouse.write.duration spans and metrics.
-	TelemetryCHOperationKey = attribute.Key("gram.telemetry.operation")
-	TelemetryCHRowCountKey  = attribute.Key("gram.telemetry.row_count")
 	// HookReplayedKey is set (true) on telemetry rows for events redelivered
 	// from a device's offline spool after control-plane downtime, so
 	// dashboards can separate downtime backlog from live traffic. The row's
@@ -641,9 +637,6 @@ func SlogHookServerNameOverrideID(v string) slog.Attr {
 func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
 
 func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool(v) }
-
-func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
-func TelemetryCHRowCount(v int) attribute.KeyValue     { return TelemetryCHRowCountKey.Int(v) }
 
 func HookEvent(v string) attribute.KeyValue { return HookEventKey.String(v) }
 func SlogHookEvent(v string) slog.Attr      { return slog.String(string(HookEventKey), v) }
