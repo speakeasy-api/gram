@@ -383,6 +383,13 @@ trackedFiles:
   src/funcs/telemetryGetProjectOverview.ts: {}
   src/funcs/telemetryGetToolUsageFilterOptions.ts: {}
   src/funcs/telemetryGetToolUsageSummary.ts: {}
+  src/funcs/telemetryGetToolUsageTargetTimeSeries.ts: {}
+  src/funcs/telemetryGetToolUsageTargetToolBreakdown.ts: {}
+  src/funcs/telemetryGetToolUsageTargets.ts: {}
+  src/funcs/telemetryGetToolUsageTotals.ts: {}
+  src/funcs/telemetryGetToolUsageUserTimeSeries.ts: {}
+  src/funcs/telemetryGetToolUsageUsers.ts: {}
+  src/funcs/telemetryGetToolUsageUsersByTarget.ts: {}
   src/funcs/telemetryGetUserMetricsSummary.ts: {}
   src/funcs/telemetryListAttributeKeys.ts: {}
   src/funcs/telemetryListFilterOptions.ts: {}
@@ -664,6 +671,13 @@ trackedFiles:
   src/models/components/gettoolusagefilteroptionsresult.ts: {}
   src/models/components/gettoolusagesummarypayload.ts: {}
   src/models/components/gettoolusagesummaryresult.ts: {}
+  src/models/components/gettoolusagetargetsresult.ts: {}
+  src/models/components/gettoolusagetargettimeseriesresult.ts: {}
+  src/models/components/gettoolusagetargettoolbreakdownresult.ts: {}
+  src/models/components/gettoolusagetotalsresult.ts: {}
+  src/models/components/gettoolusageusersbytargetresult.ts: {}
+  src/models/components/gettoolusageusersresult.ts: {}
+  src/models/components/gettoolusageusertimeseriesresult.ts: {}
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
   src/models/components/hookingestdata.ts: {}
@@ -1329,6 +1343,13 @@ trackedFiles:
   src/models/operations/gettoolsetenvironment.ts: {}
   src/models/operations/gettoolusagefilteroptions.ts: {}
   src/models/operations/gettoolusagesummary.ts: {}
+  src/models/operations/gettoolusagetargets.ts: {}
+  src/models/operations/gettoolusagetargettimeseries.ts: {}
+  src/models/operations/gettoolusagetargettoolbreakdown.ts: {}
+  src/models/operations/gettoolusagetotals.ts: {}
+  src/models/operations/gettoolusageusers.ts: {}
+  src/models/operations/gettoolusageusersbytarget.ts: {}
+  src/models/operations/gettoolusageusertimeseries.ts: {}
   src/models/operations/gettriggerinstance.ts: {}
   src/models/operations/gettunneledmcpserver.ts: {}
   src/models/operations/getusermetricssummary.ts: {}
@@ -1758,6 +1779,20 @@ trackedFiles:
   src/react-query/getToolUsageFilterOptions.ts: {}
   src/react-query/getToolUsageSummary.core.ts: {}
   src/react-query/getToolUsageSummary.ts: {}
+  src/react-query/getToolUsageTargetTimeSeries.core.ts: {}
+  src/react-query/getToolUsageTargetTimeSeries.ts: {}
+  src/react-query/getToolUsageTargetToolBreakdown.core.ts: {}
+  src/react-query/getToolUsageTargetToolBreakdown.ts: {}
+  src/react-query/getToolUsageTargets.core.ts: {}
+  src/react-query/getToolUsageTargets.ts: {}
+  src/react-query/getToolUsageTotals.core.ts: {}
+  src/react-query/getToolUsageTotals.ts: {}
+  src/react-query/getToolUsageUserTimeSeries.core.ts: {}
+  src/react-query/getToolUsageUserTimeSeries.ts: {}
+  src/react-query/getToolUsageUsers.core.ts: {}
+  src/react-query/getToolUsageUsers.ts: {}
+  src/react-query/getToolUsageUsersByTarget.core.ts: {}
+  src/react-query/getToolUsageUsersByTarget.ts: {}
   src/react-query/getToolsetEnvironment.core.ts: {}
   src/react-query/getToolsetEnvironment.ts: {}
   src/react-query/getTunneledMcpServer.core.ts: {}
@@ -4383,6 +4418,83 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getToolUsageTargetTimeSeries:
+    speakeasy-default-get-tool-usage-target-time-series:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"target_time_series": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getToolUsageTargetToolBreakdown:
+    speakeasy-default-get-tool-usage-target-tool-breakdown:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"target_tool_breakdown": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getToolUsageTargets:
+    speakeasy-default-get-tool-usage-targets:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"targets": [{"event_count": 979213, "failure_count": 989908, "failure_rate": 765.08, "success_count": 975140, "target_id": "<id>", "target_kind": "local_tools", "target_label": "<value>", "target_type": "tunneled_mcp_server", "unique_tools": 208855}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getToolUsageTotals:
+    speakeasy-default-get-tool-usage-totals:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"totals": {"event_count": 279655, "failure_count": 247635, "failure_rate": 7317.76, "success_count": 145330, "unique_targets": 634848, "unique_tools": 940744, "unique_users": 975569}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getToolUsageUserTimeSeries:
+    speakeasy-default-get-tool-usage-user-time-series:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"user_time_series": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getToolUsageUsers:
+    speakeasy-default-get-tool-usage-users:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"users": [{"event_count": 702889, "failure_count": 274440, "failure_rate": 9768.86, "success_count": 218340, "unique_tools": 224466, "user_key": "<value>", "user_kind": "email", "user_label": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getToolUsageUsersByTarget:
+    speakeasy-default-get-tool-usage-users-by-target:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"users_by_target": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getToolset:
     speakeasy-default-get-toolset:
       parameters:
