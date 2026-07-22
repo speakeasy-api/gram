@@ -7,7 +7,7 @@ afterEach(cleanup);
 
 function renderCard({
   disabledReason,
-  onToggle = vi.fn(),
+  onToggle = vi.fn<(checked: boolean) => void>(),
 }: {
   disabledReason?: string;
   onToggle?: (checked: boolean) => void;
@@ -20,7 +20,7 @@ function renderCard({
         disabledRules={new Set()}
         disabledReason={disabledReason}
         onToggle={onToggle}
-        onCustomize={vi.fn()}
+        onCustomize={vi.fn<() => void>()}
       />
     </TooltipProvider>,
   );
@@ -28,7 +28,7 @@ function renderCard({
 
 describe("DetectorCard", () => {
   it("keeps an enabled switch interactive and unwrapped", () => {
-    const onToggle = vi.fn();
+    const onToggle = vi.fn<(checked: boolean) => void>();
     renderCard({ onToggle });
 
     const toggle = screen.getByRole("switch", {
