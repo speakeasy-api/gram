@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -663,17 +664,23 @@ func TestBackfillShadowMCPInventoryURLs_CanonicalizesAndUpserts(t *testing.T) {
 
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-	rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
-		GramProjectID: projectID,
-		Limit:         50,
-		Cursor:        "",
-	})
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.Equal(t, "https://mcp.speakeasy.com/mcp", rows[0].CanonicalServerURL)
-	require.Equal(t, "mcp.speakeasy.com", rows[0].URLHost)
-	require.Equal(t, observedAt, rows[0].FirstSeen)
-	require.Equal(t, observedAt.Add(time.Minute), rows[0].LastSeen)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
+			GramProjectID: projectID,
+			Limit:         50,
+			Cursor:        "",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.Len(c, rows, 1) {
+			return
+		}
+		assert.Equal(c, "https://mcp.speakeasy.com/mcp", rows[0].CanonicalServerURL)
+		assert.Equal(c, "mcp.speakeasy.com", rows[0].URLHost)
+		assert.Equal(c, observedAt, rows[0].FirstSeen)
+		assert.Equal(c, observedAt.Add(time.Minute), rows[0].LastSeen)
+	}, 5*time.Second, 100*time.Millisecond, "shadow mcp inventory should eventually be visible")
 }
 
 func TestBackfillShadowMCPInventoryURLs_ExcludesHostedHostnames(t *testing.T) {
@@ -728,13 +735,19 @@ func TestBackfillShadowMCPInventoryURLs_ExcludesHostedHostnames(t *testing.T) {
 
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-	rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
-		GramProjectID: projectID,
-		Limit:         50,
-	})
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.Equal(t, "https://external.example.com/mcp", rows[0].CanonicalServerURL)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
+			GramProjectID: projectID,
+			Limit:         50,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.Len(c, rows, 1) {
+			return
+		}
+		assert.Equal(c, "https://external.example.com/mcp", rows[0].CanonicalServerURL)
+	}, 5*time.Second, 100*time.Millisecond, "shadow mcp inventory should eventually be visible")
 }
 
 type historicalShadowMCPCall struct {
