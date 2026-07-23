@@ -410,6 +410,16 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.ResetStaleSkillEfficacyReservations)
 	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.SignalSkillEfficacyCoordinator)
 	skillEfficacyWorker.RegisterActivity(activities.skillEfficacyScorer.PublishSkillEfficacyBatch)
+	// Chat analysis activities — same split as skill efficacy: database steps on
+	// the main queue, the judged publication on the shared judged-publication
+	// worker so one per-pod cap bounds both pipelines' model conversations.
+	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.EnqueueChatAnalysisPage)
+	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.ReserveChatAnalysisEvaluations)
+	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.LoadReservedChatAnalysisEvaluations)
+	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.ListChatAnalysisProjects)
+	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.ResetStaleChatAnalysisReservations)
+	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.SignalChatAnalysisCoordinator)
+	skillEfficacyWorker.RegisterActivity(activities.chatAnalysisScorer.PublishChatAnalysisBatch)
 
 	// AI integration usage syncing runs on its own worker and task queue.
 	aiUsageWorker.RegisterActivity(activities.PollAIData)
@@ -471,6 +481,9 @@ func NewTemporalWorker(
 	// Skill efficacy workflows
 	temporalWorker.RegisterWorkflow(SkillEfficacyCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
+	// Chat analysis workflows
+	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -540,6 +553,10 @@ func NewTemporalWorker(
 
 	if err := AddSkillEfficacySweepSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add skill efficacy sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddChatAnalysisSweepSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add chat analysis sweep schedule", attr.SlogError(err))
 	}
 
 	if opts.PluginPublisher != nil {
