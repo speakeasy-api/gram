@@ -60,6 +60,7 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
+import OrgSkills from "./pages/org/OrgSkills";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import {
   RemoteIdentityProvidersPage,
@@ -875,6 +876,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "logs",
     icon: "file-text",
     component: OrgLogs,
+  },
+  skills: {
+    title: "Skills",
+    url: "skills",
+    icon: "terminal",
+    component: OrgSkills,
   },
   aiIntegrations: {
     title: "AI Integrations",
