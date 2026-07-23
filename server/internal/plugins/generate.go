@@ -1217,10 +1217,15 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		timeoutSeconds, async := codexHookParams(event)
+		hookTimeout := 0
+		if event == "SessionEnd" {
+			hookTimeout = timeoutSeconds
+		}
 		hooks := []codexHookCommand{{
 			Type:           "command",
 			Command:        codexHookCommandString(timeoutSeconds, async),
 			CommandWindows: codexHookCommandStringWindows(timeoutSeconds, async),
+			Timeout:        hookTimeout,
 		}}
 		hookEvents[event] = []codexMatcherGroup{{
 			Matcher: "",
@@ -1313,10 +1318,14 @@ func codexEventSnakeCase(event string) string {
 // variables only after trust verification.
 func computeCodexHookHash(event, command string) (string, error) {
 	eventSnake := codexEventSnakeCase(event)
+	timeoutSeconds := 600
+	if event == "SessionEnd" {
+		timeoutSeconds = 3
+	}
 	hook := map[string]any{
 		"async":   false,
 		"command": command,
-		"timeout": 600,
+		"timeout": timeoutSeconds,
 		"type":    "command",
 	}
 	// json.Marshal on map[string]any sorts keys alphabetically, matching
@@ -1910,6 +1919,7 @@ type codexHookCommand struct {
 	Type           string `json:"type"`
 	Command        string `json:"command"`
 	CommandWindows string `json:"commandWindows,omitempty"`
+	Timeout        int    `json:"timeout,omitempty"`
 }
 
 // CodexObservabilityHookEvents are Codex's hook event names. Codex uses

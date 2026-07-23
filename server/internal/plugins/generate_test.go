@@ -1002,6 +1002,11 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		}
 		require.Equal(t, `bash "${PLUGIN_ROOT}/hooks/bootstrap.sh"`+expectedSuffix, groups[0].Hooks[0].Command)
 		require.Equal(t, `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "${PLUGIN_ROOT}\hooks\bootstrap.ps1"`+expectedWindowsSuffix, groups[0].Hooks[0].CommandWindows)
+		if event == "SessionEnd" {
+			require.Equal(t, 3, groups[0].Hooks[0].Timeout)
+		} else {
+			require.Zero(t, groups[0].Hooks[0].Timeout)
+		}
 		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async"))
 		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].CommandWindows, " --async"))
 	}
