@@ -51,9 +51,10 @@ const (
 )
 
 // EvaluationSignaler triggers an immediate evaluation cycle for an
-// organization after a rule mutation so circuits open and close quickly
-// instead of waiting for the next scheduled cycle. Best-effort: a failed
-// signal is logged, not fatal.
+// organization — after a rule mutation, or when fresh usage lands (see
+// UsageTrigger) — so circuits open and close quickly instead of waiting for
+// the next scheduled cycle. Best-effort: a failed signal is logged, not
+// fatal.
 type EvaluationSignaler interface {
 	Signal(ctx context.Context, organizationID string) error
 }

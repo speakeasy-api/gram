@@ -52,6 +52,16 @@ func WithOTELMetadata(params LogParams, observedTimestamp time.Time, resourceAtt
 	return params
 }
 
+// LogObserver is notified after a batch of telemetry log rows is written to
+// telemetry_logs. Observers receive the caller's batch before per-org
+// feature-flag filtering, so a row is not a guarantee that it was persisted.
+// Implementations must be cheap; heavy work should be throttled or dispatched
+// asynchronously. Staged rows (LogBulkStaging) are not observed — they only
+// reach telemetry_logs later, via promotion.
+type LogObserver interface {
+	OnTelemetryLogsWritten(ctx context.Context, params []LogParams)
+}
+
 type Logger struct {
 	shutdownCtx       func() context.Context
 	logger            *slog.Logger
@@ -59,6 +69,7 @@ type Logger struct {
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
 	users             *UserInfoResolver
+	observers         []LogObserver
 }
 
 func NewLogger(
@@ -82,7 +93,14 @@ func NewLogger(
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
 		users:             users,
+		observers:         nil,
 	}
+}
+
+// AddObserver registers a LogObserver. Not safe to call concurrently with
+// logging — register observers during wiring, before traffic flows.
+func (l *Logger) AddObserver(obs LogObserver) {
+	l.observers = append(l.observers, obs)
 }
 
 // NewStub returns a Logger with feature checks hard-wired to disabled. Log
@@ -96,6 +114,7 @@ func NewStub(logger *slog.Logger) *Logger {
 		logsEnabled:       disabled,
 		toolIOLogsEnabled: disabled,
 		users:             nil,
+		observers:         nil,
 	}
 }
 
@@ -157,6 +176,9 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 	err := repo.New(l.chConn).InsertTelemetryLogs(l.detachedWriteContext(ctx), logParams)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
+	}
+	for _, obs := range l.observers {
+		obs.OnTelemetryLogsWritten(ctx, params)
 	}
 	return nil
 }

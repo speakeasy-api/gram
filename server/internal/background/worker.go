@@ -472,6 +472,7 @@ func NewTemporalWorker(
 	// Spend rule evaluation workflows
 	temporalWorker.RegisterWorkflow(SpendRuleEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflow)
+	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflowDebounced)
 	// Skill efficacy workflows
 	temporalWorker.RegisterWorkflow(SkillEfficacyCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)

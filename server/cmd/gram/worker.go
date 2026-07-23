@@ -61,6 +61,7 @@ import (
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
@@ -594,6 +595,19 @@ func newWorkerCommand() *cli.Command {
 			)
 			chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
 
+			// Spend-relevant telemetry written by worker-side pollers
+			// (Cursor usage polling, Codex cost import) triggers a throttled
+			// per-org spend rule evaluation, mirroring the server-side
+			// trigger on the hooks ingest path. Its flush shares the
+			// deferred drain below.
+			spendUsageTrigger := spendrules.NewUsageTrigger(
+				logger,
+				cache.NewRedisCacheAdapter(redisClient),
+				&background.TemporalSpendRuleEvaluator{TemporalEnv: temporalEnv},
+				spendrules.UsageSignalCooldown,
+			)
+			telemetryLogger.AddObserver(spendUsageTrigger)
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
@@ -826,6 +840,9 @@ func newWorkerCommand() *cli.Command {
 				}
 				if ferr := efficacySignaler.Shutdown(ctx); ferr != nil {
 					logger.ErrorContext(ctx, "flush pending skill efficacy signals", attr.SlogError(ferr))
+				}
+				if ferr := spendUsageTrigger.Shutdown(ctx); ferr != nil {
+					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(ferr))
 				}
 			}()
 

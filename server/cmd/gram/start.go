@@ -1220,6 +1220,7 @@ func newStartCommand() *cli.Command {
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
+			spendEvaluator := &background.TemporalSpendRuleEvaluator{TemporalEnv: temporalEnv}
 			spendrules.Attach(mux, spendrules.NewService(
 				logger,
 				tracerProvider,
@@ -1229,8 +1230,22 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				auditLogger,
 				spendCelEngine,
-				&background.TemporalSpendRuleEvaluator{TemporalEnv: temporalEnv},
+				spendEvaluator,
 			))
+
+			// Fresh spend-relevant telemetry (Claude Code OTEL logs,
+			// Codex/Cursor usage rows) triggers a throttled per-org
+			// evaluation so breached budgets block within seconds instead of
+			// waiting for the scheduled sweep. Flushed in the drain goroutine
+			// below, not via shutdownFuncs, for the same gRPC-close race
+			// reason as riskSignaler.
+			spendUsageTrigger := spendrules.NewUsageTrigger(
+				logger,
+				cache.NewRedisCacheAdapter(redisClient),
+				spendEvaluator,
+				spendrules.UsageSignalCooldown,
+			)
+			telemLogger.AddObserver(spendUsageTrigger)
 
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChatsTools(chatService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
@@ -1364,6 +1379,9 @@ func newStartCommand() *cli.Command {
 				}
 				if err := efficacySignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending skill efficacy signals", attr.SlogError(err))
+				}
+				if err := spendUsageTrigger.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(err))
 				}
 			})
 

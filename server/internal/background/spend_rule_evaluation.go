@@ -70,8 +70,9 @@ func SpendRuleEvaluationWorkflow(ctx workflow.Context) error {
 }
 
 // SpendRuleOrgEvaluationWorkflow evaluates a single organization's spend
-// rules immediately. Started by rule mutations so circuits open and close
-// without waiting for the next scheduled sweep.
+// rules immediately. Runs as the body of the debounced wrapper below so
+// circuits open and close without waiting for the next scheduled sweep. It
+// must not issue its own ContinueAsNew — continuation is owned by Debounce.
 func SpendRuleOrgEvaluationWorkflow(ctx workflow.Context, organizationID string) error {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: spendRuleEvaluationActivityTimeout,
@@ -95,10 +96,38 @@ func buildSpendRuleOrgEvaluationWorkflowID(organizationID string) string {
 	return "v1:spend-rule-eval:" + organizationID
 }
 
+// spendRuleOrgEvaluationDebounceSignal names the debounce signal channel.
+// Signals are addressed to a per-org workflow ID, so a single constant name
+// is unambiguous across organizations.
+func spendRuleOrgEvaluationDebounceSignal(string) string {
+	return "v1:spend-rule-eval/signal"
+}
+
+// SpendRuleOrgEvaluationResult carries no data; the Debounce wrapper requires
+// a result type.
+type SpendRuleOrgEvaluationResult struct{}
+
+// SpendRuleOrgEvaluationWorkflowDebounced is the signal-with-start entry
+// point for per-org evaluation. Signals that arrive while a run is in flight
+// (fresh usage landing mid-evaluation) coalesce into exactly one follow-up
+// run via ContinueAsNew instead of being dropped; the workflow completes when
+// no work is pending.
+func SpendRuleOrgEvaluationWorkflowDebounced(ctx workflow.Context, organizationID string) (SpendRuleOrgEvaluationResult, error) {
+	return Debounce(
+		func(ctx workflow.Context, organizationID string) (SpendRuleOrgEvaluationResult, error) {
+			return SpendRuleOrgEvaluationResult{}, SpendRuleOrgEvaluationWorkflow(ctx, organizationID)
+		},
+		SpendRuleOrgEvaluationWorkflowDebounced,
+		spendRuleOrgEvaluationDebounceSignal,
+		func(string, SpendRuleOrgEvaluationResult) bool { return false },
+	)(ctx, organizationID)
+}
+
 // TemporalSpendRuleEvaluator implements spendrules.EvaluationSignaler by
-// starting a one-shot per-org evaluation workflow. A concurrent in-flight
-// evaluation for the same org is treated as success — the running one will
-// pick up the freshly committed rule state or the next sweep will.
+// signal-with-starting the debounced per-org evaluation workflow. If a run is
+// already in flight the signal enqueues exactly one follow-up run, so state
+// committed mid-evaluation (a rule mutation or fresh usage) is always picked
+// up rather than waiting for the next scheduled sweep.
 type TemporalSpendRuleEvaluator struct {
 	TemporalEnv *tenv.Environment
 }
@@ -106,13 +135,23 @@ type TemporalSpendRuleEvaluator struct {
 var _ spendrules.EvaluationSignaler = (*TemporalSpendRuleEvaluator)(nil)
 
 func (e *TemporalSpendRuleEvaluator) Signal(ctx context.Context, organizationID string) error {
-	_, err := e.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    buildSpendRuleOrgEvaluationWorkflowID(organizationID),
-		TaskQueue:             string(e.TemporalEnv.Queue()),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-	}, SpendRuleOrgEvaluationWorkflow, organizationID)
-	if err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
-		return fmt.Errorf("start spend rule org evaluation: %w", err)
+	id := buildSpendRuleOrgEvaluationWorkflowID(organizationID)
+	_, err := e.TemporalEnv.Client().SignalWithStartWorkflow(
+		ctx,
+		id,
+		spendRuleOrgEvaluationDebounceSignal(organizationID),
+		"enqueue",
+		client.StartWorkflowOptions{
+			ID:                       id,
+			TaskQueue:                string(e.TemporalEnv.Queue()),
+			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		},
+		SpendRuleOrgEvaluationWorkflowDebounced,
+		organizationID,
+	)
+	if err != nil {
+		return fmt.Errorf("signal spend rule org evaluation: %w", err)
 	}
 	return nil
 }
