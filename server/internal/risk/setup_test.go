@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -27,10 +30,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -79,12 +84,49 @@ func TestMain(m *testing.M) {
 }
 
 type signalerStub struct {
+	mu    sync.Mutex
 	calls []uuid.UUID
 }
 
+type countingCache struct {
+	cache.Cache
+	mu      sync.Mutex
+	deletes []string
+}
+
+func (c *countingCache) Delete(ctx context.Context, key string) error {
+	c.mu.Lock()
+	c.deletes = append(c.deletes, key)
+	c.mu.Unlock()
+	if err := c.Cache.Delete(ctx, key); err != nil {
+		return fmt.Errorf("delete counted cache key: %w", err)
+	}
+	return nil
+}
+
+func (c *countingCache) DeleteCountContaining(fragment string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	count := 0
+	for _, key := range c.deletes {
+		if strings.Contains(key, fragment) {
+			count++
+		}
+	}
+	return count
+}
+
 func (s *signalerStub) Signal(_ context.Context, projectID uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.calls = append(s.calls, projectID)
 	return nil
+}
+
+func (s *signalerStub) Calls() []uuid.UUID {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.calls)
 }
 
 // syncResultsCleaner implements risk.RiskPolicyResultsCleaner synchronously for
@@ -118,17 +160,21 @@ func (s *stubJudge) Evaluate(_ context.Context, in promptpolicy.Input) (*promptp
 }
 
 type testInstance struct {
-	service        *risk.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
-	signaler       *signalerStub
-	chatRepo       *chatrepo.Queries
-	flags          *feature.InMemory
-	cacheAdapter   cache.Cache
-	judge          *stubJudge
+	service                      *risk.Service
+	conn                         *pgxpool.Pool
+	sessionManager               *sessions.Manager
+	signaler                     *signalerStub
+	chatRepo                     *chatrepo.Queries
+	flags                        *feature.InMemory
+	cacheAdapter                 cache.Cache
+	judge                        *stubJudge
+	reconcileShadowMCPPolicyURLs risk.ShadowMCPPolicyURLReconciler
+	shadowMCPInventoryURLLookup  risk.ShadowMCPInventoryURLLookup
+	completionClient             openrouter.CompletionClient
+	cacheDeletes                 *countingCache
 }
 
-func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
+func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -154,7 +200,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
+	cacheAdapter := &countingCache{Cache: cache.NewRedisCacheAdapter(redisClient), mu: sync.Mutex{}, deletes: nil}
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore, nil)
 	auditLogger := audit.NewLogger()
@@ -162,18 +208,32 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	judge := &stubJudge{evaluate: nil}
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate)
-
-	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
-		signaler:       sig,
-		chatRepo:       chatrepo.New(conn),
-		flags:          flags,
-		cacheAdapter:   cacheAdapter,
-		judge:          judge,
+	ti := &testInstance{
+		service:                      nil,
+		conn:                         conn,
+		sessionManager:               sessionManager,
+		signaler:                     sig,
+		chatRepo:                     chatrepo.New(conn),
+		flags:                        flags,
+		cacheAdapter:                 cacheAdapter,
+		judge:                        judge,
+		reconcileShadowMCPPolicyURLs: policybypass.ReconcilePolicyURLs,
+		shadowMCPInventoryURLLookup: func(_ context.Context, _ uuid.UUID, canonicalURLs []string) ([]string, error) {
+			return canonicalURLs, nil
+		},
+		completionClient: nil,
+		cacheDeletes:     cacheAdapter,
 	}
+	for _, configureInstance := range configure {
+		configureInstance(ti)
+	}
+	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
+		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
+	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
+		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
+	})
+
+	return ctx, ti
 }
 
 func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {
@@ -201,4 +261,64 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.NoError(t, err)
 
 	return authz.GrantsToContext(ctx, loadedGrants)
+}
+
+func shadowMCPPolicyAllowedURLs(t *testing.T, ctx context.Context, conn *pgxpool.Pool, policyID string) []string {
+	t.Helper()
+
+	principals := shadowMCPPolicyURLPrincipals(t, ctx, conn, policyID)
+	urls := make([]string, 0, len(principals))
+	for serverURL := range principals {
+		urls = append(urls, serverURL)
+	}
+	slices.Sort(urls)
+	return urls
+}
+
+func shadowMCPPolicyURLPrincipals(t *testing.T, ctx context.Context, conn *pgxpool.Pool, policyID string) map[string][]string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	grants, err := authz.ListGrantsForResource(ctx, conn, authz.Resource{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     policyID,
+	})
+	require.NoError(t, err)
+
+	result := make(map[string][]string)
+	for _, grant := range grants {
+		if grant.Effect != authz.PolicyEffectAllow {
+			continue
+		}
+		serverURL := grant.Selector[authz.SelectorKeyServerURL]
+		if serverURL == "" {
+			continue
+		}
+		result[serverURL] = append(result[serverURL], grant.PrincipalUrn)
+	}
+	for serverURL := range result {
+		slices.Sort(result[serverURL])
+		result[serverURL] = slices.Compact(result[serverURL])
+	}
+	return result
+}
+
+func riskPolicyExistsByName(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) bool {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	require.NotNil(t, authCtx.ProjectID)
+	policies, err := riskrepo.New(conn).ListRiskPolicies(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	for _, policy := range policies {
+		if policy.Name == name {
+			return true
+		}
+	}
+	return false
 }

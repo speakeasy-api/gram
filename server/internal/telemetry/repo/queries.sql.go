@@ -326,6 +326,11 @@ type GetShadowMCPInventoryURLParams struct {
 	CanonicalServerURL string
 }
 
+type ListExistingShadowMCPInventoryURLsParams struct {
+	GramProjectID       string
+	CanonicalServerURLs []string
+}
+
 type UpdateShadowMCPInventoryURLNameOverrideParams struct {
 	GramProjectID      string
 	CanonicalServerURL string
@@ -657,6 +662,46 @@ func (q *Queries) insertShadowMCPInventoryURLRows(ctx context.Context, rows []*s
 
 func (q *Queries) GetShadowMCPInventoryURL(ctx context.Context, arg GetShadowMCPInventoryURLParams) (*ShadowMCPInventoryURLRow, error) {
 	return q.getShadowMCPInventoryURL(ctx, arg.GramProjectID, arg.CanonicalServerURL)
+}
+
+func (q *Queries) ListExistingShadowMCPInventoryURLs(
+	ctx context.Context,
+	arg ListExistingShadowMCPInventoryURLsParams,
+) ([]string, error) {
+	if len(arg.CanonicalServerURLs) == 0 {
+		return []string{}, nil
+	}
+
+	sb := sq.Select("canonical_server_url").
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"canonical_server_url": arg.CanonicalServerURLs}).
+		GroupBy("gram_project_id", "canonical_server_url")
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory url batch lookup query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory url batch lookup: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]string, 0, len(arg.CanonicalServerURLs))
+	for rows.Next() {
+		var canonicalURL string
+		if err := rows.Scan(&canonicalURL); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory url batch lookup row: %w", err)
+		}
+		result = append(result, canonicalURL)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory url batch lookup rows: %w", err)
+	}
+
+	return result, nil
 }
 
 func (q *Queries) UpdateShadowMCPInventoryURLNameOverride(

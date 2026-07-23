@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -100,6 +101,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
@@ -1173,6 +1175,7 @@ func newStartCommand() *cli.Command {
 			// synchronously in the drain goroutine below, while Temporal is still open.
 			riskReconciler := &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger}
 			riskResultsCleaner := &background.TemporalRiskPolicyResultsCleaner{TemporalEnv: temporalEnv, Logger: logger}
+			shadowMCPInventoryRepo := telemetryrepo.New(chDB)
 			riskService := risk.NewService(
 				logger,
 				tracerProvider,
@@ -1193,6 +1196,17 @@ func newStartCommand() *cli.Command {
 				celEngine,
 				builtinPresets,
 				hookPromptJudge,
+				policybypass.ReconcilePolicyURLs,
+				func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
+					urls, err := shadowMCPInventoryRepo.ListExistingShadowMCPInventoryURLs(ctx, telemetryrepo.ListExistingShadowMCPInventoryURLsParams{
+						GramProjectID:       projectID.String(),
+						CanonicalServerURLs: canonicalURLs,
+					})
+					if err != nil {
+						return nil, fmt.Errorf("list existing shadow mcp inventory urls: %w", err)
+					}
+					return urls, nil
+				},
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)

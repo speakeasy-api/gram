@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
+	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -84,18 +85,20 @@ type RiskPolicyResultsCleaner interface {
 }
 
 type Service struct {
-	tracer           trace.Tracer
-	logger           *slog.Logger
-	db               *pgxpool.Pool
-	repo             *repo.Queries
-	auth             *auth.Auth
-	authz            *authz.Engine
-	signaler         RiskAnalysisSignaler
-	reconciler       RiskExclusionReconciler
-	resultsCleaner   RiskPolicyResultsCleaner
-	completionClient openrouter.CompletionClient
-	shadowMCPClient  *shadowmcp.Client
-	audit            *audit.Logger
+	tracer                       trace.Tracer
+	logger                       *slog.Logger
+	db                           *pgxpool.Pool
+	repo                         *repo.Queries
+	auth                         *auth.Auth
+	authz                        *authz.Engine
+	signaler                     RiskAnalysisSignaler
+	reconciler                   RiskExclusionReconciler
+	resultsCleaner               RiskPolicyResultsCleaner
+	completionClient             openrouter.CompletionClient
+	shadowMCPClient              *shadowmcp.Client
+	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler
+	shadowMCPInventoryURLLookup  ShadowMCPInventoryURLLookup
+	audit                        *audit.Logger
 	// cache backs the rpbr2 policy-bypass request links: the link generator
 	// stores request state here and CreateRiskPolicyBypassRequest reads it
 	// back. Must be the same backing store the link generator uses.
@@ -137,26 +140,28 @@ func NewObserver(
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
 
-		logger:           logger.With(attr.SlogComponent("risk")),
-		db:               db,
-		repo:             repo.New(db),
-		auth:             nil,
-		authz:            nil,
-		signaler:         signaler,
-		reconciler:       nil,
-		resultsCleaner:   nil,
-		completionClient: nil,
-		shadowMCPClient:  nil,
-		audit:            auditLogger,
-		cache:            nil,
-		jwtSecret:        "",
-		piiScanner:       nil,
-		piScanner:        nil,
-		gitleaksScanner:  nil,
-		flags:            nil,
-		celEng:           nil,
-		builtinPresets:   nil,
-		promptJudge:      nil,
+		logger:                       logger.With(attr.SlogComponent("risk")),
+		db:                           db,
+		repo:                         repo.New(db),
+		auth:                         nil,
+		authz:                        nil,
+		signaler:                     signaler,
+		reconciler:                   nil,
+		resultsCleaner:               nil,
+		completionClient:             nil,
+		shadowMCPClient:              nil,
+		reconcileShadowMCPPolicyURLs: nil,
+		shadowMCPInventoryURLLookup:  nil,
+		audit:                        auditLogger,
+		cache:                        nil,
+		jwtSecret:                    "",
+		piiScanner:                   nil,
+		piScanner:                    nil,
+		gitleaksScanner:              nil,
+		flags:                        nil,
+		celEng:                       nil,
+		builtinPresets:               nil,
+		promptJudge:                  nil,
 	}
 }
 
@@ -180,31 +185,35 @@ func NewService(
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
 	promptJudge promptpolicy.Evaluator,
+	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler,
+	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
 	return &Service{
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		logger:           logger,
-		db:               db,
-		repo:             repo.New(db),
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		authz:            authzEngine,
-		signaler:         signaler,
-		reconciler:       reconciler,
-		resultsCleaner:   resultsCleaner,
-		completionClient: completionClient,
-		shadowMCPClient:  shadowMCPClient,
-		audit:            auditLogger,
-		cache:            cacheImpl,
-		jwtSecret:        jwtSecret,
-		piiScanner:       piiScanner,
-		piScanner:        piScanner,
-		gitleaksScanner:  gitleaks.NewScanner(),
-		flags:            flags,
-		celEng:           celEng,
-		builtinPresets:   builtinPresets,
-		promptJudge:      promptJudge,
+		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		logger:                       logger,
+		db:                           db,
+		repo:                         repo.New(db),
+		auth:                         auth.New(logger, db, sessions, authzEngine),
+		authz:                        authzEngine,
+		signaler:                     signaler,
+		reconciler:                   reconciler,
+		resultsCleaner:               resultsCleaner,
+		completionClient:             completionClient,
+		shadowMCPClient:              shadowMCPClient,
+		reconcileShadowMCPPolicyURLs: reconcileShadowMCPPolicyURLs,
+		shadowMCPInventoryURLLookup:  shadowMCPInventoryURLLookup,
+		audit:                        auditLogger,
+		cache:                        cacheImpl,
+		jwtSecret:                    jwtSecret,
+		piiScanner:                   piiScanner,
+		piScanner:                    piScanner,
+		gitleaksScanner:              gitleaks.NewScanner(),
+		flags:                        flags,
+		celEng:                       celEng,
+		builtinPresets:               builtinPresets,
+		promptJudge:                  promptJudge,
 	}
 }
 
@@ -339,6 +348,14 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		enabled = *payload.Enabled
 	}
 
+	var shadowMCPAllowedURLs []string
+	if payload.ShadowMcpAllowedUrls != nil {
+		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, payload.ShadowMcpAllowedUrls)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Auto-generate a name when the caller opted in (explicit auto_name=true
 	// or omitted both auto_name and name). Setting auto_name=false with an
 	// empty name surfaces a validation error below rather than silently
@@ -437,6 +454,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 
 	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").LogError(ctx, s.logger)
+	}
+	if payload.ShadowMcpAllowedUrls != nil {
+		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PolicyID:       row.ID.String(),
+			DesiredURLs:    shadowMCPAllowedURLs,
+			Principals:     audiencePrincipals,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := s.audit.LogRiskPolicyCreate(ctx, dbtx, audit.LogRiskPolicyCreateEvent{
@@ -768,6 +795,15 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 	audiencePrincipalURNs = principalStrings(audiencePrincipals)
 
+	var shadowMCPAllowedURLs []string
+	audienceUpdateRequested := payload.AudienceType != nil || payload.AudiencePrincipalUrns != nil
+	if payload.ShadowMcpAllowedUrls != nil {
+		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, payload.ShadowMcpAllowedUrls)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	autoName := current.AutoName
 	if payload.AutoName != nil {
 		autoName = *payload.AutoName
@@ -869,6 +905,16 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 
 	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").LogError(ctx, s.logger)
+	}
+	if payload.ShadowMcpAllowedUrls != nil || audienceUpdateRequested {
+		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PolicyID:       row.ID.String(),
+			DesiredURLs:    shadowMCPAllowedURLs,
+			Principals:     audiencePrincipals,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := s.audit.LogRiskPolicyUpdate(ctx, dbtx, audit.LogRiskPolicyUpdateEvent{
