@@ -18,6 +18,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -45,12 +46,33 @@ const sinkFailureClass = "chat analysis score sink failure"
 
 const validationFailureClass = "chat analysis row validation failure"
 
-// ScoreSink is the ClickHouse side of publication: the existence guard and the
-// synchronous insert. Satisfied by *telemetryrepo.Queries.
+// ScoreSink is the ClickHouse side of publication: the existence guard, the
+// synchronous insert, and the session-facts read that decorates score events.
+// Satisfied by *telemetryrepo.Queries.
 type ScoreSink interface {
 	ListExistingChatAnalysisScoreIDs(ctx context.Context, arg telemetryrepo.ListExistingChatAnalysisScoreIDsParams) ([]string, error)
 	InsertChatAnalysisScores(ctx context.Context, rows []telemetryrepo.ChatAnalysisScore) error
+	GetChatSessionFactsByChatIDs(ctx context.Context, arg telemetryrepo.GetChatSessionFactsByChatIDsParams) (map[string]telemetryrepo.ChatSessionFacts, error)
 }
+
+// ScoreEventSink emits the synthetic per-session telemetry events derived from
+// published work-units verdicts — the rows attribute_metrics_summaries_mv
+// folds into the work-units efficiency measures. Satisfied by
+// *telemetry.Logger; nil disables emission.
+type ScoreEventSink interface {
+	LogBulk(ctx context.Context, params []telemetry.LogParams) error
+}
+
+// WorkUnitsScoreEventURN is the gram_urn stamped on work-units score events.
+// attribute_metrics_summaries_mv admits rows by this exact value; keep the two
+// in sync.
+const WorkUnitsScoreEventURN = "chat_analysis:work_units:score"
+
+// scoreEventFactsWindow is how far back the session-facts read scans summary
+// buckets, relative to the pass. Evaluations are enqueued shortly after a
+// session's last activity, so two weeks comfortably covers reservation lag and
+// retries; a session older than that simply publishes without an event.
+const scoreEventFactsWindow = 14 * 24 * time.Hour
 
 // PublishResult reports what one publication pass did with the reserved
 // evaluations it was handed.
@@ -80,20 +102,24 @@ type Publisher struct {
 	db     *pgxpool.Pool
 	chats  efficacy.TranscriptSource
 	scores ScoreSink
+	events ScoreEventSink
 	judges *Judges
 	// evaluationTimeout is publishEvaluationTimeout, held on the struct so a test
 	// can shorten the bound it is asserting on.
 	evaluationTimeout time.Duration
 }
 
-// NewPublisher constructs a Publisher over the given judge roster.
-func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, scores ScoreSink, judges *Judges) *Publisher {
+// NewPublisher constructs a Publisher over the given judge roster. events may
+// be nil, which disables work-units score event emission (scores still
+// publish).
+func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, scores ScoreSink, events ScoreEventSink, judges *Judges) *Publisher {
 	return &Publisher{
 		logger:            logger.With(attr.SlogComponent("chat-analysis-publisher")),
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat/analysis"),
 		db:                db,
 		chats:             chatrepo.New(db),
 		scores:            scores,
+		events:            events,
 		judges:            judges,
 		evaluationTimeout: publishEvaluationTimeout,
 	}
@@ -157,6 +183,12 @@ func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, ids []uuid
 	// per chat for the length of this pass.
 	transcripts := make(map[uuid.UUID]efficacy.Transcript, len(inputs))
 
+	// Session facts decorate the work-units score events with the session's
+	// identity, model, source, and usage totals. Fetched once for the whole
+	// batch, best-effort: without facts an evaluation publishes normally and
+	// only its score event is skipped.
+	sessionFacts := p.loadScoreEventFacts(ctx, projectID, inputs, published)
+
 	var retryable []error
 	for _, input := range inputs {
 		// Reported before the evaluation rather than after it, so the caller that
@@ -185,7 +217,7 @@ func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, ids []uuid
 			continue
 		}
 
-		if err := p.publishEvaluation(ctx, projectID, input, transcripts, &result); err != nil {
+		if err := p.publishEvaluation(ctx, projectID, input, transcripts, sessionFacts, &result); err != nil {
 			retryable = append(retryable, err)
 		}
 	}
@@ -273,11 +305,11 @@ func guardWindow(inputs []repo.GetChatAnalysisJudgeInputsRow, now time.Time) (ti
 // Every step it covers can hang — a chat read, a judge call, a ClickHouse
 // insert — and without a bound one hung step holds the batch past the lease
 // that owns its rows, letting a second pass judge them concurrently.
-func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, input repo.GetChatAnalysisJudgeInputsRow, transcripts map[uuid.UUID]efficacy.Transcript, result *PublishResult) error {
+func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, input repo.GetChatAnalysisJudgeInputsRow, transcripts map[uuid.UUID]efficacy.Transcript, sessionFacts map[string]telemetryrepo.ChatSessionFacts, result *PublishResult) error {
 	evaluationCtx, cancel := context.WithTimeout(ctx, p.evaluationTimeout)
 	defer cancel()
 
-	err := p.publishOne(evaluationCtx, projectID, input, transcripts, result)
+	err := p.publishOne(evaluationCtx, projectID, input, transcripts, sessionFacts, result)
 	if err != nil && ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
 		// The bound expired while the pass's own context was still live, so the
 		// hang is this evaluation's.
@@ -290,7 +322,7 @@ func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, 
 // publishOne judges one evaluation and publishes its verdict. It returns an
 // error only for infrastructure failures; model failures and deterministic row
 // validation failures are charged locally so the rest of the batch still runs.
-func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input repo.GetChatAnalysisJudgeInputsRow, transcripts map[uuid.UUID]efficacy.Transcript, result *PublishResult) error {
+func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input repo.GetChatAnalysisJudgeInputsRow, transcripts map[uuid.UUID]efficacy.Transcript, sessionFacts map[string]telemetryrepo.ChatSessionFacts, result *PublishResult) error {
 	judge, ok := p.judges.Get(input.Judge)
 	if !ok {
 		// The roster no longer runs this judge; a retry reads the same row and
@@ -367,6 +399,8 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 		return fmt.Errorf("insert chat analysis score: %w: %w", ErrRetryable, err)
 	}
 
+	p.emitWorkUnitsScoreEvent(ctx, projectID, input, judged, sessionFacts)
+
 	if err := p.markScored(ctx, projectID, input.ID); err != nil {
 		result.Retryable++
 		return err
@@ -374,6 +408,92 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 
 	result.Scored++
 	return nil
+}
+
+// loadScoreEventFacts fetches session facts for the batch's not-yet-published
+// work-units evaluations. Best-effort: on failure every affected evaluation
+// publishes without a score event rather than failing the pass.
+func (p *Publisher) loadScoreEventFacts(ctx context.Context, projectID uuid.UUID, inputs []repo.GetChatAnalysisJudgeInputsRow, published map[uuid.UUID]struct{}) map[string]telemetryrepo.ChatSessionFacts {
+	if p.events == nil {
+		return nil
+	}
+
+	var chatIDs []string
+	for _, input := range inputs {
+		if input.Judge != WorkUnitsJudgeName {
+			continue
+		}
+		if _, ok := published[input.ID]; ok {
+			continue
+		}
+		chatIDs = append(chatIDs, input.ChatID.String())
+	}
+	if len(chatIDs) == 0 {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	facts, err := p.scores.GetChatSessionFactsByChatIDs(ctx, telemetryrepo.GetChatSessionFactsByChatIDsParams{
+		ProjectID: projectID.String(),
+		ChatIDs:   chatIDs,
+		From:      now.Add(-scoreEventFactsWindow),
+		To:        now,
+	})
+	if err != nil {
+		p.logger.WarnContext(ctx, "failed to load session facts for work units score events", attr.SlogError(err))
+		return nil
+	}
+	return facts
+}
+
+// emitWorkUnitsScoreEvent emits the synthetic telemetry row that feeds the
+// work-units efficiency measures in attribute_metrics_summaries. Best-effort
+// by design: the scores table is the source of truth, and a lost event only
+// removes this session from the efficiency aggregates. Duplicate emission is
+// bounded by the publication guard — a retried evaluation whose score row is
+// already visible takes the alreadyPublished path and never reaches this.
+func (p *Publisher) emitWorkUnitsScoreEvent(ctx context.Context, projectID uuid.UUID, input repo.GetChatAnalysisJudgeInputsRow, judged JudgeResult, sessionFacts map[string]telemetryrepo.ChatSessionFacts) {
+	if p.events == nil || input.Judge != WorkUnitsJudgeName {
+		return
+	}
+
+	facts, ok := sessionFacts[input.ChatID.String()]
+	if !ok {
+		// No telemetry summary for the session means no ingested usage: there is
+		// no spend to relate the units to and no identity to attribute them to.
+		p.logger.InfoContext(ctx, "no session facts; skipping work units score event", attr.SlogChatID(input.ChatID.String()))
+		return
+	}
+
+	params := telemetry.LogParams{
+		// Stamped with the session's end so the units land in the same buckets
+		// as the session's spend, not the (later) scoring time.
+		Timestamp: time.Unix(0, facts.EndTimeUnixNano).UTC(),
+		ToolInfo: telemetry.ToolInfo{
+			ID:             "",
+			URN:            WorkUnitsScoreEventURN,
+			Name:           "",
+			ProjectID:      projectID.String(),
+			DeploymentID:   "",
+			FunctionID:     nil,
+			OrganizationID: input.OrganizationID,
+		},
+		UserInfo: telemetry.UserInfoByEmail(facts.UserEmail),
+		Attributes: map[attr.Key]any{
+			attr.LogBodyKey:                  "chat_analysis.work_units_score",
+			attr.GenAIConversationIDKey:      input.ChatID.String(),
+			attr.GenAIResponseModelKey:       facts.Model,
+			attr.HookSourceKey:               facts.HookSource,
+			attr.AccountTypeKey:              facts.AccountType(),
+			attr.ChatAnalysisWorkUnitsKey:    judged.Verdict.Score,
+			attr.ChatAnalysisScoredCostKey:   facts.TotalCost,
+			attr.ChatAnalysisScoredTokensKey: facts.TotalTokens,
+		},
+	}
+
+	if err := p.events.LogBulk(ctx, []telemetry.LogParams{params}); err != nil {
+		p.logger.WarnContext(ctx, "failed to emit work units score event", attr.SlogError(err), attr.SlogChatID(input.ChatID.String()))
+	}
 }
 
 // recordAttempt charges a model failure to the evaluation. The query never

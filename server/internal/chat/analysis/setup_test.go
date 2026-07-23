@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -206,6 +207,7 @@ type captureSink struct {
 	mu       sync.Mutex
 	inserted []telemetryrepo.ChatAnalysisScore
 	existing []string
+	facts    map[string]telemetryrepo.ChatSessionFacts
 }
 
 var _ ScoreSink = (*captureSink)(nil)
@@ -223,6 +225,40 @@ func (c *captureSink) ListExistingChatAnalysisScoreIDs(ctx context.Context, arg 
 	out := make([]string, len(c.existing))
 	copy(out, c.existing)
 	return out, nil
+}
+
+func (c *captureSink) GetChatSessionFactsByChatIDs(ctx context.Context, arg telemetryrepo.GetChatSessionFactsByChatIDsParams) (map[string]telemetryrepo.ChatSessionFacts, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[string]telemetryrepo.ChatSessionFacts, len(c.facts))
+	for chatID, facts := range c.facts {
+		out[chatID] = facts
+	}
+	return out, nil
+}
+
+// captureEventSink is an in-memory ScoreEventSink.
+type captureEventSink struct {
+	mu     sync.Mutex
+	logged []telemetry.LogParams
+}
+
+var _ ScoreEventSink = (*captureEventSink)(nil)
+
+func (c *captureEventSink) LogBulk(ctx context.Context, params []telemetry.LogParams) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.logged = append(c.logged, params...)
+	return nil
+}
+
+func (c *captureEventSink) events(t *testing.T) []telemetry.LogParams {
+	t.Helper()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]telemetry.LogParams, len(c.logged))
+	copy(out, c.logged)
+	return out
 }
 
 func (c *captureSink) rows(t *testing.T) []telemetryrepo.ChatAnalysisScore {

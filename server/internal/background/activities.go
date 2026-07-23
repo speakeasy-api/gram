@@ -288,7 +288,7 @@ func NewActivities(
 		chatAnalysisScorer: activities.NewChatAnalysisScorer(
 			db,
 			chatAnalysisJudges,
-			analysis.NewPublisher(logger, tracerProvider, db, telemetryRepo, chatAnalysisJudges),
+			analysis.NewPublisher(logger, tracerProvider, db, telemetryRepo, telemetryLogger, chatAnalysisJudges),
 			&TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 	}

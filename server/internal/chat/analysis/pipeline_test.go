@@ -9,7 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -158,7 +160,7 @@ func TestPublish_ScoresReservedBatch(t *testing.T) {
 	require.Len(t, reserved, 1)
 
 	sink := &captureSink{}
-	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, roster)
+	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, nil, roster)
 
 	result, err := publisher.Publish(ctx, fixture.projectID, []uuid.UUID{reserved[0].ID}, nil)
 	require.NoError(t, err)
@@ -195,7 +197,7 @@ func TestPublish_ModelFailureChargesAttempt(t *testing.T) {
 	require.Len(t, reserved, 1)
 
 	sink := &captureSink{}
-	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, roster)
+	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, nil, roster)
 
 	// Two failed passes stay reserved; the third terminates the evaluation.
 	for attempt := 1; attempt <= int(MaxModelAttempts); attempt++ {
@@ -243,7 +245,7 @@ func TestPublish_AlreadyPublishedSkipsJudge(t *testing.T) {
 	// The sink already holds this evaluation's score: a crash between insert and
 	// mark. The pass must finish the transition without paying for inference.
 	sink := &captureSink{existing: []string{reserved[0].ID.String()}}
-	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, roster)
+	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, nil, roster)
 
 	result, err := publisher.Publish(ctx, fixture.projectID, []uuid.UUID{reserved[0].ID}, nil)
 	require.NoError(t, err)
@@ -251,4 +253,81 @@ func TestPublish_AlreadyPublishedSkipsJudge(t *testing.T) {
 	require.Equal(t, 1, result.Scored)
 	require.Empty(t, sink.rows(t))
 	require.Equal(t, "scored", fixture.evaluation(t, reserved[0].ID).State)
+}
+
+func TestPublish_EmitsWorkUnitsScoreEvent(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	fixture := newAnalysisFixture(t, "publish_score_event")
+	roster := testJudges(t, stubNamedJudge{name: "work_units", verdict: stubVerdict(24), err: nil})
+	fixture.enableJudge(t, "work_units", 10)
+
+	chatID := fixture.seedChat(t, 3, time.Hour)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
+	require.NoError(t, err)
+	reserved, _, err := Reserve(ctx, fixture.db, roster, fixture.projectID, PendingCursor{}, MaxReservedClaimBatch)
+	require.NoError(t, err)
+	require.Len(t, reserved, 1)
+
+	sessionEnd := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
+	sink := &captureSink{facts: map[string]telemetryrepo.ChatSessionFacts{
+		chatID.String(): {
+			ChatID:          chatID.String(),
+			UserEmail:       "worker@example.com",
+			HookSource:      "claude-code",
+			Model:           "claude-opus-4-8",
+			AccountTypes:    []string{"", "team"},
+			EndTimeUnixNano: sessionEnd.UnixNano(),
+			TotalTokens:     4200,
+			TotalCost:       1.25,
+		},
+	}}
+	events := &captureEventSink{}
+	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, events, roster)
+
+	result, err := publisher.Publish(ctx, fixture.projectID, []uuid.UUID{reserved[0].ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Scored)
+
+	logged := events.events(t)
+	require.Len(t, logged, 1)
+	event := logged[0]
+	require.Equal(t, WorkUnitsScoreEventURN, event.ToolInfo.URN)
+	require.Equal(t, fixture.projectID.String(), event.ToolInfo.ProjectID)
+	require.Equal(t, fixture.organizationID, event.ToolInfo.OrganizationID)
+	require.Equal(t, "worker@example.com", event.UserInfo.Email())
+	require.Equal(t, sessionEnd, event.Timestamp)
+	require.Equal(t, chatID.String(), event.Attributes[attr.GenAIConversationIDKey])
+	require.Equal(t, "claude-opus-4-8", event.Attributes[attr.GenAIResponseModelKey])
+	require.Equal(t, "claude-code", event.Attributes[attr.HookSourceKey])
+	require.Equal(t, "team", event.Attributes[attr.AccountTypeKey])
+	require.InDelta(t, 24.0, event.Attributes[attr.ChatAnalysisWorkUnitsKey], 0.0001)
+	require.InDelta(t, 1.25, event.Attributes[attr.ChatAnalysisScoredCostKey], 0.0001)
+	require.EqualValues(t, int64(4200), event.Attributes[attr.ChatAnalysisScoredTokensKey])
+}
+
+func TestPublish_SkipsScoreEventWithoutSessionFacts(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	fixture := newAnalysisFixture(t, "publish_score_event_no_facts")
+	roster := testJudges(t, stubNamedJudge{name: "work_units", verdict: stubVerdict(24), err: nil})
+	fixture.enableJudge(t, "work_units", 10)
+
+	fixture.seedChat(t, 3, time.Hour)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
+	require.NoError(t, err)
+	reserved, _, err := Reserve(ctx, fixture.db, roster, fixture.projectID, PendingCursor{}, MaxReservedClaimBatch)
+	require.NoError(t, err)
+	require.Len(t, reserved, 1)
+
+	sink := &captureSink{}
+	events := &captureEventSink{}
+	publisher := NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, sink, events, roster)
+
+	result, err := publisher.Publish(ctx, fixture.projectID, []uuid.UUID{reserved[0].ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Scored, "missing session facts must not block publication")
+	require.Empty(t, events.events(t), "no session facts means no score event")
 }

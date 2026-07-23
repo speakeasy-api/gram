@@ -8,7 +8,16 @@ import {
 } from "@/components/stacked-time-series";
 import { StackedTimeSeriesPanel } from "@/components/stacked-time-series-panel";
 import { formatCompactDollars, formatCost } from "@/lib/money";
-import { displayName, isAttributionDim } from "./taxonomy";
+import { displayName, formatWorkUnits, isAttributionDim } from "./taxonomy";
+
+// Compact work-units axis tick (e.g. "1.2K"), pairing with formatWorkUnits the
+// way formatCompactDollars pairs with formatCost.
+function formatCompactUnits(value: number): string {
+  return value.toLocaleString(undefined, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  });
+}
 
 // Stacked cost-over-time chart for the costs explorer: the shared time-series
 // panel fed with the slice's per-group daily cost series — the same
@@ -27,6 +36,7 @@ export function CostBreakdownChart({
   data,
   groupBy,
   serverRollupValue,
+  efficiency,
   loading,
   isError,
   onSelectRange,
@@ -41,6 +51,9 @@ export function CostBreakdownChart({
   // remainder bucket — two nested rollups would otherwise chart side by side
   // as separate gray "Other" stacks.
   serverRollupValue?: string;
+  // The efficiency lens charts each group's work units over time instead of
+  // its cost — matching the "Work units by X" table it sits above.
+  efficiency?: boolean;
   loading: boolean;
   // The slice query failed — say so instead of the benign empty state, so the
   // chart agrees with the table's error message below it.
@@ -71,7 +84,11 @@ export function CostBreakdownChart({
     const byLabel = new Map<string, number[]>();
     let rollupSeed: number[] | null = null;
     for (const s of series) {
-      const values = s.points.map((p) => p.measures.totalCost ?? 0);
+      const values = s.points.map((p) =>
+        efficiency
+          ? (p.measures.totalWorkUnits ?? 0)
+          : (p.measures.totalCost ?? 0),
+      );
       if (s.groupValue === serverRollupValue) {
         rollupSeed = values;
         continue;
@@ -119,8 +136,27 @@ export function CostBreakdownChart({
         ),
       },
     ];
-  }, [data, groupBy, serverRollupValue, bucketsMs]);
+  }, [data, groupBy, serverRollupValue, bucketsMs, efficiency]);
 
+  if (efficiency) {
+    return (
+      <StackedTimeSeriesPanel
+        title="Work Units Over Time"
+        headerHint="Work units delivered over time, stacked by the selected breakdown. Click or drag on the chart to zoom to a period."
+        bucketsMs={bucketsMs}
+        stacks={isError ? [] : stacks}
+        formatValue={formatWorkUnits}
+        formatAxisValue={formatCompactUnits}
+        emptyMessage={
+          isError
+            ? "Failed to load cost data."
+            : "No work-units scores in this range."
+        }
+        loading={loading}
+        onSelectRange={onSelectRange}
+      />
+    );
+  }
   return (
     <StackedTimeSeriesPanel
       title="Cost Over Time"
