@@ -23,6 +23,7 @@ const testState = vi.hoisted(() => ({
   },
   invalidateSkills: vi.fn().mockResolvedValue(undefined),
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
+  invalidateDistributions: vi.fn().mockResolvedValue(undefined),
   invalidateVersions: vi.fn().mockResolvedValue(undefined),
   setSkillParam: vi.fn(),
 }));
@@ -41,6 +42,9 @@ vi.mock("@gram/client/react-query/skills.js", () => ({
 }));
 vi.mock("@gram/client/react-query/skill.js", () => ({
   invalidateAllSkill: testState.invalidateSkill,
+}));
+vi.mock("@gram/client/react-query/skillDistributions.js", () => ({
+  invalidateAllSkillDistributions: testState.invalidateDistributions,
 }));
 vi.mock("@gram/client/react-query/skillVersions.js", () => ({
   invalidateAllSkillVersions: testState.invalidateVersions,
@@ -61,6 +65,7 @@ const validResult = {
   createdVersion: true,
   skill: { id: "skill_result" },
   version: {
+    id: "version_result",
     content: VALID_MANIFEST,
     description: "Example skill.",
     specValid: true,
@@ -77,6 +82,7 @@ beforeEach(() => {
   testState.addVersion.reset.mockReset();
   testState.invalidateSkills.mockClear();
   testState.invalidateSkill.mockClear();
+  testState.invalidateDistributions.mockClear();
   testState.invalidateVersions.mockClear();
   testState.setSkillParam.mockReset();
 });
@@ -107,6 +113,9 @@ describe("SkillManifestDialog", () => {
     expect(testState.invalidateSkill).toHaveBeenCalledWith(
       testState.queryClient,
     );
+    expect(testState.invalidateDistributions).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
     expect(testState.invalidateVersions).toHaveBeenCalledWith(
       testState.queryClient,
     );
@@ -123,6 +132,7 @@ describe("SkillManifestDialog", () => {
         open
         onOpenChange={() => {}}
         skillId="skill_a"
+        derivedFromVersionId="version_source"
         initialContent={UPDATED_MANIFEST}
       />,
     );
@@ -134,6 +144,7 @@ describe("SkillManifestDialog", () => {
           addSkillVersionRequestBody: {
             id: "skill_a",
             content: UPDATED_MANIFEST,
+            derivedFromVersionId: "version_source",
           },
         },
       });
@@ -145,6 +156,7 @@ describe("SkillManifestDialog", () => {
     testState.create.mutateAsync.mockResolvedValue({
       ...validResult,
       version: {
+        id: "version_result",
         content: INVALID_MANIFEST,
         description: "Example skill.",
         specValid: false,
@@ -189,6 +201,7 @@ describe("SkillManifestDialog", () => {
           addSkillVersionRequestBody: {
             id: "skill_result",
             content: UPDATED_MANIFEST,
+            derivedFromVersionId: "version_result",
           },
         },
       });
@@ -231,6 +244,7 @@ describe("SkillManifestDialog", () => {
           addSkillVersionRequestBody: {
             id: "skill_result",
             content: UPDATED_MANIFEST,
+            derivedFromVersionId: "version_result",
           },
         },
       });

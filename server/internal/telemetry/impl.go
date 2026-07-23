@@ -1675,7 +1675,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 
 	eg.Go(func() error {
 		var fetchErr error
-		clickHouseResult, fetchErr = fetchProjectOverviewClickHouse(egCtx, s.tracer, s.chRepo, projectOverviewClickHouseParams{
+		clickHouseResult, fetchErr = fetchProjectOverviewClickHouse(egCtx, s.chRepo, projectOverviewClickHouseParams{
 			projectID:       projectID,
 			timeStart:       timeStart,
 			timeEnd:         timeEnd,
@@ -2427,27 +2427,66 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 
 // GetToolUsageSummary returns target-aware MCP and tool usage metrics.
 func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.GetToolUsageSummaryPayload) (res *telem_gen.GetToolUsageSummaryResult, err error) {
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        payload.UserFilters,
+		HookSources:        payload.HookSources,
+		AccountType:        payload.AccountType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	summary, err := s.chRepo.GetToolUsageSummary(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage summary data")
+	}
+
+	return toToolUsageSummaryResult(summary), nil
+}
+
+// toolUsageFilters carries the shared filter inputs of the getToolUsage* endpoints.
+// Each endpoint has its own generated payload type, so this normalizes them into a
+// single shape for resolveToolUsageParams.
+type toolUsageFilters struct {
+	From               string
+	To                 string
+	TargetTypes        []telem_gen.ToolUsageTargetType
+	HostedToolsetSlugs []string
+	ShadowServerNames  []string
+	UserFilters        []*telem_gen.ToolUsageUserFilter
+	HookSources        []string
+	AccountType        *string
+}
+
+// resolveToolUsageParams authorizes the caller, verifies logging is enabled, and
+// builds the ClickHouse query parameters shared by the tool usage summary aggregate
+// and its per-panel endpoints. All returned errors are already oops-wrapped.
+func (s *Service) resolveToolUsageParams(ctx context.Context, f toolUsageFilters) (repo.GetToolUsageSummaryParams, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+		return repo.GetToolUsageSummaryParams{}, oops.C(oops.CodeUnauthorized)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
+		return repo.GetToolUsageSummaryParams{}, err
 	}
 
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
 	}
-
 	if !logsEnabled {
-		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
-	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	timeStart, timeEnd, err := parseTimeRange(&f.From, &f.To)
 	if err != nil {
-		return nil, err
+		return repo.GetToolUsageSummaryParams{}, err
 	}
 
 	const fiveMinNs = int64(5 * 60 * 1e9)
@@ -2457,13 +2496,13 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		bucketSizeNs = fiveMinNs
 	}
 
-	targetTypes := make([]string, 0, len(payload.TargetTypes))
-	for _, targetType := range payload.TargetTypes {
+	targetTypes := make([]string, 0, len(f.TargetTypes))
+	for _, targetType := range f.TargetTypes {
 		targetTypes = append(targetTypes, string(targetType))
 	}
 
-	userFilters := make([]repo.ToolUsageUserFilter, 0, len(payload.UserFilters))
-	for _, filter := range payload.UserFilters {
+	userFilters := make([]repo.ToolUsageUserFilter, 0, len(f.UserFilters))
+	for _, filter := range f.UserFilters {
 		if filter == nil {
 			continue
 		}
@@ -2475,14 +2514,14 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 
 	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
+		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
 	}
 	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
+		return repo.GetToolUsageSummaryParams{}, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
 	}
 
-	summary, err := s.chRepo.GetToolUsageSummary(ctx, repo.GetToolUsageSummaryParams{
+	return repo.GetToolUsageSummaryParams{
 		GramProjectID:      authCtx.ProjectID.String(),
 		TimeStart:          timeStart,
 		TimeEnd:            timeEnd,
@@ -2490,23 +2529,186 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		HostedMCPMatchers:  hostedMCPMatchers,
 		MCPServerMatchers:  mcpServerMatchers,
 		TargetTypes:        targetTypes,
-		HostedToolsetSlugs: payload.HostedToolsetSlugs,
-		ShadowServerNames:  payload.ShadowServerNames,
+		HostedToolsetSlugs: f.HostedToolsetSlugs,
+		ShadowServerNames:  f.ShadowServerNames,
 		UserFilters:        userFilters,
-		HookSources:        payload.HookSources,
-		AccountType:        conv.PtrValOr(payload.AccountType, ""),
+		HookSources:        f.HookSources,
+		AccountType:        conv.PtrValOr(f.AccountType, ""),
 		TargetLimit:        25,
 		UserLimit:          25,
 		UsersByTargetLimit: 100,
 		TargetToolRowLimit: 100,
 		TimeSeriesRowLimit: 10000,
 		UserSeriesRowLimit: 10000,
+	}, nil
+}
+
+// GetToolUsageTotals returns overall MCP and tool usage totals.
+func (s *Service) GetToolUsageTotals(ctx context.Context, payload *telem_gen.GetToolUsageTotalsPayload) (res *telem_gen.GetToolUsageTotalsResult, err error) {
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        payload.UserFilters,
+		HookSources:        payload.HookSources,
+		AccountType:        payload.AccountType,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage summary data")
+		return nil, err
 	}
 
-	return toToolUsageSummaryResult(summary), nil
+	totals, err := s.chRepo.GetToolUsageTotals(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage totals")
+	}
+
+	return &telem_gen.GetToolUsageTotalsResult{Totals: toToolUsageTotals(totals)}, nil
+}
+
+// GetToolUsageTargets returns the top MCP and tool usage targets.
+func (s *Service) GetToolUsageTargets(ctx context.Context, payload *telem_gen.GetToolUsageTargetsPayload) (res *telem_gen.GetToolUsageTargetsResult, err error) {
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        payload.UserFilters,
+		HookSources:        payload.HookSources,
+		AccountType:        payload.AccountType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	targets, err := s.chRepo.GetToolUsageTargets(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage targets")
+	}
+
+	return &telem_gen.GetToolUsageTargetsResult{Targets: toToolUsageTargetSummaries(targets)}, nil
+}
+
+// GetToolUsageUsers returns the top MCP and tool usage user identities.
+func (s *Service) GetToolUsageUsers(ctx context.Context, payload *telem_gen.GetToolUsageUsersPayload) (res *telem_gen.GetToolUsageUsersResult, err error) {
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        payload.UserFilters,
+		HookSources:        payload.HookSources,
+		AccountType:        payload.AccountType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	users, err := s.chRepo.GetToolUsageUsers(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage users")
+	}
+
+	return &telem_gen.GetToolUsageUsersResult{Users: toToolUsageUserSummaries(users)}, nil
+}
+
+// GetToolUsageTargetTimeSeries returns time-series MCP and tool usage grouped by target.
+func (s *Service) GetToolUsageTargetTimeSeries(ctx context.Context, payload *telem_gen.GetToolUsageTargetTimeSeriesPayload) (res *telem_gen.GetToolUsageTargetTimeSeriesResult, err error) {
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        payload.UserFilters,
+		HookSources:        payload.HookSources,
+		AccountType:        payload.AccountType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	series, err := s.chRepo.GetToolUsageTargetTimeSeries(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage target time series")
+	}
+
+	return &telem_gen.GetToolUsageTargetTimeSeriesResult{TargetTimeSeries: toToolUsageTargetTimeSeries(series)}, nil
+}
+
+// GetToolUsageUserTimeSeries returns time-series MCP and tool usage grouped by user identity.
+func (s *Service) GetToolUsageUserTimeSeries(ctx context.Context, payload *telem_gen.GetToolUsageUserTimeSeriesPayload) (res *telem_gen.GetToolUsageUserTimeSeriesResult, err error) {
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        payload.UserFilters,
+		HookSources:        payload.HookSources,
+		AccountType:        payload.AccountType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	series, err := s.chRepo.GetToolUsageUserTimeSeries(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage user time series")
+	}
+
+	return &telem_gen.GetToolUsageUserTimeSeriesResult{UserTimeSeries: toToolUsageUserTimeSeries(series)}, nil
+}
+
+// GetToolUsageUsersByTarget returns cross-dimensional usage grouped by target and user identity.
+func (s *Service) GetToolUsageUsersByTarget(ctx context.Context, payload *telem_gen.GetToolUsageUsersByTargetPayload) (res *telem_gen.GetToolUsageUsersByTargetResult, err error) {
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        payload.UserFilters,
+		HookSources:        payload.HookSources,
+		AccountType:        payload.AccountType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.chRepo.GetToolUsageUsersByTarget(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage users by target")
+	}
+
+	return &telem_gen.GetToolUsageUsersByTargetResult{UsersByTarget: toToolUsageUsersByTargetRows(rows)}, nil
+}
+
+// GetToolUsageTargetToolBreakdown returns per-tool usage grouped by target.
+func (s *Service) GetToolUsageTargetToolBreakdown(ctx context.Context, payload *telem_gen.GetToolUsageTargetToolBreakdownPayload) (res *telem_gen.GetToolUsageTargetToolBreakdownResult, err error) {
+	params, err := s.resolveToolUsageParams(ctx, toolUsageFilters{
+		From:               payload.From,
+		To:                 payload.To,
+		TargetTypes:        payload.TargetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        payload.UserFilters,
+		HookSources:        payload.HookSources,
+		AccountType:        payload.AccountType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.chRepo.GetToolUsageTargetToolBreakdown(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage target tool breakdown")
+	}
+
+	return &telem_gen.GetToolUsageTargetToolBreakdownResult{TargetToolBreakdown: toToolUsageTargetToolBreakdownRows(rows)}, nil
 }
 
 func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.ListToolUsageTracesPayload) (res *telem_gen.ListToolUsageTracesResult, err error) {
@@ -2640,6 +2842,88 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 	}
 
 	return toToolUsageFilterOptionsResult(options, hostedMCPMatchers, payload.OptionTypes), nil
+}
+
+// mcpServerActivityLookbackDays bounds the "ever active" window. Telemetry logs
+// are retained for 90 days, so a longer lookback can never surface older calls;
+// a server quiet for the full window reads as "never received a tool call".
+const mcpServerActivityLookbackDays = 90
+
+func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.GetMcpServerActivityPayload) (res *telem_gen.GetMcpServerActivityResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	recentWindowDays := payload.RecentWindowDays
+	if recentWindowDays <= 0 {
+		recentWindowDays = 14
+	}
+	if recentWindowDays > mcpServerActivityLookbackDays {
+		recentWindowDays = mcpServerActivityLookbackDays
+	}
+
+	now := time.Now()
+	timeEnd := now.UnixNano()
+	timeStart := now.AddDate(0, 0, -mcpServerActivityLookbackDays).UnixNano()
+	recentThreshold := now.AddDate(0, 0, -recentWindowDays).UnixNano()
+
+	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
+	}
+	mcpServerMatchers, err := s.toolUsageMCPServerMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing MCP servers")
+	}
+
+	rows, err := s.chRepo.GetMcpServerActivity(ctx, repo.GetMcpServerActivityParams{
+		GramProjectID:     authCtx.ProjectID.String(),
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		RecentThresholdNs: recentThreshold,
+		HostedMCPMatchers: hostedMCPMatchers,
+		MCPServerMatchers: mcpServerMatchers,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching mcp server activity")
+	}
+
+	activity := make([]*telem_gen.McpServerActivity, 0, len(rows))
+	for _, row := range rows {
+		entry := &telem_gen.McpServerActivity{
+			TargetType:      telem_gen.McpServerActivityTargetType(row.TargetType),
+			TargetID:        row.TargetID,
+			TargetLabel:     row.TargetLabel,
+			TotalToolCalls:  int64(row.TotalToolCalls),  //nolint:gosec // Bounded count
+			RecentToolCalls: int64(row.RecentToolCalls), //nolint:gosec // Bounded count
+			LastToolCallAt:  nil,
+		}
+		if row.LastToolCallUnixNano > 0 {
+			lastAt := time.Unix(0, row.LastToolCallUnixNano).UTC().Format(time.RFC3339)
+			entry.LastToolCallAt = &lastAt
+		}
+		activity = append(activity, entry)
+	}
+
+	return &telem_gen.GetMcpServerActivityResult{
+		Activity:         activity,
+		RecentWindowDays: recentWindowDays,
+		LookbackDays:     mcpServerActivityLookbackDays,
+	}, nil
 }
 
 func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.HostedMCPMatcher, error) {
@@ -2860,14 +3144,26 @@ func toolUsageFilterOptionTypeSet(optionTypes []telem_gen.ToolUsageFilterOptionT
 	return includeHostedServers, includeShadowServers, includeUsers
 }
 
-func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetToolUsageSummaryResult {
-	if summary == nil {
-		return emptyToolUsageSummaryResult()
-	}
+// The toToolUsage* converters below map each repo aggregate row set to its Goa
+// wire type. They are shared between the summary aggregate (toToolUsageSummaryResult)
+// and the per-panel getToolUsage* endpoints so both paths emit identical shapes.
 
-	targets := make([]*telem_gen.ToolUsageTargetSummary, 0, len(summary.Targets))
-	for _, row := range summary.Targets {
-		targets = append(targets, &telem_gen.ToolUsageTargetSummary{
+func toToolUsageTotals(row repo.ToolUsageTotalsRow) *telem_gen.ToolUsageTotals {
+	return &telem_gen.ToolUsageTotals{
+		EventCount:    uint64ToInt64(row.EventCount),
+		SuccessCount:  uint64ToInt64(row.SuccessCount),
+		FailureCount:  uint64ToInt64(row.FailureCount),
+		FailureRate:   row.FailureRate,
+		UniqueTools:   uint64ToInt64(row.UniqueTools),
+		UniqueUsers:   uint64ToInt64(row.UniqueUsers),
+		UniqueTargets: uint64ToInt64(row.UniqueTargets),
+	}
+}
+
+func toToolUsageTargetSummaries(rows []repo.ToolUsageTargetSummaryRow) []*telem_gen.ToolUsageTargetSummary {
+	out := make([]*telem_gen.ToolUsageTargetSummary, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &telem_gen.ToolUsageTargetSummary{
 			TargetType:   telem_gen.ToolUsageTargetType(row.TargetType),
 			TargetKind:   telem_gen.ToolUsageTargetKind(row.TargetKind),
 			TargetID:     row.TargetID,
@@ -2879,10 +3175,13 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 			FailureRate:  row.FailureRate,
 		})
 	}
+	return out
+}
 
-	users := make([]*telem_gen.ToolUsageUserSummary, 0, len(summary.Users))
-	for _, row := range summary.Users {
-		users = append(users, &telem_gen.ToolUsageUserSummary{
+func toToolUsageUserSummaries(rows []repo.ToolUsageUserSummaryRow) []*telem_gen.ToolUsageUserSummary {
+	out := make([]*telem_gen.ToolUsageUserSummary, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &telem_gen.ToolUsageUserSummary{
 			UserKey:      row.UserKey,
 			UserLabel:    row.UserLabel,
 			UserKind:     telem_gen.ToolUsageUserKind(row.UserKind),
@@ -2893,10 +3192,13 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 			FailureRate:  row.FailureRate,
 		})
 	}
+	return out
+}
 
-	targetTimeSeries := make([]*telem_gen.ToolUsageTargetTimeSeriesPoint, 0, len(summary.TargetTimeSeries))
-	for _, row := range summary.TargetTimeSeries {
-		targetTimeSeries = append(targetTimeSeries, &telem_gen.ToolUsageTargetTimeSeriesPoint{
+func toToolUsageTargetTimeSeries(rows []repo.ToolUsageTargetTimeSeriesPointRow) []*telem_gen.ToolUsageTargetTimeSeriesPoint {
+	out := make([]*telem_gen.ToolUsageTargetTimeSeriesPoint, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &telem_gen.ToolUsageTargetTimeSeriesPoint{
 			BucketStartNs: strconv.FormatInt(row.BucketStartNs, 10),
 			TargetType:    telem_gen.ToolUsageTargetType(row.TargetType),
 			TargetKind:    telem_gen.ToolUsageTargetKind(row.TargetKind),
@@ -2906,10 +3208,13 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 			FailureCount:  uint64ToInt64(row.FailureCount),
 		})
 	}
+	return out
+}
 
-	userTimeSeries := make([]*telem_gen.ToolUsageUserTimeSeriesPoint, 0, len(summary.UserTimeSeries))
-	for _, row := range summary.UserTimeSeries {
-		userTimeSeries = append(userTimeSeries, &telem_gen.ToolUsageUserTimeSeriesPoint{
+func toToolUsageUserTimeSeries(rows []repo.ToolUsageUserTimeSeriesPointRow) []*telem_gen.ToolUsageUserTimeSeriesPoint {
+	out := make([]*telem_gen.ToolUsageUserTimeSeriesPoint, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &telem_gen.ToolUsageUserTimeSeriesPoint{
 			BucketStartNs: strconv.FormatInt(row.BucketStartNs, 10),
 			UserKey:       row.UserKey,
 			UserLabel:     row.UserLabel,
@@ -2918,10 +3223,13 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 			FailureCount:  uint64ToInt64(row.FailureCount),
 		})
 	}
+	return out
+}
 
-	usersByTarget := make([]*telem_gen.ToolUsageUsersByTargetRow, 0, len(summary.UsersByTarget))
-	for _, row := range summary.UsersByTarget {
-		usersByTarget = append(usersByTarget, &telem_gen.ToolUsageUsersByTargetRow{
+func toToolUsageUsersByTargetRows(rows []repo.ToolUsageUsersByTargetRow) []*telem_gen.ToolUsageUsersByTargetRow {
+	out := make([]*telem_gen.ToolUsageUsersByTargetRow, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &telem_gen.ToolUsageUsersByTargetRow{
 			TargetType:   telem_gen.ToolUsageTargetType(row.TargetType),
 			TargetKind:   telem_gen.ToolUsageTargetKind(row.TargetKind),
 			TargetID:     row.TargetID,
@@ -2933,10 +3241,13 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 			FailureCount: uint64ToInt64(row.FailureCount),
 		})
 	}
+	return out
+}
 
-	targetToolBreakdown := make([]*telem_gen.ToolUsageTargetToolBreakdownRow, 0, len(summary.TargetToolBreakdown))
-	for _, row := range summary.TargetToolBreakdown {
-		targetToolBreakdown = append(targetToolBreakdown, &telem_gen.ToolUsageTargetToolBreakdownRow{
+func toToolUsageTargetToolBreakdownRows(rows []repo.ToolUsageTargetToolBreakdownRow) []*telem_gen.ToolUsageTargetToolBreakdownRow {
+	out := make([]*telem_gen.ToolUsageTargetToolBreakdownRow, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &telem_gen.ToolUsageTargetToolBreakdownRow{
 			TargetType:   telem_gen.ToolUsageTargetType(row.TargetType),
 			TargetKind:   telem_gen.ToolUsageTargetKind(row.TargetKind),
 			TargetID:     row.TargetID,
@@ -2948,43 +3259,30 @@ func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetTool
 			FailureRate:  row.FailureRate,
 		})
 	}
-
-	return &telem_gen.GetToolUsageSummaryResult{
-		Totals: &telem_gen.ToolUsageTotals{
-			EventCount:    uint64ToInt64(summary.Totals.EventCount),
-			SuccessCount:  uint64ToInt64(summary.Totals.SuccessCount),
-			FailureCount:  uint64ToInt64(summary.Totals.FailureCount),
-			FailureRate:   summary.Totals.FailureRate,
-			UniqueTools:   uint64ToInt64(summary.Totals.UniqueTools),
-			UniqueUsers:   uint64ToInt64(summary.Totals.UniqueUsers),
-			UniqueTargets: uint64ToInt64(summary.Totals.UniqueTargets),
-		},
-		Targets:             targets,
-		Users:               users,
-		TargetTimeSeries:    targetTimeSeries,
-		UserTimeSeries:      userTimeSeries,
-		UsersByTarget:       usersByTarget,
-		TargetToolBreakdown: targetToolBreakdown,
-	}
+	return out
 }
 
-func emptyToolUsageSummaryResult() *telem_gen.GetToolUsageSummaryResult {
+func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetToolUsageSummaryResult {
+	if summary == nil {
+		summary = &repo.ToolUsageSummary{
+			Totals:              repo.ToolUsageTotalsRow{}, //nolint:exhaustruct // zero totals for the empty result
+			Targets:             nil,
+			Users:               nil,
+			TargetTimeSeries:    nil,
+			UserTimeSeries:      nil,
+			UsersByTarget:       nil,
+			TargetToolBreakdown: nil,
+		}
+	}
+
 	return &telem_gen.GetToolUsageSummaryResult{
-		Totals: &telem_gen.ToolUsageTotals{
-			EventCount:    0,
-			SuccessCount:  0,
-			FailureCount:  0,
-			FailureRate:   0,
-			UniqueTools:   0,
-			UniqueUsers:   0,
-			UniqueTargets: 0,
-		},
-		Targets:             []*telem_gen.ToolUsageTargetSummary{},
-		Users:               []*telem_gen.ToolUsageUserSummary{},
-		TargetTimeSeries:    []*telem_gen.ToolUsageTargetTimeSeriesPoint{},
-		UserTimeSeries:      []*telem_gen.ToolUsageUserTimeSeriesPoint{},
-		UsersByTarget:       []*telem_gen.ToolUsageUsersByTargetRow{},
-		TargetToolBreakdown: []*telem_gen.ToolUsageTargetToolBreakdownRow{},
+		Totals:              toToolUsageTotals(summary.Totals),
+		Targets:             toToolUsageTargetSummaries(summary.Targets),
+		Users:               toToolUsageUserSummaries(summary.Users),
+		TargetTimeSeries:    toToolUsageTargetTimeSeries(summary.TargetTimeSeries),
+		UserTimeSeries:      toToolUsageUserTimeSeries(summary.UserTimeSeries),
+		UsersByTarget:       toToolUsageUsersByTargetRows(summary.UsersByTarget),
+		TargetToolBreakdown: toToolUsageTargetToolBreakdownRows(summary.TargetToolBreakdown),
 	}
 }
 

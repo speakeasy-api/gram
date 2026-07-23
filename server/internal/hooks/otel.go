@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
 
@@ -45,11 +46,10 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		attr.SlogProjectID(projectID),
 	)
 
-	// Codex reports token usage on its OTEL logs stream (codex.sse_event /
-	// response.completed) rather than as metrics like Claude Code. Route those
-	// payloads to the usage writer; they carry no Claude session to seed.
+	// Codex payloads persist as a raw log stream like Claude's; they carry no
+	// Claude session to seed, so they skip the attribution path below.
 	if isCodexLogsPayload(payload) {
-		s.writeCodexUsageToClickHouse(ctx, payload, orgID, projectID)
+		s.writeCodexOTELLogsToClickHouse(ctx, payload, orgID, projectID)
 		return nil
 	}
 
@@ -124,9 +124,12 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			ExternalAccountUUID: conv.Default(session.ExternalAccountUUID, cached.ExternalAccountUUID),
 			ExternalAccountID:   conv.Default(session.ExternalAccountID, cached.ExternalAccountID),
 			DeviceID:            conv.Default(session.DeviceID, cached.DeviceID),
-			AccountType:         "",
-			BillingMode:         "",
-			UserAccountID:       "",
+			// Claude OTEL records carry no hostname; adopt whatever the hooks
+			// path cached for the session (the Go hooks send it on every event).
+			Hostname:      cached.Hostname,
+			AccountType:   "",
+			BillingMode:   "",
+			UserAccountID: "",
 			// On this path user.email is the account's own report, so it doubles
 			// as the observed email consumers keep separate from actor identity.
 			ObservedUserEmail: userEmail,
@@ -720,4 +723,46 @@ func stringPtrVal(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// Metrics handles authenticated OTEL metrics data from Claude Code and Codex.
+func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("Metrics"),
+	)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.E(oops.CodeUnauthorized, errors.New("rejected unauthorized claude OTEL metrics request"), "unauthorized").LogWarn(ctx, logger, attr.SlogEvent("claude_metrics_unauthorized"))
+	}
+
+	orgID := authCtx.ActiveOrganizationID
+	projectID := authCtx.ProjectID.String()
+
+	// Codex metrics (event counters, not token usage) must not run through the
+	// Claude usage extractor — it would find no claude_code.* metrics and can
+	// reject on temporality. Persist them verbatim instead.
+	if isCodexMetricsPayload(payload) {
+		s.logger.InfoContext(ctx, "Received Codex OTEL metrics",
+			attr.SlogHookSource("codex"),
+			attr.SlogHookEvent("Metrics"),
+			attr.SlogEvent("codex_metrics"),
+			attr.SlogOrganizationID(orgID),
+			attr.SlogProjectID(projectID),
+		)
+		s.writeCodexMetricsToClickHouse(ctx, payload, orgID, projectID)
+		return nil
+	}
+
+	logger.InfoContext(ctx, "Received Claude token metrics",
+		attr.SlogEvent("claude_metrics"),
+		attr.SlogOrganizationID(orgID),
+		attr.SlogProjectID(projectID),
+	)
+
+	// Write metrics to ClickHouse
+	s.writeMetricsToClickHouse(ctx, payload, orgID, projectID)
+
+	return nil
 }

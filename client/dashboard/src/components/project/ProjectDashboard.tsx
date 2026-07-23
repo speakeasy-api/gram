@@ -5,17 +5,23 @@ import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
+import { Dimension } from "@gram/client/models/components/queryfilter.js";
+import { GroupBy } from "@gram/client/models/components/querypayload.js";
+import type { QueryMeasures } from "@gram/client/models/components/querymeasures.js";
 import type { SearchUsersFilter } from "@gram/client/models/components/searchusersfilter.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Button, Card, Icon } from "@speakeasy-api/moonshine";
@@ -36,6 +42,8 @@ import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
 export function ProjectDashboard(): JSX.Element {
   const { orgSlug, projectSlug } = useSlugs();
+  const project = useProject();
+  const projectId = project.id;
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
 
@@ -90,109 +98,167 @@ export function ProjectDashboard(): JSX.Element {
 
   const { data: membersData, isPending: isMembersPending } = useMembers();
   const members = useMemo(() => membersData?.members ?? [], [membersData]);
-  const memberById = useMemo(
-    () => new Map(members.map((m) => [m.id, m])),
+  const memberByEmail = useMemo(
+    () => new Map(members.map((m) => [m.email, m])),
     [members],
   );
 
-  const { data: topUsersSearchData, isPending: isTopUsersPending } = useQuery({
-    queryKey: ["project", "topUsers", from.toISOString(), to.toISOString()],
-    queryFn: () =>
-      fetchAllUsers(client, { from, to, eventSource: "hook" }, "internal"),
-    enabled: logsEnabled,
-    placeholderData: keepPreviousData,
-  });
+  // Hook/agent-view metrics read the pre-aggregated attribute_metrics_summaries
+  // table through the org-scoped telemetry.query endpoint, filtered to this
+  // project (project_id is an allowlisted dimension) — the same source as the
+  // Costs page, so the numbers agree. This replaces paginating every user
+  // through telemetry.searchUsers, which scanned raw telemetry_logs. The
+  // generated useTelemetryQuery hook keys its cache on gramSession only
+  // (ignores the body), so drive useQuery directly. throwOnError is off so a
+  // member without org:read degrades to the MCP view instead of crashing the
+  // page on the app-wide error boundary.
+  const projectFilter = useMemo(
+    () => [{ dimension: Dimension.ProjectId, values: [projectId] }],
+    [projectId],
+  );
 
-  // Mode detection: a project that only hosts MCP servers produces no hook
-  // telemetry, so the hook-filtered fetch above is empty. Once it has loaded we
-  // know which view to render — prefer the hook/agent view whenever any hook
-  // data exists, else fall back to the MCP-hosting view.
-  const hookDataLoaded = topUsersSearchData !== undefined;
-  const hasHookData = (topUsersSearchData?.length ?? 0) > 0;
+  const {
+    data: usageByUserData,
+    isPending: isUsageByUserPending,
+    isError: isUsageByUserError,
+  } = useQuery({
+    queryKey: [
+      "project",
+      "usageByUser",
+      projectId,
+      from.toISOString(),
+      to.toISOString(),
+    ],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryQuery(client, {
+          queryPayload: {
+            from,
+            to,
+            groupBy: GroupBy.Email,
+            sortBy: "total_tokens",
+            topN: 100,
+            filters: projectFilter,
+          },
+        }),
+      ),
+    enabled: logsEnabled && !!projectId,
+    placeholderData: keepPreviousData,
+    throwOnError: false,
+  });
+  const usageByUserRows = usageByUserData?.table;
+
+  // Mode detection: attribute_metrics_summaries only admits agent-surface
+  // telemetry (Claude/Codex/Cursor), so any row with usage means the project
+  // has hook data. A project that only hosts MCP servers produces none, and
+  // falls back to the MCP-hosting view.
+  const hookDataLoaded = usageByUserRows !== undefined || isUsageByUserError;
+  const hasHookData = (usageByUserRows ?? []).some((r) => hasUsage(r.measures));
+
+  // Per-user rows suitable for ranking: drop the unattributed '' bucket and
+  // the synthetic "Other" rollup. Both still count toward the totals below.
+  const rankableUserRows = useMemo(
+    () =>
+      (usageByUserRows ?? []).filter(
+        (r) => r.groupValue !== "" && r.groupValue !== "Other",
+      ),
+    [usageByUserRows],
+  );
 
   const topUsersByTokens = useMemo(() => {
-    if (!topUsersSearchData) return [];
-    return [...topUsersSearchData]
-      .sort(
-        (a, b) =>
-          b.totalInputTokens +
-          b.totalOutputTokens -
-          (a.totalInputTokens + a.totalOutputTokens),
-      )
+    return [...rankableUserRows]
+      .sort((a, b) => b.measures.totalTokens - a.measures.totalTokens)
       .slice(0, 5)
-      .map((u) => ({
-        key: u.userId,
-        label: memberById.get(u.userId)?.name ?? u.userId,
-        value: u.totalInputTokens + u.totalOutputTokens,
+      .filter((r) => r.measures.totalTokens > 0)
+      .map((r) => ({
+        key: r.groupValue,
+        label: memberByEmail.get(r.groupValue)?.name ?? r.groupValue,
+        value: r.measures.totalTokens,
       }));
-  }, [topUsersSearchData, memberById]);
+  }, [rankableUserRows, memberByEmail]);
 
-  // Most Agent Sessions by User reads from the same trusted telemetrySearchUsers
-  // data as Top Users (rather than overview.summary.topUsers), ranking by the
-  // number of distinct agent sessions (totalChats = unique gen_ai.conversation.id,
-  // which every hook source stamps with its session id). Names resolve via the
-  // shared memberById map; internal users only, so raw auth IDs no longer leak.
+  // Most Agent Sessions by User ranks the same per-email rows by distinct
+  // agent sessions (total_chats = unique gen_ai.conversation.id). Names
+  // resolve via the members list; group keys are emails, so raw auth IDs
+  // never surface.
   const topUsersBySessions = useMemo(() => {
-    if (!topUsersSearchData) return [];
-    return [...topUsersSearchData]
-      .filter((u) => u.totalChats > 0)
-      .sort((a, b) => b.totalChats - a.totalChats)
+    return [...rankableUserRows]
+      .filter((r) => r.measures.totalChats > 0)
+      .sort((a, b) => b.measures.totalChats - a.measures.totalChats)
       .slice(0, 5)
-      .map((u) => {
-        const member = memberById.get(u.userId);
+      .map((r) => {
+        const member = memberByEmail.get(r.groupValue);
         return {
-          userId: u.userId,
-          name: member?.name ?? u.userId,
-          initialsSource: member?.email ?? member?.name ?? u.userId,
-          sessions: u.totalChats,
+          userId: r.groupValue,
+          name: member?.name ?? r.groupValue,
+          initialsSource: r.groupValue,
+          sessions: r.measures.totalChats,
         };
       });
-  }, [topUsersSearchData, memberById]);
+  }, [rankableUserRows, memberByEmail]);
 
-  // Total agent sessions = sum of per-user distinct hook sessions (totalChats).
-  // Each session id (gen_ai.conversation.id) belongs to a single user, so summing
-  // per-user counts gives the project-wide distinct-session total.
-  const totalSessions = (topUsersSearchData ?? []).reduce(
-    (sum, u) => sum + u.totalChats,
+  // Total agent sessions = sum of per-user distinct sessions. Each session id
+  // (gen_ai.conversation.id) belongs to a single user, so summing per-user
+  // counts gives the project-wide distinct-session total. Includes the
+  // unattributed '' bucket and the "Other" rollup.
+  const totalSessions = (usageByUserRows ?? []).reduce(
+    (sum, r) => sum + r.measures.totalChats,
     0,
   );
 
-  // Most Used Agents: aggregate per-user hook-source breakdowns (hookSources)
-  // across all users, ranking agents (claude-code, cursor, ...) by total events.
-  // Replaces overview.summary.llmClientBreakdown, whose tool-call-only count
-  // reads 0 for hook events (they carry no `tools:` URN).
+  // Total Spend sums per-user cost across every row (including '' and
+  // "Other"), matching the Costs page's figure for this project since both
+  // read the same aggregate.
+  const totalSpend = (usageByUserRows ?? []).reduce(
+    (sum, r) => sum + r.measures.totalCost,
+    0,
+  );
+
+  // Most Used Agents: one grouped-by-hook_source read, ranked by token volume.
+  // Only fetched in the hook/agent view.
+  const { data: usageByAgentData, isPending: isUsageByAgentPending } = useQuery(
+    {
+      queryKey: [
+        "project",
+        "usageByAgent",
+        projectId,
+        from.toISOString(),
+        to.toISOString(),
+      ],
+      queryFn: () =>
+        unwrapAsync(
+          telemetryQuery(client, {
+            queryPayload: {
+              from,
+              to,
+              groupBy: GroupBy.HookSource,
+              sortBy: "total_tokens",
+              topN: 10,
+              filters: projectFilter,
+            },
+          }),
+        ),
+      enabled: logsEnabled && !!projectId && hasHookData,
+      placeholderData: keepPreviousData,
+      throwOnError: false,
+    },
+  );
+
   const mostUsedAgents = useMemo(() => {
-    const bySource = new Map<string, number>();
-    for (const u of topUsersSearchData ?? []) {
-      for (const h of u.hookSources) {
-        bySource.set(h.source, (bySource.get(h.source) ?? 0) + h.eventCount);
-      }
-    }
-    return [...bySource.entries()]
-      .sort((a, b) => b[1] - a[1])
+    return (usageByAgentData?.table ?? [])
+      .filter(
+        (r) =>
+          r.groupValue !== "" &&
+          r.groupValue !== "Other" &&
+          r.measures.totalTokens > 0,
+      )
       .slice(0, 5)
-      .map(([source, eventCount]) => ({
-        key: source,
-        label: source,
-        value: eventCount,
+      .map((r) => ({
+        key: r.groupValue,
+        label: formatPlatform(r.groupValue),
+        value: r.measures.totalTokens,
       }));
-  }, [topUsersSearchData]);
-
-  // Total Spend mirrors the Employees ("cost") page exactly: internal users,
-  // all event sources (no eventSource filter), summing per-user totalCost — so
-  // this card shows the same figure as that page.
-  const { data: allUsersSpendData, isPending: isSpendPending } = useQuery({
-    queryKey: ["project", "totalSpend", from.toISOString(), to.toISOString()],
-    queryFn: () => fetchAllUsers(client, { from, to }, "internal"),
-    // Spend is only shown in the hook/agent view.
-    enabled: logsEnabled && hasHookData,
-    placeholderData: keepPreviousData,
-  });
-
-  const totalSpend = (allUsersSpendData ?? []).reduce(
-    (sum, u) => sum + u.totalCost,
-    0,
-  );
+  }, [usageByAgentData]);
 
   // MCP-hosting fallback: external end-users (customer-supplied IDs) and their
   // tool-call activity. Fetched only when the project has no hook data. No
@@ -280,12 +346,14 @@ export function ProjectDashboard(): JSX.Element {
   const endUsersCount = externalUsersData?.length ?? 0;
 
   const isTopUsersLoading =
-    logsEnabled && (isTopUsersPending || isMembersPending);
+    logsEnabled &&
+    ((isUsageByUserPending && !isUsageByUserError) || isMembersPending);
 
-  // Mode is unknown until the hook fetch + members settle.
+  // Mode is unknown until the per-user usage fetch + members settle.
   const modePending = isTopUsersLoading;
-  // Spend (hook view) / external users (MCP view) still loading after mode known.
-  const isSpendLoading = hasHookData && (isSpendPending || !allUsersSpendData);
+  // Agent breakdown (hook view) / external users (MCP view) still loading
+  // after mode is known.
+  const isAgentsLoading = hasHookData && isUsageByAgentPending;
   const mcpUsersPending = !hasHookData && externalUsersData === undefined;
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
@@ -416,8 +484,7 @@ export function ProjectDashboard(): JSX.Element {
                     tooltip="Total tool invocations recorded across all servers and sources in the selected period."
                   />
                 )}
-                {modePending ||
-                (hasHookData ? isSpendLoading : mcpUsersPending) ? (
+                {modePending || (!hasHookData && mcpUsersPending) ? (
                   <Skeleton className="h-[100px] rounded-lg" />
                 ) : hasHookData ? (
                   <MetricCard
@@ -425,7 +492,7 @@ export function ProjectDashboard(): JSX.Element {
                     value={totalSpend}
                     format="currency"
                     icon="dollar-sign"
-                    tooltip="Total LLM spend by project members in the selected period, summed from per-user cost. Matches the figure on the Employees page."
+                    tooltip="Total LLM spend recorded for this project in the selected period. Matches the figure on the Costs page."
                   />
                 ) : (
                   <MetricCard
@@ -461,7 +528,7 @@ export function ProjectDashboard(): JSX.Element {
                   title={hasHookData ? "Top Users" : "Top End Users"}
                   tooltip={
                     hasHookData
-                      ? "Employees ranked by total token consumption (input + output tokens) in the selected period."
+                      ? "Employees ranked by total token consumption in the selected period."
                       : "External end users ranked by MCP tool calls in the selected period."
                   }
                   action={
@@ -614,7 +681,7 @@ export function ProjectDashboard(): JSX.Element {
 
                     <DashboardCard
                       title="Most Used Agents"
-                      tooltip="Agents (e.g. Claude, Cursor, Codex) ranked by activity volume in the selected period, identified from client metadata sent with each call."
+                      tooltip="Agents (e.g. Claude, Cursor, Codex) ranked by token volume in the selected period, identified from client metadata sent with each call."
                       action={
                         <CardActions>
                           <ExploreWithAIButton
@@ -635,7 +702,7 @@ export function ProjectDashboard(): JSX.Element {
                         </CardActions>
                       }
                     >
-                      {isTopUsersLoading ? (
+                      {modePending || isAgentsLoading ? (
                         <SkeletonList />
                       ) : mostUsedAgents.length === 0 ? (
                         <EmptyState message="No agent activity recorded" />
@@ -781,8 +848,22 @@ function avatarColor(index: number): string {
   return AVATAR_COLORS[index % AVATAR_COLORS.length]!;
 }
 
+// A row "has usage" when any measure is nonzero — used to detect whether the
+// project has agent (hook) telemetry at all, since attribute_metrics_summaries
+// only admits agent-surface rows.
+function hasUsage(m: QueryMeasures): boolean {
+  return (
+    m.totalTokens > 0 ||
+    m.totalCost > 0 ||
+    m.totalChats > 0 ||
+    m.totalToolCalls > 0
+  );
+}
+
 // Fetch every page of telemetrySearchUsers for the given filter, following the
-// pagination cursor. Shared by the overview's hook / spend / external queries.
+// pagination cursor. Used by the MCP-hosting fallback view's external-user
+// query only — the hook/agent view reads pre-aggregated data via
+// telemetry.query instead.
 async function fetchAllUsers(
   client: Parameters<typeof telemetrySearchUsers>[0],
   filter: SearchUsersFilter,

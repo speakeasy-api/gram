@@ -21,6 +21,7 @@ import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
 import { External } from "./external.js";
 import { ExternalCredentials } from "./externalcredentials.js";
+import { ExternalKeys } from "./externalkeys.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
@@ -46,9 +47,11 @@ import { RemoteSessionIssuers } from "./remotesessionissuers.js";
 import { RemoteSessions } from "./remotesessions.js";
 import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
+import { SkillEfficacy } from "./skillefficacy.js";
 import { Skills } from "./skills.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
+import { TokenExchange } from "./tokenexchange.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 import { Triggers } from "./triggers.js";
@@ -153,6 +156,11 @@ export class Gram extends ClientSDK {
     return (this._externalCredentials ??= new ExternalCredentials(
       this._options,
     ));
+  }
+
+  private _externalKeys?: ExternalKeys;
+  get externalKeys(): ExternalKeys {
+    return (this._externalKeys ??= new ExternalKeys(this._options));
   }
 
   private _hooks?: Hooks;
@@ -288,6 +296,11 @@ export class Gram extends ClientSDK {
     return (this._risk ??= new Risk(this._options));
   }
 
+  private _skillEfficacy?: SkillEfficacy;
+  get skillEfficacy(): SkillEfficacy {
+    return (this._skillEfficacy ??= new SkillEfficacy(this._options));
+  }
+
   private _skills?: Skills;
   get skills(): Skills {
     return (this._skills ??= new Skills(this._options));
@@ -301,6 +314,11 @@ export class Gram extends ClientSDK {
   private _templates?: Templates;
   get templates(): Templates {
     return (this._templates ??= new Templates(this._options));
+  }
+
+  private _tokenExchange?: TokenExchange;
+  get tokenExchange(): TokenExchange {
+    return (this._tokenExchange ??= new TokenExchange(this._options));
   }
 
   private _tools?: Tools;

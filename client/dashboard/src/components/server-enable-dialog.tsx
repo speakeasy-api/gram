@@ -83,8 +83,10 @@ export function ServerEnableDialog({
           </Button>
           {!canEnable ? (
             <Button onClick={handleUpgrade} className="gap-2">
-              <CreditCard className="h-4 w-4" />
-              Upgrade Plan
+              <Button.LeftIcon>
+                <CreditCard className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Upgrade Plan</Button.Text>
             </Button>
           ) : (
             <Button

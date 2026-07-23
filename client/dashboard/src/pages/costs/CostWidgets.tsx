@@ -1,5 +1,6 @@
+import { formatCost } from "@/lib/money";
 import type { Dimension } from "@gram/client/models/components/queryfilter.js";
-import type { Measures } from "./taxonomy";
+import { type Measures, unsetLabel } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
 import { movingAverage, resample, smoothPath } from "./sparkline-math";
 import { EstimatedCostIndicator } from "@/components/estimated-cost";
@@ -49,13 +50,6 @@ const MIX_SKELETON_ROWS = [
   { label: 30, bar: 40 },
   { label: 38, bar: 28 },
 ];
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 function formatCompact(value: number): string {
   return value.toLocaleString(undefined, {
@@ -327,7 +321,7 @@ function MixCard({
             return (
               <MixRowItem
                 key={r.label}
-                label={r.label}
+                label={r.label === "" ? unsetLabel(dim) : r.label}
                 cost={r.cost}
                 barPct={(r.cost / max) * 100}
                 barColor={gradeColor(t)}

@@ -261,6 +261,7 @@ func handleToolsCall(
 		SystemEnv:  systemConfig,
 		OAuthToken: oauthToken,
 		GramEmail:  gramEmail,
+		GramChatID: payload.chatID,
 	}
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)

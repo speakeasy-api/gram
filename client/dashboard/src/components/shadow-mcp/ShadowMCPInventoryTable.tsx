@@ -32,6 +32,10 @@ import {
   ShadowMCPInventoryActionSheet,
   type ShadowMCPPolicy,
 } from "./ShadowMCPInventoryActions";
+import {
+  ShadowMCPInventoryServerCell,
+  ShadowMCPInventoryUsageCell,
+} from "./ShadowMCPInventoryCells";
 import { shadowMCPInventoryActions } from "./shadowMCPInventoryActionItems";
 import {
   shadowMCPInventoryStatus,
@@ -52,42 +56,6 @@ type InventoryPage = {
 
 const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 
-function usageCountLabel(count: number) {
-  return `${count} ${count === 1 ? "call" : "calls"}`;
-}
-
-function userCountLabel(count: number) {
-  return `${count} ${count === 1 ? "user" : "users"}`;
-}
-
-function InventoryServerCell({ server }: { server: ShadowMCPInventoryServer }) {
-  const label = server.serverName || server.urlHost;
-
-  return (
-    <div className="min-w-0 space-y-1">
-      <div className="flex gap-2 items-center">
-        <Type variant="small" className="truncate font-medium">
-          {label}
-        </Type>
-        {server.requestCount > 0 && (
-          <Badge variant="warning" size="sm" background={false}>
-            <Badge.LeftIcon>
-              <Icon name="shield-alert" />
-            </Badge.LeftIcon>
-            <Badge.Text>
-              {server.requestCount} Access Request
-              {server.requestCount > 1 && "s"}
-            </Badge.Text>
-          </Badge>
-        )}
-      </div>
-      <Type variant="small" className="text-muted-foreground truncate text-xs">
-        {server.canonicalServerUrl}
-      </Type>
-    </div>
-  );
-}
-
 function InventoryStatusCell({
   policyState,
   server,
@@ -104,17 +72,6 @@ function InventoryStatusCell({
       </Badge>
       <Type variant="small" className="text-muted-foreground text-xs">
         {shadowMCPInventoryStatusDescription(server, policyState)}
-      </Type>
-    </div>
-  );
-}
-
-function UsageCell({ server }: { server: ShadowMCPInventoryServer }) {
-  return (
-    <div className="space-y-1">
-      <Type variant="small">{usageCountLabel(server.observedUseCount)}</Type>
-      <Type variant="small" className="text-muted-foreground text-xs">
-        {userCountLabel(server.userCount)}
       </Type>
     </div>
   );
@@ -191,6 +148,7 @@ export function ShadowMCPInventoryTable({
     deletePolicyBypass.isPending ||
     resolveInventoryRequest.isPending;
   const isActionPending = isSubmitting || activeAction !== null;
+  const canManageAllowRules = shadowMCPPolicies.length > 0;
 
   useEffect(() => {
     setPaginationScope(inventoryScope);
@@ -331,6 +289,7 @@ export function ShadowMCPInventoryTable({
   const renderActionsCell = (server: ShadowMCPInventoryServer) => {
     return (
       <ShadowMCPInventoryActionMenu
+        canManageAllowRules={canManageAllowRules}
         disabled={isActionPending}
         onOpenAction={(mode, selectedServer) =>
           setActiveAction({ mode, server: selectedServer })
@@ -350,7 +309,7 @@ export function ShadowMCPInventoryTable({
           .trim()
           .toLowerCase(),
       width: "2fr",
-      render: (server) => <InventoryServerCell server={server} />,
+      render: (server) => <ShadowMCPInventoryServerCell server={server} />,
     },
     {
       key: "status",
@@ -391,7 +350,7 @@ export function ShadowMCPInventoryTable({
       sortable: true,
       sortValue: (server) => server.observedUseCount,
       width: "0.5fr",
-      render: (server) => <UsageCell server={server} />,
+      render: (server) => <ShadowMCPInventoryUsageCell server={server} />,
     },
     {
       key: "actions",
@@ -498,6 +457,7 @@ export function ShadowMCPInventoryTable({
             <TableRowContextMenu
               key={row.canonicalServerUrl}
               actions={shadowMCPInventoryActions(row, {
+                canManageAllowRules,
                 disabled: isActionPending,
                 onOpenAction: (mode, selectedServer) =>
                   setActiveAction({ mode, server: selectedServer }),

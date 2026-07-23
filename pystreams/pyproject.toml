@@ -6,9 +6,9 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
   "aiocop>=1.1.4",
-  "anyio>=4.14.0",
+  "anyio>=4.14.1",
   "asyncer>=0.0.17",
-  "click>=8.4.1",
+  "click>=8.4.2",
   "en-core-web-lg",
   "gram-infra",
   "maxminddb>=3.1.1",
@@ -17,7 +17,7 @@ dependencies = [
   "opentelemetry-exporter-otlp-proto-grpc>=1.43.0",
   "opentelemetry-instrumentation-system-metrics>=0.64b0",
   "opentelemetry-semantic-conventions>=0.64b0",
-  "presidio-analyzer>=2.2.362",
+  "presidio-analyzer>=2.2.363",
   "starlette>=0.40.0",
   "structlog>=26.1.0",
   "uvicorn>=0.30.0",
@@ -28,7 +28,7 @@ dev = [
   "pyrefly>=1.1.1",
   "pytest>=9.1.1",
   "pytest-asyncio>=0.24.0",
-  "ty>=0.0.53",
+  "ty>=0.0.55",
   "types-protobuf>=7.34.1.20260518",
 ]
 
@@ -39,7 +39,7 @@ multi = "pystreams.cmd.bootstrap:main"
 presidio-load = "pystreams.cmd.presidio_load:cli"
 
 [build-system]
-requires = ["uv_build>=0.11.21,<0.12"]
+requires = ["uv_build>=0.11.26,<0.12"]
 build-backend = "uv_build"
 
 [tool.uv.sources]

@@ -380,6 +380,66 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "move")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MoveOrganizationRemoteSessionIssuer"}`)
 	})
+
+	Method("getIssuerMigratePreflight", func() {
+		Description("Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.")
+
+		Payload(func() {
+			Attribute("source_id", String, "The remote_session_issuer to migrate away from.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("target_id", String, "The remote_session_issuer to migrate onto.", func() {
+				Format(FormatUUID)
+			})
+			Required("source_id", "target_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(OrganizationIssuerMigratePreflight)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.getMigratePreflight")
+			Param("source_id")
+			Param("target_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationRemoteSessionIssuerMigratePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMigratePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuerMigratePreflight"}`)
+	})
+
+	Method("migrateIssuer", func() {
+		Description("Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("source_id", String, "The remote_session_issuer to migrate away from; soft-deleted on success.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("target_id", String, "The remote_session_issuer to migrate onto; survives and adopts the source's clients.", func() {
+				Format(FormatUUID)
+			})
+			Required("source_id", "target_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(MigrateOrganizationRemoteSessionIssuerResult)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.migrate")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "migrateOrganizationRemoteSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "migrate")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MigrateOrganizationRemoteSessionIssuer"}`)
+	})
 })
 
 var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func() {
@@ -391,6 +451,7 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 	Attribute("logo_asset_id", String, "Optional logo asset id.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("client_setup_documentation_url", String, "URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; absent for issuers without DCR.")
@@ -421,6 +482,7 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	Attribute("logo_asset_id", String, "Set the logo asset id.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("client_setup_documentation_url", String, "Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint.")
@@ -457,6 +519,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("logo_asset_id", String, "Optional logo asset id; null when unset.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("client_setup_documentation_url", String, "URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; null for issuers without DCR.")

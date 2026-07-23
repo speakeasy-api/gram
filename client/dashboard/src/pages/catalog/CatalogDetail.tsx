@@ -284,27 +284,32 @@ export default function CatalogDetail(): JSX.Element {
                           }
                           disabled={removeServerMutation.isPending}
                         >
-                          {removeServerMutation.isPending ? (
-                            <>
+                          <Button.LeftIcon>
+                            {removeServerMutation.isPending ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
-                              <Button.Text>Removing...</Button.Text>
-                            </>
-                          ) : (
-                            <>
+                            ) : (
                               <Minus className="h-4 w-4" />
-                              <Button.Text>Remove</Button.Text>
-                            </>
-                          )}
+                            )}
+                          </Button.LeftIcon>
+                          <Button.Text>
+                            {removeServerMutation.isPending
+                              ? "Removing..."
+                              : "Remove"}
+                          </Button.Text>
                         </Button>
                       )}
                       <Button size="md" onClick={() => setShowAddDialog(true)}>
-                        <Plus className="h-4 w-4" />
+                        <Button.LeftIcon>
+                          <Plus className="h-4 w-4" />
+                        </Button.LeftIcon>
                         <Button.Text>Add another</Button.Text>
                       </Button>
                     </Stack>
                   ) : (
                     <Button size="md" onClick={() => setShowAddDialog(true)}>
-                      <Plus className="h-4 w-4" />
+                      <Button.LeftIcon>
+                        <Plus className="h-4 w-4" />
+                      </Button.LeftIcon>
                       <Button.Text>Add</Button.Text>
                     </Button>
                   )}

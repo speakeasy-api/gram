@@ -336,6 +336,45 @@ func (q *Queries) CountAnalyzedMessages(ctx context.Context, arg CountAnalyzedMe
 	return column_1, err
 }
 
+const countAnalyzedMessagesByProject = `-- name: CountAnalyzedMessagesByProject :many
+SELECT
+    rr.risk_policy_id
+  , rr.risk_policy_version
+  , COUNT(DISTINCT rr.chat_message_id)::BIGINT AS analyzed_messages
+FROM risk_results rr
+WHERE rr.project_id = $1
+GROUP BY rr.risk_policy_id, rr.risk_policy_version
+`
+
+type CountAnalyzedMessagesByProjectRow struct {
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	AnalyzedMessages  int64
+}
+
+// Batched form of CountAnalyzedMessages: the analyzed-message count for every
+// (policy, version) in a project in one query, so ListRiskPolicies avoids a
+// per-policy round trip.
+func (q *Queries) CountAnalyzedMessagesByProject(ctx context.Context, projectID uuid.UUID) ([]CountAnalyzedMessagesByProjectRow, error) {
+	rows, err := q.db.Query(ctx, countAnalyzedMessagesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountAnalyzedMessagesByProjectRow
+	for rows.Next() {
+		var i CountAnalyzedMessagesByProjectRow
+		if err := rows.Scan(&i.RiskPolicyID, &i.RiskPolicyVersion, &i.AnalyzedMessages); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countEnabledRegexExclusionsInScope = `-- name: CountEnabledRegexExclusionsInScope :one
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions
@@ -1069,7 +1108,7 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 }
 
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many
-SELECT cm.id, cm.role, cm.content, cm.tool_calls,
+SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
   COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
 FROM chat_messages cm
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -1087,6 +1126,8 @@ type GetMessageContentBatchRow struct {
 	Role       string
 	Content    string
 	ToolCalls  []byte
+	CreatedAt  pgtype.Timestamptz
+	Source     pgtype.Text
 	ChatUserID string
 }
 
@@ -1095,6 +1136,16 @@ type GetMessageContentBatchRow struct {
 // attribution rule as ListRiskOverviewTopUsers: the message's own user_id
 // wins, the chat owner's is the fallback — and a soft-deleted chat's owner
 // never is (LEFT JOIN so the message still gets scanned, just unattributed).
+//
+// created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
+// the batch's own time range, keeping that query on the telemetry table's
+// time-ordered primary key instead of scanning the full retention window.
+//
+// source names the agent that recorded the message (Codex, Cursor, the ingest
+// adapter, ...). The shadow-MCP scanner attributes its provenance-resolution
+// metric to it, which is the one attribution available when the call resolved
+// to no telemetry row at all — precisely the population that metric exists to
+// measure.
 func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageContentBatchParams) ([]GetMessageContentBatchRow, error) {
 	rows, err := q.db.Query(ctx, getMessageContentBatch, arg.Ids, arg.ProjectID)
 	if err != nil {
@@ -1109,6 +1160,8 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 			&i.Role,
 			&i.Content,
 			&i.ToolCalls,
+			&i.CreatedAt,
+			&i.Source,
 			&i.ChatUserID,
 		); err != nil {
 			return nil, err

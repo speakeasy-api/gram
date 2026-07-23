@@ -28,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	claudeevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/claude"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -72,6 +71,16 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 		ctx := r.Context()
 		contentType := r.Header.Get("Content-Type")
 		contentEncoding := r.Header.Get("Content-Encoding")
+		skillUpload := r.URL.Path == "/rpc/hooks.uploadSkillContent"
+		logBody := func(body []byte) []byte {
+			if skillUpload {
+				return nil
+			}
+			return body
+		}
+		if skillUpload && r.Body != nil {
+			r.Body = http.MaxBytesReader(nil, r.Body, maxSkillUploadRequestBodyBytes)
+		}
 
 		raw, err := io.ReadAll(r.Body)
 		_ = r.Body.Close()
@@ -89,16 +98,27 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 			if gerr != nil {
 				wrapped := fmt.Errorf("open gzip reader for hooks request: %w", gerr)
 				return decoderFunc(func(_ any) error {
-					logDecodeFailure(ctx, logger, wrapped, raw, contentType, contentEncoding)
+					logDecodeFailure(ctx, logger, wrapped, logBody(raw), contentType, contentEncoding)
 					return wrapped
 				})
 			}
-			decompressed, gerr := io.ReadAll(gz)
+			var reader io.Reader = gz
+			if skillUpload {
+				reader = io.LimitReader(gz, maxSkillUploadRequestBodyBytes+1)
+			}
+			decompressed, gerr := io.ReadAll(reader)
 			_ = gz.Close()
 			if gerr != nil {
 				wrapped := fmt.Errorf("decompress gzip hooks request body: %w", gerr)
 				return decoderFunc(func(_ any) error {
-					logDecodeFailure(ctx, logger, wrapped, raw, contentType, contentEncoding)
+					logDecodeFailure(ctx, logger, wrapped, logBody(raw), contentType, contentEncoding)
+					return wrapped
+				})
+			}
+			if skillUpload && len(decompressed) > maxSkillUploadRequestBodyBytes {
+				wrapped := fmt.Errorf("decompressed skill content upload exceeds %d bytes", maxSkillUploadRequestBodyBytes)
+				return decoderFunc(func(_ any) error {
+					logDecodeFailure(ctx, logger, wrapped, nil, contentType, contentEncoding)
 					return wrapped
 				})
 			}
@@ -119,7 +139,7 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 
 		return decoderFunc(func(v any) error {
 			if derr := inner.Decode(v); derr != nil {
-				logDecodeFailure(ctx, logger, derr, body, contentType, contentEncoding)
+				logDecodeFailure(ctx, logger, derr, logBody(body), contentType, contentEncoding)
 				return fmt.Errorf("decode hooks request body: %w", derr)
 			}
 			return nil
@@ -189,33 +209,6 @@ func (d *formDecoder) Decode(v any) error {
 	return nil
 }
 
-// Metrics handles authenticated OTEL metrics data from Claude Code
-func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
-	logger := s.logger.With(
-		attr.SlogHookSource("claude"),
-		attr.SlogHookEvent("Metrics"),
-	)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, errors.New("rejected unauthorized claude OTEL metrics request"), "unauthorized").LogWarn(ctx, logger, attr.SlogEvent("claude_metrics_unauthorized"))
-	}
-
-	orgID := authCtx.ActiveOrganizationID
-	projectID := authCtx.ProjectID.String()
-
-	logger.InfoContext(ctx, "Received Claude token metrics",
-		attr.SlogEvent("claude_metrics"),
-		attr.SlogOrganizationID(orgID),
-		attr.SlogProjectID(projectID),
-	)
-
-	// Write metrics to ClickHouse
-	s.writeMetricsToClickHouse(ctx, payload, orgID, projectID)
-
-	return nil
-}
-
 // Claude is the unified endpoint for all Claude Code hook events.
 func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *gen.ClaudeHookResult, err error) {
 	start := time.Now()
@@ -254,11 +247,12 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	}
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
+	ctx, riskScanned := withRiskScanTracker(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
 	if hasPluginAuth {
@@ -747,6 +741,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 			ExternalAccountUUID: "",
 			ExternalAccountID:   "",
 			DeviceID:            "",
+			Hostname:            "",
 			AccountType:         "",
 			BillingMode:         "",
 			UserAccountID:       "",
@@ -766,6 +761,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
+		Hostname:            "",
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -1022,7 +1018,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	switch {
 	case matched == nil:
 		detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
-	case matched.URL != "" && !s.isGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
+	case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
 		detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
 	case matched.URL == "" && matched.Command != "":
 		// Local stdio servers have no URL, so the Gram-hosted check above

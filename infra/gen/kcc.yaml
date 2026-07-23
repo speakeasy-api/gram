@@ -110,6 +110,63 @@ pubsub:
           double score_threshold = 11;
         }
       type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-injection-analysis
+    name: gram-risk-v1-prompt-injection-analysis
+    spec:
+      definition: |
+        edition = "2024";
+        message PromptInjectionAnalysis {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string content = 8;
+          string user_id = 9;
+          bool l1_enabled = 10;
+          string message_type = 11;
+          string body = 12;
+          string tool_name = 13;
+          repeated ToolCall tool_calls = 14;
+          message ToolCall {
+            string name = 1;
+            string arguments = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-policy-analysis
+    name: gram-risk-v1-prompt-policy-analysis
+    spec:
+      definition: |
+        edition = "2024";
+        message PromptPolicyAnalysis {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string content = 8;
+          string user_id = 9;
+          string prompt = 10;
+          bytes model_config = 11;
+          string message_type = 12;
+          string body = 13;
+          string tool_name = 14;
+          repeated ToolCall tool_calls = 15;
+          message ToolCall {
+            string name = 1;
+            string arguments = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
   subscriptions:
   - labels:
       managed_by: proto-pubsub-orchestrator
@@ -163,9 +220,9 @@ pubsub:
         name: gram-risk-v1-custom-rules-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
-      proto_message: gram-risk-v1-finding-bq-writer
+      proto_message: gram-risk-v1-finding-ch-writer
       topic_proto_message: gram-risk-v1-finding
-    name: gram-risk-v1-finding-bq-writer
+    name: gram-risk-v1-finding-ch-writer
     spec:
       ackDeadlineSeconds: 60
       messageRetentionDuration: 604800s
@@ -203,6 +260,34 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-risk-v1-presidio-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-injection-analyzer
+      topic_proto_message: gram-risk-v1-prompt-injection-analysis
+    name: gram-risk-v1-prompt-injection-analyzer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-prompt-injection-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-policy-analyzer
+      topic_proto_message: gram-risk-v1-prompt-policy-analysis
+    name: gram-risk-v1-prompt-policy-analyzer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-prompt-policy-analysis
   topics:
   - labels:
       managed_by: proto-pubsub-orchestrator
@@ -266,3 +351,23 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-presidio-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-injection-analysis
+    name: gram-risk-v1-prompt-injection-analysis
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-prompt-injection-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-policy-analysis
+    name: gram-risk-v1-prompt-policy-analysis
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-prompt-policy-analysis

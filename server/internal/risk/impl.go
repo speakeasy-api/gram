@@ -50,7 +50,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
+	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -83,18 +85,20 @@ type RiskPolicyResultsCleaner interface {
 }
 
 type Service struct {
-	tracer           trace.Tracer
-	logger           *slog.Logger
-	db               *pgxpool.Pool
-	repo             *repo.Queries
-	auth             *auth.Auth
-	authz            *authz.Engine
-	signaler         RiskAnalysisSignaler
-	reconciler       RiskExclusionReconciler
-	resultsCleaner   RiskPolicyResultsCleaner
-	completionClient openrouter.CompletionClient
-	shadowMCPClient  *shadowmcp.Client
-	audit            *audit.Logger
+	tracer                       trace.Tracer
+	logger                       *slog.Logger
+	db                           *pgxpool.Pool
+	repo                         *repo.Queries
+	auth                         *auth.Auth
+	authz                        *authz.Engine
+	signaler                     RiskAnalysisSignaler
+	reconciler                   RiskExclusionReconciler
+	resultsCleaner               RiskPolicyResultsCleaner
+	completionClient             openrouter.CompletionClient
+	shadowMCPClient              *shadowmcp.Client
+	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler
+	shadowMCPInventoryURLLookup  ShadowMCPInventoryURLLookup
+	audit                        *audit.Logger
 	// cache backs the rpbr2 policy-bypass request links: the link generator
 	// stores request state here and CreateRiskPolicyBypassRequest reads it
 	// back. Must be the same backing store the link generator uses.
@@ -136,26 +140,28 @@ func NewObserver(
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
 
-		logger:           logger.With(attr.SlogComponent("risk")),
-		db:               db,
-		repo:             repo.New(db),
-		auth:             nil,
-		authz:            nil,
-		signaler:         signaler,
-		reconciler:       nil,
-		resultsCleaner:   nil,
-		completionClient: nil,
-		shadowMCPClient:  nil,
-		audit:            auditLogger,
-		cache:            nil,
-		jwtSecret:        "",
-		piiScanner:       nil,
-		piScanner:        nil,
-		gitleaksScanner:  nil,
-		flags:            nil,
-		celEng:           nil,
-		builtinPresets:   nil,
-		promptJudge:      nil,
+		logger:                       logger.With(attr.SlogComponent("risk")),
+		db:                           db,
+		repo:                         repo.New(db),
+		auth:                         nil,
+		authz:                        nil,
+		signaler:                     signaler,
+		reconciler:                   nil,
+		resultsCleaner:               nil,
+		completionClient:             nil,
+		shadowMCPClient:              nil,
+		reconcileShadowMCPPolicyURLs: nil,
+		shadowMCPInventoryURLLookup:  nil,
+		audit:                        auditLogger,
+		cache:                        nil,
+		jwtSecret:                    "",
+		piiScanner:                   nil,
+		piScanner:                    nil,
+		gitleaksScanner:              nil,
+		flags:                        nil,
+		celEng:                       nil,
+		builtinPresets:               nil,
+		promptJudge:                  nil,
 	}
 }
 
@@ -179,31 +185,35 @@ func NewService(
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
 	promptJudge promptpolicy.Evaluator,
+	reconcileShadowMCPPolicyURLs ShadowMCPPolicyURLReconciler,
+	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
 	return &Service{
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		logger:           logger,
-		db:               db,
-		repo:             repo.New(db),
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		authz:            authzEngine,
-		signaler:         signaler,
-		reconciler:       reconciler,
-		resultsCleaner:   resultsCleaner,
-		completionClient: completionClient,
-		shadowMCPClient:  shadowMCPClient,
-		audit:            auditLogger,
-		cache:            cacheImpl,
-		jwtSecret:        jwtSecret,
-		piiScanner:       piiScanner,
-		piScanner:        piScanner,
-		gitleaksScanner:  gitleaks.NewScanner(),
-		flags:            flags,
-		celEng:           celEng,
-		builtinPresets:   builtinPresets,
-		promptJudge:      promptJudge,
+		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		logger:                       logger,
+		db:                           db,
+		repo:                         repo.New(db),
+		auth:                         auth.New(logger, db, sessions, authzEngine),
+		authz:                        authzEngine,
+		signaler:                     signaler,
+		reconciler:                   reconciler,
+		resultsCleaner:               resultsCleaner,
+		completionClient:             completionClient,
+		shadowMCPClient:              shadowMCPClient,
+		reconcileShadowMCPPolicyURLs: reconcileShadowMCPPolicyURLs,
+		shadowMCPInventoryURLLookup:  shadowMCPInventoryURLLookup,
+		audit:                        auditLogger,
+		cache:                        cacheImpl,
+		jwtSecret:                    jwtSecret,
+		piiScanner:                   piiScanner,
+		piScanner:                    piScanner,
+		gitleaksScanner:              gitleaks.NewScanner(),
+		flags:                        flags,
+		celEng:                       celEng,
+		builtinPresets:               builtinPresets,
+		promptJudge:                  promptJudge,
 	}
 }
 
@@ -338,6 +348,14 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		enabled = *payload.Enabled
 	}
 
+	var shadowMCPAllowedURLs []string
+	if payload.ShadowMcpAllowedUrls != nil {
+		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, payload.ShadowMcpAllowedUrls)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Auto-generate a name when the caller opted in (explicit auto_name=true
 	// or omitted both auto_name and name). Setting auto_name=false with an
 	// empty name surfaces a validation error below rather than silently
@@ -388,6 +406,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
 		}
 	}
+	if len(payload.DetectionScopes) > 0 {
+		specs, err := validateDetectionScopes(s.celEng, payload.DetectionScopes)
+		if err != nil {
+			return nil, err
+		}
+		analyzerConfig, err = ra.WithDetectionScopes(analyzerConfig, specs)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -426,6 +454,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 
 	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").LogError(ctx, s.logger)
+	}
+	if payload.ShadowMcpAllowedUrls != nil {
+		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PolicyID:       row.ID.String(),
+			DesiredURLs:    shadowMCPAllowedURLs,
+			Principals:     audiencePrincipals,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := s.audit.LogRiskPolicyCreate(ctx, dbtx, audit.LogRiskPolicyCreateEvent{
@@ -470,16 +508,55 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies").LogError(ctx, s.logger)
 	}
 
+	if len(rows) == 0 {
+		return &gen.ListRiskPoliciesResult{Policies: []*types.RiskPolicy{}}, nil
+	}
+
+	// Enrichment is resolved once for the whole set rather than per policy (the
+	// old N+1). totalMessages is project-wide and identical for every policy;
+	// analyzed counts and audience grants are batched into one query each and
+	// looked up per row below.
+	totalMessages, err := s.repo.CountTotalMessages(ctx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true})
+	if err != nil {
+		totalMessages = 0
+	}
+
+	// Analyzed counts are optional status enrichment, so a failure degrades to
+	// zero (pending = total) rather than failing the whole list — matching the
+	// tolerance of the single-policy CountAnalyzedMessages path.
+	analyzedByPolicy := map[analyzedMessagesKey]int64{}
+	if analyzedRows, err := s.repo.CountAnalyzedMessagesByProject(ctx, *authCtx.ProjectID); err != nil {
+		s.logger.WarnContext(ctx, "count analyzed messages for risk policy list failed", attr.SlogError(err))
+	} else {
+		analyzedByPolicy = make(map[analyzedMessagesKey]int64, len(analyzedRows))
+		for _, r := range analyzedRows {
+			analyzedByPolicy[analyzedMessagesKey{policyID: r.RiskPolicyID, version: r.RiskPolicyVersion}] = r.AnalyzedMessages
+		}
+	}
+
+	policyIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		policyIDs = append(policyIDs, row.ID.String())
+	}
+	audienceByPolicy, err := riskPolicyAudienceURNsByPolicy(ctx, s.db, authCtx.ActiveOrganizationID, policyIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audiences").LogError(ctx, s.logger)
+	}
+
 	policies := make([]*types.RiskPolicy, 0, len(rows))
 	for _, row := range rows {
-		p, err := s.policyToType(ctx, row)
-		if err != nil {
-			return nil, err
-		}
-		policies = append(policies, p)
+		analyzedMessages := analyzedByPolicy[analyzedMessagesKey{policyID: row.ID, version: row.Version}]
+		policies = append(policies, buildRiskPolicyType(row, totalMessages, analyzedMessages, audienceByPolicy[row.ID.String()]))
 	}
 
 	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
+}
+
+// analyzedMessagesKey keys the batched analyzed-message counts by the
+// (policy, version) pair they were aggregated on.
+type analyzedMessagesKey struct {
+	policyID uuid.UUID
+	version  int64
 }
 
 // ListBuiltinExclusions returns the built-in exclusion library grouped by
@@ -620,6 +697,18 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		}
 		analyzerConfig = updated
 	}
+	// Omit to preserve; send (possibly empty, to clear) to replace.
+	if payload.DetectionScopes != nil {
+		specs, err := validateDetectionScopes(s.celEng, payload.DetectionScopes)
+		if err != nil {
+			return nil, err
+		}
+		updated, err := ra.WithDetectionScopes(analyzerConfig, specs)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build analyzer config").LogError(ctx, s.logger)
+		}
+		analyzerConfig = updated
+	}
 
 	promptInjectionRules := current.PromptInjectionRules
 	if payload.PromptInjectionRules != nil {
@@ -705,6 +794,15 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		}
 	}
 	audiencePrincipalURNs = principalStrings(audiencePrincipals)
+
+	var shadowMCPAllowedURLs []string
+	audienceUpdateRequested := payload.AudienceType != nil || payload.AudiencePrincipalUrns != nil
+	if payload.ShadowMcpAllowedUrls != nil {
+		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, payload.ShadowMcpAllowedUrls)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	autoName := current.AutoName
 	if payload.AutoName != nil {
@@ -807,6 +905,16 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 
 	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").LogError(ctx, s.logger)
+	}
+	if payload.ShadowMcpAllowedUrls != nil || audienceUpdateRequested {
+		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PolicyID:       row.ID.String(),
+			DesiredURLs:    shadowMCPAllowedURLs,
+			Principals:     audiencePrincipals,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := s.audit.LogRiskPolicyUpdate(ctx, dbtx, audit.LogRiskPolicyUpdateEvent{
@@ -1289,17 +1397,36 @@ func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedact
 	}
 }
 
-// redactMatch encodes a match value as `<redacted len=N sha=XXXXXXXX>`,
-// except for shadow_mcp and account_identity findings whose match passes
-// through verbatim: an MCP server URL or an account email IS the report, not
-// a secret. A nil/empty match collapses to `<redacted len=0>` without a sha
-// component so the absence of a finding payload is distinguishable from a
-// real hash.
+// RedactMatchAll encodes a match value as `<redacted len=N sha=XXXXXXXX>`,
+// redacting every source with no passthrough. An empty match collapses to
+// `<redacted len=0>` without a sha component so the absence of a finding payload
+// is distinguishable from a real hash.
 //
-// The hash is salted by orgID with a NUL separator so two different orgs
-// holding the same secret produce different fingerprints — defense in depth
-// against any future surface that crosses an org boundary. Within an org the
-// fingerprint stays deterministic so agents can still dedupe.
+// The hash is salted by orgID with a NUL separator so two different orgs holding
+// the same secret produce different fingerprints — defense in depth against any
+// future surface that crosses an org boundary. Within an org the fingerprint
+// stays deterministic so agents can still dedupe.
+//
+// This is the canonical redaction for the ClickHouse analytics store
+// (match_redacted), where no source may store plaintext. The API-facing
+// redactMatch wraps it for its non-passthrough sources, and the risk_findings
+// backfill (server/cmd/tools/migrations) calls it directly, so the two never
+// drift in salt layout, prefix, or sha truncation.
+func RedactMatchAll(match string, orgID string) string {
+	if match == "" {
+		return "<redacted len=0>"
+	}
+	var buf []byte
+	buf = append(buf, orgID...)
+	buf = append(buf, 0x00)
+	buf = append(buf, match...)
+	sum := sha256.Sum256(buf)
+	return fmt.Sprintf("<redacted len=%d sha=%s>", len(match), hex.EncodeToString(sum[:4]))
+}
+
+// redactMatch is the API-facing redaction: like RedactMatchAll, except
+// shadow_mcp and account_identity findings pass through verbatim — an MCP server
+// URL or an account email IS the report, not a secret.
 func redactMatch(source string, match *string, orgID string) string {
 	if match == nil || *match == "" {
 		return "<redacted len=0>"
@@ -1307,12 +1434,7 @@ func redactMatch(source string, match *string, orgID string) string {
 	if source == shadowmcp.SourceShadowMCP || source == ra.SourceAccountIdentity {
 		return *match
 	}
-	var buf []byte
-	buf = append(buf, orgID...)
-	buf = append(buf, 0x00)
-	buf = append(buf, *match...)
-	sum := sha256.Sum256(buf)
-	return fmt.Sprintf("<redacted len=%d sha=%s>", len(*match), hex.EncodeToString(sum[:4]))
+	return RedactMatchAll(*match, orgID)
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
@@ -1634,22 +1756,47 @@ func (s *Service) ListRiskCategories(ctx context.Context, payload *gen.ListRiskC
 
 	defs := categories.All()
 	out := make([]*gen.RiskCategoryDefinition, 0, len(defs))
+	// The definition list carries trailing scanner-source fallback entries for
+	// Classify precedence (duplicate secrets/pii keys); the API surface is one
+	// entry per category, keeping the canonical (first) definition.
+	seen := make(map[categories.Category]bool, len(defs))
 	for _, def := range defs {
+		if seen[def.Category] {
+			continue
+		}
+		seen[def.Category] = true
 		ruleIDs := def.RuleIDs
 		if ruleIDs == nil {
 			ruleIDs = []string{}
 		}
+		rec, ok := recommendedscopes.For(def.Category)
+		if !ok {
+			rec = recommendedscopes.Recommendation{
+				Category:     def.Category,
+				ScopeInclude: "",
+				ScopeExempt:  "",
+				Rationale:    "",
+				Applicable:   true,
+			}
+		}
 		out = append(out, &gen.RiskCategoryDefinition{
-			Key:          string(def.Category),
-			Label:        def.Label,
-			Description:  def.Description,
-			Icon:         def.Icon,
-			Source:       def.Source,
-			RuleIds:      ruleIDs,
-			RuleIDPrefix: def.RulePrefix,
+			Key:                        string(def.Category),
+			Label:                      def.Label,
+			Description:                def.Description,
+			Icon:                       def.Icon,
+			Source:                     def.Source,
+			RuleIds:                    ruleIDs,
+			RuleIDPrefix:               def.RulePrefix,
+			RecommendedScopeInclude:    rec.ScopeInclude,
+			RecommendedScopeExempt:     rec.ScopeExempt,
+			RecommendedScopeRationale:  rec.Rationale,
+			RecommendedScopeApplicable: rec.Applicable,
 		})
 	}
-	return &gen.RiskCategoriesResult{Categories: out}, nil
+	return &gen.RiskCategoriesResult{
+		Categories:               out,
+		RecommendedScopesVersion: recommendedscopes.Version,
+	}, nil
 }
 
 // CompileExpr compiles a single CEL expression without evaluating it, so the
@@ -2234,6 +2381,56 @@ func validateMessageTypes(messageTypes []string) error {
 		)
 	}
 	return nil
+}
+
+// validateDetectionScopes checks each specified scope's category (must be a
+// registry category whose message scoping applies) and CEL predicates, and
+// converts to the analyzer_config representation.
+func validateDetectionScopes(eng *celenv.Engine, specs []*types.RiskDetectionScope) ([]ra.DetectionScopeConfig, error) {
+	out := make([]ra.DetectionScopeConfig, 0, len(specs))
+	seen := make(map[categories.Category]bool, len(specs))
+	for _, spec := range specs {
+		if spec == nil {
+			return nil, oops.E(oops.CodeInvalid, nil, "detection scope must not be null")
+		}
+		cat := categories.Category(spec.Category)
+		rec, ok := recommendedscopes.For(cat)
+		if !ok {
+			return nil, oops.E(oops.CodeInvalid, nil, "detection scope category %q is not recognized", spec.Category)
+		}
+		if !rec.Applicable {
+			return nil, oops.E(oops.CodeInvalid, nil, "category %q is session-scoped; message detection scopes do not apply", spec.Category)
+		}
+		if seen[cat] {
+			return nil, oops.E(oops.CodeInvalid, nil, "detection scope category %q specified more than once", spec.Category)
+		}
+		seen[cat] = true
+		include := strings.TrimSpace(conv.PtrValOr(spec.ScopeInclude, ""))
+		exempt := strings.TrimSpace(conv.PtrValOr(spec.ScopeExempt, ""))
+		if _, err := ra.CompileScope(eng, include, exempt); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "detection scope for %q does not compile", spec.Category)
+		}
+		out = append(out, ra.DetectionScopeConfig{Category: string(cat), ScopeInclude: include, ScopeExempt: exempt})
+	}
+	return out, nil
+}
+
+// detectionScopesToAPI maps the analyzer_config detection scopes into the API
+// representation.
+func detectionScopesToAPI(analyzerConfig []byte) []*types.RiskDetectionScope {
+	specs := ra.DetectionScopesFromConfig(analyzerConfig)
+	if len(specs) == 0 {
+		return nil
+	}
+	out := make([]*types.RiskDetectionScope, 0, len(specs))
+	for _, spec := range specs {
+		out = append(out, &types.RiskDetectionScope{
+			Category:     spec.Category,
+			ScopeInclude: conv.PtrEmpty(spec.ScopeInclude),
+			ScopeExempt:  conv.PtrEmpty(spec.ScopeExempt),
+		})
+	}
+	return out
 }
 
 func validateCustomDetectionRule(eng *celenv.Engine, ruleID, title, detectionExpr, severity string) error {
@@ -3078,12 +3275,21 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	if err != nil {
 		analyzedMessages = 0
 	}
-	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	audiencePrincipalURNs, err := riskPolicyAudiencePrincipalURNs(ctx, s.db, row.OrganizationID, row.ID.String())
 	if err != nil {
 		return nil, fmt.Errorf("load risk policy audience: %w", err)
 	}
+
+	return buildRiskPolicyType(row, totalMessages, analyzedMessages, audiencePrincipalURNs), nil
+}
+
+// buildRiskPolicyType assembles the API type from a policy row and its already
+// resolved message counts and audience. The enrichment queries are the caller's
+// responsibility so batched paths (ListRiskPolicies) can resolve them once for
+// the whole set instead of per policy.
+func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages int64, audiencePrincipalURNs []string) *types.RiskPolicy {
+	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	return &types.RiskPolicy{
 		ID:                     row.ID.String(),
@@ -3094,6 +3300,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PresidioEntities:       row.PresidioEntities,
 		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
 		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
+		DetectionScopes:        detectionScopesToAPI(row.AnalyzerConfig),
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,
@@ -3114,7 +3321,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
 		PendingMessages:        pendingMessages,
 		TotalMessages:          totalMessages,
-	}, nil
+	}
 }
 
 func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []string) *types.RiskPolicy {
@@ -3130,6 +3337,7 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		PresidioEntities:       row.PresidioEntities,
 		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
 		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
+		DetectionScopes:        detectionScopesToAPI(row.AnalyzerConfig),
 		PromptInjectionRules:   row.PromptInjectionRules,
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIds:          row.CustomRuleIds,

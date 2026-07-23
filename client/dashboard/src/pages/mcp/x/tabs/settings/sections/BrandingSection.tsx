@@ -12,12 +12,11 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { FooterSaveButtonContent, SettingsSection } from "../SettingsSection";
+import { FooterSaveButton, SettingsSection } from "../SettingsSection";
 
 // The display name shares the mcp_servers.name column, whose CHECK caps length
 // at 40 (see schema.sql / MCP_SERVER_NAME_MAX_LENGTH on the legacy page).
@@ -124,14 +123,11 @@ export function BrandingSection({
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope scope="mcp:write" level="component">
-              <Button
-                variant="primary"
-                size="md"
+              <FooterSaveButton
+                pending={update.isPending}
                 disabled={saveDisabled}
                 onClick={() => void handleSave()}
-              >
-                <FooterSaveButtonContent pending={update.isPending} />
-              </Button>
+              />
             </RequireScope>
           </SettingsSection.FooterActions>
         </SettingsSection.Footer>

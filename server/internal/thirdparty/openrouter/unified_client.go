@@ -330,7 +330,7 @@ func (c *ChatClient) requestCompletion(ctx context.Context, apiKey string, reqBo
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return OpenAIChatResponse{}, body, classifyHTTPError(httpResp.StatusCode, body)
+		return OpenAIChatResponse{}, body, classifyHTTPError(ctx, httpResp.StatusCode, body)
 	}
 
 	var chatResp OpenAIChatResponse
@@ -384,11 +384,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	// generation id and any error envelope OpenRouter returned in lieu of
 	// choices, which is otherwise discarded here.
 	if len(chatResp.Choices) == 0 {
-		const maxLoggedBody = 2048
-		snippet := strings.TrimSpace(string(body))
-		if len(snippet) > maxLoggedBody {
-			snippet = snippet[:maxLoggedBody]
-		}
+		snippet := diagnosticBody(body)
 		trace.SpanFromContext(ctx).SetAttributes(
 			attr.OpenRouterResponseBody(snippet),
 			attr.GenAIResponseIDKey.String(chatResp.ID),
@@ -474,7 +470,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
 		o11y.NoLogDefer(func() error { return httpResp.Body.Close() })
-		return nil, classifyHTTPError(httpResp.StatusCode, body)
+		return nil, classifyHTTPError(ctx, httpResp.StatusCode, body)
 	}
 
 	// Wrap the response body with SSE parser that accumulates metadata

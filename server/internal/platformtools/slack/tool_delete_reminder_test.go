@@ -40,6 +40,7 @@ func TestDeleteReminderTool_CallsRemindersDeleteWithUserToken(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"reminder":"Rm12345678","team_id":"T999"}`), io.Discard)
 	require.NoError(t, err)
 	require.Equal(t, "/reminders.delete", requestPath)

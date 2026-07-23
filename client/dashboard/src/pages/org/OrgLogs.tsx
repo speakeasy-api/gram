@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
@@ -8,7 +9,6 @@ import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Eye, FileText, LogIn, Monitor, Unplug } from "lucide-react";
 import { useState } from "react";
-import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { handleAPIError } from "@/lib/errors";
@@ -29,13 +29,15 @@ export default function OrgLogs(): JSX.Element {
 }
 
 function OrgLogsInner() {
-  const { data: featuresData, isLoading: featuresLoading } =
-    useProductFeatures();
+  const { data: featuresData } = useProductFeatures();
   const [logsEnabled, setLogsEnabled] = useState<boolean | null>(null);
   const [toolIoLogsEnabled, setToolIoLogsEnabled] = useState<boolean | null>(
     null,
   );
   const [sessionCaptureEnabled, setSessionCaptureEnabled] = useState<
+    boolean | null
+  >(null);
+  const [skillCaptureMetadataOnly, setSkillCaptureMetadataOnly] = useState<
     boolean | null
   >(null);
   const [hooksBrowserLoginEnabled, setHooksBrowserLoginEnabled] = useState<
@@ -51,6 +53,8 @@ function OrgLogsInner() {
     toolIoLogsEnabled ?? featuresData?.toolIoLogsEnabled ?? false;
   const effectiveSessionCaptureEnabled =
     sessionCaptureEnabled ?? featuresData?.sessionCaptureEnabled ?? false;
+  const effectiveSkillCaptureMetadataOnly =
+    skillCaptureMetadataOnly ?? featuresData?.skillCaptureMetadataOnly ?? false;
   const effectiveHooksBrowserLoginEnabled =
     hooksBrowserLoginEnabled ?? featuresData?.hooksBrowserLoginEnabled ?? false;
   const effectiveHooksFailOpenEnabled =
@@ -67,6 +71,8 @@ function OrgLogsInner() {
           setToolIoLogsEnabled(enabled);
         } else if (featureName === FeatureName.SessionCapture) {
           setSessionCaptureEnabled(enabled);
+        } else if (featureName === FeatureName.SkillCaptureMetadataOnly) {
+          setSkillCaptureMetadataOnly(enabled);
         } else if (featureName === FeatureName.HooksBrowserLogin) {
           setHooksBrowserLoginEnabled(enabled);
         } else if (featureName === FeatureName.HooksFailOpen) {
@@ -126,6 +132,17 @@ function OrgLogsInner() {
     });
   };
 
+  const handleSetSkillCaptureMetadataOnly = (enabled: boolean) => {
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.SkillCaptureMetadataOnly,
+          enabled,
+        },
+      },
+    });
+  };
+
   const handleSetHooksBrowserLogin = (enabled: boolean) => {
     setLogsFeature({
       request: {
@@ -158,6 +175,7 @@ function OrgLogsInner() {
         enabled, tool calls and traces are recorded for debugging and analytics.
         These power the insights and logs page on the platform.
       </Type>
+      <LogDataRetentionBanner />
       <div className="border-border bg-card rounded-lg border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
@@ -175,7 +193,7 @@ function OrgLogsInner() {
                 Record tool call traces and telemetry data
               </Type>
             </Stack>
-            {!featuresLoading && (
+            {featuresData && (
               <RequireScope scope="org:admin" level="component">
                 <Switch
                   checked={effectiveLogsEnabled}
@@ -188,6 +206,45 @@ function OrgLogsInner() {
           </Stack>
 
           <div className="border-border border-t" />
+
+          {featuresData?.skillsEnabled && (
+            <>
+              <Stack
+                direction="horizontal"
+                justify="space-between"
+                align="center"
+              >
+                <Stack gap={1}>
+                  <Stack direction="horizontal" align="center" gap={2}>
+                    <FileText className="text-muted-foreground h-4 w-4" />
+                    <Type variant="body" className="font-medium">
+                      Upload Skill Content
+                    </Type>
+                  </Stack>
+                  <Type
+                    variant="body"
+                    className="text-muted-foreground mr-8 ml-6 max-w-4xl text-sm"
+                  >
+                    When enabled, Gram uploads SKILL.md content at activation so
+                    captured skills can be inspected. When disabled, Gram only
+                    receives skill names, source details, hashes, users, and
+                    hostnames at activation.
+                  </Type>
+                </Stack>
+                <RequireScope scope="org:admin" level="component">
+                  <Switch
+                    checked={!effectiveSkillCaptureMetadataOnly}
+                    onCheckedChange={(enabled) =>
+                      handleSetSkillCaptureMetadataOnly(!enabled)
+                    }
+                    disabled={isMutatingLogs}
+                    aria-label="Upload skill content"
+                  />
+                </RequireScope>
+              </Stack>
+              <div className="border-border border-t" />
+            </>
+          )}
 
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
@@ -205,7 +262,7 @@ function OrgLogsInner() {
                 logs.
               </Type>
             </Stack>
-            {!featuresLoading && (
+            {featuresData && (
               <RequireScope scope="org:admin" level="component">
                 <Switch
                   checked={effectiveToolIoLogsEnabled}
@@ -236,7 +293,7 @@ function OrgLogsInner() {
                 Agent Sessions tab.
               </Type>
             </Stack>
-            {!featuresLoading && (
+            {featuresData && (
               <RequireScope scope="org:admin" level="component">
                 <Switch
                   checked={effectiveSessionCaptureEnabled}
@@ -268,7 +325,7 @@ function OrgLogsInner() {
                 recovery. Invalid credentials always block.
               </Type>
             </Stack>
-            {!featuresLoading && (
+            {featuresData && (
               <RequireScope scope="org:admin" level="component">
                 <Switch
                   checked={effectiveHooksFailOpenEnabled}
@@ -299,7 +356,7 @@ function OrgLogsInner() {
                 organization key or explicitly configured credentials.
               </Type>
             </Stack>
-            {!featuresLoading && (
+            {featuresData && (
               <RequireScope scope="org:admin" level="component">
                 <Switch
                   checked={effectiveHooksBrowserLoginEnabled}
@@ -311,10 +368,6 @@ function OrgLogsInner() {
             )}
           </Stack>
         </Stack>
-      </div>
-
-      <div className="mt-8">
-        <AIIntegrationsSection />
       </div>
 
       <div className="mt-8">

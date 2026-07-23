@@ -1,4 +1,5 @@
 import { invalidateAllSkill } from "@gram/client/react-query/skill.js";
+import { invalidateAllSkillDistributions } from "@gram/client/react-query/skillDistributions.js";
 import { invalidateAllSkillVersions } from "@gram/client/react-query/skillVersions.js";
 import { invalidateAllSkills } from "@gram/client/react-query/skills.js";
 import type { QueryClient } from "@tanstack/react-query";
@@ -9,6 +10,7 @@ export async function invalidateSkillQueries(
   await Promise.all([
     invalidateAllSkills(queryClient),
     invalidateAllSkill(queryClient),
+    invalidateAllSkillDistributions(queryClient),
     invalidateAllSkillVersions(queryClient),
   ]);
 }

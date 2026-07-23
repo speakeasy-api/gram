@@ -1240,8 +1240,8 @@ func TestServeMCP_PublicRemoteBackend_GetForwardsToUpstream(t *testing.T) {
 // the full request → proxy → interceptor pipeline for a tools/call.
 // Previous tests only fire initialize through the proxy; this one
 // catches regressions in the per-tool interceptor chain wired up by
-// [Service.buildProxy] (counter, usage limits, shadowmcp validate-strip,
-// usage tracking response) for public visibility.
+// [Service.buildProxy] (counter, usage limits, toolset-id strip, usage
+// tracking response) for public visibility.
 func TestServeMCP_PublicRemoteBackend_ToolsCallForwardsToUpstream(t *testing.T) {
 	t.Parallel()
 

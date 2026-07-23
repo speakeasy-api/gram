@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -464,8 +465,8 @@ func (s *Service) replaceShadowMCPInventoryURLBypassGrants(
 	}
 	for _, policy := range shadowMCPPolicies {
 		policyID := policy.ID.String()
-		if err := revokeShadowMCPInventoryURLBypassGrant(ctx, db, organizationID, policyID, canonicalURL); err != nil {
-			return nil, err
+		if err := policybypass.RevokePolicyURL(ctx, db, organizationID, policyID, canonicalURL); err != nil {
+			return nil, fmt.Errorf("revoke shadow mcp inventory policy bypass grant: %w", err)
 		}
 	}
 
@@ -480,16 +481,7 @@ func (s *Service) replaceShadowMCPInventoryURLBypassGrants(
 			return nil, err
 		}
 		audiences[policyID] = principals
-		if err := authz.GrantResourceToPrincipals(ctx, db, authz.ResourceGrant{
-			Resource: authz.Resource{
-				OrganizationID: organizationID,
-				Scope:          authz.ScopeRiskPolicyBypass,
-				ResourceID:     policyID,
-			},
-			Effect:     authz.PolicyEffectAllow,
-			Principals: principals,
-			Selector:   shadowMCPInventoryURLBypassSelector(policyID, canonicalURL),
-		}); err != nil {
+		if err := policybypass.ReplacePolicyURLAudience(ctx, db, organizationID, policyID, canonicalURL, principals); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "grant shadow mcp inventory policy bypass").LogError(ctx, s.logger)
 		}
 	}
@@ -525,48 +517,6 @@ func (s *Service) shadowMCPInventoryProjectPolicies(ctx context.Context, db risk
 		policies = append(policies, row)
 	}
 	return policies, nil
-}
-
-func revokeShadowMCPInventoryURLBypassGrant(ctx context.Context, db riskrepo.DBTX, organizationID string, policyID string, canonicalURL string) error {
-	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     policyID,
-	})
-	if err != nil {
-		return fmt.Errorf("list shadow mcp inventory bypass grants: %w", err)
-	}
-
-	principals := make([]urn.Principal, 0, len(grants))
-	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
-		if !maps.Equal(grant.Selector, shadowMCPInventoryURLBypassSelector(policyID, canonicalURL)) {
-			continue
-		}
-		principal, err := urn.ParsePrincipal(grant.PrincipalUrn)
-		if err != nil {
-			return fmt.Errorf("parse shadow mcp inventory bypass principal: %w", err)
-		}
-		principals = append(principals, principal)
-	}
-	if len(principals) == 0 {
-		return nil
-	}
-	if err := authz.RevokeResourceFromPrincipals(ctx, db, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: organizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     policyID,
-		},
-		Effect:     authz.PolicyEffectAllow,
-		Principals: principals,
-		Selector:   shadowMCPInventoryURLBypassSelector(policyID, canonicalURL),
-	}); err != nil {
-		return fmt.Errorf("revoke shadow mcp inventory policy bypass grant: %w", err)
-	}
-	return nil
 }
 
 func shadowMCPInventoryPolicyAudiencePrincipals(ctx context.Context, db riskrepo.DBTX, organizationID string, policyID string) ([]urn.Principal, error) {
@@ -770,12 +720,6 @@ func shadowMCPInventoryPrincipalStrings(principals []urn.Principal) []string {
 	}
 	slices.Sort(values)
 	return slices.Compact(values)
-}
-
-func shadowMCPInventoryURLBypassSelector(policyID string, canonicalURL string) authz.Selector {
-	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
-	selector[authz.SelectorKeyServerURL] = canonicalURL
-	return selector
 }
 
 func (s *Service) shadowMCPInventoryURLState(ctx context.Context, organizationID string, projectID uuid.UUID, canonicalURL string) (*gen.ShadowMCPInventoryURLState, error) {

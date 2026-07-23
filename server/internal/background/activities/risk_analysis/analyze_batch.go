@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
+	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
@@ -49,12 +50,15 @@ type AnalyzeBatch struct {
 	flags                  feature.Provider
 	presidioPub            gcp.Publisher[*riskv1.PresidioAnalysis]
 	gitleaksPub            gcp.Publisher[*riskv1.GitleaksAnalysis]
+	promptInjectionPub     gcp.Publisher[*riskv1.PromptInjectionAnalysis]
+	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	customRuleScanner      *customruleanalyzer.Scanner
 	cliDestructiveScanner  *clidestructive.Scanner
 	destructiveToolScanner *destructivetool.Scanner
 	celEng                 *celenv.Engine
 	builtinPresets         *presetlib.Library
+	recommended            RecommendedSet
 }
 
 func NewAnalyzeBatch(
@@ -65,16 +69,18 @@ func NewAnalyzeBatch(
 	piiScanner PIIScanner,
 	promptInjectionScanner *promptinjection.Scanner,
 	shadowMCPClient *shadowmcp.Client,
-	mcpMatchLookup MCPMatchLookup,
+	mcpProvenanceLookup MCPProvenanceLookup,
 	judge promptpolicy.Evaluator,
 	flags feature.Provider,
 	presidioPub gcp.Publisher[*riskv1.PresidioAnalysis],
 	gitleaksPub gcp.Publisher[*riskv1.GitleaksAnalysis],
+	promptInjectionPub gcp.Publisher[*riskv1.PromptInjectionAnalysis],
+	promptPolicyPub gcp.Publisher[*riskv1.PromptPolicyAnalysis],
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
 	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
-) *AnalyzeBatch {
+) (*AnalyzeBatch, error) {
 	logger = logger.With(attr.SlogComponent("risk-analysis-dispatcher"))
 
 	if piiScanner == nil {
@@ -83,27 +89,36 @@ func NewAnalyzeBatch(
 	if promptInjectionScanner == nil {
 		promptInjectionScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 	}
+	recommended, err := CompileRecommended(celEng)
+	if err != nil {
+		return nil, fmt.Errorf("compile recommended scopes version %d: %w", recommendedscopes.Version, err)
+	}
+
+	metrics := newRiskMetrics(meterProvider, logger)
 
 	return &AnalyzeBatch{
 		logger:                 logger,
 		tracer:                 tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
-		metrics:                newRiskMetrics(meterProvider, logger),
+		metrics:                metrics,
 		db:                     db,
 		gitleaksScanner:        gitleaks.NewScanner(),
 		piiScanner:             piiScanner,
 		promptInjectionScanner: promptInjectionScanner,
-		shadowMCPScanner:       shadowmcpscan.NewScanner(logger, shadowMCPClient, mcpMatchLookup),
+		shadowMCPScanner:       shadowmcpscan.NewScanner(logger, shadowMCPClient, shadowMCPClient, mcpProvenanceLookup, metrics),
 		judge:                  judge,
 		flags:                  flags,
 		presidioPub:            presidioPub,
 		gitleaksPub:            gitleaksPub,
+		promptInjectionPub:     promptInjectionPub,
+		promptPolicyPub:        promptPolicyPub,
 		customRulesPub:         customRulesPub,
 		customRuleScanner:      customRuleScanner,
 		cliDestructiveScanner:  clidestructive.NewScanner(),
 		destructiveToolScanner: destructivetool.NewScanner(shadowMCPClient),
 		celEng:                 celEng,
 		builtinPresets:         builtinPresets,
-	}
+		recommended:            recommended,
+	}, nil
 }
 
 type AnalyzeBatchArgs struct {
@@ -129,6 +144,10 @@ type AnalyzeBatchArgs struct {
 	// false positives. Do derives it from the refetched policy's analyzer_config
 	// (defaulting ON), so it is not a caller input.
 	BuiltinPresetsEnabled bool
+	// DetectionScopes are the policy's specified per-category detection scopes,
+	// each replacing its registry recommendation. Do derives it from the
+	// refetched policy's analyzer_config, so it is not a caller input.
+	DetectionScopes []DetectionScopeConfig
 }
 
 type AnalyzeBatchResult struct {
@@ -183,6 +202,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	args.PresidioScoreThreshold = PresidioScoreThresholdFromConfig(policy.AnalyzerConfig)
 	args.ApprovedEmailDomains = ApprovedEmailDomainsFromConfig(policy.AnalyzerConfig)
 	args.BuiltinPresetsEnabled = BuiltinPresetsEnabledFromConfig(policy.AnalyzerConfig)
+	args.DetectionScopes = DetectionScopesFromConfig(policy.AnalyzerConfig)
 
 	rows, err := a.fetchContent(ctx, args)
 	if err != nil {
@@ -228,13 +248,19 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		if err != nil {
 			return nil, fmt.Errorf("compile policy scope: %w", err)
 		}
-		outOfPolicyScope := a.scopeExclusions(ctx, scope, messages)
+		specified, err := CompileDetectionScopes(a.celEng, args.DetectionScopes)
+		if err != nil {
+			return nil, fmt.Errorf("compile detection scopes: %w", err)
+		}
+		recommendedEnabled := a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagRiskRecommendedScopes)
+		categoryScopes := NewCategoryScopes(scope, a.recommended, specified, recommendedEnabled, a.metrics)
+		masks := categoryScopes.Masks(ctx, messages)
 
 		switch policy.PolicyType {
 		case PolicyTypePromptBased:
-			findings = a.scanPromptPolicy(ctx, args, policy, messages, outOfPolicyScope)
+			findings = a.scanPromptPolicy(ctx, args, policy, messages, masks)
 		default:
-			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, outOfPolicyScope)
+			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, masks)
 			if err != nil {
 				return nil, err
 			}

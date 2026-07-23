@@ -30,7 +30,7 @@ const MODE_COPY: Record<
     submit: "Add skill",
   },
   edit: {
-    title: "Edit skill",
+    title: "Edit SKILL.md",
     description: "Saving records your changes as a new immutable version.",
     submit: "Save new version",
   },
@@ -41,12 +41,14 @@ export function SkillManifestDialog({
   open,
   onOpenChange,
   skillId,
+  derivedFromVersionId,
   initialContent = "",
 }: {
   mode: SkillManifestDialogMode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   skillId?: string;
+  derivedFromVersionId?: string;
   initialContent?: string;
 }): JSX.Element {
   const copy = MODE_COPY[mode];
@@ -63,6 +65,7 @@ export function SkillManifestDialog({
   );
   const [continuing, setContinuing] = useState(false);
   const [persistedSkillId, setPersistedSkillId] = useState<string | null>(null);
+  const [parentVersionId, setParentVersionId] = useState(derivedFromVersionId);
   const [noOpContent, setNoOpContent] = useState<string | null>(null);
   const [readingFile, setReadingFile] = useState(false);
   const fileReadSeq = useRef(0);
@@ -81,6 +84,7 @@ export function SkillManifestDialog({
     setSavedResult(null);
     setContinuing(false);
     setPersistedSkillId(null);
+    setParentVersionId(derivedFromVersionId);
     setNoOpContent(null);
     fileReadSeq.current += 1;
     setReadingFile(false);
@@ -114,13 +118,18 @@ export function SkillManifestDialog({
         }
         result = await addVersionMutation.mutateAsync({
           request: {
-            addSkillVersionRequestBody: { id: versionSkillId, content },
+            addSkillVersionRequestBody: {
+              id: versionSkillId,
+              content,
+              derivedFromVersionId: parentVersionId,
+            },
           },
         });
       }
 
       if (!result.createdVersion) {
         setPersistedSkillId(result.skill.id);
+        setParentVersionId(result.version.id);
         setNoOpContent(content);
         setSavedResult(result);
         return;
@@ -129,6 +138,7 @@ export function SkillManifestDialog({
       await invalidateSkillQueries(queryClient);
       if (!result.version.specValid) {
         setPersistedSkillId(result.skill.id);
+        setParentVersionId(result.version.id);
         setNoOpContent(null);
         setSavedResult(result);
         return;

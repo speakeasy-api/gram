@@ -104,16 +104,25 @@ func TestManagedAssistantDeploymentsToolsExposesCatalog(t *testing.T) {
 func TestManagedAssistantSkillsToolsExposesCatalog(t *testing.T) {
 	t.Parallel()
 
-	tools := ManagedAssistantSkillsTools(nil)
+	tools := ManagedAssistantSkillsTools(nil, nil)
 	require.ElementsMatch(t, []string{
 		"platform_list_skills",
 		"platform_get_skill",
 		"platform_list_skill_versions",
 		"platform_list_skill_distributions",
+		"platform_skill_insights",
 	}, toolNames(tools))
 	for _, tool := range tools {
 		require.Equal(t, "skills", tool.RequiredFeature)
 	}
+}
+
+func TestAssistantSkillToolsExposesCatalog(t *testing.T) {
+	t.Parallel()
+
+	tools := AssistantSkillTools(testenv.NewLogger(t), nil)
+	require.Equal(t, []string{platformtools.ToolNameSkillsLoad}, toolNames(tools))
+	require.Empty(t, tools[0].RequiredFeature)
 }
 
 func toolNames(tools []platformtools.ExternalTool) []string {
@@ -167,6 +176,7 @@ func TestService_ExecuteTool_RequiresProjectAuthContext(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "project auth context")
@@ -194,6 +204,7 @@ func TestService_ExecuteTool_RejectsMismatchedProjectAuthContext(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, nil)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "does not match project")
