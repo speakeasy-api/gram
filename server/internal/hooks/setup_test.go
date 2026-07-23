@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -160,14 +159,6 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager:  sessionManager,
 		efficacySignals: efficacySignals,
 	}
-}
-
-func authOrganizationID(t *testing.T, ctx context.Context) string {
-	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	return authCtx.ActiveOrganizationID
 }
 
 func seedHookUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string, email string) {
