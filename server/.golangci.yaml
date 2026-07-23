@@ -457,6 +457,9 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
+        # Generic function: wrapcheck reports the sig with its type params, so
+        # match up to the bracket instead of the open paren.
+        - "github.com/speakeasy-api/gram/server/internal/authz.FilterSlice["
         - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/chatsessions.Manager).Authorize("

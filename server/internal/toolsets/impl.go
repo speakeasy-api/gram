@@ -309,30 +309,11 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets").LogError(ctx, s.logger)
 	}
 
-	toolsetIDs := make([]string, len(toolsets))
-	for i, ts := range toolsets {
-		toolsetIDs[i] = ts.ID.String()
-	}
-
-	checks := make([]authz.Check, len(toolsetIDs))
-	for i, id := range toolsetIDs {
-		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, id, authCtx.ProjectID.String())
-	}
-	allowedIDs, err := s.authz.Filter(ctx, checks)
+	allowedToolsets, err := authz.FilterSlice(ctx, s.authz, toolsets, func(toolset repo.Toolset) authz.Check {
+		return authz.MCPCheck(authz.ScopeMCPRead, toolset.ID.String(), authCtx.ProjectID.String())
+	})
 	if err != nil {
 		return nil, err
-	}
-
-	allowedSet := make(map[string]struct{}, len(allowedIDs))
-	for _, id := range allowedIDs {
-		allowedSet[id] = struct{}{}
-	}
-
-	allowedToolsets := make([]repo.Toolset, 0, len(allowedIDs))
-	for _, toolset := range toolsets {
-		if _, ok := allowedSet[toolset.ID.String()]; ok {
-			allowedToolsets = append(allowedToolsets, toolset)
-		}
 	}
 
 	result, err := mv.DescribeToolsetEntries(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), allowedToolsets)
@@ -360,7 +341,16 @@ func (s *Service) ListToolsetsForOrg(ctx context.Context, payload *gen.ListTools
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets for organization").LogError(ctx, s.logger)
 	}
 
-	result, err := mv.GetToolsetsSummary(ctx, s.logger, s.db, toolsets)
+	// Rows span every project in the org, so each check carries its own row's
+	// project id rather than the (possibly absent) auth context project.
+	allowedToolsets, err := authz.FilterSlice(ctx, s.authz, toolsets, func(toolset repo.ListToolsetsWithVersionsByOrganizationRow) authz.Check {
+		return authz.MCPCheck(authz.ScopeMCPRead, toolset.ID.String(), toolset.ProjectID.String())
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := mv.GetToolsetsSummary(ctx, s.logger, s.db, allowedToolsets)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset summaries").LogError(ctx, s.logger)
 	}

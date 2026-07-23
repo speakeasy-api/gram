@@ -213,10 +213,6 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
-	}
-
 	idProvided := payload.ID != nil && *payload.ID != ""
 	slugProvided := payload.Slug != nil && *payload.Slug != ""
 	if !idProvided && !slugProvided {
@@ -252,7 +248,23 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
 	}
 
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+
 	return mv.BuildMcpServerView(server), nil
+}
+
+// grantResourceID returns the id that mcp-scope grants name for a server row.
+// Toolset-backed rows are granted (and serve-time enforced) against the
+// backing toolset id — the RBAC picker's Server.id invariant
+// (client/dashboard/src/pages/access/serverMerge.ts) and the toolset serving
+// path both use it. Remote- and tunneled-backed rows use the mcp_servers id.
+func grantResourceID(server repo.McpServer) string {
+	if server.ToolsetID.Valid {
+		return server.ToolsetID.UUID.String()
+	}
+	return server.ID.String()
 }
 
 func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFiltersPayload) (*types.ListToolFiltersResult, error) {
@@ -354,10 +366,6 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	remoteMcpServerID, err := conv.PtrToNullUUID(payload.RemoteMcpServerID)
@@ -386,7 +394,14 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").LogError(ctx, logger)
 	}
 
-	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(servers)}, nil
+	allowedServers, err := authz.FilterSlice(ctx, s.authz, servers, func(server repo.McpServer) authz.Check {
+		return authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server), authCtx.ProjectID.String())
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(allowedServers)}, nil
 }
 
 func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcpServersForOrgPayload) (*gen.ListMcpServersResult, error) {
@@ -406,7 +421,16 @@ func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcp
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for organization").LogError(ctx, logger)
 	}
 
-	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(servers)}, nil
+	// Rows span every project in the org, so each check carries its own row's
+	// project id rather than the (possibly absent) auth context project.
+	allowedServers, err := authz.FilterSlice(ctx, s.authz, servers, func(server repo.McpServer) authz.Check {
+		return authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server), server.ProjectID.String())
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(allowedServers)}, nil
 }
 
 func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpServerPayload) (*types.McpServer, error) {
