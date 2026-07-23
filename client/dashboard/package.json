@@ -21,7 +21,7 @@
     "knip": "knip"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "^1.0.52",
+    "@ai-sdk/mcp": "^2.0.14",
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "^0.14.26",
     "@assistant-ui/react-ai-sdk": "~1.3.40",
