@@ -1244,7 +1244,8 @@ CREATE TABLE IF NOT EXISTS chat_analysis_scores (
     judge_prompt_version LowCardinality(String) COMMENT 'Judge prompt version.',
 
     CONSTRAINT score_valid CHECK isFinite(score),
-    CONSTRAINT judge_valid CHECK judge != ''
+    CONSTRAINT judge_valid CHECK judge != '',
+    CONSTRAINT detail_valid CHECK isValidJSON(detail)
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMM(created_at)
 ORDER BY (organization_id, project_id, judge, created_at, id)
