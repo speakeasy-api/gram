@@ -33,6 +33,7 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
+import { Metrics } from "@gram/client/models/components/searchuserspayload.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -1116,6 +1117,11 @@ async function fetchEmployeeUsage(
           limit: 1000,
           sort: "desc",
           userType: "internal",
+          // The enrollment list renders only identity, last activity, token
+          // totals, and linked accounts (the latter from Postgres enrichment),
+          // so request the lean aggregation and skip the per-tool/hook-source
+          // map aggregates that dominate the ClickHouse query cost (DNO-618).
+          metrics: Metrics.Basic,
         },
       }),
     );

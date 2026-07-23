@@ -1458,6 +1458,13 @@ type SearchUsersPayload struct {
 	Sort string
 	// Number of items to return (1-1000)
 	Limit int
+	// Level of usage metrics to compute per user. 'full' (default) returns the
+	// complete set: chat counts, cost, cache tokens, tool-call totals, and the
+	// per-tool and per-hook-source breakdowns. 'basic' computes only user
+	// identity, first/last activity, and input/output token sums — a much cheaper
+	// aggregation for large orgs (e.g. the employee enrollment list, which renders
+	// only those fields). The remaining fields are zero/empty under 'basic'.
+	Metrics string
 }
 
 // SearchUsersResult is the result type of the telemetry service searchUsers

@@ -2490,7 +2490,25 @@ type SearchUsersParams struct {
 	SortOrder        string // "asc" or "desc"
 	Cursor           string // user identifier to paginate from
 	Limit            int
+	// MetricsDetail selects how many aggregates to compute: one of the
+	// MetricsDetail* constants. MetricsDetailBasic projects only identity,
+	// first/last activity, input/output token sums, and raw_user_ids — skipping
+	// the per-tool/hook-source map aggregations and chat/cost/cache/avg columns,
+	// which are the bulk of the per-row work. Any other value (including the empty
+	// zero value) computes the complete set, so full is the safe default. The
+	// employee enrollment list uses MetricsDetailBasic because it renders only the
+	// lean fields.
+	MetricsDetail string
 }
+
+// MetricsDetail levels for SearchUsersParams.MetricsDetail. The string values
+// match the telemetry.searchUsers `metrics` API enum. Basic is the only value
+// that trims the projection; every other value (including "") means full, so a
+// caller can never silently lose aggregates by omitting it.
+const (
+	MetricsDetailFull  = "full"
+	MetricsDetailBasic = "basic"
+)
 
 // SearchUsers retrieves aggregated usage metrics grouped by user identifier.
 //
@@ -2506,50 +2524,65 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	}
 	groupExpr := searchUsersGroupExpr(arg.GroupBy)
 
-	tc := toolCallExprsFor(arg.EventSource)
-
-	sb := sq.Select(
-		groupExpr+" AS user_id",
+	// Lean columns rendered by every caller (identity, activity window, tokens) and
+	// the raw ids the account-enrichment join needs. The employee enrollment list
+	// consumes only these, so "basic" stops here — see MetricsDetail.
+	columns := []string{
+		groupExpr + " AS user_id",
 		"anyIf(user_email, user_email != '') AS user_email",
 
 		// Activity timestamps
 		"min(time_unix_nano) AS first_seen_unix_nano",
 		"max(time_unix_nano) AS last_seen_unix_nano",
 
-		// Chat metrics
-		"uniqExactIf(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats",
-		"uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '') AS total_chat_requests",
-
 		// Token metrics (from any event with gen_ai usage data)
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
-		totalTokensExpr+" AS total_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
-		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
-		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
-		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
-
-		// Tool call metrics (path depends on event source — Gram MCP tools vs AI-coding hook tools)
-		"countIf("+tc.isCall+") AS total_tool_calls",
-		"countIf("+tc.isSuccess+") AS tool_call_success",
-		"countIf("+tc.isFailure+") AS tool_call_failure",
-
-		// Tool breakdowns (maps of tool URN or hook tool name -> count)
-		"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isCall+") AS tool_counts",
-		"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isSuccess+") AS tool_success_counts",
-		"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isFailure+") AS tool_failure_counts",
-
-		// Hook source breakdowns (maps of hook source -> count)
-		"sumMapIf(map(hook_source, toUInt64(1)), hook_source != '') AS hook_source_counts",
-
-		// Distinct account types observed (powers the employees personal-account indicator)
-		"groupUniqArrayIf(account_type, account_type != '') AS account_types",
 
 		// Raw user_id values folded into this summary. The group key is email-first,
 		// so callers joining against user_id-keyed stores (user_accounts, role
 		// assignments) need these to find the summary's underlying ids.
 		"groupUniqArrayIf(telemetry_logs.user_id, telemetry_logs.user_id != '') AS raw_user_ids",
-	).
+	}
+
+	// The heavy aggregates — per-tool and per-hook-source maps (sumMapIf), chat
+	// cardinality (uniqExactIf), and cost/cache/avg — dominate the per-row work.
+	// They are only computed for the full detail level; MetricsDetailBasic leaves
+	// the corresponding UserSummary fields zero/empty. Full is the safe default:
+	// only an explicit MetricsDetailBasic trims the projection.
+	if arg.MetricsDetail != MetricsDetailBasic {
+		tc := toolCallExprsFor(arg.EventSource)
+		columns = append(columns,
+			// Chat metrics
+			"uniqExactIf(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats",
+			"uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '') AS total_chat_requests",
+
+			// Remaining token/cost metrics
+			totalTokensExpr+" AS total_tokens",
+			"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
+			"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
+			"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
+			"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
+
+			// Tool call metrics (path depends on event source — Gram MCP tools vs AI-coding hook tools)
+			"countIf("+tc.isCall+") AS total_tool_calls",
+			"countIf("+tc.isSuccess+") AS tool_call_success",
+			"countIf("+tc.isFailure+") AS tool_call_failure",
+
+			// Tool breakdowns (maps of tool URN or hook tool name -> count)
+			"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isCall+") AS tool_counts",
+			"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isSuccess+") AS tool_success_counts",
+			"sumMapIf(map("+tc.key+", toUInt64(1)), "+tc.isFailure+") AS tool_failure_counts",
+
+			// Hook source breakdowns (maps of hook source -> count)
+			"sumMapIf(map(hook_source, toUInt64(1)), hook_source != '') AS hook_source_counts",
+
+			// Distinct account types observed (powers the employees personal-account indicator)
+			"groupUniqArrayIf(account_type, account_type != '') AS account_types",
+		)
+	}
+
+	sb := sq.Select(columns...).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).

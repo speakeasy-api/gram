@@ -74,6 +74,13 @@ type SearchUsersRequestBody struct {
 	Sort *string `form:"sort,omitempty" json:"sort,omitempty" xml:"sort,omitempty"`
 	// Number of items to return (1-1000)
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+	// Level of usage metrics to compute per user. 'full' (default) returns the
+	// complete set: chat counts, cost, cache tokens, tool-call totals, and the
+	// per-tool and per-hook-source breakdowns. 'basic' computes only user
+	// identity, first/last activity, and input/output token sums — a much cheaper
+	// aggregation for large orgs (e.g. the employee enrollment list, which renders
+	// only those fields). The remaining fields are zero/empty under 'basic'.
+	Metrics *string `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
 }
 
 // CaptureEventRequestBody is the type of the "telemetry" service
@@ -12062,6 +12069,9 @@ func NewSearchUsersPayload(body *SearchUsersRequestBody, apikeyToken *string, se
 	if body.Limit != nil {
 		v.Limit = *body.Limit
 	}
+	if body.Metrics != nil {
+		v.Metrics = *body.Metrics
+	}
 	v.Filter = unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(body.Filter)
 	if body.GroupBy == nil {
 		v.GroupBy = "employee"
@@ -12071,6 +12081,9 @@ func NewSearchUsersPayload(body *SearchUsersRequestBody, apikeyToken *string, se
 	}
 	if body.Limit == nil {
 		v.Limit = 50
+	}
+	if body.Metrics == nil {
+		v.Metrics = "full"
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -13020,6 +13033,11 @@ func ValidateSearchUsersRequestBody(body *SearchUsersRequestBody) (err error) {
 	if body.Limit != nil {
 		if *body.Limit > 1000 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1000, false))
+		}
+	}
+	if body.Metrics != nil {
+		if !(*body.Metrics == "full" || *body.Metrics == "basic") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.metrics", *body.Metrics, []any{"full", "basic"}))
 		}
 	}
 	return

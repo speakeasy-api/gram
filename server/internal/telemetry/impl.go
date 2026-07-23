@@ -378,6 +378,17 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 	return s.searchUsersByEmployee(ctx, payload)
 }
 
+// metricsDetailFromPayload maps the telemetry.searchUsers `metrics` API level to
+// the repo detail level. Only the explicit "basic" value trims the projection;
+// any other value (including the empty default) resolves to the full set, so a
+// caller can never silently drop aggregates — full is the safe default.
+func metricsDetailFromPayload(metrics string) string {
+	if metrics == repo.MetricsDetailBasic {
+		return repo.MetricsDetailBasic
+	}
+	return repo.MetricsDetailFull
+}
+
 func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.SearchUsersPayload) (*telem_gen.SearchUsersResult, error) {
 	// Filter is required by the Goa design, but direct callers (e.g. platform
 	// tools) bypass transport validation and may pass a nil filter. Normalize to
@@ -422,6 +433,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		SortOrder:        params.sortOrder,
 		Cursor:           params.cursor,
 		Limit:            params.limit + 1,
+		MetricsDetail:    metricsDetailFromPayload(payload.Metrics),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error searching users")
@@ -691,7 +703,8 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 			UserIDs:          filter.UserIds,
 			SortOrder:        "desc",
 			Cursor:           "",
-			Limit:            10001, // Upper bound; orgs rarely have >10k users
+			Limit:            10001,                  // Upper bound; orgs rarely have >10k users
+			MetricsDetail:    repo.MetricsDetailFull, // role aggregation sums cost/tokens across the full metric set
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error searching users for role aggregation")

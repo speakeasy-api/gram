@@ -26,6 +26,18 @@ export type SearchUsersPayloadGroupBy = ClosedEnum<
 >;
 
 /**
+ * Level of usage metrics to compute per user. 'full' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. 'basic' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under 'basic'.
+ */
+export const Metrics = {
+  Full: "full",
+  Basic: "basic",
+} as const;
+/**
+ * Level of usage metrics to compute per user. 'full' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. 'basic' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under 'basic'.
+ */
+export type Metrics = ClosedEnum<typeof Metrics>;
+
+/**
  * Sort order
  */
 export const SearchUsersPayloadSort = {
@@ -72,6 +84,10 @@ export type SearchUsersPayload = {
    */
   limit?: number | undefined;
   /**
+   * Level of usage metrics to compute per user. 'full' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. 'basic' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under 'basic'.
+   */
+  metrics?: Metrics | undefined;
+  /**
    * Sort order
    */
   sort?: SearchUsersPayloadSort | undefined;
@@ -85,6 +101,11 @@ export type SearchUsersPayload = {
 export const SearchUsersPayloadGroupBy$outboundSchema: z.ZodMiniEnum<
   typeof SearchUsersPayloadGroupBy
 > = z.enum(SearchUsersPayloadGroupBy);
+
+/** @internal */
+export const Metrics$outboundSchema: z.ZodMiniEnum<typeof Metrics> = z.enum(
+  Metrics,
+);
 
 /** @internal */
 export const SearchUsersPayloadSort$outboundSchema: z.ZodMiniEnum<
@@ -102,6 +123,7 @@ export type SearchUsersPayload$Outbound = {
   filter: SearchUsersFilter$Outbound;
   group_by: string;
   limit: number;
+  metrics: string;
   sort: string;
   user_type: string;
 };
@@ -116,6 +138,7 @@ export const SearchUsersPayload$outboundSchema: z.ZodMiniType<
     filter: SearchUsersFilter$outboundSchema,
     groupBy: z._default(SearchUsersPayloadGroupBy$outboundSchema, "employee"),
     limit: z._default(z.int(), 50),
+    metrics: z._default(Metrics$outboundSchema, "full"),
     sort: z._default(SearchUsersPayloadSort$outboundSchema, "desc"),
     userType: SearchUsersPayloadUserType$outboundSchema,
   }),
