@@ -1,4 +1,4 @@
-h1:OXKBBVJcb2W59EkeDYd+GSbQG7ZHK3jOB7fwNhiEr8s=
+h1:qUJclWcm87RGxeD9Fr8CSvmxL3laKyzL6A4dII1RQjQ=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -293,4 +293,4 @@ h1:OXKBBVJcb2W59EkeDYd+GSbQG7ZHK3jOB7fwNhiEr8s=
 20260722165701_add-skill-efficacy-pipeline.sql h1:SWL2LPA0fHEdRohT2mYWmJZJMvB6sAdm2/KZZn7OqsU=
 20260722220532_skill-efficacy-reservation-recovery.sql h1:iSc/QDP1ySptfvBBw0GnH7DKOeMx3bCG6YlrmbbzO4o=
 20260723011926_directory-users-lower-email-idx.sql h1:AiPMrCU0PlDY4Mfzy+W9uSboRpNyOzk2weYOZqviGbk=
-20260723011934_spend-rules.sql h1:MeSLvCGeticmA35lnPQ1erfQDnvDe+Dc7WG/q7owjaM=
+20260723020937_spend-rules.sql h1:9bPlnuwA9nA9DwshM+ZmZ3JjLiS7leMVUqJH4aikEHY=

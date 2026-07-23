@@ -19,11 +19,10 @@ CREATE TABLE "spend_rules" (
   "archived" boolean NOT NULL GENERATED ALWAYS AS (archived_at IS NOT NULL) STORED,
   "superseded_by" uuid NULL,
   PRIMARY KEY ("id"),
+  CONSTRAINT "spend_rules_organization_id_id_key" UNIQUE ("organization_id", "id"),
   CONSTRAINT "spend_rules_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "spend_rules_superseded_by_fkey" FOREIGN KEY ("superseded_by") REFERENCES "spend_rules" ("id") ON UPDATE NO ACTION ON DELETE SET NULL
+  CONSTRAINT "spend_rules_organization_id_superseded_by_fkey" FOREIGN KEY ("organization_id", "superseded_by") REFERENCES "spend_rules" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION
 );
--- Create index "spend_rules_organization_id_id_key" to table: "spend_rules"
-CREATE UNIQUE INDEX "spend_rules_organization_id_id_key" ON "spend_rules" ("organization_id", "id");
 -- Create index "spend_rules_organization_id_slug_live_key" to table: "spend_rules"
 CREATE UNIQUE INDEX "spend_rules_organization_id_slug_live_key" ON "spend_rules" ("organization_id", "slug") WHERE (archived IS FALSE);
 -- Create index "spend_rules_organization_id_slug_version_key" to table: "spend_rules"
