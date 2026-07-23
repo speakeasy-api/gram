@@ -323,6 +323,32 @@ type Chat struct {
 	Deleted          bool
 }
 
+type ChatAnalysisEvaluation struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ChatID         uuid.UUID
+	SessionID      string
+	Judge          string
+	ObservedAt     pgtype.Timestamptz
+	State          string
+	ReservedOn     pgtype.Date
+	Attempts       int32
+	LastError      pgtype.Text
+	ScoredAt       pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type ChatAnalysisSetting struct {
+	OrganizationID string
+	Judge          string
+	Enabled        bool
+	DailyCap       int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type ChatMessage struct {
 	ID                uuid.UUID
 	Seq               int64

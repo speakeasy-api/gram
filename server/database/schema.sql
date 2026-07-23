@@ -2012,6 +2012,74 @@ CREATE INDEX IF NOT EXISTS chat_messages_risk_analyzed_at_null_idx
 ON chat_messages (project_id, id)
 WHERE risk_analyzed_at IS NULL;
 
+-- Serves the chat analysis enqueue walk, which pages a project's chats on the
+-- immutable (created_at, id) keyset within a bounded lookback.
+CREATE INDEX IF NOT EXISTS chats_project_id_created_at_id_idx
+ON chats (project_id, created_at, id);
+
+-- Per-(organization, judge) switches and budgets for the chat analysis
+-- pipeline (the generalized session judges: work units and whatever comes
+-- after it). One row per judge rather than one column per judge, so enabling a
+-- new judge for an organization is an insert, never a migration. A judge with
+-- no row for an organization is off: the pipeline is opt-in per judge.
+CREATE TABLE IF NOT EXISTS chat_analysis_settings (
+  organization_id TEXT NOT NULL,
+  judge TEXT NOT NULL,
+  enabled boolean NOT NULL,
+  daily_cap integer NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_analysis_settings_pkey PRIMARY KEY (organization_id, judge),
+  CONSTRAINT chat_analysis_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT chat_analysis_settings_daily_cap_check CHECK (daily_cap >= 0)
+);
+
+-- Durable queue for the chat analysis pipeline: one row per (chat, judge)
+-- scoring unit. Mirrors skill_efficacy_evaluations — pending rows are reserved
+-- against the organization's daily budget, judged, and marked scored; verdicts
+-- live only in the ClickHouse chat_analysis_scores sink while this table holds
+-- pipeline state.
+CREATE TABLE IF NOT EXISTS chat_analysis_evaluations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  chat_id uuid NOT NULL,
+  -- Raw agent session id the chat was captured under, empty when the unit was
+  -- enqueued from the chats walk. Chat ids are a one-way hash of session ids,
+  -- so judges whose domain data is keyed by session id (skill efficacy) need
+  -- the original string carried on the unit.
+  session_id TEXT NOT NULL DEFAULT '',
+  judge TEXT NOT NULL,
+  observed_at timestamptz NOT NULL,
+
+  state TEXT NOT NULL DEFAULT 'pending',
+  reserved_on date,
+  attempts integer NOT NULL DEFAULT 0,
+  last_error TEXT,
+  scored_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_analysis_evaluations_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_analysis_evaluations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT chat_analysis_evaluations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT chat_analysis_evaluations_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS chat_analysis_evaluations_scoring_unit_key
+ON chat_analysis_evaluations (project_id, chat_id, judge);
+
+CREATE INDEX IF NOT EXISTS chat_analysis_evaluations_pending_idx
+ON chat_analysis_evaluations (project_id, observed_at DESC, id DESC)
+WHERE state = 'pending';
+
+CREATE INDEX IF NOT EXISTS chat_analysis_evaluations_org_spend_idx
+ON chat_analysis_evaluations (organization_id, reserved_on)
+WHERE state IN ('reserved', 'scored');
+
 CREATE TABLE IF NOT EXISTS chat_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
