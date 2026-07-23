@@ -1,0 +1,20 @@
+edition = "2024";
+
+package gram.telemetry.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1;telemetryv1";
+
+message Noop {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.telemetry.v1.LogRecord"
+    ack_deadline: {seconds: 60}
+    retention: {seconds: 86400}
+    retain_acked_messages: false
+    retry_policy: {
+      minimum_backoff: {seconds: 10}
+      maximum_backoff: {seconds: 600}
+    }
+  };
+}

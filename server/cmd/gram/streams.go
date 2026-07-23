@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/gen"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -49,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/streams"
+	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
@@ -406,10 +408,13 @@ func newStreamsCommand() *cli.Command {
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, pingLogLevel))
+
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
+
+				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
 				if enableCHRiskWrites {
 					mustReceiveBatch(

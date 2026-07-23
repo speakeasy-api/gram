@@ -18,6 +18,12 @@ const (
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
+	// FlagTelemetryLogsPubSubShadow gates the best-effort shadow dual-write of
+	// telemetry_logs rows onto Pub/Sub (gram-telemetry-v1-log-record). It is
+	// evaluated globally with a constant distinct ID, not per-org: this is an
+	// infrastructure cutover killswitch, not a product rollout.
+	FlagTelemetryLogsPubSubShadow Flag = "telemetry-logs-pubsub-shadow"
+
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
 	// PAYLOAD, not its boolean state: the flag carries a JSON payload

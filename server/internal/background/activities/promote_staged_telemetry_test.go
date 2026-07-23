@@ -3,15 +3,20 @@ package activities_test
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -65,7 +70,7 @@ func insertStagedRowForTest(t *testing.T, ctx context.Context, queries *telemetr
 	}}))
 }
 
-func newPromoteStagedTelemetryHarness(t *testing.T) (context.Context, *activities.PromoteStagedTelemetry, *telemetryrepo.Queries, cache.Cache) {
+func newPromoteStagedTelemetryHarness(t *testing.T, logPublisher *telemetry.LogPublisher) (context.Context, *activities.PromoteStagedTelemetry, *telemetryrepo.Queries, cache.Cache) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -75,7 +80,7 @@ func newPromoteStagedTelemetryHarness(t *testing.T) (context.Context, *activitie
 	require.NoError(t, err)
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 
-	act := activities.NewPromoteStagedTelemetry(testenv.NewLogger(t), chConn, cacheAdapter)
+	act := activities.NewPromoteStagedTelemetry(testenv.NewLogger(t), chConn, cacheAdapter, logPublisher)
 	return ctx, act, telemetryrepo.New(chConn), cacheAdapter
 }
 
@@ -98,7 +103,7 @@ func listPromotedLogs(t *testing.T, ctx context.Context, queries *telemetryrepo.
 func TestPromoteStagedTelemetry_RewritesWithTuple(t *testing.T) {
 	t.Parallel()
 
-	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t)
+	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	// The tuple is keyed by org, not project — the hooks key that writes it
@@ -164,7 +169,7 @@ func TestPromoteStagedTelemetry_RewritesWithTuple(t *testing.T) {
 func TestPromoteStagedTelemetry_IgnoresTupleFromAnotherOrg(t *testing.T) {
 	t.Parallel()
 
-	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t)
+	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	sessionID := "promo-session-cross-org"
@@ -208,7 +213,7 @@ func TestPromoteStagedTelemetry_IgnoresTupleFromAnotherOrg(t *testing.T) {
 func TestPromoteStagedTelemetry_ScopesTupleMemoizationByOrg(t *testing.T) {
 	t.Parallel()
 
-	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t)
+	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	orgID := "org-" + uuid.NewString()
@@ -274,7 +279,7 @@ func TestPromoteStagedTelemetry_ScopesTupleMemoizationByOrg(t *testing.T) {
 func TestPromoteStagedTelemetry_LeavesFreshRowsAwaitingTuple(t *testing.T) {
 	t.Parallel()
 
-	ctx, act, queries, _ := newPromoteStagedTelemetryHarness(t)
+	ctx, act, queries, _ := newPromoteStagedTelemetryHarness(t, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	sessionID := "promo-session-waiting"
@@ -311,7 +316,7 @@ func TestPromoteStagedTelemetry_LeavesFreshRowsAwaitingTuple(t *testing.T) {
 func TestPromoteStagedTelemetry_PromotesVerbatimAfterTimeout(t *testing.T) {
 	t.Parallel()
 
-	ctx, act, queries, _ := newPromoteStagedTelemetryHarness(t)
+	ctx, act, queries, _ := newPromoteStagedTelemetryHarness(t, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	sessionID := "promo-session-timeout"
@@ -351,7 +356,7 @@ func TestPromoteStagedTelemetry_PromotesVerbatimAfterTimeout(t *testing.T) {
 func TestPromoteStagedTelemetry_DefersRowClaimedByConcurrentAttempt(t *testing.T) {
 	t.Parallel()
 
-	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t)
+	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	orgID := "org-" + uuid.NewString()
@@ -426,7 +431,7 @@ func TestPromoteStagedTelemetry_DefersRowClaimedByConcurrentAttempt(t *testing.T
 func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 	t.Parallel()
 
-	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t)
+	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	orgID := "org-" + uuid.NewString()
@@ -528,4 +533,109 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 		assert.NoError(collect, err)
 		assert.Empty(collect, staged)
 	}, 3*time.Second, 50*time.Millisecond)
+}
+
+// TestPromoteStagedTelemetry_ShadowPublishesPromotedRows verifies the shadow
+// dual-write on the promotion path: rows this pass inserts into telemetry_logs
+// are published to Pub/Sub with their staged ids preserved, while rows the
+// dedup guard skips (already promoted by an earlier crashed pass) are not
+// re-published by the cleanup pass.
+func TestPromoteStagedTelemetry_ShadowPublishesPromotedRows(t *testing.T) {
+	t.Parallel()
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagTelemetryLogsPubSubShadow, telemetry.ShadowFlagDistinctID, true)
+
+	var publishedMu sync.Mutex
+	published := make([]string, 0, 2)
+	mockPub := gcp.NewMockPublisher[*telemetryv1.LogRecord]()
+	mockPub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Run(func(args mock.Arguments) {
+		if rec, ok := args.Get(1).(*telemetryv1.LogRecord); ok {
+			publishedMu.Lock()
+			published = append(published, rec.GetId())
+			publishedMu.Unlock()
+		}
+	})
+	logPublisher := telemetry.NewLogPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), mockPub, flags)
+
+	ctx, act, queries, cacheAdapter := newPromoteStagedTelemetryHarness(t, logPublisher)
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	orgID := "org-" + uuid.NewString()
+	sessionID := "promo-session-shadow"
+	promotedRowID := uuid.NewString()
+	dedupedRowID := uuid.NewString()
+	observed := time.Now().UTC().Add(-time.Minute)
+
+	insertStagedRowForTest(t, ctx, queries, stagedRowFixture{
+		id:        promotedRowID,
+		projectID: projectID,
+		orgID:     orgID,
+		sessionID: sessionID,
+		requestID: "req_shadow_promote_1",
+		observed:  observed,
+	})
+	insertStagedRowForTest(t, ctx, queries, stagedRowFixture{
+		id:        dedupedRowID,
+		projectID: projectID,
+		orgID:     orgID,
+		sessionID: sessionID,
+		requestID: "req_shadow_dedup_1",
+		observed:  observed,
+	})
+	for _, requestID := range []string{"req_shadow_promote_1", "req_shadow_dedup_1"} {
+		require.NoError(t, cacheAdapter.Set(ctx,
+			telemetry.MCPAttributionTupleKey(orgID, requestID),
+			telemetry.MCPAttributionTuple{Server: "workos-public", Tool: "whoami"},
+			telemetry.MCPAttributionTupleTTL,
+		))
+	}
+
+	// Simulate a crash between insert and delete for the second row: it
+	// already exists in telemetry_logs, so the pass takes the dedup path and
+	// must not publish it again.
+	gramChatID := sessionID
+	require.NoError(t, queries.InsertTelemetryLogs(ctx, []telemetryrepo.InsertTelemetryLogParams{{
+		ID:                   dedupedRowID,
+		TimeUnixNano:         observed.UnixNano(),
+		ObservedTimeUnixNano: observed.UnixNano(),
+		SeverityText:         nil,
+		Body:                 "claude_code.api_request",
+		TraceID:              nil,
+		SpanID:               nil,
+		Attributes:           `{"event.name":"api_request","request_id":"req_shadow_dedup_1","mcp_server.name":"workos-public","mcp_tool.name":"whoami","gen_ai.conversation.id":"` + sessionID + `"}`,
+		ResourceAttributes:   "{}",
+		GramProjectID:        projectID.String(),
+		GramDeploymentID:     nil,
+		GramFunctionID:       nil,
+		GramURN:              "claude-code:otel:logs",
+		ServiceName:          "claude-code",
+		ServiceVersion:       nil,
+		GramChatID:           &gramChatID,
+	}}))
+
+	// Drain the async insert queue so both staged rows and the pre-inserted
+	// telemetry_logs row are deterministically visible to the pass — no
+	// polling needed.
+	testenv.FlushClickHouseAsyncInserts(t, chConn)
+
+	result, err := act.Do(ctx, activities.PromoteStagedTelemetryArgs{ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Promoted)
+	require.Equal(t, 1, result.Rewritten)
+	require.Equal(t, 1, result.Deduped)
+	require.Equal(t, 0, result.Remaining)
+
+	// The staging delete is a lightweight delete, synchronous by default
+	// (lightweight_deletes_sync = 2), so the drain is visible immediately.
+	staged, err := queries.ListStagedTelemetryLogs(ctx, projectID.String())
+	require.NoError(t, err)
+	require.Empty(t, staged)
+
+	publishedMu.Lock()
+	defer publishedMu.Unlock()
+	require.Equal(t, []string{promotedRowID}, published,
+		"exactly the promoted row publishes, with its staged id; the deduped row does not")
 }

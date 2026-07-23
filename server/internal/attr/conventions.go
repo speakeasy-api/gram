@@ -397,6 +397,10 @@ const (
 	RetryAttemptKey = attribute.Key("retry.attempt")
 	RetryWaitKey    = attribute.Key("retry.wait")
 
+	TelemetryPublishFailedCountKey = attribute.Key("gram.telemetry.publish_failed_count")
+	TelemetryCHOperationKey        = attribute.Key("gram.telemetry.ch.operation")
+	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
+
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
 	GenAIOperationNameKey         = semconv.GenAIOperationNameKey
@@ -625,6 +629,18 @@ func SlogHookServerNameOverrideID(v string) slog.Attr {
 func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
 
 func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool(v) }
+
+func SlogTelemetryPublishFailedCount(v int) slog.Attr {
+	return slog.Int(string(TelemetryPublishFailedCountKey), v)
+}
+
+func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
+
+func TelemetryCHRowCount(v int) attribute.KeyValue { return TelemetryCHRowCountKey.Int(v) }
+
+func SlogTelemetryCHRowCount(v int) slog.Attr {
+	return slog.Int(string(TelemetryCHRowCountKey), v)
+}
 
 func HookEvent(v string) attribute.KeyValue { return HookEventKey.String(v) }
 func SlogHookEvent(v string) slog.Attr      { return slog.String(string(HookEventKey), v) }

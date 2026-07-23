@@ -144,7 +144,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
 	sessionCaptureEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 
-	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter))
+	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	telemService := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
