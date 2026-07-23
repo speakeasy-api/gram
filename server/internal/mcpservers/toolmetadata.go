@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -26,15 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-// pgCardinalityViolation is raised by ON CONFLICT DO UPDATE when one statement
-// would touch the same conflict target twice, which is how a tool name repeated
-// within a single batch payload surfaces.
-const pgCardinalityViolation = "21000"
-
-// pgUniqueViolation is raised by the strictly additive insert when a tool in
-// the payload already holds a live stored entry.
-const pgUniqueViolation = "23505"
 
 // toolMetadataInput is the jsonb element shape the batch writes unpack with
 // jsonb_array_elements and ->> accessors. The json tags must track the key
@@ -180,7 +172,10 @@ func (s *Service) SetToolMetadataBatch(ctx context.Context, payload *gen.SetTool
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgCardinalityViolation {
+		// A cardinality violation is how ON CONFLICT DO UPDATE surfaces a tool
+		// name repeated within a single batch payload: the statement would touch
+		// the same conflict target twice.
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.CardinalityViolation {
 			return nil, oops.E(oops.CodeBadRequest, err, "duplicate tool name in payload").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "set tool metadata").LogError(ctx, logger)
@@ -277,7 +272,9 @@ func (s *Service) AddToolMetadataBatch(ctx context.Context, payload *gen.AddTool
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
+		// A unique violation is how the strictly additive insert surfaces a tool
+		// in the payload that already holds a live stored entry.
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			// The statement aborted this transaction, so the lookup that names
 			// the offending tools runs on a fresh one.
 			names := s.storedToolNames(ctx, serverID, *authCtx.ProjectID, seen)
