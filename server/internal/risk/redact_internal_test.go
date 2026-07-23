@@ -86,6 +86,17 @@ func TestRedactMatch_AWSAccessKeyIDPassesThrough(t *testing.T) {
 	require.Equal(t, id, got, "an AWS access key id must pass through unredacted")
 }
 
+// The id carve-out is scoped to the gitleaks source: another source reusing the
+// access-key-id rule id must NOT bypass redaction.
+func TestRedactMatch_AccessKeyIDCarveOutIsSourceScoped(t *testing.T) {
+	t.Parallel()
+
+	match := "AKIAIOSFODNN7EXAMPLE"
+	got := redactMatch("custom", gitleaks.AccessKeyIDRuleID, &match, "org-x")
+	require.Regexp(t, `^<redacted len=\d+ sha=[0-9a-f]{8}>$`, got,
+		"a non-gitleaks finding with this rule id must still be redacted")
+}
+
 func TestRedactMatch_AWSSecretAndTokenStayRedacted(t *testing.T) {
 	t.Parallel()
 

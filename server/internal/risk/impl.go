@@ -1440,7 +1440,10 @@ func redactMatch(source, ruleID string, match *string, orgID string) string {
 	if source == shadowmcp.SourceShadowMCP || source == ra.SourceAccountIdentity {
 		return *match
 	}
-	if ruleID == gitleaks.AccessKeyIDRuleID {
+	// Scoped to the gitleaks source so only the built-in aws-access-token rule
+	// gets the carve-out; another source reusing this rule id must not bypass
+	// redaction if its match is a secret.
+	if source == gitleaks.Source && ruleID == gitleaks.AccessKeyIDRuleID {
 		return *match
 	}
 	return RedactMatchAll(*match, orgID)
