@@ -866,6 +866,30 @@ func TestGenerateObservabilityPluginsIncludeBootstrapLayout(t *testing.T) {
 	require.NotContains(t, files, "cursor-plugins/"+CursorObservabilitySlug(cfg)+"/hooks/bootstrap.ps1")
 }
 
+func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		OrgID:       "org_123",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "opencode")
+	require.NoError(t, err)
+
+	shim := string(files["plugin/agenthooks.ts"])
+	require.NotEmpty(t, shim)
+	// Pinned binaries only recognize serve mode with the sentinel leading the
+	// argv; --config is position-independent. See opencodeObservabilityShim.
+	require.Contains(t, shim, `["agenthooks", "serve", "--provider=opencode", "--config=" + join(ROOT, "speakeasy.json")]`)
+	require.NotContains(t, shim, cfg.HooksAPIKey)
+
+	require.NotEmpty(t, files["hooks/bootstrap.sh"])
+	require.NotEmpty(t, files["hooks/bootstrap.ps1"])
+	require.Contains(t, string(files["speakeasy.json"]), cfg.HooksAPIKey)
+}
+
 // Claude only invokes events listed in hooks.json. The Claude() handler in
 // server/internal/hooks/claude_hooks.go records PostToolUseFailure,
 // so dropping it from the registered events would silently lose all tool
@@ -1412,7 +1436,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "cursor", "codex"} {
+	for _, platform := range []string{"claude", "cursor", "codex", "opencode"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {

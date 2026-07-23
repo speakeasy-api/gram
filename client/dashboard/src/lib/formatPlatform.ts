@@ -14,6 +14,7 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   "claude-cowork": "Claude Cowork",
   cursor: "Cursor",
   codex: "Codex",
+  opencode: "opencode",
   copilot: "Copilot",
   "github-copilot": "Copilot",
   gemini: "Gemini",
