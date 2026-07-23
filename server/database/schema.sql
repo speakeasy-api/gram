@@ -4548,17 +4548,23 @@ CREATE TABLE IF NOT EXISTS spend_rules (
   superseded_by uuid,
 
   CONSTRAINT spend_rules_pkey PRIMARY KEY (id),
+  -- Tenancy-pinning key: the superseded_by FK below and spend_rule_events
+  -- composite-FK (organization_id, id) here so neither can ever reference a
+  -- rule owned by another organization. A table-level constraint (not a
+  -- CREATE UNIQUE INDEX) because the self-referential FK must resolve inline;
+  -- the table is created in one migration so there is no online-index concern.
+  CONSTRAINT spend_rules_organization_id_id_key UNIQUE (organization_id, id),
   CONSTRAINT spend_rules_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT spend_rules_superseded_by_fkey FOREIGN KEY (superseded_by) REFERENCES spend_rules (id) ON DELETE SET NULL
+  -- Composite so the successor reference is pinned to the same organization —
+  -- a UUID-only FK would let a row point at another org's rule. No delete
+  -- action: rule rows are never hard-deleted individually (append-only,
+  -- archive-only), and the only delete path — the organization cascade —
+  -- removes referencer and referenced in one statement, which the
+  -- end-of-statement NO ACTION check accepts. ON DELETE SET NULL is not an
+  -- option here: on a composite key it would null organization_id (NOT NULL),
+  -- and Postgres 15's `SET NULL (column list)` form is not modeled by Atlas.
+  CONSTRAINT spend_rules_organization_id_superseded_by_fkey FOREIGN KEY (organization_id, superseded_by) REFERENCES spend_rules (organization_id, id)
 );
-
--- Tenancy-pinning key: spend_rule_events composite-FKs (organization_id, id)
--- here so an event can never reference a rule owned by another organization.
--- Non-partial, so it also backs the ON DELETE CASCADE from
--- organization_metadata (the RI cascade trigger scans without an
--- `archived IS FALSE` predicate and so cannot use a partial index).
-CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_id_key
-ON spend_rules (organization_id, id);
 
 -- URNs are unique because every (slug, version) pair maps to exactly one row.
 CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_slug_version_key
@@ -4570,8 +4576,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS spend_rules_organization_id_slug_live_key
 ON spend_rules (organization_id, slug)
 WHERE archived IS FALSE;
 
--- Backs the self-referential superseded_by foreign key; without it every rule
--- row delete (organization cascade) scans the table for referencing rows.
+-- Backs the self-referential (organization_id, superseded_by) foreign key's
+-- referencing side; without it every rule row delete (organization cascade)
+-- scans the table for referencing rows. superseded_by alone is selective
+-- enough — no need to widen it to the full key.
 CREATE INDEX IF NOT EXISTS spend_rules_superseded_by_idx
 ON spend_rules (superseded_by);
 
