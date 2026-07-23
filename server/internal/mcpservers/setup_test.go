@@ -53,6 +53,7 @@ type testInstance struct {
 	service        *mcpservers.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	dispositions   *mcpservers.ToolDispositionCache
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -78,12 +79,15 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, false)
+	dispositions := mcpservers.NewToolDispositionCache(logger, conn, cache.NewRedisCacheAdapter(redisClient))
+
+	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, dispositions, false)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		dispositions:   dispositions,
 	}
 }
 
