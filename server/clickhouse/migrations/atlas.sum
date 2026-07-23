@@ -1,4 +1,4 @@
-h1:5FI2RarPfBTmjY/alpIk3SFs7A8UjY12sJ79wLMcnBs=
+h1:fBcx+ZXVEHZFW+IHBRwsggGLo1wGLxkdkpVUWXR1sfo=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -77,3 +77,4 @@ h1:5FI2RarPfBTmjY/alpIk3SFs7A8UjY12sJ79wLMcnBs=
 20260722201111_codex-otel-usage-in-summaries.sql h1:CS/6Yk5eG8zEkTl4WuI3oFkQ4BB57AgXEeAItHqFX6w=
 20260722214542_add-skill-efficacy-scores.sql h1:ZBV/Z/teZpG1yLXOaCZrYzLcbyJjC8DipLNdEWtmdZY=
 20260722214543_add-skill-session-versions.sql h1:YTsETiKhwFaTlF15KfubebEJEv800tIOIBalMwxfUug=
+20260723012015_add-spend-rule-usage-summaries.sql h1:Us9S+qQrGc5viCocGNW026lXSYeJi4kJghaDTftjABI=

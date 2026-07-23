@@ -785,21 +785,26 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS spend_rule_usage_summaries_mv TO spend_ru
 WITH
     -- Keep these predicates aligned with attribute_metrics_summaries_mv's cost
     -- source rows so spend controls reconcile with the cost dashboard.
+    -- Claude provenance is anchored on the OTEL log stream URN stamped at
+    -- ingest, mirroring is_claude_otel_row in attribute_metrics_summaries_mv:
+    -- service.name, body, and log attributes are writer-controlled, so
+    -- without the URN guard a Claude-formatted row arriving through any other
+    -- path would count toward enforcement but not the dashboard, warning or
+    -- blocking users on inflated spend.
     (
-        chat_id != ''
+        gram_urn = 'claude-code:otel:logs'
+        AND chat_id != ''
         AND toString(attributes.prompt.id) != ''
         AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
-        AND (
-            service_name = 'claude-code'
-            OR toString(resource_attributes.service.name) = 'claude-code'
-            OR startsWith(body, 'claude_code.')
-        )
     ) AS is_claude_api_request,
-    -- Mirror attribute_metrics_summaries_mv's is_agent_usage_row exactly: only
-    -- Codex/Cursor usage-metric rows count. Generic gen_ai chat rows
+    -- Only Codex/Cursor usage-metric rows count. Generic gen_ai chat rows
     -- (Gram-hosted completions and other sources) are deliberately excluded so
-    -- spend-rule enforcement reconciles with the cost dashboard, which counts
-    -- the same Claude/Codex/Cursor sources and nothing else.
+    -- spend-rule enforcement reconciles with the cost dashboard's agent
+    -- surfaces. claude_chat:usage / claude_chat:cost rows (Claude web/desktop
+    -- spend polled from the Anthropic Admin API), which
+    -- attribute_metrics_summaries_mv does count, are also deliberately
+    -- excluded for now: spend rules govern agent/CLI spend until a product
+    -- decision includes Claude Chat in enforcement budgets.
     (
         startsWith(gram_urn, 'codex:usage')
         OR startsWith(gram_urn, 'cursor:usage')
