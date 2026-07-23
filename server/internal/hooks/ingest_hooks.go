@@ -1039,9 +1039,17 @@ func canonicalToolCallsJSON(payload *gen.IngestPayload) ([]byte, error) {
 	return toolCallsJSON, nil
 }
 
+// canonicalChatToolCallID falls back to the shared per-(session, tool) key
+// when the sender supplied no per-call id, matching canonicalTraceID's
+// fallback: hashing the recorded id must reproduce the trace id, or the
+// shadow-MCP provenance lookup can never join the recorded call to its hook
+// log (DNO-604).
 func canonicalChatToolCallID(payload *gen.IngestPayload) string {
 	if id := canonicalToolCallID(payload); id != "" {
 		return id
+	}
+	if key := syntheticToolCallID(canonicalSessionID(payload), canonicalToolName(payload)); key != "" {
+		return key
 	}
 	if name := canonicalToolName(payload); name != "" {
 		return name
@@ -1152,6 +1160,11 @@ func canonicalToolCallID(payload *gen.IngestPayload) string {
 func canonicalTraceID(payload *gen.IngestPayload) string {
 	if id := canonicalToolCallID(payload); id != "" {
 		return hashToolCallIDToTraceID(id)
+	}
+	// Tool events without a per-call id trace per (session, tool), keeping the
+	// trace id derivable from the id canonicalChatToolCallID records (DNO-604).
+	if key := syntheticToolCallID(canonicalSessionID(payload), canonicalToolName(payload)); key != "" {
+		return hashToolCallIDToTraceID(key)
 	}
 	if sessionID := canonicalSessionID(payload); sessionID != "" {
 		return hashToolCallIDToTraceID(sessionID)

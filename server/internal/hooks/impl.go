@@ -260,6 +260,23 @@ func hashToolCallIDToTraceID(toolCallID string) string {
 	return hex.EncodeToString(hash[:16])
 }
 
+// syntheticToolCallID is the per-(session, tool) tool-call id for senders whose
+// hook payloads carry no per-call id (Codex, and canonical-API senders that
+// omit tool.id). The recorded chat tool_calls id and the telemetry trace id
+// must both derive from this one key: the shadow-MCP provenance lookup joins a
+// recorded id to its telemetry rows via
+// trace_id = hashToolCallIDToTraceID(recorded id) (see
+// internal/telemetry/repo/mcp_match_lookup.go), so deriving the two sides from
+// different values makes every call permanently unjoinable. Returns "" when
+// either part is missing — there is no meaningful per-tool key to share then,
+// and callers keep their previous fallback.
+func syntheticToolCallID(sessionID, toolName string) string {
+	if sessionID == "" || toolName == "" {
+		return ""
+	}
+	return sessionID + "|" + toolName
+}
+
 // generateSpanID generates a W3C-compliant span ID (16 hex characters)
 func generateSpanID() string {
 	b := make([]byte, 8)
