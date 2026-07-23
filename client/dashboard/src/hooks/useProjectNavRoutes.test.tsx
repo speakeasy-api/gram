@@ -110,13 +110,4 @@ describe("useProjectNavRoutes", () => {
     expect(testState.productFeatureOptions?.staleTime).toBe(30_000);
     expect(testState.productFeatureOptions?.throwOnError).toBe(false);
   });
-
-  it("allows organization admins to reach Settings", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
-    const settings = result.current.find(
-      (entry) => entry.route === routes.settings,
-    );
-
-    expect(settings?.scope).toEqual(["project:write", "org:admin"]);
-  });
 });

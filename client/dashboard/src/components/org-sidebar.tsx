@@ -17,6 +17,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useOrgRoutes } from "@/routes";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import * as React from "react";
 import { Link } from "react-router";
@@ -68,6 +69,10 @@ export function OrgSidebar({
   const orgRoutes = useOrgRoutes();
   const { isRbacEnabled, isLoading: rbacLoading } = useRBAC();
   const telemetry = useTelemetry();
+  const { data: productFeatures } = useProductFeatures(undefined, undefined, {
+    staleTime: 30_000,
+    throwOnError: false,
+  });
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -78,6 +83,7 @@ export function OrgSidebar({
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
+    orgRoutes.skills,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
   ].some((r) => r.active);
@@ -110,6 +116,7 @@ export function OrgSidebar({
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
+    orgRoutes.skills,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.auditLogs,
@@ -183,6 +190,12 @@ export function OrgSidebar({
                   item={orgRoutes.logs}
                   scope={["org:read", "org:admin"]}
                 />
+                {productFeatures?.skillsEnabled === true && (
+                  <ScopeGatedNavItem
+                    item={orgRoutes.skills}
+                    scope="org:admin"
+                  />
+                )}
                 <ScopeGatedNavItem
                   item={orgRoutes.aiIntegrations}
                   scope={["org:read", "org:admin"]}

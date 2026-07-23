@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-Add organization controls for skill efficacy sampling limits.
+Add organization Skills settings for content upload and efficacy sampling.

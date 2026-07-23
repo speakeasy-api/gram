@@ -12,7 +12,6 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 import { ModelProviderKeysSection } from "./ModelProviderKeysSection";
-import { SkillEfficacySettingsSection } from "./SkillEfficacySettingsSection";
 
 export default function Settings(): JSX.Element {
   const isAdmin = useIsPlatformAdmin();
@@ -25,25 +24,21 @@ export default function Settings(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope={["project:write", "org:admin"]} level="page">
-          <RequireScope scope="project:write" level="section">
-            <Heading variant="h4" className="mb-2">
-              Project Settings
-            </Heading>
-            <Type muted small className="mb-6">
-              Manage your project configuration and perform administrative
-              actions.
-            </Type>
-            <div className="mb-8">
-              <ModelProviderKeysSection />
-            </div>
+        <RequireScope scope="project:write" level="page">
+          <Heading variant="h4" className="mb-2">
+            Project Settings
+          </Heading>
+          <Type muted small className="mb-6">
+            Manage your project configuration and perform administrative
+            actions.
+          </Type>
+          <div className="mb-8">
+            <ModelProviderKeysSection />
+          </div>
 
-            <div>
-              <SettingsDangerZone />
-            </div>
-          </RequireScope>
-
-          <SkillEfficacySettingsSection />
+          <div>
+            <SettingsDangerZone />
+          </div>
 
           {isAdmin && (
             <div className="mt-8 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
