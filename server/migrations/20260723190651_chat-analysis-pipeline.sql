@@ -24,7 +24,7 @@ CREATE TABLE "chat_analysis_evaluations" (
   CONSTRAINT "chat_analysis_evaluations_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "chat_analysis_evaluations_org_spend_idx" to table: "chat_analysis_evaluations"
-CREATE INDEX "chat_analysis_evaluations_org_spend_idx" ON "chat_analysis_evaluations" ("organization_id", "reserved_on") WHERE (state = ANY (ARRAY['reserved'::text, 'scored'::text]));
+CREATE INDEX "chat_analysis_evaluations_org_spend_idx" ON "chat_analysis_evaluations" ("organization_id", "reserved_on") WHERE (reserved_on IS NOT NULL);
 -- Create index "chat_analysis_evaluations_pending_idx" to table: "chat_analysis_evaluations"
 CREATE INDEX "chat_analysis_evaluations_pending_idx" ON "chat_analysis_evaluations" ("project_id", "observed_at" DESC, "id" DESC) WHERE (state = 'pending'::text);
 -- Create index "chat_analysis_evaluations_scoring_unit_key" to table: "chat_analysis_evaluations"
