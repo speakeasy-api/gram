@@ -15,7 +15,7 @@ import {
 export function KindBadge({ kind }: { kind: DataEventKind }): JSX.Element {
   const KindIcon = kind === "metric" ? ChartLine : Activity;
   return (
-    <Badge size="sm" variant="neutral" background className="shrink-0">
+    <Badge variant="neutral" background className="shrink-0">
       <Badge.LeftIcon>
         <KindIcon className="h-3 w-3" />
       </Badge.LeftIcon>
@@ -34,7 +34,6 @@ export function SourceBadge({ event }: { event: DataEvent }): JSX.Element {
   return (
     <SimpleTooltip tooltip={`Observed via ${ORIGIN_LABELS[event.origin]}`}>
       <Badge
-        size="sm"
         variant={isUnknown ? "destructive" : "neutral"}
         background={isUnknown}
       >
@@ -88,7 +87,7 @@ export function QualityPill({
 }): JSX.Element {
   return (
     <SimpleTooltip tooltip={qualityTooltip(quality)}>
-      <Badge size="sm" variant={qualityVariant(quality)} background>
+      <Badge variant={qualityVariant(quality)} background>
         <Badge.Text>{qualityLabel(quality)}</Badge.Text>
       </Badge>
     </SimpleTooltip>
