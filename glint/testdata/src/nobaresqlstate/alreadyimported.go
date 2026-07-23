@@ -1,0 +1,13 @@
+package nobaresqlstate
+
+import (
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+// pgerrcodeAlreadyImported ensures the fix reuses the existing import rather
+// than adding a duplicate.
+func pgerrcodeAlreadyImported(pgErr *pgconn.PgError) bool {
+	_ = pgerrcode.UniqueViolation
+	return pgErr.Code == "23514" // want `compare pgconn\.PgError\.Code against a github\.com/jackc/pgerrcode constant instead of a bare SQLSTATE string literal`
+}
