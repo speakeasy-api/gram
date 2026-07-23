@@ -25,6 +25,11 @@ type Server struct {
 	ListMcpServersForOrg http.Handler
 	UpdateMcpServer      http.Handler
 	ListToolFilters      http.Handler
+	SetToolMetadataBatch http.Handler
+	AddToolMetadataBatch http.Handler
+	ListToolMetadata     http.Handler
+	SetToolMetadata      http.Handler
+	DeleteToolMetadata   http.Handler
 	DeleteMcpServer      http.Handler
 }
 
@@ -61,6 +66,11 @@ func New(
 			{"ListMcpServersForOrg", "GET", "/rpc/mcpServers.listForOrg"},
 			{"UpdateMcpServer", "POST", "/rpc/mcpServers.update"},
 			{"ListToolFilters", "GET", "/rpc/mcpServers.listToolFilters"},
+			{"SetToolMetadataBatch", "PUT", "/rpc/mcpServers.setToolMetadataBatch"},
+			{"AddToolMetadataBatch", "POST", "/rpc/mcpServers.addToolMetadataBatch"},
+			{"ListToolMetadata", "GET", "/rpc/mcpServers.listToolMetadata"},
+			{"SetToolMetadata", "PUT", "/rpc/mcpServers.setToolMetadata"},
+			{"DeleteToolMetadata", "DELETE", "/rpc/mcpServers.deleteToolMetadata"},
 			{"DeleteMcpServer", "DELETE", "/rpc/mcpServers.delete"},
 		},
 		CreateMcpServer:      NewCreateMcpServerHandler(e.CreateMcpServer, mux, decoder, encoder, errhandler, formatter),
@@ -69,6 +79,11 @@ func New(
 		ListMcpServersForOrg: NewListMcpServersForOrgHandler(e.ListMcpServersForOrg, mux, decoder, encoder, errhandler, formatter),
 		UpdateMcpServer:      NewUpdateMcpServerHandler(e.UpdateMcpServer, mux, decoder, encoder, errhandler, formatter),
 		ListToolFilters:      NewListToolFiltersHandler(e.ListToolFilters, mux, decoder, encoder, errhandler, formatter),
+		SetToolMetadataBatch: NewSetToolMetadataBatchHandler(e.SetToolMetadataBatch, mux, decoder, encoder, errhandler, formatter),
+		AddToolMetadataBatch: NewAddToolMetadataBatchHandler(e.AddToolMetadataBatch, mux, decoder, encoder, errhandler, formatter),
+		ListToolMetadata:     NewListToolMetadataHandler(e.ListToolMetadata, mux, decoder, encoder, errhandler, formatter),
+		SetToolMetadata:      NewSetToolMetadataHandler(e.SetToolMetadata, mux, decoder, encoder, errhandler, formatter),
+		DeleteToolMetadata:   NewDeleteToolMetadataHandler(e.DeleteToolMetadata, mux, decoder, encoder, errhandler, formatter),
 		DeleteMcpServer:      NewDeleteMcpServerHandler(e.DeleteMcpServer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -84,6 +99,11 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListMcpServersForOrg = m(s.ListMcpServersForOrg)
 	s.UpdateMcpServer = m(s.UpdateMcpServer)
 	s.ListToolFilters = m(s.ListToolFilters)
+	s.SetToolMetadataBatch = m(s.SetToolMetadataBatch)
+	s.AddToolMetadataBatch = m(s.AddToolMetadataBatch)
+	s.ListToolMetadata = m(s.ListToolMetadata)
+	s.SetToolMetadata = m(s.SetToolMetadata)
+	s.DeleteToolMetadata = m(s.DeleteToolMetadata)
 	s.DeleteMcpServer = m(s.DeleteMcpServer)
 }
 
@@ -98,6 +118,11 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListMcpServersForOrgHandler(mux, h.ListMcpServersForOrg)
 	MountUpdateMcpServerHandler(mux, h.UpdateMcpServer)
 	MountListToolFiltersHandler(mux, h.ListToolFilters)
+	MountSetToolMetadataBatchHandler(mux, h.SetToolMetadataBatch)
+	MountAddToolMetadataBatchHandler(mux, h.AddToolMetadataBatch)
+	MountListToolMetadataHandler(mux, h.ListToolMetadata)
+	MountSetToolMetadataHandler(mux, h.SetToolMetadata)
+	MountDeleteToolMetadataHandler(mux, h.DeleteToolMetadata)
 	MountDeleteMcpServerHandler(mux, h.DeleteMcpServer)
 }
 
@@ -401,6 +426,271 @@ func NewListToolFiltersHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listToolFilters")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpServers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetToolMetadataBatchHandler configures the mux to serve the
+// "mcpServers" service "setToolMetadataBatch" endpoint.
+func MountSetToolMetadataBatchHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("PUT", "/rpc/mcpServers.setToolMetadataBatch", f)
+}
+
+// NewSetToolMetadataBatchHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpServers" service "setToolMetadataBatch" endpoint.
+func NewSetToolMetadataBatchHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetToolMetadataBatchRequest(mux, decoder)
+		encodeResponse = EncodeSetToolMetadataBatchResponse(encoder)
+		encodeError    = EncodeSetToolMetadataBatchError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setToolMetadataBatch")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpServers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountAddToolMetadataBatchHandler configures the mux to serve the
+// "mcpServers" service "addToolMetadataBatch" endpoint.
+func MountAddToolMetadataBatchHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpServers.addToolMetadataBatch", f)
+}
+
+// NewAddToolMetadataBatchHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpServers" service "addToolMetadataBatch" endpoint.
+func NewAddToolMetadataBatchHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeAddToolMetadataBatchRequest(mux, decoder)
+		encodeResponse = EncodeAddToolMetadataBatchResponse(encoder)
+		encodeError    = EncodeAddToolMetadataBatchError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "addToolMetadataBatch")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpServers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListToolMetadataHandler configures the mux to serve the "mcpServers"
+// service "listToolMetadata" endpoint.
+func MountListToolMetadataHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/mcpServers.listToolMetadata", f)
+}
+
+// NewListToolMetadataHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpServers" service "listToolMetadata" endpoint.
+func NewListToolMetadataHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListToolMetadataRequest(mux, decoder)
+		encodeResponse = EncodeListToolMetadataResponse(encoder)
+		encodeError    = EncodeListToolMetadataError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listToolMetadata")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpServers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetToolMetadataHandler configures the mux to serve the "mcpServers"
+// service "setToolMetadata" endpoint.
+func MountSetToolMetadataHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("PUT", "/rpc/mcpServers.setToolMetadata", f)
+}
+
+// NewSetToolMetadataHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpServers" service "setToolMetadata" endpoint.
+func NewSetToolMetadataHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetToolMetadataRequest(mux, decoder)
+		encodeResponse = EncodeSetToolMetadataResponse(encoder)
+		encodeError    = EncodeSetToolMetadataError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setToolMetadata")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpServers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteToolMetadataHandler configures the mux to serve the "mcpServers"
+// service "deleteToolMetadata" endpoint.
+func MountDeleteToolMetadataHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/mcpServers.deleteToolMetadata", f)
+}
+
+// NewDeleteToolMetadataHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpServers" service "deleteToolMetadata" endpoint.
+func NewDeleteToolMetadataHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteToolMetadataRequest(mux, decoder)
+		encodeResponse = EncodeDeleteToolMetadataResponse(encoder)
+		encodeError    = EncodeDeleteToolMetadataError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteToolMetadata")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpServers")
 		payload, err := decodeRequest(r)
 		if err != nil {
