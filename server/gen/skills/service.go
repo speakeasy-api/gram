@@ -52,6 +52,15 @@ type Service interface {
 	// Revoke a skill's active distribution to exactly one plugin or assistant.
 	// Repeated requests are a no-op.
 	Undistribute(context.Context, *UndistributePayload) (err error)
+	// Create a public share link for a skill. Repeated requests return the
+	// existing active link, so each skill has at most one active share token.
+	Share(context.Context, *SharePayload) (res *types.SkillShareLink, err error)
+	// Revoke a skill's active public share link. Repeated requests are a no-op.
+	Unshare(context.Context, *UnsharePayload) (err error)
+	// Fetch the publicly shared view of a skill by its share token. This endpoint
+	// is unauthenticated and only ever exposes the skill name, display name,
+	// summary, and latest content.
+	GetShared(context.Context, *GetSharedPayload) (res *SharedSkill, err error)
 	// List active plugin skill distributions for the current project.
 	ListDistributions(context.Context, *ListDistributionsPayload) (res *ListSkillDistributionsResult, err error)
 }
@@ -76,7 +85,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"create", "addVersion", "update", "list", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "listDistributions"}
+var MethodNames = [14]string{"create", "addVersion", "update", "list", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -136,6 +145,12 @@ type GetPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// GetSharedPayload is the payload type of the skills service getShared method.
+type GetSharedPayload struct {
+	// The public share token.
+	Token string
 }
 
 // GetSkillResult is the result type of the skills service get method.
@@ -255,6 +270,35 @@ type RecordSkillResult struct {
 	CreatedVersion bool
 }
 
+// SharePayload is the payload type of the skills service share method.
+type SharePayload struct {
+	// The skill ID.
+	SkillID          string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// SharedSkill is the result type of the skills service getShared method.
+type SharedSkill struct {
+	// The normalized skill name.
+	Name string
+	// The user-facing skill name.
+	DisplayName string
+	// The optional skill summary.
+	Summary *string
+	// The latest SKILL.md content.
+	Content string
+	// When the shared content was last updated.
+	UpdatedAt string
+	// The Cache-Control response header.
+	CacheControl *string
+	// The X-Robots-Tag response header.
+	XRobotsTag *string
+	// The Referrer-Policy response header.
+	ReferrerPolicy *string
+}
+
 // Activation adoption metrics for a skill.
 type SkillAdoption struct {
 	// Start of the rolling adoption window.
@@ -327,6 +371,15 @@ type UnknownSkillActivation struct {
 	SeenAt string
 	// Why exact version attribution failed.
 	Reason string
+}
+
+// UnsharePayload is the payload type of the skills service unshare method.
+type UnsharePayload struct {
+	// The skill ID.
+	SkillID          string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // UpdatePayload is the payload type of the skills service update method.

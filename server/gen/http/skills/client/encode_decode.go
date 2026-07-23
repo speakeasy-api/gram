@@ -2421,6 +2421,723 @@ func DecodeUndistributeResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildShareRequest instantiates a HTTP request object with method and path
+// set to call the "skills" service "share" endpoint
+func (c *Client) BuildShareRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ShareSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "share", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeShareRequest returns an encoder for requests sent to the skills share
+// server.
+func EncodeShareRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.SharePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "share", "*skills.SharePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewShareRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "share", err)
+		}
+		return nil
+	}
+}
+
+// DecodeShareResponse returns a decoder for responses returned by the skills
+// share endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeShareResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeShareResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ShareResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			res := NewShareSkillShareLinkOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ShareUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ShareForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ShareBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ShareNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ShareConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ShareUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ShareInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ShareInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "share", err)
+				}
+				err = ValidateShareInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "share", err)
+				}
+				return nil, NewShareInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ShareUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "share", err)
+				}
+				err = ValidateShareUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "share", err)
+				}
+				return nil, NewShareUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "share", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ShareGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "share", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUnshareRequest instantiates a HTTP request object with method and path
+// set to call the "skills" service "unshare" endpoint
+func (c *Client) BuildUnshareRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UnshareSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "unshare", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUnshareRequest returns an encoder for requests sent to the skills
+// unshare server.
+func EncodeUnshareRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.UnsharePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "unshare", "*skills.UnsharePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUnshareRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "unshare", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUnshareResponse returns a decoder for responses returned by the skills
+// unshare endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeUnshareResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUnshareResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body UnshareUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UnshareForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UnshareBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UnshareNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UnshareConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UnshareUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UnshareInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UnshareInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+				}
+				err = ValidateUnshareInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "unshare", err)
+				}
+				return nil, NewUnshareInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UnshareUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+				}
+				err = ValidateUnshareUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "unshare", err)
+				}
+				return nil, NewUnshareUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "unshare", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UnshareGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "unshare", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetSharedRequest instantiates a HTTP request object with method and
+// path set to call the "skills" service "getShared" endpoint
+func (c *Client) BuildGetSharedRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetSharedSkillsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "getShared", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetSharedRequest returns an encoder for requests sent to the skills
+// getShared server.
+func EncodeGetSharedRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.GetSharedPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "getShared", "*skills.GetSharedPayload", v)
+		}
+		values := req.URL.Query()
+		values.Add("token", p.Token)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetSharedResponse returns a decoder for responses returned by the
+// skills getShared endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetSharedResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetSharedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetSharedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			var (
+				cacheControl   *string
+				xRobotsTag     *string
+				referrerPolicy *string
+			)
+			cacheControlRaw := resp.Header.Get("Cache-Control")
+			if cacheControlRaw != "" {
+				cacheControl = &cacheControlRaw
+			}
+			xRobotsTagRaw := resp.Header.Get("X-Robots-Tag")
+			if xRobotsTagRaw != "" {
+				xRobotsTag = &xRobotsTagRaw
+			}
+			referrerPolicyRaw := resp.Header.Get("Referrer-Policy")
+			if referrerPolicyRaw != "" {
+				referrerPolicy = &referrerPolicyRaw
+			}
+			res := NewGetSharedSharedSkillOK(&body, cacheControl, xRobotsTag, referrerPolicy)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetSharedUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetSharedForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetSharedBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetSharedNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetSharedConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetSharedUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetSharedInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetSharedInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+				}
+				err = ValidateGetSharedInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "getShared", err)
+				}
+				return nil, NewGetSharedInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetSharedUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+				}
+				err = ValidateGetSharedUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "getShared", err)
+				}
+				return nil, NewGetSharedUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "getShared", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetSharedGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "getShared", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListDistributionsRequest instantiates a HTTP request object with method
 // and path set to call the "skills" service "listDistributions" endpoint
 func (c *Client) BuildListDistributionsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2688,6 +3405,7 @@ func unmarshalSkillResponseBodyToTypesSkill(v *SkillResponseBody) *types.Skill {
 		FirstSeenAt:     v.FirstSeenAt,
 		LastSeenAt:      v.LastSeenAt,
 		SeenCount:       *v.SeenCount,
+		ShareToken:      v.ShareToken,
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,
 	}

@@ -54,6 +54,7 @@ const UNAUTHENTICATED_PATHS = [
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/blocks",
+  "/shared",
 ];
 
 const SLUG_EXEMPT_PATHS = [
@@ -62,6 +63,7 @@ const SLUG_EXEMPT_PATHS = [
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
   "/blocks",
+  "/shared",
 ];
 
 export const AuthProvider = ({
