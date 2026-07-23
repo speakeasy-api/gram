@@ -36,16 +36,41 @@ const prefixSecret = "secret."
 // initialization.
 var detectorInitMu sync.Mutex
 
-// newDetector creates a gitleaks detector using the default config, serialized
-// by detectorInitMu to avoid viper's init-time data race.
+// newDetector creates a gitleaks detector using the default config extended with
+// our AWS credential rules (see awsRules), serialized by detectorInitMu to avoid
+// viper's init-time data race.
+//
+// The AWS rules — in particular the composite aws-secret-access-key-paired rule
+// — carry keywords that must be present in the detector's aho-corasick prefilter,
+// which NewDetector builds once from Config.Keywords. So we inject the rules and
+// their keywords into the default config and construct the detector from the
+// extended config, rather than mutating a detector after the fact (which would
+// leave the prefilter stale and silently skip keyworded rules).
 func newDetector() (*detect.Detector, error) {
 	detectorInitMu.Lock()
 	defer detectorInitMu.Unlock()
-	detector, err := detect.NewDetectorDefaultConfig()
+	base, err := detect.NewDetectorDefaultConfig()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
 	}
-	return detector, nil
+
+	cfg := base.Config
+	for _, rule := range awsRules() {
+		// Validate explicitly: constructing config.Rule values in Go bypasses the
+		// TOML translation path that would normally call Validate, so a malformed
+		// rule (e.g. a SecretGroup past the regex's capture count) would otherwise
+		// fail silently as a rule that never matches. Surface it at startup.
+		if err := rule.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid AWS gitleaks rule %q: %w", rule.RuleID, err)
+		}
+		cfg.Rules[rule.RuleID] = rule
+		cfg.OrderedRules = append(cfg.OrderedRules, rule.RuleID)
+		for _, k := range rule.Keywords {
+			cfg.Keywords[strings.ToLower(k)] = struct{}{}
+		}
+	}
+
+	return detect.NewDetector(cfg), nil
 }
 
 // Scanner is the single gitleaks scanner used across the codebase — batch
