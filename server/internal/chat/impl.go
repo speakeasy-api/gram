@@ -547,10 +547,15 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Off-dashboard callers must match the chat owner unless they're the
-	// managed-assistant runtime (see ListChats).
+	// External-user and chat-session-token callers must match the chat owner.
+	// First-party project credentials read any session in their project: the
+	// dashboard session, the managed-assistant runtime, and project API keys,
+	// which the RBAC engine already treats as self-scoped (see
+	// authz.Engine.ShouldEnforce). An API key is authenticated the same way the
+	// dashboard is, so it is not an external end user to be owner-matched.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	if authCtx.SessionID == nil {
+	isAPIKeyCall := authCtx.APIKeyID != ""
+	if authCtx.SessionID == nil && !isAPIKeyCall {
 		if !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
 				return nil, oops.C(oops.CodeUnauthorized)

@@ -77,6 +77,7 @@ func (s *LoadChat) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		SessionToken:      nil,
 		ProjectSlugInput:  nil,
 		ChatSessionsToken: nil,
+		ApikeyToken:       nil,
 		ID:                input.ID,
 		Generation:        input.Generation,
 		Limit:             limit,
