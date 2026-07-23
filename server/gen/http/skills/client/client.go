@@ -53,6 +53,17 @@ type Client struct {
 	// undistribute endpoint.
 	UndistributeDoer goahttp.Doer
 
+	// Share Doer is the HTTP client used to make requests to the share endpoint.
+	ShareDoer goahttp.Doer
+
+	// Unshare Doer is the HTTP client used to make requests to the unshare
+	// endpoint.
+	UnshareDoer goahttp.Doer
+
+	// GetShared Doer is the HTTP client used to make requests to the getShared
+	// endpoint.
+	GetSharedDoer goahttp.Doer
+
 	// ListDistributions Doer is the HTTP client used to make requests to the
 	// listDistributions endpoint.
 	ListDistributionsDoer goahttp.Doer
@@ -87,6 +98,9 @@ func NewClient(
 		ArchiveDoer:                doer,
 		DistributeDoer:             doer,
 		UndistributeDoer:           doer,
+		ShareDoer:                  doer,
+		UnshareDoer:                doer,
+		GetSharedDoer:              doer,
 		ListDistributionsDoer:      doer,
 		RestoreResponseBody:        restoreBody,
 		scheme:                     scheme,
@@ -331,6 +345,78 @@ func (c *Client) Undistribute() goa.Endpoint {
 		resp, err := c.UndistributeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "undistribute", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Share returns an endpoint that makes HTTP requests to the skills service
+// share server.
+func (c *Client) Share() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeShareRequest(c.encoder)
+		decodeResponse = DecodeShareResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildShareRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ShareDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "share", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Unshare returns an endpoint that makes HTTP requests to the skills service
+// unshare server.
+func (c *Client) Unshare() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUnshareRequest(c.encoder)
+		decodeResponse = DecodeUnshareResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUnshareRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UnshareDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "unshare", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetShared returns an endpoint that makes HTTP requests to the skills service
+// getShared server.
+func (c *Client) GetShared() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSharedRequest(c.encoder)
+		decodeResponse = DecodeGetSharedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSharedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSharedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "getShared", err)
 		}
 		return decodeResponse(resp)
 	}

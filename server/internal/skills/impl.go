@@ -2,6 +2,8 @@ package skills
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -341,7 +343,7 @@ func (s *Service) recordVersion(
 		}
 
 		return &gen.RecordSkillResult{
-			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion),
+			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}),
 			Version:        matchedView,
 			CreatedSkill:   false,
 			CreatedVersion: false,
@@ -376,7 +378,7 @@ func (s *Service) recordVersion(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
 	}
-	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion)
+	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false})
 	versionView, err := mv.BuildSkillVersionView(version, derivedFromVersionID, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
 		FirstSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		LastSeenAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -644,7 +646,7 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		return nil, oops.E(oops.CodeUnexpected, err, "commit update skill transaction").LogError(ctx, logger)
 	}
 
-	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion), nil
+	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {
@@ -784,7 +786,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	return &gen.GetSkillResult{
-		Skill:          mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion),
+		Skill:          mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
 		LatestVersion:  latestView,
 		AssistantCount: details.AssistantCount,
 		Adoption: &gen.SkillAdoption{
@@ -1211,6 +1213,201 @@ func (s *Service) ListDistributions(ctx context.Context, payload *gen.ListDistri
 	}, nil
 }
 
+// newShareToken returns a 256-bit random token encoded with unpadded
+// URL-safe base64, which always yields 43 characters.
+func newShareToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate share token: %w", err)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func (s *Service) Share(ctx context.Context, payload *gen.SharePayload) (*types.SkillShareLink, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	if err != nil {
+		return nil, err
+	}
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "sharing a skill requires a user identity")
+	}
+
+	skillID, err := uuid.Parse(payload.SkillID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill id")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin share skill transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+
+	skill, err := queries.GetSkillForUpdate(ctx, repo.GetSkillForUpdateParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        skillID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, nil, "skill not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lock skill for sharing").LogError(ctx, logger)
+	}
+
+	existing, err := queries.GetActiveSkillShareLink(ctx, repo.GetActiveSkillShareLinkParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillID:   skill.ID,
+	})
+	if err == nil {
+		if err := dbtx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "commit existing skill share link transaction").LogError(ctx, logger)
+		}
+		return &types.SkillShareLink{
+			Token:     existing.Token,
+			CreatedAt: conv.FromPGTimestamptz(existing.CreatedAt),
+		}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, err, "get active skill share link").LogError(ctx, logger)
+	}
+
+	// The skill row is locked above, so only a global token collision can make
+	// the insert return no rows. One retry with a fresh token covers it.
+	var link repo.SkillShareLink
+	for attempt := range 2 {
+		token, tokenErr := newShareToken()
+		if tokenErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, tokenErr, "generate skill share token").LogError(ctx, logger)
+		}
+		link, err = queries.InsertSkillShareLink(ctx, repo.InsertSkillShareLinkParams{
+			Token:           token,
+			CreatedByUserID: authCtx.UserID,
+			ProjectID:       *authCtx.ProjectID,
+			SkillID:         skill.ID,
+		})
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, pgx.ErrNoRows) || attempt == 1 {
+			return nil, oops.E(oops.CodeUnexpected, err, "create skill share link").LogError(ctx, logger)
+		}
+	}
+
+	if err := s.audit.LogSkillShareLinkCreate(ctx, dbtx, audit.LogSkillShareLinkCreateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		SkillURN:         urn.NewSkill(skill.ID),
+		SkillName:        skill.Name,
+		SkillDisplayName: skill.DisplayName,
+		ShareLinkURN:     urn.NewSkillShareLink(link.ID),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log skill share link create").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit share skill transaction").LogError(ctx, logger)
+	}
+
+	return &types.SkillShareLink{
+		Token:     link.Token,
+		CreatedAt: conv.FromPGTimestamptz(link.CreatedAt),
+	}, nil
+}
+
+func (s *Service) Unshare(ctx context.Context, payload *gen.UnsharePayload) error {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	if err != nil {
+		return err
+	}
+	if authCtx.UserID == "" {
+		return oops.E(oops.CodeUnauthorized, nil, "unsharing a skill requires a user identity")
+	}
+
+	skillID, err := uuid.Parse(payload.SkillID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, nil, "invalid skill id")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin unshare skill transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+
+	skill, err := queries.GetSkillForUpdate(ctx, repo.GetSkillForUpdateParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        skillID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		if err := dbtx.Commit(ctx); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "commit missing skill unshare transaction").LogError(ctx, logger)
+		}
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock skill for unsharing").LogError(ctx, logger)
+	}
+
+	revoked, err := queries.RevokeSkillShareLink(ctx, repo.RevokeSkillShareLinkParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillID:   skill.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		if err := dbtx.Commit(ctx); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "commit no-op unshare skill transaction").LogError(ctx, logger)
+		}
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "revoke skill share link").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogSkillShareLinkRevoke(ctx, dbtx, audit.LogSkillShareLinkRevokeEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		SkillURN:         urn.NewSkill(skill.ID),
+		SkillName:        skill.Name,
+		SkillDisplayName: skill.DisplayName,
+		ShareLinkURN:     urn.NewSkillShareLink(revoked.ID),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log skill share link revoke").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit unshare skill transaction").LogError(ctx, logger)
+	}
+
+	return nil
+}
+
+func (s *Service) GetShared(ctx context.Context, payload *gen.GetSharedPayload) (*gen.SharedSkill, error) {
+	row, err := repo.New(s.db).GetSharedSkillByToken(ctx, payload.Token)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeNotFound, nil, "link not found or no longer available")
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get shared skill").LogError(ctx, s.logger)
+	}
+
+	return &gen.SharedSkill{
+		Name:           row.Name,
+		DisplayName:    row.DisplayName,
+		Summary:        conv.FromPGText[string](row.Summary),
+		Content:        row.Content,
+		UpdatedAt:      conv.FromPGTimestamptz(row.VersionCreatedAt),
+		CacheControl:   conv.PtrEmpty("private, max-age=300"),
+		XRobotsTag:     conv.PtrEmpty("noindex, nofollow"),
+		ReferrerPolicy: conv.PtrEmpty("no-referrer"),
+	}, nil
+}
+
 func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) error {
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
 	if err != nil {
@@ -1292,6 +1489,29 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 			DistributionSnapshotAfter:  buildSkillDistributionAuditSnapshot(revoked.SkillDistribution, revoked.ResolvedVersionID),
 		}); auditErr != nil {
 			return oops.E(oops.CodeUnexpected, auditErr, "log archived skill undistribution").LogError(ctx, logger)
+		}
+	}
+
+	revokedLink, err := queries.RevokeSkillShareLink(ctx, repo.RevokeSkillShareLinkParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillID:   skill.ID,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "revoke skill share link during archive").LogError(ctx, logger)
+	}
+	if err == nil {
+		if auditErr := s.audit.LogSkillShareLinkRevoke(ctx, dbtx, audit.LogSkillShareLinkRevokeEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			SkillURN:         urn.NewSkill(skill.ID),
+			SkillName:        skill.Name,
+			SkillDisplayName: skill.DisplayName,
+			ShareLinkURN:     urn.NewSkillShareLink(revokedLink.ID),
+		}); auditErr != nil {
+			return oops.E(oops.CodeUnexpected, auditErr, "log archived skill share link revoke").LogError(ctx, logger)
 		}
 	}
 
