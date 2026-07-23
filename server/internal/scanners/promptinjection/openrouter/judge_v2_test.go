@@ -3,16 +3,24 @@ package openrouter
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -185,6 +193,153 @@ func TestTypedFailOpenReasonsAreBounded(t *testing.T) {
 	require.Equal(t, "timeout", typedFailureReason(context.DeadlineExceeded, o11y.OutcomeTimeout))
 	require.Equal(t, "malformed", typedFailureReason(errMalformedVerdict, o11y.OutcomeFailure))
 	require.Equal(t, "error", typedFailureReason(context.Canceled, o11y.OutcomeFailure))
+}
+
+func TestTypedContextObservabilityIncludesSuppressedVerdict(t *testing.T) {
+	t.Parallel()
+
+	recorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() {
+		require.NoError(t, tracerProvider.Shutdown(context.Background()))
+		require.NoError(t, meterProvider.Shutdown(context.Background()))
+	})
+
+	client := &fakeCompletionClient{responder: func(string) string {
+		return `{"directive_kind":"instruction_override","target":"other_context","operational":true,"rationale":"archived directive"}`
+	}}
+	engine := New(testenv.NewLogger(t), tracerProvider, meterProvider, client, testJudgeLimiter(t))
+	in := req("both context fields", "prior only", "recent only", "no context")
+	in.Trajectories = []judgemessage.Trajectory{
+		{
+			PriorUserRequest:       strings.Repeat("界", judgemessage.MaxTrajectoryBodyRunes+1),
+			RecentUntrustedContent: "recent untrusted context",
+		},
+		{PriorUserRequest: "prior context", RecentUntrustedContent: ""},
+		{PriorUserRequest: "", RecentUntrustedContent: "recent context"},
+		{PriorUserRequest: "", RecentUntrustedContent: ""},
+	}
+
+	results, err := engine.Classify(t.Context(), in)
+	require.NoError(t, err)
+	require.Len(t, results, 4)
+	for _, result := range results {
+		require.Equal(t, promptinjection.LabelSafe, result.Label, "other-context verdicts do not emit a finding")
+	}
+
+	var eventSpan sdktrace.ReadOnlySpan
+	for _, span := range recorder.Ended() {
+		if span.Name() != "risk.prompt_injection.classify.typed_event" {
+			continue
+		}
+		for _, kv := range span.Attributes() {
+			if kv.Key == spanAttrPriorLen && kv.Value.AsInt64() == int64(judgemessage.MaxTrajectoryBodyRunes+1) {
+				eventSpan = span
+			}
+		}
+	}
+	require.NotNil(t, eventSpan)
+	spanAttrs := make(map[attribute.Key]attribute.Value)
+	for _, kv := range eventSpan.Attributes() {
+		spanAttrs[kv.Key] = kv.Value
+	}
+	require.True(t, spanAttrs[spanAttrContextPresent].AsBool())
+	require.True(t, spanAttrs[spanAttrPriorPresent].AsBool())
+	require.True(t, spanAttrs[spanAttrRecentPresent].AsBool())
+	require.True(t, spanAttrs[spanAttrPriorTruncated].AsBool())
+	require.False(t, spanAttrs[spanAttrRecentTruncated].AsBool())
+	require.Equal(t, int64(judgemessage.MaxTrajectoryBodyRunes+1), spanAttrs[spanAttrPriorLen].AsInt64())
+	require.Equal(t, int64(24), spanAttrs[spanAttrRecentLen].AsInt64())
+	require.Equal(t, DirectiveInstructionOverride, spanAttrs[spanAttrDirectiveKind].AsString())
+	require.Equal(t, TargetOtherContext, spanAttrs[spanAttrTarget].AsString())
+	require.True(t, spanAttrs[spanAttrOperational].AsBool())
+	require.False(t, spanAttrs[spanAttrFindingSurfaced].AsBool())
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+
+	coverage := counterPoints(t, collected, meterTypedContextCoverage)
+	require.Len(t, coverage, 4)
+	coverageStates := make(map[string]int64, 4)
+	for _, point := range coverage {
+		attrs := metricAttrs(point.Attributes)
+		key := fmt.Sprintf(
+			"%s/%t/%t",
+			attrs["coverage"].AsString(),
+			attrs["prior_user_request_present"].AsBool(),
+			attrs["recent_untrusted_content_present"].AsBool(),
+		)
+		coverageStates[key] = point.Value
+	}
+	require.Equal(t, map[string]int64{
+		"both/true/true":      1,
+		"either/true/false":   1,
+		"either/false/true":   1,
+		"neither/false/false": 1,
+	}, coverageStates)
+
+	fields := counterPoints(t, collected, meterTypedContextFields)
+	var priorTruncations int64
+	var recentTruncations int64
+	for _, point := range fields {
+		attrs := metricAttrs(point.Attributes)
+		if !attrs["truncated"].AsBool() {
+			continue
+		}
+		switch attrs["field"].AsString() {
+		case "prior_user_request":
+			priorTruncations += point.Value
+		case "recent_untrusted_content":
+			recentTruncations += point.Value
+		}
+	}
+	require.Equal(t, int64(1), priorTruncations)
+	require.Zero(t, recentTruncations)
+
+	verdicts := counterPoints(t, collected, meterTypedVerdicts)
+	require.Len(t, verdicts, 2)
+	var contextVerdicts int64
+	var contextAbsentVerdicts int64
+	for _, point := range verdicts {
+		attrs := metricAttrs(point.Attributes)
+		require.Equal(t, DirectiveInstructionOverride, attrs["directive_kind"].AsString())
+		require.Equal(t, TargetOtherContext, attrs["target"].AsString())
+		require.True(t, attrs["operational"].AsBool())
+		require.False(t, attrs["finding_surfaced"].AsBool())
+		if attrs["session_context_present"].AsBool() {
+			contextVerdicts += point.Value
+		} else {
+			contextAbsentVerdicts += point.Value
+		}
+	}
+	require.Equal(t, int64(3), contextVerdicts)
+	require.Equal(t, int64(1), contextAbsentVerdicts)
+}
+
+func counterPoints(t *testing.T, collected metricdata.ResourceMetrics, name string) []metricdata.DataPoint[int64] {
+	t.Helper()
+	for _, scope := range collected.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name != name {
+				continue
+			}
+			sum, ok := metric.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			return sum.DataPoints
+		}
+	}
+	require.Failf(t, "metric not found", "missing metric %q", name)
+	return nil
+}
+
+func metricAttrs(set attribute.Set) map[string]attribute.Value {
+	attrs := make(map[string]attribute.Value, set.Len())
+	for _, kv := range set.ToSlice() {
+		attrs[string(kv.Key)] = kv.Value
+	}
+	return attrs
 }
 
 func TestLegacyProfileOverrideRestoresBinaryRequest(t *testing.T) {

@@ -19,9 +19,9 @@ const (
 	// message renders. Oversized call lists keep head and tail calls, and set
 	// tool_calls_truncated.
 	maxPayloadRenderedToolCall = 50
-	// maxTrajectoryBodyLen bounds each contextual field independently. Context
-	// is supporting evidence, not a second copy of the full conversation.
-	maxTrajectoryBodyLen = 4000
+	// MaxTrajectoryBodyRunes bounds each contextual field independently.
+	// Context is supporting evidence, not a second copy of the full conversation.
+	MaxTrajectoryBodyRunes = 4000
 )
 
 type TrajectoryPayload struct {
@@ -32,8 +32,8 @@ type TrajectoryPayload struct {
 }
 
 func RenderTrajectory(t Trajectory) TrajectoryPayload {
-	priorUserRequest, priorUserRequestTruncated := truncatePayloadBody(t.PriorUserRequest, maxTrajectoryBodyLen)
-	recent, recentTruncated := truncatePayloadBody(t.RecentUntrustedContent, maxTrajectoryBodyLen)
+	priorUserRequest, priorUserRequestTruncated := truncatePayloadBody(t.PriorUserRequest, MaxTrajectoryBodyRunes)
+	recent, recentTruncated := truncatePayloadBody(t.RecentUntrustedContent, MaxTrajectoryBodyRunes)
 	return TrajectoryPayload{
 		PriorUserRequest:                priorUserRequest,
 		PriorUserRequestTruncated:       priorUserRequestTruncated,

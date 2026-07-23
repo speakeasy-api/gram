@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
@@ -62,6 +63,19 @@ const (
 	spanAttrReasoning = "pi_judge.reasoning"
 	spanAttrSamples   = "pi_judge.samples"
 	spanAttrContext   = "pi_judge.session_context_count"
+
+	spanAttrContextPresent  = "pi_judge.context_present"
+	spanAttrPriorPresent    = "pi_judge.prior_user_request_present"
+	spanAttrRecentPresent   = "pi_judge.recent_untrusted_content_present"
+	spanAttrPriorTruncated  = "pi_judge.prior_user_request_truncated"
+	spanAttrRecentTruncated = "pi_judge.recent_untrusted_content_truncated"
+	spanAttrPriorLen        = "pi_judge.prior_len"
+	spanAttrRecentLen       = "pi_judge.recent_len"
+	spanAttrDirectiveKind   = "pi_judge.directive_kind"
+	spanAttrTarget          = "pi_judge.target"
+	spanAttrOperational     = "pi_judge.operational"
+	spanAttrFindingSurfaced = "pi_judge.finding_surfaced"
+	spanAttrFailOpen        = "pi_judge.fail_open"
 )
 
 // LegacySystemPrompt is the rollback judge's system message. It remains
@@ -145,6 +159,16 @@ type typedConfig struct {
 	reasoning string
 	samples   int
 	schema    or.ChatJSONSchemaConfig
+}
+
+type trajectoryTelemetry struct {
+	contextPresent  bool
+	priorPresent    bool
+	recentPresent   bool
+	priorTruncated  bool
+	recentTruncated bool
+	priorLen        int
+	recentLen       int
 }
 
 // Config selects the process-wide judge profile and its model settings.
@@ -371,6 +395,32 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 // multi-sample overrides retain strict-majority aggregation for rollback
 // experiments, and every failed sample remains an explicit safe vote.
 func (c *Engine) classifyTyped(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) promptinjection.Result {
+	contextState := observeTrajectory(trajectory)
+	ctx, span := c.tracer.Start(ctx, "risk.prompt_injection.classify.typed_event", trace.WithAttributes(
+		attr.OrganizationID(req.OrgID),
+		attr.ProjectID(req.ProjectID),
+		attribute.String(spanAttrModel, c.typed.model),
+		attribute.String(spanAttrReasoning, c.typed.reasoning),
+		attribute.Bool(spanAttrContextPresent, contextState.contextPresent),
+		attribute.Bool(spanAttrPriorPresent, contextState.priorPresent),
+		attribute.Bool(spanAttrRecentPresent, contextState.recentPresent),
+		attribute.Bool(spanAttrPriorTruncated, contextState.priorTruncated),
+		attribute.Bool(spanAttrRecentTruncated, contextState.recentTruncated),
+		attribute.Int(spanAttrPriorLen, contextState.priorLen),
+		attribute.Int(spanAttrRecentLen, contextState.recentLen),
+	))
+	defer span.End()
+	c.metrics.RecordContext(
+		ctx,
+		req.OrgID,
+		c.typed.model,
+		c.typed.reasoning,
+		contextState.priorPresent,
+		contextState.recentPresent,
+		contextState.priorTruncated,
+		contextState.recentTruncated,
+	)
+
 	decisionCtx, cancel := context.WithTimeout(ctx, JudgeTimeout)
 	defer cancel()
 
@@ -403,14 +453,34 @@ func (c *Engine) classifyTyped(ctx context.Context, req promptinjection.Request,
 	}
 
 	duration := time.Since(start)
-	c.metrics.RecordEvent(ctx, req.OrgID, c.typed.model, c.typed.reasoning, trajectory.HasContent(), stabilized.IsInjection, failOpen, duration)
-	trace.SpanFromContext(ctx).AddEvent("pi_judge.typed_result", trace.WithAttributes(
-		attribute.String("pi_judge.directive_kind", stabilized.DirectiveKind),
-		attribute.String("pi_judge.target", stabilized.Target),
-		attribute.Bool("pi_judge.operational", stabilized.Operational),
-		attribute.Bool("pi_judge.finding_surfaced", stabilized.IsInjection),
-		attribute.Bool("pi_judge.fail_open", failOpen),
-	))
+	directiveKind := stabilized.DirectiveKind
+	if directiveKind == "" {
+		directiveKind = DirectiveNone
+	}
+	target := stabilized.Target
+	if target == "" {
+		target = TargetNone
+	}
+	c.metrics.RecordEvent(ctx, req.OrgID, c.typed.model, c.typed.reasoning, contextState.contextPresent, stabilized.IsInjection, failOpen, duration)
+	c.metrics.RecordVerdict(
+		ctx,
+		req.OrgID,
+		directiveKind,
+		target,
+		stabilized.Operational,
+		stabilized.IsInjection,
+		contextState.contextPresent,
+		failOpen,
+		c.typed.model,
+		c.typed.reasoning,
+	)
+	span.SetAttributes(
+		attribute.String(spanAttrDirectiveKind, directiveKind),
+		attribute.String(spanAttrTarget, target),
+		attribute.Bool(spanAttrOperational, stabilized.Operational),
+		attribute.Bool(spanAttrFindingSurfaced, stabilized.IsInjection),
+		attribute.Bool(spanAttrFailOpen, failOpen),
+	)
 	if !stabilized.IsInjection {
 		return safeResult
 	}
@@ -426,6 +496,22 @@ func (c *Engine) classifyTyped(ctx context.Context, req promptinjection.Request,
 		DirectiveKind: stabilized.DirectiveKind,
 		Target:        stabilized.Target,
 		Operational:   stabilized.Operational,
+	}
+}
+
+func observeTrajectory(trajectory judgemessage.Trajectory) trajectoryTelemetry {
+	priorPresent := strings.TrimSpace(trajectory.PriorUserRequest) != ""
+	recentPresent := strings.TrimSpace(trajectory.RecentUntrustedContent) != ""
+	priorLen := utf8.RuneCountInString(trajectory.PriorUserRequest)
+	recentLen := utf8.RuneCountInString(trajectory.RecentUntrustedContent)
+	return trajectoryTelemetry{
+		contextPresent:  priorPresent || recentPresent,
+		priorPresent:    priorPresent,
+		recentPresent:   recentPresent,
+		priorTruncated:  priorLen > judgemessage.MaxTrajectoryBodyRunes,
+		recentTruncated: recentLen > judgemessage.MaxTrajectoryBodyRunes,
+		priorLen:        priorLen,
+		recentLen:       recentLen,
 	}
 }
 

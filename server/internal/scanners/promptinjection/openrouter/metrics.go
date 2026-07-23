@@ -18,6 +18,9 @@ const (
 	meterJudgeConfidence       = "risk.prompt_injection.judge_confidence"
 	meterTypedEvents           = "risk.prompt_injection.typed_events"
 	meterTypedDetections       = "risk.prompt_injection.typed_detections"
+	meterTypedVerdicts         = "risk.prompt_injection.typed_verdicts"
+	meterTypedContextCoverage  = "risk.prompt_injection.typed_context_coverage"
+	meterTypedContextFields    = "risk.prompt_injection.typed_context_fields"
 	meterTypedPhysicalCalls    = "risk.prompt_injection.typed_physical_calls"
 	meterTypedCallDuration     = "risk.prompt_injection.typed_call_duration"
 	meterTypedDecisionDuration = "risk.prompt_injection.typed_decision_duration"
@@ -31,6 +34,9 @@ type metrics struct {
 	confidence       metric.Float64Histogram
 	events           metric.Int64Counter
 	detections       metric.Int64Counter
+	verdicts         metric.Int64Counter
+	contextCoverage  metric.Int64Counter
+	contextFields    metric.Int64Counter
 	physicalCalls    metric.Int64Counter
 	callDuration     metric.Float64Histogram
 	decisionDuration metric.Float64Histogram
@@ -94,6 +100,33 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedDetections), attr.SlogError(err))
 	}
 
+	verdicts, err := meter.Int64Counter(
+		meterTypedVerdicts,
+		metric.WithDescription("All typed prompt-injection verdicts, including verdicts suppressed by the detection predicate"),
+		metric.WithUnit("{verdict}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedVerdicts), attr.SlogError(err))
+	}
+
+	contextCoverage, err := meter.Int64Counter(
+		meterTypedContextCoverage,
+		metric.WithDescription("Typed prompt-injection trajectory context coverage by bounded presence state"),
+		metric.WithUnit("{event}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedContextCoverage), attr.SlogError(err))
+	}
+
+	contextFields, err := meter.Int64Counter(
+		meterTypedContextFields,
+		metric.WithDescription("Typed prompt-injection trajectory fields by presence and truncation state"),
+		metric.WithUnit("{field}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedContextFields), attr.SlogError(err))
+	}
+
 	physicalCalls, err := meter.Int64Counter(
 		meterTypedPhysicalCalls,
 		metric.WithDescription("Physical model calls made by the typed prompt-injection judge"),
@@ -147,11 +180,53 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		confidence:       confidence,
 		events:           events,
 		detections:       detections,
+		verdicts:         verdicts,
+		contextCoverage:  contextCoverage,
+		contextFields:    contextFields,
 		physicalCalls:    physicalCalls,
 		callDuration:     callDuration,
 		decisionDuration: decisionDuration,
 		failOpen:         failOpen,
 		rateLimited:      rateLimited,
+	}
+}
+
+func (m *metrics) RecordContext(ctx context.Context, orgID, model, reasoning string, priorPresent, recentPresent, priorTruncated, recentTruncated bool) {
+	coverage := "neither"
+	if priorPresent && recentPresent {
+		coverage = "both"
+	} else if priorPresent || recentPresent {
+		coverage = "either"
+	}
+	common := []attribute.KeyValue{
+		attr.OrganizationID(orgID),
+		attribute.String("model", model),
+		attribute.String("reasoning", reasoning),
+	}
+	if m.contextCoverage != nil {
+		m.contextCoverage.Add(ctx, 1, metric.WithAttributes(
+			append(common,
+				attribute.Bool("prior_user_request_present", priorPresent),
+				attribute.Bool("recent_untrusted_content_present", recentPresent),
+				attribute.String("coverage", coverage),
+			)...,
+		))
+	}
+	if m.contextFields != nil {
+		m.contextFields.Add(ctx, 1, metric.WithAttributes(
+			append(common,
+				attribute.String("field", "prior_user_request"),
+				attribute.Bool("present", priorPresent),
+				attribute.Bool("truncated", priorTruncated),
+			)...,
+		))
+		m.contextFields.Add(ctx, 1, metric.WithAttributes(
+			append(common,
+				attribute.String("field", "recent_untrusted_content"),
+				attribute.Bool("present", recentPresent),
+				attribute.Bool("truncated", recentTruncated),
+			)...,
+		))
 	}
 }
 
@@ -186,6 +261,23 @@ func (m *metrics) RecordEvent(ctx context.Context, orgID, model, reasoning strin
 	if m.decisionDuration != nil {
 		m.decisionDuration.Record(ctx, duration.Seconds(), attrs)
 	}
+}
+
+func (m *metrics) RecordVerdict(ctx context.Context, orgID, kind, target string, operational, findingSurfaced, sessionContextPresent, failOpen bool, model, reasoning string) {
+	if m.verdicts == nil {
+		return
+	}
+	m.verdicts.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attribute.String("directive_kind", kind),
+		attribute.String("target", target),
+		attribute.Bool("operational", operational),
+		attribute.Bool("finding_surfaced", findingSurfaced),
+		attribute.Bool("session_context_present", sessionContextPresent),
+		attribute.Bool("fail_open", failOpen),
+		attribute.String("model", model),
+		attribute.String("reasoning", reasoning),
+	))
 }
 
 func (m *metrics) RecordFailOpen(ctx context.Context, orgID, model, reasoning, reason string) {
