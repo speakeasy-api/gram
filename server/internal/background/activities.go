@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -126,6 +127,7 @@ type Activities struct {
 	outboxGC                        *outbox_relay.GC
 	pluginPublisher                 *activities.PluginPublisher
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
+	chatAnalysisScorer              *activities.ChatAnalysisScorer
 }
 
 func NewActivities(
@@ -199,6 +201,16 @@ func NewActivities(
 
 	telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs, features)
 
+	// The chat analysis judge roster. Adding a new session analysis is
+	// registering its judge here; enabling it per organization is a
+	// chat_analysis_settings row.
+	chatAnalysisJudges, err := analysis.NewJudges(
+		analysis.NewWorkUnitsJudge(logger, tracerProvider, chatClient, judgeRateLimiter),
+	)
+	if err != nil {
+		panic(fmt.Errorf("new chat analysis judges: %w", err))
+	}
+
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -269,6 +281,15 @@ func NewActivities(
 			productFeatures,
 			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter)),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
+		),
+		// The judges draw on the same per-(org, model) bucket and the same
+		// completion client as every other platform judge, so chat analysis
+		// cannot outspend the org's key behind their backs.
+		chatAnalysisScorer: activities.NewChatAnalysisScorer(
+			db,
+			chatAnalysisJudges,
+			analysis.NewPublisher(logger, tracerProvider, db, telemetryRepo, chatAnalysisJudges),
+			&TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 	}
 }

@@ -29,6 +29,7 @@ import (
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
@@ -596,6 +597,15 @@ func newWorkerCommand() *cli.Command {
 			)
 			chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
 
+			// Chat analysis rides the same durable-write event as efficacy, with
+			// its own coordinator and the same throttle/flush rationale.
+			chatAnalysisSignaler := background.NewThrottledSignaler(
+				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
+				background.ChatAnalysisSignalCooldown,
+				logger.With(attr.SlogComponent("chat-analysis")),
+			)
+			chatWriter.AddObserver(analysis.NewObserver(logger, chatAnalysisSignaler))
+
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
@@ -828,6 +838,9 @@ func newWorkerCommand() *cli.Command {
 				}
 				if ferr := efficacySignaler.Shutdown(ctx); ferr != nil {
 					logger.ErrorContext(ctx, "flush pending skill efficacy signals", attr.SlogError(ferr))
+				}
+				if ferr := chatAnalysisSignaler.Shutdown(ctx); ferr != nil {
+					logger.ErrorContext(ctx, "flush pending chat analysis signals", attr.SlogError(ferr))
 				}
 			}()
 

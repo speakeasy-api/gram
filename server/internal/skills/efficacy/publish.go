@@ -454,6 +454,24 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, claimTo
 // already made. Only a success is cached: a failed read is retryable, and
 // caching it would hand every later evaluation of the same chat the same
 // failure.
+func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID, transcripts map[uuid.UUID]Transcript) (Transcript, error) {
+	if cached, ok := transcripts[chatID]; ok {
+		return cached, nil
+	}
+
+	transcript, err := LoadTranscript(ctx, p.chats, projectID, chatID)
+	if err != nil {
+		return Transcript{}, err
+	}
+
+	transcripts[chatID] = transcript
+
+	return transcript, nil
+}
+
+// LoadTranscript renders one chat's transcript for a judge. Shared with the
+// chat analysis pipeline, which judges the same transcripts under its own
+// queue.
 //
 // The chat is read backwards in fixed pages rather than whole: a session has no
 // bound on its length, but the rendering the judge receives does, so loading all
@@ -462,12 +480,9 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, claimTo
 // drops a message, which is sound because RenderTranscript trims oldest-first
 // and every unread message is older than every message already dropped — so the
 // messages it keeps are exactly the ones a full load would have kept, and only
-// the omission count has to account for what was never read.
-func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID, transcripts map[uuid.UUID]Transcript) (Transcript, error) {
-	if cached, ok := transcripts[chatID]; ok {
-		return cached, nil
-	}
-
+// the omission count has to account for what was never read. Errors wrap
+// ErrRetryable: a failed read is infrastructure, never the transcript's fault.
+func LoadTranscript(ctx context.Context, chats TranscriptSource, projectID uuid.UUID, chatID uuid.UUID) (Transcript, error) {
 	page := chatrepo.ListChatTranscriptMessagesPageParams{
 		ChatID:          chatID,
 		ProjectID:       projectID,
@@ -477,9 +492,9 @@ func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, cha
 		Lim:             transcriptPageSize,
 	}
 
-	unread, err := p.chats.CountChatMessages(ctx, chatrepo.CountChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	unread, err := chats.CountChatMessages(ctx, chatrepo.CountChatMessagesParams{ChatID: chatID, ProjectID: projectID})
 	if err != nil {
-		return Transcript{}, fmt.Errorf("count skill efficacy transcript: %w: %w", ErrRetryable, err)
+		return Transcript{}, fmt.Errorf("count judge transcript: %w: %w", ErrRetryable, err)
 	}
 
 	loaded := make([]TranscriptInput, 0, min(unread, int64(transcriptPageSize)))
@@ -487,9 +502,9 @@ func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, cha
 	// rendering a whole-chat read produced rather than a zero Transcript.
 	transcript := RenderTranscript(nil)
 	for {
-		rows, err := p.chats.ListChatTranscriptMessagesPage(ctx, page)
+		rows, err := chats.ListChatTranscriptMessagesPage(ctx, page)
 		if err != nil {
-			return Transcript{}, fmt.Errorf("load skill efficacy transcript: %w: %w", ErrRetryable, err)
+			return Transcript{}, fmt.Errorf("load judge transcript: %w: %w", ErrRetryable, err)
 		}
 		if len(rows) == 0 {
 			// The cursor reached the start of the chat, so nothing is left
@@ -523,8 +538,6 @@ func (p *Publisher) loadTranscript(ctx context.Context, projectID uuid.UUID, cha
 	for i := range transcript.Messages {
 		transcript.Messages[i].Index += int(unread)
 	}
-
-	transcripts[chatID] = transcript
 
 	return transcript, nil
 }
