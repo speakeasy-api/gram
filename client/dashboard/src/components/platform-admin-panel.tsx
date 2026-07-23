@@ -2,6 +2,10 @@ import { Input } from "@/components/ui/input";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
+import {
+  invalidateAllChatAnalysisSettings,
+  useChatAnalysisSettings,
+} from "@gram/client/react-query/chatAnalysisSettings.js";
 import { useDisableRBACMutation } from "@gram/client/react-query/disableRBAC.js";
 import { useEnableRBACMutation } from "@gram/client/react-query/enableRBAC.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
@@ -9,11 +13,14 @@ import { invalidateAllGrants } from "@gram/client/react-query/grants.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { useSendEnterpriseAdminOnboardingEmailMutation } from "@gram/client/react-query/sendEnterpriseAdminOnboardingEmail.js";
+import { useTriggerChatAnalysisMutation } from "@gram/client/react-query/triggerChatAnalysis.js";
+import { useUpsertChatAnalysisSettingsMutation } from "@gram/client/react-query/upsertChatAnalysisSettings.js";
 import { invalidateAllProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRightLeft,
+  BarChart3,
   BookOpen,
   Building2,
   FileSearch,
@@ -379,7 +386,162 @@ function ProductFeaturesSection(): ReactElement {
           pendingFeature === FeatureName.Scim ? mutError?.message : undefined
         }
       />
+
+      <WorkUnitsAnalysisSection />
     </div>
+  );
+}
+
+const WORK_UNITS_MAX_CAP = 10_000;
+// Prefilled when enabling an organization whose stored cap is 0 — a cap of 0
+// disables scoring as surely as the switch.
+const WORK_UNITS_SUGGESTED_CAP = 100;
+
+// WorkUnitsAnalysisSection controls the chat analysis pipeline's work-units
+// judge for the organization. Not a product feature: it writes the
+// chat_analysis_settings row (adminChatAnalysis service) that the analysis
+// reservation spends against, so it lives beside the feature toggles rather
+// than among them.
+function WorkUnitsAnalysisSection(): ReactElement {
+  const queryClient = useQueryClient();
+  const query = useChatAnalysisSettings(undefined, undefined, {
+    throwOnError: false,
+  });
+  // undefined mirrors the stored cap; a string is a local edit in progress.
+  const [capInput, setCapInput] = useState<string>();
+
+  const mutation = useUpsertChatAnalysisSettingsMutation({
+    onSuccess: async () => {
+      setCapInput(undefined);
+      await invalidateAllChatAnalysisSettings(queryClient);
+    },
+  });
+
+  const trigger = useTriggerChatAnalysisMutation({
+    onSuccess: (data) => {
+      toast.success(
+        `Chat analysis triggered for ${data.projectsSignaled} project${data.projectsSignaled === 1 ? "" : "s"}.`,
+      );
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to trigger chat analysis",
+      );
+    },
+  });
+
+  const section = (children: React.ReactNode) => (
+    <Section
+      icon={BarChart3}
+      title="Work Units Chat Analysis"
+      description="Runs the work-units judge over the organization's quiet chat sessions. Cap is evaluations per UTC day; 0 disables scoring."
+    >
+      {children}
+    </Section>
+  );
+
+  if (query.isLoading) {
+    return section(
+      <div className="flex items-center gap-2 py-1">
+        <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
+        <span className="text-muted-foreground text-[11px]">Loading…</span>
+      </div>,
+    );
+  }
+  if (query.error || !query.data) {
+    return section(
+      <p className="text-destructive text-[11px]">
+        Failed to load chat analysis settings:{" "}
+        {query.error?.message ?? "unknown error"}
+      </p>,
+    );
+  }
+
+  const settings = query.data;
+  const cap = capInput ?? String(settings.workUnitsDailyCap);
+  const capNumber = Number(cap);
+  const capValid =
+    cap.trim() !== "" &&
+    Number.isInteger(capNumber) &&
+    capNumber >= 0 &&
+    capNumber <= WORK_UNITS_MAX_CAP;
+  const capDirty = capValid && capNumber !== settings.workUnitsDailyCap;
+
+  const upsert = (enabled: boolean, dailyCap: number) => {
+    mutation.mutate({
+      request: {
+        upsertWorkUnitsSettingsRequestBody: {
+          workUnitsEnabled: enabled,
+          workUnitsDailyCap: dailyCap,
+        },
+      },
+    });
+  };
+
+  // One contextual action: enable when off, save an edited cap, disable
+  // otherwise.
+  const action = () => {
+    if (!settings.workUnitsEnabled) {
+      upsert(true, capNumber > 0 ? capNumber : WORK_UNITS_SUGGESTED_CAP);
+    } else if (capDirty) {
+      upsert(true, capNumber);
+    } else {
+      upsert(false, capNumber);
+    }
+  };
+  const actionLabel = () => {
+    if (!settings.workUnitsEnabled) return "Enable";
+    if (capDirty) return "Save cap";
+    return "Disable";
+  };
+
+  return section(
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <StatusPill enabled={settings.workUnitsEnabled} />
+        <div className="flex items-center gap-1.5">
+          <Input
+            value={cap}
+            onChange={setCapInput}
+            aria-label="Work-units daily evaluation cap"
+            className="h-6 w-20 px-2 text-[11px]"
+          />
+          <ActionButton
+            onClick={action}
+            pending={mutation.isPending}
+            disabled={!capValid}
+            destructive={settings.workUnitsEnabled && !capDirty}
+          >
+            {actionLabel()}
+          </ActionButton>
+        </div>
+      </div>
+      {settings.workUnitsEnabled && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="text-muted-foreground text-[11px]">
+            Wake every project's analysis coordinator now instead of waiting for
+            the sweep.
+          </p>
+          <ActionButton
+            onClick={() => trigger.mutate({})}
+            pending={trigger.isPending}
+          >
+            Run now
+          </ActionButton>
+        </div>
+      )}
+      {!capValid && (
+        <p className="text-destructive mt-2 text-[11px]">
+          Cap must be a whole number from 0 to{" "}
+          {WORK_UNITS_MAX_CAP.toLocaleString()}.
+        </p>
+      )}
+      {mutation.error && (
+        <p className="text-destructive mt-2 text-[11px]">
+          {mutation.error.message}
+        </p>
+      )}
+    </>,
   );
 }
 

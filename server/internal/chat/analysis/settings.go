@@ -9,10 +9,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
 )
 
-// DefaultJudgeDailyCap is the daily budget a judge runs on when its settings
-// row enables it without naming a cap; the stored cap always wins. There is no
-// default enablement: a judge with no chat_analysis_settings row is off, so the
-// pipeline spends nothing for an organization until someone opts a judge in.
+// DefaultJudgeDailyCap is the cap the settings surfaces suggest when switching
+// a judge on for an organization that never stored one. The pipeline itself
+// never falls back to it: a configured judge's row always stores its cap (the
+// column is NOT NULL), and a judge with no row is off.
 const DefaultJudgeDailyCap int32 = 100
 
 // Settings are the effective per-organization budgets: the daily cap for each
@@ -29,7 +29,10 @@ type Settings struct {
 // project, keeping only judges the roster actually runs: a settings row for a
 // judge that was unregistered stays in the table but admits nothing. No rows at
 // all means the project is gone or deleted, which callers treat the same as
-// nothing enabled.
+// nothing enabled. There is no default enablement and no default cap: a judge
+// with no chat_analysis_settings row is off, and a configured judge's row
+// always stores its cap (the column is NOT NULL), so the pipeline spends
+// nothing for an organization until someone opts a judge in.
 func settingsForProject(ctx context.Context, queries *repo.Queries, judges *Judges, projectID uuid.UUID) (Settings, error) {
 	rows, err := queries.GetChatAnalysisSettingsForProject(ctx, projectID)
 	if err != nil {
@@ -45,11 +48,10 @@ func settingsForProject(ctx context.Context, queries *repo.Queries, judges *Judg
 		if _, ok := judges.Get(row.Judge.String); !ok {
 			continue
 		}
-		dailyCap := DefaultJudgeDailyCap
-		if row.DailyCap.Valid {
-			dailyCap = row.DailyCap.Int32
-		}
-		settings.JudgeDailyCaps[row.Judge.String] = dailyCap
+		// DailyCap is null only on the settings-less LEFT JOIN row, and that row's
+		// null judge already continued above: a judge that reaches here always
+		// carries its stored cap.
+		settings.JudgeDailyCaps[row.Judge.String] = row.DailyCap.Int32
 	}
 
 	return settings, nil
