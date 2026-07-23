@@ -31,6 +31,7 @@ import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import { LogsRoot } from "./pages/logs/Logs";
+import { DataRoot } from "./pages/data/Data";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
@@ -509,6 +510,13 @@ const ROUTE_STRUCTURE = {
     url: "logs",
     icon: "logs",
     component: LogsRoot,
+  },
+  data: {
+    title: "Data",
+    url: "data",
+    icon: "database",
+    stage: "preview",
+    component: DataRoot,
   },
   agentSessions: {
     title: "Agent Sessions",

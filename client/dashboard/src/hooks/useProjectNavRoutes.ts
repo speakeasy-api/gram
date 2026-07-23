@@ -84,6 +84,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },
       { route: routes.logs, scope: observe },
+      { route: routes.data, scope: observe },
       { route: routes.riskOverview, scope: read },
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.riskEvents, scope: ["org:admin"] },

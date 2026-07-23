@@ -122,6 +122,7 @@ export function AppSidebar({
     routes.insights,
     routes.agentSessions,
     routes.logs,
+    routes.data,
   ].some((r) => r.active);
 
   const securityActive = [
@@ -234,6 +235,7 @@ export function AppSidebar({
               {...accessFor(routes.agentSessions)}
             />
             <ScopeGatedNavItem item={routes.logs} {...accessFor(routes.logs)} />
+            <ScopeGatedNavItem item={routes.data} {...accessFor(routes.data)} />
             <ScopeGatedNavItem
               item={routes.employees}
               {...accessFor(routes.employees)}
