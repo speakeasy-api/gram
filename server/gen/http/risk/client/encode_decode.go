@@ -10519,8 +10519,8 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		Version:                *v.Version,
 		CreatedAt:              *v.CreatedAt,
 		UpdatedAt:              *v.UpdatedAt,
-		PendingMessages:        *v.PendingMessages,
-		TotalMessages:          *v.TotalMessages,
+		PendingMessages:        v.PendingMessages,
+		TotalMessages:          v.TotalMessages,
 	}
 	res.Sources = make([]string, len(v.Sources))
 	for i, val := range v.Sources {

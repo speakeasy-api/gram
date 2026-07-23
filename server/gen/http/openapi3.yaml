@@ -57380,7 +57380,7 @@ components:
                     description: The policy name.
                 pending_messages:
                     type: integer
-                    description: Number of messages not yet analyzed at the current policy version.
+                    description: Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).
                     format: int64
                 policy_type:
                     type: string
@@ -57434,7 +57434,7 @@ components:
                     description: Detection sources enabled for this policy.
                 total_messages:
                     type: integer
-                    description: Total number of messages in the project.
+                    description: Total number of messages in the project. Populated on single-policy reads; omitted from list responses.
                     format: int64
                 updated_at:
                     type: string
@@ -57462,8 +57462,6 @@ components:
                 - version
                 - created_at
                 - updated_at
-                - pending_messages
-                - total_messages
         RiskPolicyBypassApprovalRequestBody:
             type: object
             properties:
