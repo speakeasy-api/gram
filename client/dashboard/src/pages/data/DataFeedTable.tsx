@@ -1,41 +1,33 @@
 import { Type } from "@/components/ui/type";
-import { HumanizeDateTime } from "@/lib/dates";
+import { dateTimeFormatters } from "@/lib/dates";
 import { Column, Table } from "@speakeasy-api/moonshine";
 import { evaluateQuality, type DataEvent } from "./data-events";
-import { KindBadge, OriginBadge, QualityPill } from "./DataEventBadges";
+import { KindBadge, QualityPill, SourceBadge } from "./DataEventBadges";
 
 const columns: Column<DataEvent>[] = [
   {
     key: "timestamp",
     header: "Time",
-    width: "130px",
+    width: "185px",
+    // Full timestamps, like a standard log table: the feed is a stream of
+    // events, and relative times can't be compared or correlated.
     render: (event) => (
-      <Type muted small className="whitespace-nowrap">
-        <HumanizeDateTime date={event.timestamp} />
-      </Type>
-    ),
-  },
-  {
-    key: "project",
-    header: "Project",
-    width: "130px",
-    render: (event) => (
-      <Type muted small className="font-mono">
-        {event.project}
+      <Type muted small className="font-mono whitespace-nowrap">
+        {dateTimeFormatters.logTimestamp.format(event.timestamp)}
       </Type>
     ),
   },
   {
     key: "kind",
     header: "Kind",
-    width: "90px",
+    width: "100px",
     render: (event) => <KindBadge kind={event.kind} />,
   },
   {
-    key: "origin",
-    header: "Origin",
-    width: "140px",
-    render: (event) => <OriginBadge origin={event.origin} />,
+    key: "source",
+    header: "Source",
+    width: "150px",
+    render: (event) => <SourceBadge event={event} />,
   },
   {
     key: "type",
@@ -46,12 +38,6 @@ const columns: Column<DataEvent>[] = [
         {event.type}
       </Type>
     ),
-  },
-  {
-    key: "producer",
-    header: "Producer",
-    width: "150px",
-    render: (event) => <Type small>{event.producer}</Type>,
   },
   {
     key: "body",

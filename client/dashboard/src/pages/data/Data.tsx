@@ -16,6 +16,7 @@ import {
   type DataEvent,
 } from "./data-events";
 import { DataEventSheet } from "./DataEventSheet";
+import { DataFeedHistogram } from "./DataFeedHistogram";
 import { DataFeedTable } from "./DataFeedTable";
 
 const DATA_FILTERS = defineFilters([
@@ -111,6 +112,8 @@ function DataFeed(): JSX.Element {
           {visibleEvents.length} of {events.length} events
         </Page.Toolbar.Count>
       </Page.Toolbar>
+
+      <DataFeedHistogram events={visibleEvents} />
 
       <DataFeedTable events={visibleEvents} onSelect={setSelected} />
 

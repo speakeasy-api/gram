@@ -1,33 +1,44 @@
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Badge } from "@speakeasy-api/moonshine";
+import { Activity, ChartLine } from "lucide-react";
 import {
+  type DataEvent,
   type DataEventKind,
-  type DataEventOrigin,
   type EventQuality,
   ORIGIN_LABELS,
 } from "./data-events";
 
+/**
+ * Kind badge with the same icon treatment as the AI Integrations streams
+ * table: Activity for event/log streams, ChartLine for metrics.
+ */
 export function KindBadge({ kind }: { kind: DataEventKind }): JSX.Element {
+  const KindIcon = kind === "metric" ? ChartLine : Activity;
   return (
-    <Badge size="sm" variant={kind === "metric" ? "information" : "neutral"}>
-      <Badge.Text>{kind}</Badge.Text>
+    <Badge size="sm" variant="neutral" background className="shrink-0">
+      <Badge.LeftIcon>
+        <KindIcon className="h-3 w-3" />
+      </Badge.LeftIcon>
+      <Badge.Text>{kind === "metric" ? "Metric" : "Log"}</Badge.Text>
     </Badge>
   );
 }
 
-export function OriginBadge({
-  origin,
-}: {
-  origin: DataEventOrigin;
-}): JSX.Element {
+/**
+ * The actual producer name (claude-code, codex, gram-server, ...) instead of
+ * a generic channel label — the event should be understandable at a glance.
+ * The observation channel moves to the tooltip.
+ */
+export function SourceBadge({ event }: { event: DataEvent }): JSX.Element {
+  const isUnknown = event.producer === "unknown";
   return (
-    <SimpleTooltip tooltip="Which channel observed this event">
+    <SimpleTooltip tooltip={`Observed via ${ORIGIN_LABELS[event.origin]}`}>
       <Badge
         size="sm"
-        variant={origin === "unknown" ? "destructive" : "neutral"}
-        background={origin === "unknown"}
+        variant={isUnknown ? "destructive" : "neutral"}
+        background={isUnknown}
       >
-        <Badge.Text>{ORIGIN_LABELS[origin]}</Badge.Text>
+        <Badge.Text>{event.producer}</Badge.Text>
       </Badge>
     </SimpleTooltip>
   );
