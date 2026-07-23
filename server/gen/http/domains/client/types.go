@@ -50,6 +50,22 @@ type GetDomainResponseBody struct {
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
+	// The latest observed domain health status. One of: unknown, healthy,
+	// unhealthy.
+	HealthStatus *string `form:"health_status,omitempty" json:"health_status,omitempty" xml:"health_status,omitempty"`
+	// The reason the domain was last observed as unhealthy. One of: dns_not_found,
+	// dns_target_mismatch, resource_missing, certificate_missing,
+	// certificate_not_ready, certificate_expired, certificate_invalid,
+	// check_failed.
+	HealthIssue *string `form:"health_issue,omitempty" json:"health_issue,omitempty" xml:"health_issue,omitempty"`
+	// When the domain health was last checked.
+	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
+	// When the current unhealthy period began.
+	UnhealthySince *string `form:"unhealthy_since,omitempty" json:"unhealthy_since,omitempty" xml:"unhealthy_since,omitempty"`
+	// When the currently observed TLS certificate expires.
+	CertificateExpiresAt *string `form:"certificate_expires_at,omitempty" json:"certificate_expires_at,omitempty" xml:"certificate_expires_at,omitempty"`
+	// The number of consecutive failed health checks
+	ConsecutiveFailures *int32 `form:"consecutive_failures,omitempty" json:"consecutive_failures,omitempty" xml:"consecutive_failures,omitempty"`
 }
 
 // UpdateDomainResponseBody is the type of the "domains" service "updateDomain"
@@ -74,6 +90,62 @@ type UpdateDomainResponseBody struct {
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
+	// The latest observed domain health status. One of: unknown, healthy,
+	// unhealthy.
+	HealthStatus *string `form:"health_status,omitempty" json:"health_status,omitempty" xml:"health_status,omitempty"`
+	// The reason the domain was last observed as unhealthy. One of: dns_not_found,
+	// dns_target_mismatch, resource_missing, certificate_missing,
+	// certificate_not_ready, certificate_expired, certificate_invalid,
+	// check_failed.
+	HealthIssue *string `form:"health_issue,omitempty" json:"health_issue,omitempty" xml:"health_issue,omitempty"`
+	// When the domain health was last checked.
+	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
+	// When the current unhealthy period began.
+	UnhealthySince *string `form:"unhealthy_since,omitempty" json:"unhealthy_since,omitempty" xml:"unhealthy_since,omitempty"`
+	// When the currently observed TLS certificate expires.
+	CertificateExpiresAt *string `form:"certificate_expires_at,omitempty" json:"certificate_expires_at,omitempty" xml:"certificate_expires_at,omitempty"`
+	// The number of consecutive failed health checks
+	ConsecutiveFailures *int32 `form:"consecutive_failures,omitempty" json:"consecutive_failures,omitempty" xml:"consecutive_failures,omitempty"`
+}
+
+// CheckHealthResponseBody is the type of the "domains" service "checkHealth"
+// endpoint HTTP response body.
+type CheckHealthResponseBody struct {
+	// The ID of the custom domain
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the organization this domain belongs to
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The custom domain name
+	Domain *string `form:"domain,omitempty" json:"domain,omitempty" xml:"domain,omitempty"`
+	// Whether the domain is verified
+	Verified *bool `form:"verified,omitempty" json:"verified,omitempty" xml:"verified,omitempty"`
+	// Whether the domain is activated in ingress
+	Activated *bool `form:"activated,omitempty" json:"activated,omitempty" xml:"activated,omitempty"`
+	// When the custom domain was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the custom domain was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The custom domain is actively being registered
+	IsUpdating *bool `form:"is_updating,omitempty" json:"is_updating,omitempty" xml:"is_updating,omitempty"`
+	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
+	// unrestricted.
+	IPAllowlist []string `form:"ip_allowlist,omitempty" json:"ip_allowlist,omitempty" xml:"ip_allowlist,omitempty"`
+	// The latest observed domain health status. One of: unknown, healthy,
+	// unhealthy.
+	HealthStatus *string `form:"health_status,omitempty" json:"health_status,omitempty" xml:"health_status,omitempty"`
+	// The reason the domain was last observed as unhealthy. One of: dns_not_found,
+	// dns_target_mismatch, resource_missing, certificate_missing,
+	// certificate_not_ready, certificate_expired, certificate_invalid,
+	// check_failed.
+	HealthIssue *string `form:"health_issue,omitempty" json:"health_issue,omitempty" xml:"health_issue,omitempty"`
+	// When the domain health was last checked.
+	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
+	// When the current unhealthy period began.
+	UnhealthySince *string `form:"unhealthy_since,omitempty" json:"unhealthy_since,omitempty" xml:"unhealthy_since,omitempty"`
+	// When the currently observed TLS certificate expires.
+	CertificateExpiresAt *string `form:"certificate_expires_at,omitempty" json:"certificate_expires_at,omitempty" xml:"certificate_expires_at,omitempty"`
+	// The number of consecutive failed health checks
+	ConsecutiveFailures *int32 `form:"consecutive_failures,omitempty" json:"consecutive_failures,omitempty" xml:"consecutive_failures,omitempty"`
 }
 
 // ListMcpEndpointsResponseBody is the type of the "domains" service
@@ -626,6 +698,187 @@ type UpdateDomainGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CheckHealthUnauthorizedResponseBody is the type of the "domains" service
+// "checkHealth" endpoint HTTP response body for the "unauthorized" error.
+type CheckHealthUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckHealthForbiddenResponseBody is the type of the "domains" service
+// "checkHealth" endpoint HTTP response body for the "forbidden" error.
+type CheckHealthForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckHealthBadRequestResponseBody is the type of the "domains" service
+// "checkHealth" endpoint HTTP response body for the "bad_request" error.
+type CheckHealthBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckHealthNotFoundResponseBody is the type of the "domains" service
+// "checkHealth" endpoint HTTP response body for the "not_found" error.
+type CheckHealthNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckHealthConflictResponseBody is the type of the "domains" service
+// "checkHealth" endpoint HTTP response body for the "conflict" error.
+type CheckHealthConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckHealthUnsupportedMediaResponseBody is the type of the "domains" service
+// "checkHealth" endpoint HTTP response body for the "unsupported_media" error.
+type CheckHealthUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckHealthInvalidResponseBody is the type of the "domains" service
+// "checkHealth" endpoint HTTP response body for the "invalid" error.
+type CheckHealthInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckHealthInvariantViolationResponseBody is the type of the "domains"
+// service "checkHealth" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CheckHealthInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckHealthUnexpectedResponseBody is the type of the "domains" service
+// "checkHealth" endpoint HTTP response body for the "unexpected" error.
+type CheckHealthUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CheckHealthGatewayErrorResponseBody is the type of the "domains" service
+// "checkHealth" endpoint HTTP response body for the "gateway_error" error.
+type CheckHealthGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DeleteDomainUnauthorizedResponseBody is the type of the "domains" service
 // "deleteDomain" endpoint HTTP response body for the "unauthorized" error.
 type DeleteDomainUnauthorizedResponseBody struct {
@@ -1049,14 +1302,20 @@ func NewUpdateDomainRequestBody(p *domains.UpdateDomainPayload) *UpdateDomainReq
 // result from a HTTP "OK" response.
 func NewGetDomainCustomDomainOK(body *GetDomainResponseBody) *domains.CustomDomain {
 	v := &domains.CustomDomain{
-		ID:             *body.ID,
-		OrganizationID: *body.OrganizationID,
-		Domain:         *body.Domain,
-		Verified:       *body.Verified,
-		Activated:      *body.Activated,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
-		IsUpdating:     *body.IsUpdating,
+		ID:                   *body.ID,
+		OrganizationID:       *body.OrganizationID,
+		Domain:               *body.Domain,
+		Verified:             *body.Verified,
+		Activated:            *body.Activated,
+		CreatedAt:            *body.CreatedAt,
+		UpdatedAt:            *body.UpdatedAt,
+		IsUpdating:           *body.IsUpdating,
+		HealthStatus:         body.HealthStatus,
+		HealthIssue:          body.HealthIssue,
+		HealthCheckedAt:      body.HealthCheckedAt,
+		UnhealthySince:       body.UnhealthySince,
+		CertificateExpiresAt: body.CertificateExpiresAt,
+		ConsecutiveFailures:  body.ConsecutiveFailures,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -1370,14 +1629,20 @@ func NewCreateDomainGatewayError(body *CreateDomainGatewayErrorResponseBody) *go
 // endpoint result from a HTTP "OK" response.
 func NewUpdateDomainCustomDomainOK(body *UpdateDomainResponseBody) *domains.CustomDomain {
 	v := &domains.CustomDomain{
-		ID:             *body.ID,
-		OrganizationID: *body.OrganizationID,
-		Domain:         *body.Domain,
-		Verified:       *body.Verified,
-		Activated:      *body.Activated,
-		CreatedAt:      *body.CreatedAt,
-		UpdatedAt:      *body.UpdatedAt,
-		IsUpdating:     *body.IsUpdating,
+		ID:                   *body.ID,
+		OrganizationID:       *body.OrganizationID,
+		Domain:               *body.Domain,
+		Verified:             *body.Verified,
+		Activated:            *body.Activated,
+		CreatedAt:            *body.CreatedAt,
+		UpdatedAt:            *body.UpdatedAt,
+		IsUpdating:           *body.IsUpdating,
+		HealthStatus:         body.HealthStatus,
+		HealthIssue:          body.HealthIssue,
+		HealthCheckedAt:      body.HealthCheckedAt,
+		UnhealthySince:       body.UnhealthySince,
+		CertificateExpiresAt: body.CertificateExpiresAt,
+		ConsecutiveFailures:  body.ConsecutiveFailures,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -1525,6 +1790,183 @@ func NewUpdateDomainUnexpected(body *UpdateDomainUnexpectedResponseBody) *goa.Se
 // NewUpdateDomainGatewayError builds a domains service updateDomain endpoint
 // gateway_error error.
 func NewUpdateDomainGatewayError(body *UpdateDomainGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckHealthCustomDomainOK builds a "domains" service "checkHealth"
+// endpoint result from a HTTP "OK" response.
+func NewCheckHealthCustomDomainOK(body *CheckHealthResponseBody) *domains.CustomDomain {
+	v := &domains.CustomDomain{
+		ID:                   *body.ID,
+		OrganizationID:       *body.OrganizationID,
+		Domain:               *body.Domain,
+		Verified:             *body.Verified,
+		Activated:            *body.Activated,
+		CreatedAt:            *body.CreatedAt,
+		UpdatedAt:            *body.UpdatedAt,
+		IsUpdating:           *body.IsUpdating,
+		HealthStatus:         body.HealthStatus,
+		HealthIssue:          body.HealthIssue,
+		HealthCheckedAt:      body.HealthCheckedAt,
+		UnhealthySince:       body.UnhealthySince,
+		CertificateExpiresAt: body.CertificateExpiresAt,
+		ConsecutiveFailures:  body.ConsecutiveFailures,
+	}
+	v.IPAllowlist = make([]string, len(body.IPAllowlist))
+	for i, val := range body.IPAllowlist {
+		v.IPAllowlist[i] = val
+	}
+
+	return v
+}
+
+// NewCheckHealthUnauthorized builds a domains service checkHealth endpoint
+// unauthorized error.
+func NewCheckHealthUnauthorized(body *CheckHealthUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckHealthForbidden builds a domains service checkHealth endpoint
+// forbidden error.
+func NewCheckHealthForbidden(body *CheckHealthForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckHealthBadRequest builds a domains service checkHealth endpoint
+// bad_request error.
+func NewCheckHealthBadRequest(body *CheckHealthBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckHealthNotFound builds a domains service checkHealth endpoint
+// not_found error.
+func NewCheckHealthNotFound(body *CheckHealthNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckHealthConflict builds a domains service checkHealth endpoint
+// conflict error.
+func NewCheckHealthConflict(body *CheckHealthConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckHealthUnsupportedMedia builds a domains service checkHealth endpoint
+// unsupported_media error.
+func NewCheckHealthUnsupportedMedia(body *CheckHealthUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckHealthInvalid builds a domains service checkHealth endpoint invalid
+// error.
+func NewCheckHealthInvalid(body *CheckHealthInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckHealthInvariantViolation builds a domains service checkHealth
+// endpoint invariant_violation error.
+func NewCheckHealthInvariantViolation(body *CheckHealthInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckHealthUnexpected builds a domains service checkHealth endpoint
+// unexpected error.
+func NewCheckHealthUnexpected(body *CheckHealthUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCheckHealthGatewayError builds a domains service checkHealth endpoint
+// gateway_error error.
+func NewCheckHealthGatewayError(body *CheckHealthGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1889,6 +2331,15 @@ func ValidateGetDomainResponseBody(body *GetDomainResponseBody) (err error) {
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
+	if body.HealthCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.health_checked_at", *body.HealthCheckedAt, goa.FormatDateTime))
+	}
+	if body.UnhealthySince != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.unhealthy_since", *body.UnhealthySince, goa.FormatDateTime))
+	}
+	if body.CertificateExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.certificate_expires_at", *body.CertificateExpiresAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -1927,6 +2378,63 @@ func ValidateUpdateDomainResponseBody(body *UpdateDomainResponseBody) (err error
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.HealthCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.health_checked_at", *body.HealthCheckedAt, goa.FormatDateTime))
+	}
+	if body.UnhealthySince != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.unhealthy_since", *body.UnhealthySince, goa.FormatDateTime))
+	}
+	if body.CertificateExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.certificate_expires_at", *body.CertificateExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateCheckHealthResponseBody runs the validations defined on
+// CheckHealthResponseBody
+func ValidateCheckHealthResponseBody(body *CheckHealthResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Domain == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("domain", "body"))
+	}
+	if body.Verified == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verified", "body"))
+	}
+	if body.Activated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activated", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.IsUpdating == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_updating", "body"))
+	}
+	if body.IPAllowlist == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ip_allowlist", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.HealthCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.health_checked_at", *body.HealthCheckedAt, goa.FormatDateTime))
+	}
+	if body.UnhealthySince != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.unhealthy_since", *body.UnhealthySince, goa.FormatDateTime))
+	}
+	if body.CertificateExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.certificate_expires_at", *body.CertificateExpiresAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -2646,6 +3154,246 @@ func ValidateUpdateDomainUnexpectedResponseBody(body *UpdateDomainUnexpectedResp
 // ValidateUpdateDomainGatewayErrorResponseBody runs the validations defined on
 // updateDomain_gateway_error_response_body
 func ValidateUpdateDomainGatewayErrorResponseBody(body *UpdateDomainGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckHealthUnauthorizedResponseBody runs the validations defined on
+// checkHealth_unauthorized_response_body
+func ValidateCheckHealthUnauthorizedResponseBody(body *CheckHealthUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckHealthForbiddenResponseBody runs the validations defined on
+// checkHealth_forbidden_response_body
+func ValidateCheckHealthForbiddenResponseBody(body *CheckHealthForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckHealthBadRequestResponseBody runs the validations defined on
+// checkHealth_bad_request_response_body
+func ValidateCheckHealthBadRequestResponseBody(body *CheckHealthBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckHealthNotFoundResponseBody runs the validations defined on
+// checkHealth_not_found_response_body
+func ValidateCheckHealthNotFoundResponseBody(body *CheckHealthNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckHealthConflictResponseBody runs the validations defined on
+// checkHealth_conflict_response_body
+func ValidateCheckHealthConflictResponseBody(body *CheckHealthConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckHealthUnsupportedMediaResponseBody runs the validations defined
+// on checkHealth_unsupported_media_response_body
+func ValidateCheckHealthUnsupportedMediaResponseBody(body *CheckHealthUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckHealthInvalidResponseBody runs the validations defined on
+// checkHealth_invalid_response_body
+func ValidateCheckHealthInvalidResponseBody(body *CheckHealthInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckHealthInvariantViolationResponseBody runs the validations
+// defined on checkHealth_invariant_violation_response_body
+func ValidateCheckHealthInvariantViolationResponseBody(body *CheckHealthInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckHealthUnexpectedResponseBody runs the validations defined on
+// checkHealth_unexpected_response_body
+func ValidateCheckHealthUnexpectedResponseBody(body *CheckHealthUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCheckHealthGatewayErrorResponseBody runs the validations defined on
+// checkHealth_gateway_error_response_body
+func ValidateCheckHealthGatewayErrorResponseBody(body *CheckHealthGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -69,6 +70,7 @@ type Activities struct {
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
 	pollAIData                      *activities.PollAIData
 	customDomainIngress             *activities.CustomDomainIngress
+	customDomainHealth              *activities.CustomDomainHealth
 	defaultCustomDomainProvisioner  k8s.ProvisionerKind
 	fireOpenRouterCreditsMetrics    *activities.FireOpenRouterCreditsMetrics
 	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
@@ -141,6 +143,7 @@ func NewActivities(
 	k8sClient *k8s.KubernetesClients,
 	defaultCustomDomainProvisioner k8s.ProvisionerKind,
 	expectedTargetCNAME string,
+	siteURL *url.URL,
 	billingTracker billing.Tracker,
 	billingRepo billing.Repository,
 	posthogClient *posthog.Posthog,
@@ -201,6 +204,7 @@ func NewActivities(
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
+		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, emailService, siteURL, guardianPolicy),
 		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
@@ -311,6 +315,37 @@ func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.Ve
 
 func (a *Activities) CustomDomainIngress(ctx context.Context, input activities.CustomDomainIngressArgs) error {
 	return a.customDomainIngress.Do(ctx, input)
+}
+
+func (a *Activities) ListCustomDomainsForHealthCheck(ctx context.Context, input activities.ListCustomDomainsForHealthCheckArgs) ([]activities.CustomDomainHealthCheckTarget, error) {
+	targets, err := a.customDomainHealth.List(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list custom domains for health check: %w", err)
+	}
+	return targets, nil
+}
+
+func (a *Activities) CheckCustomDomainHealth(ctx context.Context, input activities.CheckCustomDomainHealthArgs) (activities.NotifyCustomDomainUnhealthyArgs, error) {
+	notification, err := a.customDomainHealth.Check(ctx, input)
+	if err != nil {
+		var noNotification activities.NotifyCustomDomainUnhealthyArgs
+		return noNotification, fmt.Errorf("check custom domain health: %w", err)
+	}
+	return notification, nil
+}
+
+func (a *Activities) NotifyCustomDomainUnhealthy(ctx context.Context, input activities.NotifyCustomDomainUnhealthyArgs) error {
+	if err := a.customDomainHealth.NotifyOrgAdmins(ctx, input); err != nil {
+		return fmt.Errorf("notify custom domain unhealthy: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) FindOrphanCustomDomainResources(ctx context.Context) error {
+	if err := a.customDomainHealth.FindOrphanResources(ctx); err != nil {
+		return fmt.Errorf("find orphan custom domain resources: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) CollectPlatformUsageMetrics(ctx context.Context) ([]activities.PlatformUsageMetrics, error) {

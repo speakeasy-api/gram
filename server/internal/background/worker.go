@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -69,6 +70,7 @@ type WorkerOptions struct {
 	K8sClient                      *k8s.KubernetesClients
 	DefaultCustomDomainProvisioner k8s.ProvisionerKind
 	ExpectedTargetCNAME            string
+	SiteURL                        *url.URL
 	BillingTracker                 billing.Tracker
 	BillingRepository              billing.Repository
 	RedisClient                    *redis.Client
@@ -125,6 +127,7 @@ func ForDeploymentProcessing(
 		K8sClient:                      nil,
 		DefaultCustomDomainProvisioner: k8s.ProvisionerKindIngress,
 		ExpectedTargetCNAME:            "",
+		SiteURL:                        nil,
 		BillingTracker:                 nil,
 		BillingRepository:              nil,
 		RagService:                     nil,
@@ -177,6 +180,7 @@ func NewTemporalWorker(
 		K8sClient:                      nil,
 		DefaultCustomDomainProvisioner: k8s.ProvisionerKindIngress,
 		ExpectedTargetCNAME:            "",
+		SiteURL:                        nil,
 		BillingTracker:                 nil,
 		BillingRepository:              nil,
 		RedisClient:                    nil,
@@ -220,6 +224,7 @@ func NewTemporalWorker(
 			K8sClient:                      conv.Default(o.K8sClient, opts.K8sClient),
 			DefaultCustomDomainProvisioner: conv.Default(o.DefaultCustomDomainProvisioner, opts.DefaultCustomDomainProvisioner),
 			ExpectedTargetCNAME:            conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			SiteURL:                        conv.Default(o.SiteURL, opts.SiteURL),
 			BillingTracker:                 conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:              conv.Default(o.BillingRepository, opts.BillingRepository),
 			RedisClient:                    conv.Default(o.RedisClient, opts.RedisClient),
@@ -301,6 +306,7 @@ func NewTemporalWorker(
 		opts.K8sClient,
 		opts.DefaultCustomDomainProvisioner,
 		opts.ExpectedTargetCNAME,
+		opts.SiteURL,
 		opts.BillingTracker,
 		opts.BillingRepository,
 		opts.PosthogClient,
@@ -340,6 +346,10 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
+	temporalWorker.RegisterActivity(activities.ListCustomDomainsForHealthCheck)
+	temporalWorker.RegisterActivity(activities.CheckCustomDomainHealth)
+	temporalWorker.RegisterActivity(activities.NotifyCustomDomainUnhealthy)
+	temporalWorker.RegisterActivity(activities.FindOrphanCustomDomainResources)
 	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.MaybeSendOpenRouterCreditsAlerts)
@@ -423,6 +433,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainUpdateWorkflow)
+	temporalWorker.RegisterWorkflow(CustomDomainHealthCheckWorkflow)
+	temporalWorker.RegisterWorkflow(CustomDomainUnhealthyNotifyWorkflow)
+	temporalWorker.RegisterWorkflow(CustomDomainHealthSweepWorkflow)
 	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
@@ -538,6 +551,12 @@ func NewTemporalWorker(
 
 	if err := AddSkillEfficacySweepSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add skill efficacy sweep schedule", attr.SlogError(err))
+	}
+
+	if opts.DB != nil && opts.K8sClient != nil && opts.ExpectedTargetCNAME != "" {
+		if err := AddCustomDomainHealthSchedule(context.Background(), env); err != nil {
+			logger.ErrorContext(context.Background(), "failed to add custom domain health schedule", attr.SlogError(err))
+		}
 	}
 
 	if opts.PluginPublisher != nil {

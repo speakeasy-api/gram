@@ -198,6 +198,47 @@ func (q *Queries) GetCustomDomainByIDAndOrganization(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getCustomDomainByIDAndOrganizationForHealthUpdate = `-- name: GetCustomDomainByIDAndOrganizationForHealthUpdate :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+FROM custom_domains
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetCustomDomainByIDAndOrganizationForHealthUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetCustomDomainByIDAndOrganizationForHealthUpdate(ctx context.Context, arg GetCustomDomainByIDAndOrganizationForHealthUpdateParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainByIDAndOrganizationForHealthUpdate, arg.ID, arg.OrganizationID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getCustomDomainByOrganization = `-- name: GetCustomDomainByOrganization :one
 SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
@@ -233,6 +274,135 @@ func (q *Queries) GetCustomDomainByOrganization(ctx context.Context, organizatio
 	return i, err
 }
 
+const getOrganizationSlugForHealthNotification = `-- name: GetOrganizationSlugForHealthNotification :one
+SELECT slug
+FROM organization_metadata
+WHERE id = $1
+`
+
+func (q *Queries) GetOrganizationSlugForHealthNotification(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getOrganizationSlugForHealthNotification, organizationID)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
+}
+
+const listActivatedCustomDomainResources = `-- name: ListActivatedCustomDomainResources :many
+SELECT
+    domain,
+    provisioner_kind,
+    COALESCE(ingress_name, '')::text AS resource_name
+FROM custom_domains
+WHERE activated IS TRUE
+  AND ingress_name IS NOT NULL
+  AND deleted IS FALSE
+`
+
+type ListActivatedCustomDomainResourcesRow struct {
+	Domain          string
+	ProvisionerKind string
+	ResourceName    string
+}
+
+func (q *Queries) ListActivatedCustomDomainResources(ctx context.Context) ([]ListActivatedCustomDomainResourcesRow, error) {
+	rows, err := q.db.Query(ctx, listActivatedCustomDomainResources)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActivatedCustomDomainResourcesRow
+	for rows.Next() {
+		var i ListActivatedCustomDomainResourcesRow
+		if err := rows.Scan(&i.Domain, &i.ProvisionerKind, &i.ResourceName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActivatedCustomDomainsForHealthCheck = `-- name: ListActivatedCustomDomainsForHealthCheck :many
+SELECT id, organization_id
+FROM custom_domains
+WHERE activated IS TRUE
+  AND deleted IS FALSE
+  AND id > $1
+ORDER BY id
+LIMIT $2
+`
+
+type ListActivatedCustomDomainsForHealthCheckParams struct {
+	AfterID   uuid.UUID
+	PageLimit int32
+}
+
+type ListActivatedCustomDomainsForHealthCheckRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ListActivatedCustomDomainsForHealthCheck(ctx context.Context, arg ListActivatedCustomDomainsForHealthCheckParams) ([]ListActivatedCustomDomainsForHealthCheckRow, error) {
+	rows, err := q.db.Query(ctx, listActivatedCustomDomainsForHealthCheck, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActivatedCustomDomainsForHealthCheckRow
+	for rows.Next() {
+		var i ListActivatedCustomDomainsForHealthCheckRow
+		if err := rows.Scan(&i.ID, &i.OrganizationID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationUsersForHealthNotification = `-- name: ListOrganizationUsersForHealthNotification :many
+SELECT users.id, users.email
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+WHERE our.organization_id = $1
+  AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+ORDER BY users.email, users.id
+`
+
+type ListOrganizationUsersForHealthNotificationRow struct {
+	ID    string
+	Email string
+}
+
+// Candidate recipients for domain health alerts; callers filter this down to
+// organization admins via authz grants.
+func (q *Queries) ListOrganizationUsersForHealthNotification(ctx context.Context, organizationID string) ([]ListOrganizationUsersForHealthNotificationRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationUsersForHealthNotification, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationUsersForHealthNotificationRow
+	for rows.Next() {
+		var i ListOrganizationUsersForHealthNotificationRow
+		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateCustomDomain = `-- name: UpdateCustomDomain :one
 UPDATE custom_domains
 SET
@@ -264,6 +434,69 @@ func (q *Queries) UpdateCustomDomain(ctx context.Context, arg UpdateCustomDomain
 		arg.CertSecretName,
 		arg.ProvisionerKind,
 		arg.ID,
+	)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateCustomDomainHealth = `-- name: UpdateCustomDomainHealth :one
+UPDATE custom_domains
+SET
+    health_status = $1,
+    health_issue = $2,
+    health_checked_at = $3,
+    unhealthy_since = $4,
+    certificate_expires_at = $5,
+    consecutive_failures = $6,
+    updated_at = clock_timestamp()
+WHERE id = $7
+  AND organization_id = $8
+  AND deleted IS FALSE
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateCustomDomainHealthParams struct {
+	HealthStatus         pgtype.Text
+	HealthIssue          pgtype.Text
+	CheckedAt            pgtype.Timestamptz
+	UnhealthySince       pgtype.Timestamptz
+	CertificateExpiresAt pgtype.Timestamptz
+	ConsecutiveFailures  pgtype.Int4
+	ID                   uuid.UUID
+	OrganizationID       string
+}
+
+func (q *Queries) UpdateCustomDomainHealth(ctx context.Context, arg UpdateCustomDomainHealthParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, updateCustomDomainHealth,
+		arg.HealthStatus,
+		arg.HealthIssue,
+		arg.CheckedAt,
+		arg.UnhealthySince,
+		arg.CertificateExpiresAt,
+		arg.ConsecutiveFailures,
+		arg.ID,
+		arg.OrganizationID,
 	)
 	var i CustomDomain
 	err := row.Scan(

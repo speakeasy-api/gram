@@ -7,6 +7,7 @@ import (
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 )
 
@@ -15,16 +16,26 @@ func buildCustomDomainView(domain repo.CustomDomain, isUpdating bool) *gen.Custo
 	if ipAllowlist == nil {
 		ipAllowlist = []string{}
 	}
+	var consecutiveFailures *int32
+	if domain.ConsecutiveFailures.Valid {
+		consecutiveFailures = &domain.ConsecutiveFailures.Int32
+	}
 	return &gen.CustomDomain{
-		ID:             domain.ID.String(),
-		OrganizationID: domain.OrganizationID,
-		Domain:         domain.Domain,
-		Verified:       domain.Verified,
-		Activated:      domain.Activated,
-		CreatedAt:      domain.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      domain.UpdatedAt.Time.Format(time.RFC3339),
-		IsUpdating:     isUpdating,
-		IPAllowlist:    ipAllowlist,
+		ID:                   domain.ID.String(),
+		OrganizationID:       domain.OrganizationID,
+		Domain:               domain.Domain,
+		Verified:             domain.Verified,
+		Activated:            domain.Activated,
+		CreatedAt:            domain.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            domain.UpdatedAt.Time.Format(time.RFC3339),
+		IsUpdating:           isUpdating,
+		IPAllowlist:          ipAllowlist,
+		HealthStatus:         conv.FromPGText[string](domain.HealthStatus),
+		HealthIssue:          conv.FromPGText[string](domain.HealthIssue),
+		HealthCheckedAt:      conv.PtrEmpty(conv.FromPGTimestamptz(domain.HealthCheckedAt)),
+		UnhealthySince:       conv.PtrEmpty(conv.FromPGTimestamptz(domain.UnhealthySince)),
+		CertificateExpiresAt: conv.PtrEmpty(conv.FromPGTimestamptz(domain.CertificateExpiresAt)),
+		ConsecutiveFailures:  consecutiveFailures,
 	}
 }
 

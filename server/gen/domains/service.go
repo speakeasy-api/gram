@@ -22,6 +22,8 @@ type Service interface {
 	CreateDomain(context.Context, *CreateDomainPayload) (err error)
 	// Update the IP allowlist for the organization's custom domain
 	UpdateDomain(context.Context, *UpdateDomainPayload) (res *CustomDomain, err error)
+	// Check the routing and certificate health of the organization's custom domain
+	CheckHealth(context.Context, *CheckHealthPayload) (res *CustomDomain, err error)
 	// Delete a custom domain
 	DeleteDomain(context.Context, *DeleteDomainPayload) (err error)
 	// List the MCP endpoints registered under the organization's custom domain
@@ -51,7 +53,13 @@ const ServiceName = "domains"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"getDomain", "createDomain", "updateDomain", "deleteDomain", "listMcpEndpoints"}
+var MethodNames = [6]string{"getDomain", "createDomain", "updateDomain", "checkHealth", "deleteDomain", "listMcpEndpoints"}
+
+// CheckHealthPayload is the payload type of the domains service checkHealth
+// method.
+type CheckHealthPayload struct {
+	SessionToken *string
+}
 
 // CreateDomainPayload is the payload type of the domains service createDomain
 // method.
@@ -84,6 +92,22 @@ type CustomDomain struct {
 	// IP addresses or CIDR ranges allowed to access this domain. Empty list means
 	// unrestricted.
 	IPAllowlist []string
+	// The latest observed domain health status. One of: unknown, healthy,
+	// unhealthy.
+	HealthStatus *string
+	// The reason the domain was last observed as unhealthy. One of: dns_not_found,
+	// dns_target_mismatch, resource_missing, certificate_missing,
+	// certificate_not_ready, certificate_expired, certificate_invalid,
+	// check_failed.
+	HealthIssue *string
+	// When the domain health was last checked.
+	HealthCheckedAt *string
+	// When the current unhealthy period began.
+	UnhealthySince *string
+	// When the currently observed TLS certificate expires.
+	CertificateExpiresAt *string
+	// The number of consecutive failed health checks
+	ConsecutiveFailures *int32
 }
 
 // An MCP endpoint registered under a custom domain, with its parent MCP server

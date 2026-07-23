@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
@@ -36,7 +37,10 @@ type stubTemporalClient struct {
 	registrationCalls int
 	deletionCalls     int
 	updateCalls       int
+	healthCheckCalls  int
 	lastDomain        string
+	lastOrganization  string
+	lastHealthCheckID uuid.UUID
 }
 
 func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
@@ -58,6 +62,13 @@ func (s *stubTemporalClient) ExecuteCustomDomainDeletion(ctx context.Context, or
 func (s *stubTemporalClient) ExecuteCustomDomainUpdate(ctx context.Context, orgID, domain string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
 	s.updateCalls++
 	s.lastDomain = domain
+	return stubTemporalRun{}, nil
+}
+
+func (s *stubTemporalClient) ExecuteCustomDomainHealthCheck(ctx context.Context, organizationID string, customDomainID uuid.UUID) (client.WorkflowRun, error) {
+	s.healthCheckCalls++
+	s.lastOrganization = organizationID
+	s.lastHealthCheckID = customDomainID
 	return stubTemporalRun{}, nil
 }
 

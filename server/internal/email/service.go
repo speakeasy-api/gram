@@ -43,6 +43,10 @@ func NewService(logger *slog.Logger, sender loops.Client) *Service {
 // it targets, so a misuse such as passing the wrong variable shape is a
 // compile-time error.
 func (s *Service) Send(ctx context.Context, recipient string, template Template) error {
+	return s.SendIdempotent(ctx, recipient, "", template)
+}
+
+func (s *Service) SendIdempotent(ctx context.Context, recipient string, idempotencyKey string, template Template) error {
 	if recipient == "" {
 		return ErrEmptyRecipient
 	}
@@ -57,6 +61,7 @@ func (s *Service) Send(ctx context.Context, recipient string, template Template)
 		Email:           recipient,
 		DataVariables:   template.Variables(),
 		AddToAudience:   template.AddToAudience(),
+		IdempotencyKey:  idempotencyKey,
 	}); err != nil {
 		return fmt.Errorf("send email %q: %w", id, err)
 	}
