@@ -15,7 +15,7 @@
  * is the only place that decides which id a mcp_servers row contributes.
  */
 
-interface ServerTool {
+export interface ServerTool {
   id: string;
   name: string;
   type: string;
@@ -36,8 +36,9 @@ export interface Server {
   mcpSlug?: string;
   tools: ServerTool[];
   /**
-   * Remote/tunneled backends resolve their tools at call time, so they cannot
-   * be individually permissioned in the "Specific tools" picker.
+   * Remote/tunneled backends resolve their tools at call time, so they carry no
+   * deploy-time tool list. The "Specific tools" picker fetches their tools from
+   * the stored metadata table (materialized via the Inspect tab) on demand.
    */
   dynamicTools: boolean;
 }
