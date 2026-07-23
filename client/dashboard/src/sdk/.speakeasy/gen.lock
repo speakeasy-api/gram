@@ -6143,7 +6143,7 @@ examples:
   searchUsers:
     speakeasy-default-search-users:
       requestBody:
-        application/json: {"filter": {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}, "group_by": "employee", "limit": 50, "metrics": "full", "sort": "desc", "user_type": "external"}
+        application/json: {"filter": {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}, "group_by": "employee", "limit": 50, "metrics": "full", "sort": "desc", "source": "logs", "user_type": "external"}
       responses:
         "200":
           application/json: {"users": [{"avg_tokens_per_request": 2445.8, "cache_creation_input_tokens": 298116, "cache_read_input_tokens": 261654, "first_seen_unix_nano": "<value>", "hook_sources": [], "last_seen_unix_nano": "<value>", "tool_call_failure": 344370, "tool_call_success": 262843, "tools": [{"count": 505126, "failure_count": 421094, "success_count": 638666, "urn": "<value>"}], "total_chat_requests": 818926, "total_chats": 659984, "total_cost": 45.75, "total_input_tokens": 504437, "total_output_tokens": 325254, "total_tokens": 66646, "total_tool_calls": 681888, "user_email": "<value>", "user_id": "<id>"}]}

@@ -58531,7 +58531,7 @@ components:
                     maximum: 1000
                 metrics:
                     type: string
-                    description: 'Level of usage metrics to compute per user. ''full'' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. ''basic'' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under ''basic''.'
+                    description: 'Level of usage metrics to compute per user. ''full'' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. ''basic'' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under ''basic''. Ignored when source=''agent_metrics''.'
                     default: full
                     enum:
                         - full
@@ -58543,6 +58543,13 @@ components:
                     enum:
                         - asc
                         - desc
+                source:
+                    type: string
+                    description: Where per-user summaries are read from (internal employee grouping only). 'logs' (default) scans raw telemetry_logs and computes the metrics selected by 'metrics'. 'agent_metrics' reads the pre-aggregated attribute_metrics_summaries view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper but returns only identity, last activity (hourly), and input/output/total token sums; users without an email in the window are surfaced separately from raw logs with activity but no token counts.
+                    default: logs
+                    enum:
+                        - logs
+                        - agent_metrics
                 user_type:
                     type: string
                     description: Type of user identifier to group by

@@ -412,6 +412,14 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
+	// The employee enrollment list can opt into the pre-aggregated
+	// attribute_metrics_summaries view instead of scanning raw telemetry_logs.
+	// The view is email-keyed and internal-only, so external grouping falls
+	// through to the raw-logs path below.
+	if payload.Source == searchUsersSourceAgentMetrics && payload.UserType != "external" {
+		return s.searchEmployeesFromAgentMetrics(ctx, payload.UserType, params)
+	}
+
 	deploymentID := conv.PtrValOr(filter.DeploymentID, "")
 
 	groupBy := "user_id"
@@ -445,6 +453,85 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		items = items[:params.limit]
 	}
 
+	users := s.assembleUserSummaries(ctx, payload.UserType, items)
+
+	return &telem_gen.SearchUsersResult{
+		Users:      users,
+		Roles:      nil,
+		NextCursor: nextCursor,
+	}, nil
+}
+
+// searchUsersSourceAgentMetrics is the SearchUsersPayload.Source value that
+// routes the internal employee grouping to the pre-aggregated
+// attribute_metrics_summaries view (see searchEmployeesFromAgentMetrics). Any
+// other value uses the raw telemetry_logs path.
+const searchUsersSourceAgentMetrics = "agent_metrics"
+
+// searchEmployeesFromAgentMetrics serves the employee enrollment list from the
+// pre-aggregated attribute_metrics_summaries view. It runs two reads
+// concurrently: the email-keyed agent-usage rollup (token totals + last
+// activity) and a cheap supplement listing email-less identities (activity
+// only, no tokens) so unattributed usage stays visible. The merged summaries go
+// through the same assembly + account enrichment as the raw path. Results are
+// returned in a single page (the enrollment directory is bounded), so there is
+// no cursor.
+func (s *Service) searchEmployeesFromAgentMetrics(ctx context.Context, userType string, params *searchParams) (*telem_gen.SearchUsersResult, error) {
+	// Full-directory fetch: enrollment orgs sit well under this bound. The raw
+	// supplement is capped identically so a pathological project can't stream
+	// unboundedly.
+	const maxEmployees = 10001
+
+	var agentItems, emaillessItems []repo.UserSummary
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		items, err := s.chRepo.SearchEmployeeAgentUsage(gctx, repo.SearchEmployeeAgentUsageParams{
+			GramProjectID: params.projectID,
+			TimeStart:     params.timeStart,
+			TimeEnd:       params.timeEnd,
+			Limit:         maxEmployees,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error reading employee agent usage")
+		}
+		agentItems = items
+		return nil
+	})
+	g.Go(func() error {
+		items, err := s.chRepo.ListEmaillessIdentities(gctx, repo.ListEmaillessIdentitiesParams{
+			GramProjectID: params.projectID,
+			TimeStart:     params.timeStart,
+			TimeEnd:       params.timeEnd,
+			Limit:         maxEmployees,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error listing email-less identities")
+		}
+		emaillessItems = items
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return nil, err //nolint:wrapcheck // already an oops error from the goroutines
+	}
+
+	items := make([]repo.UserSummary, 0, len(agentItems)+len(emaillessItems))
+	items = append(items, agentItems...)
+	items = append(items, emaillessItems...)
+
+	users := s.assembleUserSummaries(ctx, userType, items)
+
+	return &telem_gen.SearchUsersResult{
+		Users:      users,
+		Roles:      nil,
+		NextCursor: nil,
+	}, nil
+}
+
+// assembleUserSummaries converts repo user rows into API summaries and attaches
+// each user's linked AI accounts from the user_accounts directory. Shared by the
+// raw-logs and agent-metrics employee paths; rows that carry no tool/hook/chat
+// aggregates (the agent-metrics path) simply yield empty breakdowns.
+func (s *Service) assembleUserSummaries(ctx context.Context, userType string, items []repo.UserSummary) []*telem_gen.UserSummary {
 	users := make([]*telem_gen.UserSummary, len(items))
 	rawUserIDsByKey := make(map[string][]string, len(items))
 	for i, item := range items {
@@ -499,17 +586,13 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	// Attach each user's linked AI accounts (team + personal, across providers)
 	// from the user_accounts directory. Only meaningful when grouping by internal
 	// user_id — external ids don't map to a directory owner.
-	if payload.UserType != "external" {
+	if userType != "external" {
 		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
 			s.attachUserAccounts(ctx, authCtx.ActiveOrganizationID, users, rawUserIDsByKey)
 		}
 	}
 
-	return &telem_gen.SearchUsersResult{
-		Users:      users,
-		Roles:      nil,
-		NextCursor: nextCursor,
-	}, nil
+	return users
 }
 
 // resolveSummaryOwnerIDs maps summary group keys to the Gram user id each key
