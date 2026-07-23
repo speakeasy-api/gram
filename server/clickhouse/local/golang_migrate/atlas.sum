@@ -1,4 +1,4 @@
-h1:A2OxSSZ/jdGrnQ5GatF32b2gyYofpKoppYS0bs1UHZM=
+h1:4a6C0hasT3g7nAJZNnxCY521anV34+1JTJC0X+0bpF4=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -63,4 +63,4 @@ h1:A2OxSSZ/jdGrnQ5GatF32b2gyYofpKoppYS0bs1UHZM=
 20260714173525_drop-tum-breakdown-summaries.up.sql h1:bN2z1+CUm9cttkIMubc0en+gp7viCi4ojcCACI8rhtU=
 20260714200951_shadow-mcp-server-name-override.up.sql h1:O6ZXprNwT+7pVXUmO6pkPoy+SFpCh4+zSH3E61ODGnQ=
 20260714200952_add-risk-findings.up.sql h1:RBBGniqX3KuAlZdyXFC/x/PPrVj8gUWqTBMGWKytQhA=
-20260721230616_add-telemetry-event-urn.up.sql h1:pU7ZxNssi+ugc/AJ6JrvlUdOo2bEUHj03HrHbBDmfyw=
+20260723183828_add-telemetry-event-urn.up.sql h1:ZBrCdTV1noA9ZDrOqmL8vUikD8B7i7/p5o8CenZJvvY=

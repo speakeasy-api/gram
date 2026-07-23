@@ -508,14 +508,14 @@ func TestCreateLog_StampsDerivedEventURN(t *testing.T) {
 
 	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
-	require.Contains(t, log.Attributes, "urn:gram:telemetry:event:gram_gateway:log:tool_call")
+	require.Contains(t, log.Attributes, "urn:telemetry:gram_service:log:tool_call")
 }
 
 func TestCreateLog_ExplicitEventURNWins(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestLogsService(t)
 
-	explicit := "urn:gram:telemetry:event:gram_worker:log:custom_type"
+	explicit := "urn:telemetry:gram_service:log:custom_type"
 	attrs := telemetry.HTTPLogAttributes{
 		attr.EventSourceKey: string(telemetry.EventSourceToolCall),
 		attr.EventURNKey:    explicit,
@@ -535,7 +535,7 @@ func TestCreateLog_ExplicitEventURNWins(t *testing.T) {
 	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.Contains(t, log.Attributes, explicit)
-	require.NotContains(t, log.Attributes, "urn:gram:telemetry:event:gram_gateway")
+	require.NotContains(t, log.Attributes, "urn:telemetry:gram_service:log:tool_call")
 }
 
 func newTestToolInfo(orgID string) telemetry.ToolInfo {
