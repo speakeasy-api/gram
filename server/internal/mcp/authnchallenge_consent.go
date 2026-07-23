@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -440,7 +441,7 @@ func buildClientRedirect(redirectURI, code, originalState, errCode, errDescripti
 // violation. Used to detect duplicate consent inserts (idempotent re-consent).
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
 // shouldAutoCloseFirstParty reports whether a first-party connect tab is fully
