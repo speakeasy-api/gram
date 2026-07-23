@@ -126,7 +126,6 @@ type Activities struct {
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
 	pluginPublisher                 *activities.PluginPublisher
-	skillEfficacyScorer             *activities.SkillEfficacyScorer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
 }
 
@@ -203,9 +202,12 @@ func NewActivities(
 
 	// The chat analysis judge roster. Adding a new session analysis is
 	// registering its judge here; enabling it per organization is a
-	// chat_analysis_settings row.
+	// chat_analysis_settings row. Skill efficacy is one judge among the rest:
+	// it brings its own unit source (reconciled skill activations) and writes
+	// its per-skill verdicts to the skill_efficacy_scores sink itself.
 	chatAnalysisJudges, err := analysis.NewJudges(
 		analysis.NewWorkUnitsJudge(logger, tracerProvider, chatClient, judgeRateLimiter),
+		efficacy.NewJudge(logger, tracerProvider, db, telemetryRepo, chatClient, judgeRateLimiter),
 	)
 	if err != nil {
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
@@ -271,17 +273,6 @@ func NewActivities(
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
-		// The judge draws on the same per-(org, model) bucket and the same
-		// completion client as every other platform judge, so efficacy scoring
-		// cannot outspend the org's key behind their backs.
-		skillEfficacyScorer: activities.NewSkillEfficacyScorer(
-			logger,
-			meterProvider,
-			db,
-			productFeatures,
-			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter)),
-			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
-		),
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.

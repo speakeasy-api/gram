@@ -1,13 +1,14 @@
 package efficacy
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 )
 
 const (
@@ -39,41 +40,92 @@ type Verdict struct {
 	Flags           []string `json:"flags"`
 }
 
-// ParseVerdict decodes the judge's raw structured output and normalizes it.
-// Unparseable output is a model failure: the model returned something outside
-// the contract it was given, and a retry can produce a different answer.
-func ParseVerdict(raw string) (Verdict, error) {
-	required := map[string]bool{
-		"score":             false,
-		"rationale":         false,
-		"est_turns_saved":   true,
-		"est_minutes_saved": true,
-		"roi_confidence":    true,
-		"flags":             false,
+// sessionVerdict is the judge's raw structured answer: one indexed verdict
+// per judged skill.
+type sessionVerdict struct {
+	Verdicts []indexedVerdict `json:"verdicts"`
+}
+
+type indexedVerdict struct {
+	Index int `json:"index"`
+	Verdict
+}
+
+// ParseSessionVerdict decodes the judge's raw structured output and normalizes
+// it into one verdict per judged skill, ordered by the skill index the prompt
+// assigned. Anything outside the contract — a missing or duplicated index, a
+// count mismatch, unparseable JSON — is a model failure: the model returned
+// something other than what it was asked for, and a retry can produce a
+// different answer.
+func ParseSessionVerdict(raw string, skills int) ([]Verdict, error) {
+	decoder := json.NewDecoder(strings.NewReader(strings.TrimSpace(raw)))
+	decoder.DisallowUnknownFields()
+
+	var parsed sessionVerdict
+	if err := decoder.Decode(&parsed); err != nil {
+		return nil, fmt.Errorf("parse efficacy session verdict: %w: %w", analysis.ErrModelFailure, err)
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &fields); err != nil {
-		return Verdict{}, fmt.Errorf("parse efficacy verdict: %w: %w", ErrModelFailure, err)
-	}
-	for name, value := range fields {
-		if _, ok := required[name]; !ok {
-			return Verdict{}, fmt.Errorf("parse efficacy verdict: unknown field %q: %w", name, ErrModelFailure)
-		}
-		if !required[name] && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-			return Verdict{}, fmt.Errorf("parse efficacy verdict: field %q must not be null: %w", name, ErrModelFailure)
-		}
-	}
-	for name := range required {
-		if _, ok := fields[name]; !ok {
-			return Verdict{}, fmt.Errorf("parse efficacy verdict: missing field %q: %w", name, ErrModelFailure)
-		}
+	if len(parsed.Verdicts) != skills {
+		return nil, fmt.Errorf("parse efficacy session verdict: got %d verdicts for %d skills: %w", len(parsed.Verdicts), skills, analysis.ErrModelFailure)
 	}
 
-	var v Verdict
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &v); err != nil {
-		return Verdict{}, fmt.Errorf("parse efficacy verdict: %w: %w", ErrModelFailure, err)
+	ordered := make([]Verdict, skills)
+	seen := make([]bool, skills)
+	for _, entry := range parsed.Verdicts {
+		if entry.Index < 0 || entry.Index >= skills || seen[entry.Index] {
+			return nil, fmt.Errorf("parse efficacy session verdict: invalid skill index %d: %w", entry.Index, analysis.ErrModelFailure)
+		}
+		normalized, err := entry.Normalize()
+		if err != nil {
+			return nil, err
+		}
+		ordered[entry.Index] = normalized
+		seen[entry.Index] = true
 	}
-	return v.Normalize()
+
+	return ordered, nil
+}
+
+// SessionVerdictSchema is the judge's structured-output JSON schema.
+// Deliberately no minimum/maximum on the numbers and no maxLength on the
+// rationale: Anthropic routes (via Amazon Bedrock) reject those keywords with a
+// 400, which would make every Anthropic route fail. Those bounds are enforced
+// by Verdict.Normalize instead, which the sink's CHECK constraints require
+// anyway.
+func SessionVerdictSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"verdicts": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"index":             map[string]any{"type": "number"},
+						"score":             map[string]any{"type": "number"},
+						"rationale":         map[string]any{"type": "string"},
+						"est_turns_saved":   map[string]any{"type": []string{"number", "null"}},
+						"est_minutes_saved": map[string]any{"type": []string{"number", "null"}},
+						"roi_confidence": map[string]any{
+							"type": []string{"string", "null"},
+							"enum": []any{"low", "med", "high", nil},
+						},
+						"flags": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"type": "string", "enum": verdictFlags},
+						},
+					},
+					// Strict structured output requires every declared property to
+					// be required; optionality is expressed by the null-typed
+					// variants above.
+					"required":             []string{"index", "score", "rationale", "est_turns_saved", "est_minutes_saved", "roi_confidence", "flags"},
+					"additionalProperties": false,
+				},
+			},
+		},
+		"required":             []string{"verdicts"},
+		"additionalProperties": false,
+	}
 }
 
 // Normalize forces the verdict inside every CHECK constraint
@@ -87,7 +139,7 @@ func ParseVerdict(raw string) (Verdict, error) {
 // out-of-domain value degrades to the sink's null/empty representation.
 func (v Verdict) Normalize() (Verdict, error) {
 	if math.IsNaN(v.Score) || math.IsInf(v.Score, 0) {
-		return Verdict{}, fmt.Errorf("efficacy verdict score is not finite: %w", ErrModelFailure)
+		return Verdict{}, fmt.Errorf("efficacy verdict score is not finite: %w", analysis.ErrModelFailure)
 	}
 
 	rationale := strings.TrimSpace(v.Rationale)

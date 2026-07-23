@@ -23,6 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	analysisrepo "github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -399,7 +401,10 @@ func (s *Service) GetSettings(ctx context.Context, _ *gen.GetSettingsPayload) (*
 		return nil, err
 	}
 
-	row, err := skillsrepo.New(s.db).GetSkillEfficacySettingsForOrganization(ctx, authCtx.ActiveOrganizationID)
+	row, err := analysisrepo.New(s.db).GetChatAnalysisSettingForOrganizationJudge(ctx, analysisrepo.GetChatAnalysisSettingForOrganizationJudgeParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Judge:          efficacy.JudgeName,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return defaultView(authCtx.ActiveOrganizationID), nil
@@ -415,13 +420,7 @@ func (s *Service) UpsertSettings(ctx context.Context, payload *gen.UpsertSetting
 	if err != nil {
 		return nil, err
 	}
-	if err := validateCap("per_skill_daily_cap", payload.PerSkillDailyCap); err != nil {
-		return nil, err
-	}
-	if err := validateCap("org_daily_cap", payload.OrgDailyCap); err != nil {
-		return nil, err
-	}
-	if err := validateCap("new_version_burst", payload.NewVersionBurst); err != nil {
+	if err := validateCap("daily_cap", payload.DailyCap); err != nil {
 		return nil, err
 	}
 
@@ -431,12 +430,15 @@ func (s *Service) UpsertSettings(ctx context.Context, payload *gen.UpsertSetting
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	queries := skillsrepo.New(dbtx)
-	if err := queries.LockOrganizationSkillEfficacyBudget(ctx, authCtx.ActiveOrganizationID); err != nil {
+	queries := analysisrepo.New(dbtx)
+	if err := queries.LockOrganizationChatAnalysisBudget(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock skill efficacy settings").LogError(ctx, logger)
 	}
 	var beforeSnapshot *audit.SkillEfficacySettingsSnapshot
-	before, err := queries.GetSkillEfficacySettingsForOrganization(ctx, authCtx.ActiveOrganizationID)
+	before, err := queries.GetChatAnalysisSettingForOrganizationJudge(ctx, analysisrepo.GetChatAnalysisSettingForOrganizationJudgeParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Judge:          efficacy.JudgeName,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
@@ -446,12 +448,11 @@ func (s *Service) UpsertSettings(ctx context.Context, payload *gen.UpsertSetting
 		beforeSnapshot = &snapshot
 	}
 
-	row, err := queries.UpsertSkillEfficacySettingsForOrganization(ctx, skillsrepo.UpsertSkillEfficacySettingsForOrganizationParams{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		Enabled:          payload.Enabled,
-		PerSkillDailyCap: conv.SafeInt32(payload.PerSkillDailyCap),
-		OrgDailyCap:      conv.SafeInt32(payload.OrgDailyCap),
-		NewVersionBurst:  conv.SafeInt32(payload.NewVersionBurst),
+	row, err := queries.UpsertChatAnalysisSettingForOrganizationJudge(ctx, analysisrepo.UpsertChatAnalysisSettingForOrganizationJudgeParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Judge:          efficacy.JudgeName,
+		Enabled:        payload.Enabled,
+		DailyCap:       conv.SafeInt32(payload.DailyCap),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "upsert skill efficacy settings").LogError(ctx, logger)
@@ -484,33 +485,30 @@ func validateCap(name string, value int) error {
 	return nil
 }
 
+// defaultView is what an organization with no settings row runs on: scoring
+// off, the package default cap shown for when it is switched on. The pipeline
+// is opt-in per judge, so absence means disabled.
 func defaultView(organizationID string) *gen.SkillEfficacySettings {
 	return &gen.SkillEfficacySettings{
-		OrganizationID:   organizationID,
-		Enabled:          efficacy.DefaultEnabled,
-		PerSkillDailyCap: efficacy.DefaultPerSkillDailyCap,
-		OrgDailyCap:      efficacy.DefaultOrgDailyCap,
-		NewVersionBurst:  efficacy.DefaultNewVersionBurst,
-		IsDefault:        true,
+		OrganizationID: organizationID,
+		Enabled:        false,
+		DailyCap:       int(analysis.DefaultJudgeDailyCap),
+		IsDefault:      true,
 	}
 }
 
-func buildView(row skillsrepo.SkillEfficacySetting, isDefault bool) *gen.SkillEfficacySettings {
+func buildView(row analysisrepo.ChatAnalysisSetting, isDefault bool) *gen.SkillEfficacySettings {
 	return &gen.SkillEfficacySettings{
-		OrganizationID:   row.OrganizationID,
-		Enabled:          row.Enabled,
-		PerSkillDailyCap: int(row.PerSkillDailyCap),
-		OrgDailyCap:      int(row.OrgDailyCap),
-		NewVersionBurst:  int(row.NewVersionBurst),
-		IsDefault:        isDefault,
+		OrganizationID: row.OrganizationID,
+		Enabled:        row.Enabled,
+		DailyCap:       int(row.DailyCap),
+		IsDefault:      isDefault,
 	}
 }
 
-func buildSnapshot(row skillsrepo.SkillEfficacySetting) audit.SkillEfficacySettingsSnapshot {
+func buildSnapshot(row analysisrepo.ChatAnalysisSetting) audit.SkillEfficacySettingsSnapshot {
 	return audit.SkillEfficacySettingsSnapshot{
-		Enabled:          row.Enabled,
-		PerSkillDailyCap: row.PerSkillDailyCap,
-		OrgDailyCap:      row.OrgDailyCap,
-		NewVersionBurst:  row.NewVersionBurst,
+		Enabled:  row.Enabled,
+		DailyCap: row.DailyCap,
 	}
 }

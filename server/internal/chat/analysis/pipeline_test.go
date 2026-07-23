@@ -32,7 +32,7 @@ func TestEnqueuePage_EnqueuesEnabledJudgesPerChat(t *testing.T) {
 	quiet := fixture.seedChat(t, 3, time.Hour)
 	empty := fixture.seedChat(t, 0, 0)
 
-	result, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	result, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Scanned, "the chat with no messages is not a candidate")
 	require.True(t, result.Exhausted)
@@ -44,7 +44,7 @@ func TestEnqueuePage_EnqueuesEnabledJudgesPerChat(t *testing.T) {
 	require.NotEqual(t, empty, pending[0].ChatID)
 
 	// Re-running the page is idempotent.
-	_, err = EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	_, err = EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
 	require.NoError(t, err)
 	require.Len(t, fixture.pendingEvaluations(t), 1)
 }
@@ -58,7 +58,7 @@ func TestEnqueuePage_NothingEnabledBuildsNoQueue(t *testing.T) {
 
 	fixture.seedChat(t, 3, time.Hour)
 
-	result, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	result, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
 	require.NoError(t, err)
 	require.Zero(t, result.Scanned)
 	require.True(t, result.Exhausted)
@@ -76,7 +76,7 @@ func TestReserve_RespectsJudgeDailyCap(t *testing.T) {
 	for range 3 {
 		fixture.seedChat(t, 2, time.Hour)
 	}
-	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
 	require.NoError(t, err)
 	require.Len(t, fixture.pendingEvaluations(t), 3)
 
@@ -101,7 +101,7 @@ func TestReserve_SkipsActiveChats(t *testing.T) {
 	quiet := fixture.seedChat(t, 2, time.Hour)
 	fixture.seedChat(t, 2, time.Minute)
 
-	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
 	require.NoError(t, err)
 
 	reserved, _, err := Reserve(ctx, fixture.db, roster, fixture.projectID, PendingCursor{}, MaxReservedClaimBatch)
@@ -119,7 +119,7 @@ func TestPublish_ScoresReservedBatch(t *testing.T) {
 	fixture.enableJudge(t, "work_units", 10)
 
 	chatID := fixture.seedChat(t, 3, time.Hour)
-	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
 	require.NoError(t, err)
 	reserved, _, err := Reserve(ctx, fixture.db, roster, fixture.projectID, PendingCursor{}, MaxReservedClaimBatch)
 	require.NoError(t, err)
@@ -156,7 +156,7 @@ func TestPublish_ModelFailureChargesAttempt(t *testing.T) {
 	fixture.enableJudge(t, "work_units", 10)
 
 	fixture.seedChat(t, 2, time.Hour)
-	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
 	require.NoError(t, err)
 	reserved, _, err := Reserve(ctx, fixture.db, roster, fixture.projectID, PendingCursor{}, MaxReservedClaimBatch)
 	require.NoError(t, err)
@@ -192,7 +192,7 @@ func TestPublish_AlreadyPublishedSkipsJudge(t *testing.T) {
 	fixture.enableJudge(t, "work_units", 10)
 
 	fixture.seedChat(t, 2, time.Hour)
-	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
 	require.NoError(t, err)
 	reserved, _, err := Reserve(ctx, fixture.db, roster, fixture.projectID, PendingCursor{}, MaxReservedClaimBatch)
 	require.NoError(t, err)

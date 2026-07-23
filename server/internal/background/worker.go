@@ -401,18 +401,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
-	// Skill efficacy activities — the database steps run on the main queue and
-	// only the judged publication goes to the dedicated worker.
-	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
-	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.ReserveSkillEfficacyEvaluations)
-	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.LoadReservedSkillEfficacyEvaluations)
-	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.ListSkillEfficacyProjects)
-	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.ResetStaleSkillEfficacyReservations)
-	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.SignalSkillEfficacyCoordinator)
-	skillEfficacyWorker.RegisterActivity(activities.skillEfficacyScorer.PublishSkillEfficacyBatch)
-	// Chat analysis activities — same split as skill efficacy: database steps on
-	// the main queue, the judged publication on the shared judged-publication
-	// worker so one per-pod cap bounds both pipelines' model conversations.
+	// Chat analysis activities — the database steps run on the main queue and
+	// only the judged publication goes to the dedicated judged-publication
+	// worker, so one per-pod cap bounds every judge conversation (skill
+	// efficacy and work units alike).
+	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.ListChatAnalysisEnqueueSources)
 	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.EnqueueChatAnalysisPage)
 	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.ReserveChatAnalysisEvaluations)
 	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.LoadReservedChatAnalysisEvaluations)
@@ -478,9 +471,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
-	// Skill efficacy workflows
-	temporalWorker.RegisterWorkflow(SkillEfficacyCoordinatorWorkflow)
-	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
 	// Chat analysis workflows
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
@@ -551,9 +541,9 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "failed to add skill observation reconciliation schedule", attr.SlogError(err))
 	}
 
-	if err := AddSkillEfficacySweepSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add skill efficacy sweep schedule", attr.SlogError(err))
-	}
+	// The legacy skill efficacy pipeline is gone; its sweep schedule would
+	// otherwise keep firing a workflow no worker registers.
+	RemoveLegacySkillEfficacySweepSchedule(context.Background(), logger, env)
 
 	if err := AddChatAnalysisSweepSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add chat analysis sweep schedule", attr.SlogError(err))
@@ -582,11 +572,14 @@ func AIUsagePollerTaskQueue(mainQueue tenv.TaskQueueName) string {
 	return string(mainQueue) + "-ai-integration-usage"
 }
 
-// Fleet-wide cap on in-flight skill efficacy publications per worker pod. One
+// Fleet-wide cap on in-flight judged publications per worker pod. One
 // publication judges a whole reserved batch sequentially, so this is the number
 // of concurrent judge conversations a pod can hold open.
 const perPodSkillEfficacyPublishConcurrency = 5
 
+// SkillEfficacyTaskQueue names the dedicated judged-publication task queue.
+// The name predates the unified chat analysis pipeline and is kept so in-flight
+// activities survive the cutover; every chat analysis publication runs on it.
 func SkillEfficacyTaskQueue(mainQueue tenv.TaskQueueName) string {
 	return string(mainQueue) + "-skill-efficacy"
 }

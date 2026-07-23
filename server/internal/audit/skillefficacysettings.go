@@ -15,10 +15,11 @@ import (
 const ActionSkillEfficacySettingsUpsert Action = "skill_efficacy_settings:upsert"
 
 type SkillEfficacySettingsSnapshot struct {
-	Enabled          bool  `json:"enabled"`
-	PerSkillDailyCap int32 `json:"per_skill_daily_cap"`
-	OrgDailyCap      int32 `json:"org_daily_cap"`
-	NewVersionBurst  int32 `json:"new_version_burst"`
+	Enabled bool `json:"enabled"`
+	// DailyCap counts session evaluations per UTC day. Older entries carry the
+	// pre-unification per_skill_daily_cap/org_daily_cap/new_version_burst
+	// fields instead.
+	DailyCap int32 `json:"daily_cap"`
 }
 
 type LogSkillEfficacySettingsUpsertEvent struct {

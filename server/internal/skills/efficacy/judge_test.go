@@ -1,367 +1,152 @@
 package efficacy
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"testing"
 	"time"
 
-	or "github.com/OpenRouterTeam/go-sdk/models/components"
-	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
-	"github.com/stretchr/testify/mock"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
-// mockCompletionClient implements openrouter.CompletionClient for tests.
-type mockCompletionClient struct {
-	mock.Mock
-}
-
-func (m *mockCompletionClient) GetCompletion(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
-	args := m.Called(ctx, request)
-	resp, _ := args.Get(0).(*openrouter.CompletionResponse)
-	return resp, args.Error(1)
-}
-
-func (m *mockCompletionClient) GetCompletionStream(ctx context.Context, request openrouter.CompletionRequest) (openrouter.StreamReader, error) {
-	args := m.Called(ctx, request)
-	r, _ := args.Get(0).(openrouter.StreamReader)
-	return r, args.Error(1)
-}
-
-func (m *mockCompletionClient) GetObjectCompletion(ctx context.Context, request openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error) {
-	args := m.Called(ctx, request)
-	resp, _ := args.Get(0).(*openrouter.CompletionResponse)
-	return resp, args.Error(1)
-}
-
-func (m *mockCompletionClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...openrouter.EmbeddingOption) ([][]float32, error) {
-	var resolved openrouter.EmbeddingOptions
-	for _, opt := range opts {
-		opt(&resolved)
-	}
-	args := m.Called(ctx, orgID, model, inputs, resolved)
-	v, _ := args.Get(0).([][]float32)
-	return v, args.Error(1)
-}
-
-func judgeResponse(text string) *openrouter.CompletionResponse {
-	content := or.CreateChatAssistantMessageContentStr(text)
-	msg := or.CreateChatMessagesAssistant(or.ChatAssistantMessage{
-		Role:             or.ChatAssistantMessageRoleAssistant,
-		Content:          optionalnullable.From(&content),
-		Name:             nil,
-		ToolCalls:        nil,
-		Refusal:          nil,
-		Reasoning:        nil,
-		ReasoningDetails: nil,
-		Images:           nil,
-		Audio:            nil,
-	})
-	cost := 0.0004
-	return &openrouter.CompletionResponse{
-		StartTime:    time.Time{},
-		Message:      &msg,
-		MessageID:    "msg_test",
-		Model:        JudgeModel,
-		Usage:        openrouter.Usage{PromptTokens: 120, CompletionTokens: 30, TotalTokens: 150, Cost: &cost},
-		FinishReason: nil,
-		ToolCalls:    nil,
-		Content:      text,
-	}
-}
-
-// newTestJudge builds a Judge for the call path. The limiter is exercised only
-// by Judge, which needs a Redis-backed store; call() never touches it.
-func newTestJudge(t *testing.T, client openrouter.CompletionClient) *Judge {
+func testRoster(t *testing.T, judge *Judge) *analysis.Judges {
 	t.Helper()
-	return &Judge{
-		logger:  testenv.NewLogger(t),
-		tracer:  testenv.NewTracerProvider(t).Tracer("test"),
-		client:  client,
-		limiter: nil,
-	}
-}
 
-func testJudgeInput() JudgeInput {
-	return JudgeInput{
-		OrgID:        "org_1",
-		ProjectID:    "00000000-0000-0000-0000-000000000001",
-		SkillName:    "commit-hygiene",
-		SkillURN:     "skills:project:commit-hygiene",
-		SkillContent: "Always run the linter before committing.",
-		Surface:      "dev",
-		ActivatedAt:  time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC),
-		Transcript: Transcript{
-			Omitted: "",
-			Messages: []TranscriptMessage{{
-				Index:                     1,
-				CreatedAt:                 "2026-07-21T12:00:00Z",
-				SecondsSincePrevious:      nil,
-				Role:                      "user",
-				Content:                   "commit this",
-				ContentTruncated:          false,
-				ToolCalls:                 nil,
-				ToolCallsTruncated:        false,
-				ToolCallID:                "",
-				ToolURN:                   "",
-				ToolOutcome:               "",
-				ToolOutcomeNotes:          "",
-				ToolOutcomeNotesTruncated: false,
-			}},
-		},
-	}
-}
-
-func TestJudgeCallReturnsNormalizedVerdict(t *testing.T) {
-	t.Parallel()
-
-	client := &mockCompletionClient{}
-	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Return(judgeResponse(`{"score":1.4,"rationale":"linter ran first","est_turns_saved":1,"est_minutes_saved":null,"roi_confidence":"low","flags":[]}`), nil).Once()
-
-	got, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
-
+	roster, err := analysis.NewJudges(judge)
 	require.NoError(t, err)
-	require.InDelta(t, 1.0, got.Verdict.Score, 0)
-	require.Equal(t, "linter ran first", got.Verdict.Rationale)
-	require.Equal(t, JudgeModel, got.Model)
-	require.Equal(t, JudgePromptVersion, got.PromptVersion)
-	client.AssertExpectations(t)
+	return roster
 }
 
-func TestJudgeCallBillsInternalKeyAndEfficacySource(t *testing.T) {
+func TestEnqueueUnitsPageFoldsSessionsAndStampsActivations(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 
-	client := &mockCompletionClient{}
-	var captured openrouter.ObjectCompletionRequest
-	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Run(func(args mock.Arguments) {
-			captured, _ = args.Get(1).(openrouter.ObjectCompletionRequest)
-		}).
-		Return(judgeResponse(`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[]}`), nil).Once()
+	fixture := newEfficacyFixture(t, "efficacy_units")
+	fixture.enableJudge(t, 10)
 
-	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
+	judge := NewJudge(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, &captureSkillSink{}, &stubCompletionClient{response: "{}"}, judgeLimiter(t))
+	roster := testRoster(t, judge)
 
+	now := time.Now().UTC()
+	// A live session with two activations, a session whose chat was deleted,
+	// and one whose chat never arrived.
+	liveChat := fixture.seedChat(t, "session-live", 3, time.Hour)
+	fixture.observe(t, "session-live", "claude-code", now.Add(-2*time.Hour))
+	fixture.observe(t, "session-live", "claude-code", now.Add(-90*time.Minute))
+
+	deletedChat := fixture.seedChat(t, "session-deleted", 1, time.Hour)
+	fixture.observe(t, "session-deleted", "claude-code", now.Add(-2*time.Hour))
+	fixture.deleteChat(t, deletedChat)
+
+	fixture.observe(t, "session-absent", "claude-code", now.Add(-2*time.Hour))
+
+	result, err := analysis.EnqueuePage(ctx, fixture.db, roster, fixture.projectID, JudgeName, nil, analysis.MaxEnqueuePageSize)
 	require.NoError(t, err)
-	require.Equal(t, openrouter.KeyTypeInternal, captured.KeyType)
-	require.Equal(t, "skill-efficacy", string(captured.UsageSource))
-	require.Equal(t, "skill-efficacy", string(captured.KeySlot))
-	require.Equal(t, SystemPrompt, captured.SystemPrompt)
-	require.NotNil(t, captured.JSONSchema)
+	require.Equal(t, 4, result.Scanned)
+	require.True(t, result.Exhausted)
+
+	pending := fixture.pendingUnits(t)
+	require.Len(t, pending, 1, "only the live session becomes a unit")
+	require.Equal(t, liveChat, pending[0].ChatID)
+	require.Equal(t, "session-live", pending[0].SessionID)
+	require.Equal(t, JudgeName, pending[0].Judge)
+
+	// The next walk from the head sees only the absent-chat activation: the
+	// live session's activations are stamped and the deleted session's retired.
+	again, err := analysis.EnqueuePage(ctx, fixture.db, roster, fixture.projectID, JudgeName, nil, analysis.MaxEnqueuePageSize)
+	require.NoError(t, err)
+	require.Equal(t, 1, again.Scanned)
+	require.Len(t, fixture.pendingUnits(t), 1)
 }
 
-func TestJudgeCallTreatsTransportErrorAsRetryable(t *testing.T) {
+func TestSkillEfficacyJudgeEndToEnd(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 
-	client := &mockCompletionClient{}
-	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Return((*openrouter.CompletionResponse)(nil), errors.New("connection reset")).Once()
+	fixture := newEfficacyFixture(t, "efficacy_e2e")
+	fixture.enableJudge(t, 10)
 
-	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
+	skillSink := &captureSkillSink{}
+	client := &stubCompletionClient{response: `{"verdicts":[{"index":0,"score":0.8,"rationale":"followed closely","est_turns_saved":3,"est_minutes_saved":10,"roi_confidence":"med","flags":[]}]}`}
+	judge := NewJudge(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, skillSink, client, judgeLimiter(t))
+	roster := testRoster(t, judge)
 
-	require.ErrorIs(t, err, ErrRetryable)
-	require.NotErrorIs(t, err, ErrModelFailure)
-}
+	now := time.Now().UTC()
+	chatID := fixture.seedChat(t, "session-e2e", 3, time.Hour)
+	fixture.observe(t, "session-e2e", "claude-code", now.Add(-2*time.Hour))
 
-// TestJudgeCallTreatsRejectedRequestAsModelFailure covers the payload the judge
-// controls being refused: retrying re-sends the identical request, so the
-// attempt has to be charged instead of looping forever.
-func TestJudgeCallTreatsRejectedRequestAsModelFailure(t *testing.T) {
-	t.Parallel()
-
-	client := &mockCompletionClient{}
-	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Return((*openrouter.CompletionResponse)(nil), fmt.Errorf("OpenRouter API error (status 400): prompt is too long: %w", openrouter.ErrHistoryCorruptionCandidate)).Once()
-
-	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
-
-	require.ErrorIs(t, err, ErrModelFailure)
-	require.NotErrorIs(t, err, ErrRetryable)
-}
-
-// TestJudgeCallTreatsGenericBadRequestAsModelFailure covers a 400/422 that is
-// not transcript-shaped - an unusable model or parameter. It is just as
-// deterministic as a corrupt transcript, so it burns an attempt rather than
-// looping the same request until the pipeline gives up.
-func TestJudgeCallTreatsGenericBadRequestAsModelFailure(t *testing.T) {
-	t.Parallel()
-
-	client := &mockCompletionClient{}
-	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Return((*openrouter.CompletionResponse)(nil), fmt.Errorf("OpenRouter API error (status 400): model does not support structured outputs: %w", openrouter.ErrBadRequest)).Once()
-
-	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
-
-	require.ErrorIs(t, err, ErrModelFailure)
-	require.NotErrorIs(t, err, ErrRetryable)
-}
-
-// TestJudgeCallTreatsContentPolicyRejectionAsModelFailure covers a provider
-// refusing the transcript on content grounds. The verdict is a property of the
-// payload, so retrying it forever would pin the evaluation open.
-func TestJudgeCallTreatsContentPolicyRejectionAsModelFailure(t *testing.T) {
-	t.Parallel()
-
-	client := &mockCompletionClient{}
-	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Return((*openrouter.CompletionResponse)(nil), fmt.Errorf("OpenRouter API error (status 403), response body omitted: %w", openrouter.ErrContentPolicy)).Once()
-
-	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
-
-	require.ErrorIs(t, err, ErrModelFailure)
-	require.NotErrorIs(t, err, ErrRetryable)
-}
-
-// TestJudgeCallTreatsUnclassified403AsRetryable pins the other side of the 403
-// split: a key or entitlement problem clears without changing the payload, so
-// it must not burn the evaluation's attempt budget.
-func TestJudgeCallTreatsUnclassified403AsRetryable(t *testing.T) {
-	t.Parallel()
-
-	client := &mockCompletionClient{}
-	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Return((*openrouter.CompletionResponse)(nil), errors.New("OpenRouter API error (status 403), response body omitted")).Once()
-
-	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
-
-	require.ErrorIs(t, err, ErrRetryable)
-	require.NotErrorIs(t, err, ErrModelFailure)
-}
-
-// TestJudgeCallTreatsInsufficientCreditsAsRetryable pins the other side of the
-// split: a funding failure is infrastructure and must not burn attempts.
-func TestJudgeCallTreatsInsufficientCreditsAsRetryable(t *testing.T) {
-	t.Parallel()
-
-	client := &mockCompletionClient{}
-	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Return((*openrouter.CompletionResponse)(nil), fmt.Errorf("OpenRouter API error (status 402): %w", openrouter.ErrInsufficientCredits)).Once()
-
-	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
-
-	require.ErrorIs(t, err, ErrRetryable)
-	require.NotErrorIs(t, err, ErrModelFailure)
-}
-
-func TestJudgeCallTreatsCallTimeoutAsModelFailure(t *testing.T) {
-	t.Parallel()
-
-	client := &mockCompletionClient{}
-	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Return((*openrouter.CompletionResponse)(nil), context.DeadlineExceeded).Once()
-
-	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
-
-	require.ErrorIs(t, err, ErrModelFailure)
-	require.NotErrorIs(t, err, ErrRetryable)
-}
-
-func TestJudgeCallTreatsUnparseableOutputAsModelFailure(t *testing.T) {
-	t.Parallel()
-
-	client := &mockCompletionClient{}
-	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Return(judgeResponse("sorry, I cannot help with that"), nil).Once()
-
-	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
-
-	require.ErrorIs(t, err, ErrModelFailure)
-}
-
-func TestJudgeCallTreatsEmptyContentAsModelFailure(t *testing.T) {
-	t.Parallel()
-
-	client := &mockCompletionClient{}
-	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Return(judgeResponse("   "), nil).Once()
-
-	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
-
-	require.ErrorIs(t, err, ErrModelFailure)
-}
-
-func TestBuildJudgePromptCarriesSkillAndTranscript(t *testing.T) {
-	t.Parallel()
-
-	in := testJudgeInput()
-	in.Transcript.Omitted = "[2 earlier messages omitted]"
-
-	prompt, err := BuildJudgePrompt(in)
+	_, err := analysis.EnqueuePage(ctx, fixture.db, roster, fixture.projectID, JudgeName, nil, analysis.MaxEnqueuePageSize)
 	require.NoError(t, err)
 
-	var payload judgePromptPayload
-	require.NoError(t, json.Unmarshal([]byte(prompt), &payload))
-	require.Equal(t, in.SkillName, payload.SkillName)
-	require.Equal(t, in.SkillContent, payload.SkillContent)
-	require.Equal(t, in.Surface, payload.Surface)
-	require.Equal(t, in.Transcript, payload.Transcript)
+	reserved, _, err := analysis.Reserve(ctx, fixture.db, roster, fixture.projectID, analysis.PendingCursor{}, analysis.MaxReservedClaimBatch)
+	require.NoError(t, err)
+	require.Len(t, reserved, 1)
+
+	analysisSink := &captureAnalysisSink{}
+	publisher := analysis.NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, analysisSink, roster)
+
+	result, err := publisher.Publish(ctx, fixture.projectID, []uuid.UUID{reserved[0].ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Scored)
+
+	// One skill row in the efficacy sink, keyed deterministically off the
+	// evaluation so retries collapse to the same logical event.
+	skillSink.mu.Lock()
+	skillRows := skillSink.inserted
+	skillSink.mu.Unlock()
+	require.Len(t, skillRows, 1)
+	require.Equal(t, uuid.NewSHA1(reserved[0].ID, []byte(fixture.skillVersionID.String()+"/dev")), skillRows[0].ID)
+	require.Equal(t, fixture.organizationID, skillRows[0].OrganizationID)
+	require.Equal(t, "session-e2e", skillRows[0].SessionID)
+	require.Equal(t, chatID.String(), skillRows[0].GramChatID)
+	require.Equal(t, fixture.skillVersionID, skillRows[0].SkillVersionID)
+	require.Equal(t, "dev", skillRows[0].Surface)
+	require.InDelta(t, 0.8, skillRows[0].Score, 0.0001)
+	require.Equal(t, JudgePromptVersion, skillRows[0].JudgePromptVersion)
+
+	// The pipeline's own sink row carries the session-level summary.
+	analysisSink.mu.Lock()
+	summaryRows := analysisSink.inserted
+	analysisSink.mu.Unlock()
+	require.Len(t, summaryRows, 1)
+	require.Equal(t, reserved[0].ID, summaryRows[0].ID)
+	require.Equal(t, JudgeName, summaryRows[0].Judge)
+	require.InDelta(t, 0.8, summaryRows[0].Score, 0.0001)
+	require.Equal(t, 1, client.calls)
 }
 
-// TestVerdictSchemaHasNoUnsupportedBounds guards the constraint that makes
-// Anthropic routes 400: minimum/maximum/maxLength anywhere in the schema.
-func TestVerdictSchemaHasNoUnsupportedBounds(t *testing.T) {
+func TestJudgeSkipsModelWhenAllRowsPublished(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
 
-	encoded, err := json.Marshal(VerdictSchema())
+	fixture := newEfficacyFixture(t, "efficacy_dedup")
+	fixture.enableJudge(t, 10)
+
+	now := time.Now().UTC()
+	fixture.seedChat(t, "session-dedup", 2, time.Hour)
+	fixture.observe(t, "session-dedup", "claude-code", now.Add(-2*time.Hour))
+
+	client := &stubCompletionClient{response: "must not be called"}
+	skillSink := &captureSkillSink{}
+	judge := NewJudge(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, skillSink, client, judgeLimiter(t))
+	roster := testRoster(t, judge)
+
+	_, err := analysis.EnqueuePage(ctx, fixture.db, roster, fixture.projectID, JudgeName, nil, analysis.MaxEnqueuePageSize)
 	require.NoError(t, err)
-
-	var decoded any
-	require.NoError(t, json.Unmarshal(encoded, &decoded))
-
-	var walk func(node any)
-	walk = func(node any) {
-		switch v := node.(type) {
-		case map[string]any:
-			for key, child := range v {
-				require.NotContains(t, []string{"minimum", "maximum", "maxLength"}, key, "schema key %q is rejected by Anthropic routes", key)
-				walk(child)
-			}
-		case []any:
-			for _, child := range v {
-				walk(child)
-			}
-		}
-	}
-	walk(decoded)
-}
-
-func TestVerdictSchemaIsStrictOverEveryVerdictField(t *testing.T) {
-	t.Parallel()
-
-	schema := VerdictSchema()
-
-	require.Equal(t, false, schema["additionalProperties"])
-
-	properties, ok := schema["properties"].(map[string]any)
-	require.True(t, ok)
-	required, ok := schema["required"].([]string)
-	require.True(t, ok)
-	require.Len(t, required, len(properties))
-	for _, name := range required {
-		require.Contains(t, properties, name)
-	}
-
-	// The schema is the contract Verdict unmarshals from, so its properties must
-	// be exactly the verdict's JSON fields.
-	encoded, err := json.Marshal(Verdict{
-		Score:           0,
-		Rationale:       "",
-		EstTurnsSaved:   nil,
-		EstMinutesSaved: nil,
-		ROIConfidence:   nil,
-		Flags:           nil,
-	})
+	reserved, _, err := analysis.Reserve(ctx, fixture.db, roster, fixture.projectID, analysis.PendingCursor{}, analysis.MaxReservedClaimBatch)
 	require.NoError(t, err)
-	var fields map[string]any
-	require.NoError(t, json.Unmarshal(encoded, &fields))
-	for name := range fields {
-		require.Contains(t, properties, name)
-	}
-	require.Len(t, properties, len(fields))
+	require.Len(t, reserved, 1)
+
+	// Every sink row for the unit already exists: the judge must finish without
+	// paying for inference again.
+	skillSink.existing = []string{uuid.NewSHA1(reserved[0].ID, []byte(fixture.skillVersionID.String()+"/dev")).String()}
+
+	analysisSink := &captureAnalysisSink{}
+	publisher := analysis.NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.db, analysisSink, roster)
+	result, err := publisher.Publish(ctx, fixture.projectID, []uuid.UUID{reserved[0].ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Scored)
+	require.Zero(t, client.calls)
 }

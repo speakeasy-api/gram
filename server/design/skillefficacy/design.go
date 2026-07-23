@@ -8,13 +8,11 @@ import (
 )
 
 var Settings = Type("SkillEfficacySettings", func() {
-	Description("Per-organization sampling settings for skill efficacy scoring.")
-	Required("organization_id", "enabled", "per_skill_daily_cap", "org_daily_cap", "new_version_burst", "is_default")
+	Description("Per-organization settings for skill efficacy scoring. Scoring is session-grained: one evaluation covers every skill a session activated, so the cap counts sessions per day.")
+	Required("organization_id", "enabled", "daily_cap", "is_default")
 	Attribute("organization_id", String, "Organization these settings apply to.")
 	Attribute("enabled", Boolean, "Whether skill efficacy scoring is enabled.")
-	Attribute("per_skill_daily_cap", Int, "Maximum evaluations reserved per skill each UTC day.", func() { Minimum(0); Maximum(10000) })
-	Attribute("org_daily_cap", Int, "Maximum evaluations reserved across the organization each UTC day.", func() { Minimum(0); Maximum(10000) })
-	Attribute("new_version_burst", Int, "Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.", func() { Minimum(0); Maximum(10000) })
+	Attribute("daily_cap", Int, "Maximum session evaluations reserved across the organization each UTC day.", func() { Minimum(0); Maximum(10000) })
 	Attribute("is_default", Boolean, "Whether these values are platform defaults rather than stored organization settings.")
 })
 
@@ -137,10 +135,8 @@ var _ = Service("skillEfficacy", func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			Attribute("enabled", Boolean, "Whether skill efficacy scoring is enabled.")
-			Attribute("per_skill_daily_cap", Int, "Maximum evaluations reserved per skill each UTC day.", func() { Minimum(0); Maximum(10000) })
-			Attribute("org_daily_cap", Int, "Maximum evaluations reserved across the organization each UTC day.", func() { Minimum(0); Maximum(10000) })
-			Attribute("new_version_burst", Int, "Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.", func() { Minimum(0); Maximum(10000) })
-			Required("enabled", "per_skill_daily_cap", "org_daily_cap", "new_version_burst")
+			Attribute("daily_cap", Int, "Maximum session evaluations reserved across the organization each UTC day.", func() { Minimum(0); Maximum(10000) })
+			Required("enabled", "daily_cap")
 		})
 
 		Result(Settings)

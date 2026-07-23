@@ -74,14 +74,13 @@ const (
 	MaxReservedClaimBatch int32 = 10
 )
 
-// EnqueueCursor is a position in a project's chats, which the enqueue walks
-// oldest-first on the immutable (created_at, id) key. The zero value starts at
-// the head. A holder stores the cursor EnqueuePage returned and hands it back
-// on the next call, which is how a walk that spans more pages than one call may
-// scan is resumed across process restarts and a coordinator's own retries.
+// EnqueueCursor is a position in a project's chats, which the shared chats
+// walk pages oldest-first on the immutable (created_at, id) key. The zero
+// value starts at the head. It is carried between calls as the opaque cursor
+// of the ChatsEnqueueSource.
 type EnqueueCursor struct {
-	CreatedAt time.Time
-	ID        uuid.UUID
+	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
 }
 
 // PendingCursor is a position in a project's pending evaluations, which are
@@ -100,6 +99,7 @@ type Evaluation struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
 	ChatID         uuid.UUID
+	SessionID      string
 	Judge          string
 	ObservedAt     time.Time
 	State          string
@@ -116,6 +116,7 @@ func NewEvaluation(row repo.ChatAnalysisEvaluation) Evaluation {
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
 		ChatID:         row.ChatID,
+		SessionID:      row.SessionID,
 		Judge:          row.Judge,
 		ObservedAt:     row.ObservedAt.Time,
 		State:          row.State,

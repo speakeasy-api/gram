@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -20,9 +21,13 @@ type ChatAnalysisPublisher interface {
 }
 
 type EnqueueChatAnalysisPageParams struct {
-	ProjectID uuid.UUID              `json:"project_id"`
-	Cursor    analysis.EnqueueCursor `json:"cursor"`
-	PageSize  int32                  `json:"page_size"`
+	ProjectID uuid.UUID `json:"project_id"`
+	// Source names the enqueue walk this page advances: the shared chats walk
+	// or a judge-owned unit source. Cursors are opaque to the coordinator; each
+	// source owns its encoding.
+	Source   string          `json:"source"`
+	Cursor   json.RawMessage `json:"cursor"`
+	PageSize int32           `json:"page_size"`
 }
 
 type EnqueueChatAnalysisPageResult = analysis.EnqueuePageResult
@@ -101,12 +106,19 @@ func NewChatAnalysisScorer(
 // pending evaluations. The cursor it returns is what the coordinator persists
 // and hands back.
 func (s *ChatAnalysisScorer) EnqueueChatAnalysisPage(ctx context.Context, params EnqueueChatAnalysisPageParams) (*EnqueueChatAnalysisPageResult, error) {
-	result, err := analysis.EnqueuePage(ctx, s.db, s.judges, params.ProjectID, params.Cursor, params.PageSize)
+	result, err := analysis.EnqueuePage(ctx, s.db, s.judges, params.ProjectID, params.Source, params.Cursor, params.PageSize)
 	if err != nil {
 		return nil, fmt.Errorf("enqueue chat analysis page: %w", err)
 	}
 
 	return &result, nil
+}
+
+// ListChatAnalysisEnqueueSources names the enqueue walks a coordinator pass
+// runs. It is an activity rather than workflow code because the roster changes
+// across deploys and a replaying workflow must observe the recorded answer.
+func (s *ChatAnalysisScorer) ListChatAnalysisEnqueueSources(ctx context.Context) ([]string, error) {
+	return s.judges.EnqueueSources(), nil
 }
 
 // ReserveChatAnalysisEvaluations spends the organization's per-judge budgets on

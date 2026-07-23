@@ -1,4 +1,4 @@
-package efficacy
+package analysis
 
 import (
 	"encoding/json"

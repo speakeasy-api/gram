@@ -4,7 +4,7 @@ import (
 	"context"
 
 	genskills "github.com/speakeasy-api/gram/server/gen/skills"
-	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -26,6 +26,6 @@ type LoadOption func(*Load)
 
 // WithEfficacySignaler attaches the efficacy wake to the load tool. Without it
 // the tool records activations exactly as before and emits no wakes.
-func WithEfficacySignaler(signaler efficacy.Signaler) LoadOption {
+func WithEfficacySignaler(signaler analysis.Signaler) LoadOption {
 	return func(t *Load) { t.efficacySignaler = signaler }
 }

@@ -15,11 +15,11 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
-	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -35,7 +35,7 @@ const skillEfficacySignalTimeout = time.Second
 type Load struct {
 	db               *pgxpool.Pool
 	logger           *slog.Logger
-	efficacySignaler efficacy.Signaler
+	efficacySignaler analysis.Signaler
 	descriptor       core.ToolDescriptor
 }
 

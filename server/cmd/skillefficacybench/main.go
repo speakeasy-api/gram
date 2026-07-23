@@ -21,8 +21,11 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -47,7 +50,7 @@ type testCase struct {
 	SkillContent string              `json:"skill_content"`
 	Surface      string              `json:"surface"`
 	ActivatedAt  time.Time           `json:"activated_at"`
-	Transcript   efficacy.Transcript `json:"transcript"`
+	Transcript   analysis.Transcript `json:"transcript"`
 	ScoreMin     float64             `json:"score_min"`
 	ScoreMax     float64             `json:"score_max"`
 	Note         string              `json:"note"`
@@ -222,34 +225,36 @@ func evaluate(client openrouter.CompletionClient, model string, tc testCase, run
 	res.ActualModel = response.Model
 	res.Tokens = response.Usage.TotalTokens
 	res.CostUSD = response.Usage.Cost
-	verdict, err := efficacy.ParseVerdict(strings.TrimSpace(openrouter.GetText(*response.Message)))
+	verdicts, err := efficacy.ParseSessionVerdict(strings.TrimSpace(openrouter.GetText(*response.Message)), 1)
 	if err != nil {
 		res.Error = fmt.Sprintf("invalid verdict: %v", err)
 		return res
 	}
-	res.Score = &verdict.Score
+	res.Score = &verdicts[0].Score
 	return res
 }
 
 func buildRequest(model string, tc testCase) (openrouter.ObjectCompletionRequest, error) {
-	prompt, err := efficacy.BuildJudgePrompt(efficacy.JudgeInput{
-		OrgID:        benchOrgID,
-		ProjectID:    benchProjectID,
-		SkillName:    tc.SkillName,
-		SkillURN:     "",
-		SkillContent: tc.SkillContent,
-		Surface:      tc.Surface,
-		ActivatedAt:  tc.ActivatedAt,
-		Transcript:   tc.Transcript,
-	})
+	// Every corpus case is a single-skill session, rendered through the same
+	// prompt builder production uses for its multi-skill payloads.
+	prompt, err := efficacy.BuildJudgePrompt([]efficacy.JudgedSkill{{
+		SkillID:         uuid.Nil,
+		SkillVersionID:  uuid.Nil,
+		CanonicalSHA256: "",
+		Name:            tc.SkillName,
+		Content:         tc.SkillContent,
+		Surface:         tc.Surface,
+		ActivatedAt:     tc.ActivatedAt,
+		ScoreID:         uuid.Nil,
+	}}, tc.Transcript)
 	if err != nil {
 		return openrouter.ObjectCompletionRequest{}, err
 	}
 
 	strict := true
 	schema := or.ChatJSONSchemaConfig{
-		Name:        "skill_efficacy_verdict",
-		Schema:      efficacy.VerdictSchema(),
+		Name:        "skill_efficacy_session_verdict",
+		Schema:      efficacy.SessionVerdictSchema(),
 		Description: nil,
 		Strict:      optionalnullable.From(&strict),
 	}

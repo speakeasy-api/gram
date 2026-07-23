@@ -1,10 +1,8 @@
-// Package efficacy scores how well a skill served an agent session: it renders
-// the session transcript, asks an LLM judge for a structured verdict, and
-// normalizes that verdict for the skill_efficacy_scores ClickHouse sink.
-package efficacy
+package analysis
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -15,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -341,4 +340,105 @@ func truncateRunes(s string, maxRunes int) (string, bool) {
 	fmt.Fprintf(&b, truncationMarker, len(runes)-head-tail)
 	b.WriteString(string(runes[len(runes)-tail:]))
 	return b.String(), true
+}
+
+// transcriptPageSize is how many messages one backwards step of the transcript
+// loader reads. It is small because the loader overshoots by at most one page:
+// the page that pushes the rendering over its budget is the last one read.
+const transcriptPageSize = 20
+
+// TranscriptSource reads one chat's messages a page at a time, newest first.
+// Satisfied by *chatrepo.Queries.
+type TranscriptSource interface {
+	CountChatMessages(ctx context.Context, arg chatrepo.CountChatMessagesParams) (int64, error)
+	ListChatTranscriptMessagesPage(ctx context.Context, arg chatrepo.ListChatTranscriptMessagesPageParams) ([]chatrepo.ListChatTranscriptMessagesPageRow, error)
+}
+
+// LoadTranscript renders one chat's transcript for a judge.
+//
+// The chat is read backwards in fixed pages rather than whole: a session has no
+// bound on its length, but the rendering the judge receives does, so loading all
+// of it would size the worker's memory to the longest chat any project ever
+// wrote in order to discard most of it. The walk stops as soon as the rendering
+// drops a message, which is sound because RenderTranscript trims oldest-first
+// and every unread message is older than every message already dropped — so the
+// messages it keeps are exactly the ones a full load would have kept, and only
+// the omission count has to account for what was never read. Errors wrap
+// ErrRetryable: a failed read is infrastructure, never the transcript's fault.
+func LoadTranscript(ctx context.Context, chats TranscriptSource, projectID uuid.UUID, chatID uuid.UUID) (Transcript, error) {
+	page := chatrepo.ListChatTranscriptMessagesPageParams{
+		ChatID:          chatID,
+		ProjectID:       projectID,
+		CursorCreatedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		CursorSeq:       pgtype.Int8{Int64: 0, Valid: false},
+		CursorID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Lim:             transcriptPageSize,
+	}
+
+	unread, err := chats.CountChatMessages(ctx, chatrepo.CountChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+	if err != nil {
+		return Transcript{}, fmt.Errorf("count judge transcript: %w: %w", ErrRetryable, err)
+	}
+
+	loaded := make([]TranscriptInput, 0, min(unread, int64(transcriptPageSize)))
+	// Rendered up front so a chat with no messages leaves the same empty
+	// rendering a whole-chat read produced rather than a zero Transcript.
+	transcript := RenderTranscript(nil)
+	for {
+		rows, err := chats.ListChatTranscriptMessagesPage(ctx, page)
+		if err != nil {
+			return Transcript{}, fmt.Errorf("load judge transcript: %w: %w", ErrRetryable, err)
+		}
+		if len(rows) == 0 {
+			// The cursor reached the start of the chat, so nothing is left
+			// unread — including the first read of a chat with no messages.
+			unread = 0
+			break
+		}
+
+		unread -= int64(len(rows))
+		if unread < 0 {
+			unread = 0
+		}
+		for _, row := range rows {
+			loaded = append(loaded, transcriptPageMessage(row))
+		}
+
+		oldest := rows[len(rows)-1]
+		page.CursorCreatedAt = oldest.CreatedAt
+		page.CursorSeq = pgtype.Int8{Int64: oldest.Seq, Valid: true}
+		page.CursorID = uuid.NullUUID{UUID: oldest.ID, Valid: true}
+
+		transcript = RenderTranscript(loaded)
+		if unread == 0 || len(transcript.Messages) < len(loaded) {
+			break
+		}
+	}
+
+	if omitted := int64(len(loaded)-len(transcript.Messages)) + unread; omitted > 0 {
+		transcript.Omitted = fmt.Sprintf(omittedMarker, omitted)
+	}
+	for i := range transcript.Messages {
+		transcript.Messages[i].Index += int(unread)
+	}
+
+	return transcript, nil
+}
+
+// transcriptPageMessage projects one page row onto the shape RenderTranscript
+// reads. The page selects every column the rendering touches and nothing else,
+// so the projection is field-for-field.
+func transcriptPageMessage(row chatrepo.ListChatTranscriptMessagesPageRow) TranscriptInput {
+	return TranscriptInput{
+		ID:               row.ID,
+		Seq:              row.Seq,
+		CreatedAt:        row.CreatedAt,
+		Role:             row.Role,
+		Content:          row.Content,
+		ToolCalls:        row.ToolCalls,
+		ToolCallID:       row.ToolCallID,
+		ToolURN:          row.ToolUrn,
+		ToolOutcome:      row.ToolOutcome,
+		ToolOutcomeNotes: row.ToolOutcomeNotes,
+	}
 }

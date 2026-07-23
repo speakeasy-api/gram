@@ -15277,7 +15277,7 @@ func skillEfficacyUpsertSettingsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skill-efficacy upsert-settings --body '{\n      \"enabled\": false,\n      \"new_version_burst\": 1,\n      \"org_daily_cap\": 1,\n      \"per_skill_daily_cap\": 1\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skill-efficacy upsert-settings --body '{\n      \"daily_cap\": 1,\n      \"enabled\": false\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func skillEfficacyQueryInsightsUsage() {

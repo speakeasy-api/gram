@@ -23,13 +23,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
-	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -57,7 +57,7 @@ type Service struct {
 	writer             *chat.ChatMessageWriter
 	// efficacySignaler is optional: when nil, hook paths record exactly as
 	// before and emit no wakes.
-	efficacySignaler efficacy.Signaler
+	efficacySignaler analysis.Signaler
 	serverURL        *url.URL
 	siteURL          *url.URL
 	jwtSecret        string
@@ -196,7 +196,7 @@ func NewService(
 	policyBypass *risk.PolicyBypassEvaluator,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
-	efficacySignaler efficacy.Signaler,
+	efficacySignaler analysis.Signaler,
 	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
