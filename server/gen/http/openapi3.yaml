@@ -34257,6 +34257,104 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: Skill
+    /rpc/skills.getShared:
+        get:
+            description: Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.
+            operationId: getSharedSkill
+            parameters:
+                - allowEmptyValue: true
+                  description: The public share token.
+                  in: query
+                  name: token
+                  required: true
+                  schema:
+                    description: The public share token.
+                    maxLength: 128
+                    minLength: 32
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SharedSkill2'
+                    description: OK response.
+                    headers:
+                        Cache-Control:
+                            description: The Cache-Control response header.
+                            schema:
+                                description: The Cache-Control response header.
+                                type: string
+                        Referrer-Policy:
+                            description: The Referrer-Policy response header.
+                            schema:
+                                description: The Referrer-Policy response header.
+                                type: string
+                        X-Robots-Tag:
+                            description: The X-Robots-Tag response header.
+                            schema:
+                                description: The X-Robots-Tag response header.
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: getShared skills
+            tags:
+                - skills
+            x-speakeasy-name-override: getShared
+            x-speakeasy-react-hook:
+                name: SharedSkill
     /rpc/skills.list:
         get:
             description: List active skills in the project. The implementation requires the skills product feature and skill read scope.
@@ -34778,6 +34876,110 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: SkillVersions
+    /rpc/skills.share:
+        post:
+            description: Create a public share link for a skill. Repeated requests return the existing active link, so each skill has at most one active share token.
+            operationId: shareSkill
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ShareSkillRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillShareLink'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: share skills
+            tags:
+                - skills
+            x-speakeasy-name-override: share
+            x-speakeasy-react-hook:
+                name: ShareSkill
     /rpc/skills.undistribute:
         post:
             description: Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.
@@ -34881,6 +35083,106 @@ paths:
             x-speakeasy-name-override: undistribute
             x-speakeasy-react-hook:
                 name: UndistributeSkill
+    /rpc/skills.unshare:
+        post:
+            description: Revoke a skill's active public share link. Repeated requests are a no-op.
+            operationId: unshareSkill
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UnshareSkillRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: unshare skills
+            tags:
+                - skills
+            x-speakeasy-name-override: unshare
+            x-speakeasy-react-hook:
+                name: UnshareSkill
     /rpc/skills.update:
         post:
             description: Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.
@@ -59274,6 +59576,73 @@ components:
                 - user_key
                 - last_called
                 - observed_use_count
+        ShareSkillRequestBody:
+            type: object
+            properties:
+                skill_id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
+            required:
+                - skill_id
+        SharedSkill:
+            type: object
+            properties:
+                cache_control:
+                    type: string
+                    description: The Cache-Control response header.
+                content:
+                    type: string
+                    description: The latest SKILL.md content.
+                display_name:
+                    type: string
+                    description: The user-facing skill name.
+                name:
+                    type: string
+                    description: The normalized skill name.
+                referrer_policy:
+                    type: string
+                    description: The Referrer-Policy response header.
+                summary:
+                    type: string
+                    description: The optional skill summary.
+                updated_at:
+                    type: string
+                    description: When the shared content was last updated.
+                    format: date-time
+                x_robots_tag:
+                    type: string
+                    description: The X-Robots-Tag response header.
+            description: The public view of a shared skill. It deliberately carries no project, organization, or user identifiers.
+            required:
+                - name
+                - display_name
+                - content
+                - updated_at
+        SharedSkill2:
+            type: object
+            properties:
+                content:
+                    type: string
+                    description: The latest SKILL.md content.
+                display_name:
+                    type: string
+                    description: The user-facing skill name.
+                name:
+                    type: string
+                    description: The normalized skill name.
+                summary:
+                    type: string
+                    description: The optional skill summary.
+                updated_at:
+                    type: string
+                    description: When the shared content was last updated.
+                    format: date-time
+            required:
+                - name
+                - display_name
+                - content
+                - updated_at
         Skill:
             type: object
             properties:
@@ -59317,6 +59686,9 @@ components:
                     type: integer
                     description: The number of reconciled activations observed for this skill.
                     format: int64
+                share_token:
+                    type: string
+                    description: The active public share token, absent when the skill is not shared.
                 source_kind:
                     type: string
                     description: How the skill entered the registry.
@@ -59747,6 +60119,20 @@ components:
                 - session_cost_usd
                 - scored_sessions
                 - estimated_minutes_saved
+        SkillShareLink:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the share link was created.
+                    format: date-time
+                token:
+                    type: string
+                    description: The public share token.
+            description: An active public share link for a skill.
+            required:
+                - token
+                - created_at
         SkillSightingTimelinePoint:
             type: object
             properties:
@@ -62092,6 +62478,15 @@ components:
                 - provider
                 - seen_at
                 - reason
+        UnshareSkillRequestBody:
+            type: object
+            properties:
+                skill_id:
+                    type: string
+                    description: The skill ID.
+                    format: uuid
+            required:
+                - skill_id
         UpdateAssistantForm:
             type: object
             properties:

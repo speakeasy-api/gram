@@ -368,11 +368,14 @@ trackedFiles:
   src/funcs/skillsCreate.ts: {}
   src/funcs/skillsDistribute.ts: {}
   src/funcs/skillsGet.ts: {}
+  src/funcs/skillsGetShared.ts: {}
   src/funcs/skillsList.ts: {}
   src/funcs/skillsListDistributions.ts: {}
   src/funcs/skillsListUnknownActivations.ts: {}
   src/funcs/skillsListVersions.ts: {}
+  src/funcs/skillsShare.ts: {}
   src/funcs/skillsUndistribute.ts: {}
+  src/funcs/skillsUnshare.ts: {}
   src/funcs/skillsUpdate.ts: {}
   src/funcs/telemetryCaptureEvent.ts: {}
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts: {}
@@ -994,6 +997,8 @@ trackedFiles:
   src/models/components/shadowmcpinventoryserver.ts: {}
   src/models/components/shadowmcpinventoryurlstate.ts: {}
   src/models/components/shadowmcpinventoryuser.ts: {}
+  src/models/components/sharedskill2.ts: {}
+  src/models/components/shareskillrequestbody.ts: {}
   src/models/components/skill.ts: {}
   src/models/components/skilladoption.ts: {}
   src/models/components/skillbreakdownrow.ts: {}
@@ -1006,6 +1011,7 @@ trackedFiles:
   src/models/components/skillefficacysettings.ts: {}
   src/models/components/skillinsightmetrics.ts: {}
   src/models/components/skillinsightpoint.ts: {}
+  src/models/components/skillsharelink.ts: {}
   src/models/components/skillsightingtimelinepoint.ts: {}
   src/models/components/skillsummary.ts: {}
   src/models/components/skilltimeseriespoint.ts: {}
@@ -1076,6 +1082,7 @@ trackedFiles:
   src/models/components/tunneledmcpserverconnections.ts: {}
   src/models/components/undistributeskillrequestbody.ts: {}
   src/models/components/unknownskillactivation.ts: {}
+  src/models/components/unshareskillrequestbody.ts: {}
   src/models/components/updateassistantform.ts: {}
   src/models/components/updateawsiamcredentialrequestbody.ts: {}
   src/models/components/updateawskmskeyrequestbody.ts: {}
@@ -1334,6 +1341,7 @@ trackedFiles:
   src/models/operations/getriskuserbreakdown.ts: {}
   src/models/operations/getrole.ts: {}
   src/models/operations/getshadowmcpinventoryserver.ts: {}
+  src/models/operations/getsharedskill.ts: {}
   src/models/operations/getskill.ts: {}
   src/models/operations/getskillefficacysettings.ts: {}
   src/models/operations/getsourceenvironment.ts: {}
@@ -1521,6 +1529,7 @@ trackedFiles:
   src/models/operations/settoolsetenvironmentlink.ts: {}
   src/models/operations/settoolsettoolvariationsgroup.ts: {}
   src/models/operations/settoolsetusersessionissuer.ts: {}
+  src/models/operations/shareskill.ts: {}
   src/models/operations/submitfeedback.ts: {}
   src/models/operations/submitriskblockfeedback.ts: {}
   src/models/operations/suggestcustomdetectionrule.ts: {}
@@ -1531,6 +1540,7 @@ trackedFiles:
   src/models/operations/triggerriskanalysis.ts: {}
   src/models/operations/undistributeskill.ts: {}
   src/models/operations/unmaskriskresult.ts: {}
+  src/models/operations/unshareskill.ts: {}
   src/models/operations/updateassistant.ts: {}
   src/models/operations/updateawsiamcredential.ts: {}
   src/models/operations/updateawskmskey.ts: {}
@@ -2117,6 +2127,9 @@ trackedFiles:
   src/react-query/shadowMCPInventoryServer.ts: {}
   src/react-query/shadowMCPInventoryUsers.core.ts: {}
   src/react-query/shadowMCPInventoryUsers.ts: {}
+  src/react-query/shareSkill.ts: {}
+  src/react-query/sharedSkill.core.ts: {}
+  src/react-query/sharedSkill.ts: {}
   src/react-query/skill.core.ts: {}
   src/react-query/skill.ts: {}
   src/react-query/skillDistributions.core.ts: {}
@@ -2157,6 +2170,7 @@ trackedFiles:
   src/react-query/undistributeSkill.ts: {}
   src/react-query/unknownSkillActivations.core.ts: {}
   src/react-query/unknownSkillActivations.ts: {}
+  src/react-query/unshareSkill.ts: {}
   src/react-query/updateAwsIamCredential.ts: {}
   src/react-query/updateAwsKmsKey.ts: {}
   src/react-query/updateDomain.ts: {}
@@ -4332,6 +4346,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getSharedSkill:
+    speakeasy-default-get-shared-skill:
+      parameters:
+        query:
+          token: "<value>"
+      responses:
+        "200":
+          application/json: {"content": "<value>", "display_name": "Dawn_Bednar71", "name": "<value>", "updated_at": "2024-12-29T06:19:07.288Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getSkill:
     speakeasy-default-get-skill:
       parameters:
@@ -6373,6 +6399,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  shareSkill:
+    speakeasy-default-share-skill:
+      requestBody:
+        application/json: {"skill_id": "1a8a889e-f05a-4b23-9e37-b036d152ae2f"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-10-30T15:00:19.907Z", "token": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   submitFeedback:
     speakeasy-default-submit-feedback:
       requestBody:
@@ -6474,6 +6511,15 @@ examples:
       responses:
         "200":
           application/json: {"id": "19916053-7fed-4f9c-be0d-51f5fa499d5d", "match": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  unshareSkill:
+    speakeasy-default-unshare-skill:
+      requestBody:
+        application/json: {"skill_id": "c9199560-e3ec-470b-8402-ccda4c06f445"}
+      responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

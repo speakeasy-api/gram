@@ -132,7 +132,7 @@ func UsageCommands() []string {
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
-		"skills (create|add-version|update|list|get|list-unknown-activations|list-versions|archive|distribute|undistribute|list-distributions)",
+		"skills (create|add-version|update|list|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
@@ -2162,6 +2162,21 @@ func ParseEndpoint(
 		skillsUndistributeApikeyTokenFlag      = skillsUndistributeFlags.String("apikey-token", "", "")
 		skillsUndistributeProjectSlugInputFlag = skillsUndistributeFlags.String("project-slug-input", "", "")
 
+		skillsShareFlags                = flag.NewFlagSet("share", flag.ExitOnError)
+		skillsShareBodyFlag             = skillsShareFlags.String("body", "REQUIRED", "")
+		skillsShareSessionTokenFlag     = skillsShareFlags.String("session-token", "", "")
+		skillsShareApikeyTokenFlag      = skillsShareFlags.String("apikey-token", "", "")
+		skillsShareProjectSlugInputFlag = skillsShareFlags.String("project-slug-input", "", "")
+
+		skillsUnshareFlags                = flag.NewFlagSet("unshare", flag.ExitOnError)
+		skillsUnshareBodyFlag             = skillsUnshareFlags.String("body", "REQUIRED", "")
+		skillsUnshareSessionTokenFlag     = skillsUnshareFlags.String("session-token", "", "")
+		skillsUnshareApikeyTokenFlag      = skillsUnshareFlags.String("apikey-token", "", "")
+		skillsUnshareProjectSlugInputFlag = skillsUnshareFlags.String("project-slug-input", "", "")
+
+		skillsGetSharedFlags     = flag.NewFlagSet("get-shared", flag.ExitOnError)
+		skillsGetSharedTokenFlag = skillsGetSharedFlags.String("token", "REQUIRED", "")
+
 		skillsListDistributionsFlags                = flag.NewFlagSet("list-distributions", flag.ExitOnError)
 		skillsListDistributionsSkillIDFlag          = skillsListDistributionsFlags.String("skill-id", "", "")
 		skillsListDistributionsPluginIDFlag         = skillsListDistributionsFlags.String("plugin-id", "", "")
@@ -3188,6 +3203,9 @@ func ParseEndpoint(
 	skillsArchiveFlags.Usage = skillsArchiveUsage
 	skillsDistributeFlags.Usage = skillsDistributeUsage
 	skillsUndistributeFlags.Usage = skillsUndistributeUsage
+	skillsShareFlags.Usage = skillsShareUsage
+	skillsUnshareFlags.Usage = skillsUnshareUsage
+	skillsGetSharedFlags.Usage = skillsGetSharedUsage
 	skillsListDistributionsFlags.Usage = skillsListDistributionsUsage
 
 	telemetryFlags.Usage = telemetryUsage
@@ -4716,6 +4734,15 @@ func ParseEndpoint(
 
 			case "undistribute":
 				epf = skillsUndistributeFlags
+
+			case "share":
+				epf = skillsShareFlags
+
+			case "unshare":
+				epf = skillsUnshareFlags
+
+			case "get-shared":
+				epf = skillsGetSharedFlags
 
 			case "list-distributions":
 				epf = skillsListDistributionsFlags
@@ -6344,6 +6371,15 @@ func ParseEndpoint(
 			case "undistribute":
 				endpoint = c.Undistribute()
 				data, err = skillsc.BuildUndistributePayload(*skillsUndistributeBodyFlag, *skillsUndistributeSessionTokenFlag, *skillsUndistributeApikeyTokenFlag, *skillsUndistributeProjectSlugInputFlag)
+			case "share":
+				endpoint = c.Share()
+				data, err = skillsc.BuildSharePayload(*skillsShareBodyFlag, *skillsShareSessionTokenFlag, *skillsShareApikeyTokenFlag, *skillsShareProjectSlugInputFlag)
+			case "unshare":
+				endpoint = c.Unshare()
+				data, err = skillsc.BuildUnsharePayload(*skillsUnshareBodyFlag, *skillsUnshareSessionTokenFlag, *skillsUnshareApikeyTokenFlag, *skillsUnshareProjectSlugInputFlag)
+			case "get-shared":
+				endpoint = c.GetShared()
+				data, err = skillsc.BuildGetSharedPayload(*skillsGetSharedTokenFlag)
 			case "list-distributions":
 				endpoint = c.ListDistributions()
 				data, err = skillsc.BuildListDistributionsPayload(*skillsListDistributionsSkillIDFlag, *skillsListDistributionsPluginIDFlag, *skillsListDistributionsCursorFlag, *skillsListDistributionsLimitFlag, *skillsListDistributionsSessionTokenFlag, *skillsListDistributionsApikeyTokenFlag, *skillsListDistributionsProjectSlugInputFlag)
@@ -15289,6 +15325,9 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    archive: Idempotently archive a skill. The implementation requires the skills product feature and skill write scope. Repeated requests for the same skill succeed without creating another state transition.`)
 	fmt.Fprintln(os.Stderr, `    distribute: Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.`)
 	fmt.Fprintln(os.Stderr, `    undistribute: Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.`)
+	fmt.Fprintln(os.Stderr, `    share: Create a public share link for a skill. Repeated requests return the existing active link, so each skill has at most one active share token.`)
+	fmt.Fprintln(os.Stderr, `    unshare: Revoke a skill's active public share link. Repeated requests are a no-op.`)
+	fmt.Fprintln(os.Stderr, `    get-shared: Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.`)
 	fmt.Fprintln(os.Stderr, `    list-distributions: List active plugin skill distributions for the current project.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -15540,6 +15579,72 @@ func skillsUndistributeUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills undistribute --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440001\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsShareUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills share", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a public share link for a skill. Repeated requests return the existing active link, so each skill has at most one active share token.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills share --body '{\n      \"skill_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsUnshareUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills unshare", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke a skill's active public share link. Repeated requests are a no-op.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills unshare --body '{\n      \"skill_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func skillsGetSharedUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skills get-shared", os.Args[0])
+	fmt.Fprint(os.Stderr, " -token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Fetch the publicly shared view of a skill by its share token. This endpoint is unauthenticated and only ever exposes the skill name, display name, summary, and latest content.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills get-shared --token \"aaa\"")
 }
 
 func skillsListDistributionsUsage() {
