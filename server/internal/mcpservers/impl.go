@@ -54,6 +54,7 @@ type Service struct {
 	authz                *authz.Engine
 	audit                *audit.Logger
 	temporalEnv          *tenv.Environment
+	dispositionCache     *ToolDispositionCache
 	pluginsGitHubEnabled bool
 }
 
@@ -68,6 +69,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
+	dispositionCache *ToolDispositionCache,
 	pluginsGitHubEnabled bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpservers"))
@@ -80,6 +82,7 @@ func NewService(
 		authz:                authzEngine,
 		audit:                auditLogger,
 		temporalEnv:          temporalEnv,
+		dispositionCache:     dispositionCache,
 		pluginsGitHubEnabled: pluginsGitHubEnabled,
 	}
 }
