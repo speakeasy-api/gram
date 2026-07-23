@@ -5782,7 +5782,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "group_by": "department_name", "sort_by": "total_cost", "to": "2025-12-26T10:00:00Z", "top_n": 10}
       responses:
         "200":
-          application/json: {"group_by": "<value>", "interval_seconds": 79878, "table": [{"dimension_values": {}, "group_value": "<value>", "measures": {"cache_creation_input_tokens": 944151, "cache_read_input_tokens": 92280, "total_chats": 349228, "total_cost": 2214.93, "total_input_tokens": 632153, "total_output_tokens": 418347, "total_tokens": 560335, "total_tool_calls": 639239}}], "timeseries": []}
+          application/json: {"group_by": "<value>", "interval_seconds": 79878, "table": [{"dimension_values": {}, "group_value": "<value>", "measures": {"cache_creation_input_tokens": 944151, "cache_read_input_tokens": 92280, "scored_cost": 798.78, "scored_tokens": 888333, "total_chats": 349228, "total_cost": 2214.93, "total_input_tokens": 632153, "total_output_tokens": 418347, "total_tokens": 560335, "total_tool_calls": 639239, "total_work_units": 389.92}}], "timeseries": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

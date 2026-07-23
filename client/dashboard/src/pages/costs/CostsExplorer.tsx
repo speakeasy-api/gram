@@ -56,9 +56,11 @@ import {
   displayName,
   encodeCrumb,
   firstSplittableDimension,
+  formatWorkUnits,
   isAttributionDim,
   isDataset,
   isDimension,
+  isFullSpendDataset,
   isSessionLeaf,
   isSessionsAxis,
   LABELS,
@@ -84,7 +86,31 @@ const EMPTY_MEASURES: Measures = {
   tools: 0,
   tokens: 0,
   cacheCreation: 0,
+  workUnits: 0,
+  scoredCost: 0,
+  scoredTokens: 0,
 };
+
+// Sum a breakdown's rows into slice totals. Every field here is additive
+// (sums of sums), INCLUDING the work-units trio — safe to add across groups.
+// The one non-additive measure, sessions (a distinct count), is corrected by
+// the callers from the un-grouped detail row (see `stats`).
+function sumRowMeasures(rows: QueryRow[]): Measures {
+  return rows.reduce<Measures>(
+    (acc, r) => ({
+      cost: acc.cost + (r.measures.totalCost ?? 0),
+      sessions: acc.sessions + (r.measures.totalChats ?? 0),
+      tools: acc.tools + (r.measures.totalToolCalls ?? 0),
+      tokens: acc.tokens + (r.measures.totalTokens ?? 0),
+      cacheCreation:
+        acc.cacheCreation + (r.measures.cacheCreationInputTokens ?? 0),
+      workUnits: acc.workUnits + (r.measures.totalWorkUnits ?? 0),
+      scoredCost: acc.scoredCost + (r.measures.scoredCost ?? 0),
+      scoredTokens: acc.scoredTokens + (r.measures.scoredTokens ?? 0),
+    }),
+    { ...EMPTY_MEASURES },
+  );
+}
 
 // Per-breakdown secondary cuts shown as "mix" widgets above the table. Keyed by
 // the current group-by axis; complementary to it (never the same dimension).
@@ -180,16 +206,26 @@ export function CostsExplorer(): JSX.Element {
     : isDimension(byParam) && isAttributionDim(byParam)
       ? datasetForDim(byParam)
       : "all";
-  // Within a non-`all` dataset the slice is enforced only by dropping the empty
-  // attribution group from the *grouped* table. The un-groupable views — the
-  // session list, the "Most costly sessions" widget, and cross-cut cards over a
-  // non-attribution dim — can't express that "attribute present" predicate with
-  // the IN-only filter API, so on their own they'd show whole-project numbers
-  // under a dataset label. They only become correct once the drill path pins an
-  // attribution value (which inherently restricts rows to the slice); until
-  // then, suppress them rather than mislead.
+  // Within an attribution dataset the slice is enforced only by dropping the
+  // empty attribution group from the *grouped* table. The un-groupable views —
+  // the session list, the "Most costly sessions" widget, and cross-cut cards
+  // over a non-attribution dim — can't express that "attribute present"
+  // predicate with the IN-only filter API, so on their own they'd show
+  // whole-project numbers under a dataset label. They only become correct once
+  // the drill path pins an attribution value (which inherently restricts rows
+  // to the slice); until then, suppress them rather than mislead. The
+  // full-spend datasets (`all`, `efficiency`) have no slice to enforce.
   const sliceScoped =
-    dataset === "all" || path.some((c) => isAttributionDim(c.dim));
+    isFullSpendDataset(dataset) || path.some((c) => isAttributionDim(c.dim));
+  // The efficiency lens: same full-spend scope and breakdowns as `all`, but the
+  // table/hero read the work-units measures (work units, cost per unit) and the
+  // breakdown ranks by work units.
+  const efficiency = dataset === "efficiency";
+  // What the grouped queries rank their top-N groups by. Only the lens changes
+  // it — the efficiency view must keep the groups with scored work over the
+  // biggest spenders, or a mostly-unscored slice would rank rows the lens
+  // renders as "—".
+  const rankBy = efficiency ? "total_work_units" : "total_cost";
   // The deepest filter crumb is the entity in view. Agent/Model are leaves —
   // once you're on one, individual sessions are the only meaningful view, so we
   // lock to them: force sessions mode and offer no further dimension breakdown.
@@ -456,6 +492,7 @@ export function CostsExplorer(): JSX.Element {
           to.toISOString(),
           groupBy,
           filters,
+          rankBy,
         ],
         enabled: projectReady && !axisResolving,
         throwOnError: false,
@@ -470,7 +507,7 @@ export function CostsExplorer(): JSX.Element {
                 from,
                 to,
                 groupBy: groupBy as GroupBy,
-                sortBy: "total_cost",
+                sortBy: rankBy,
                 topN: BREAKDOWN_TOP_N,
                 // Daily buckets → ~30 points per group for the row trend sparklines.
                 granularitySeconds: 86400,
@@ -499,6 +536,7 @@ export function CostsExplorer(): JSX.Element {
       prevTo.toISOString(),
       groupBy,
       filters,
+      rankBy,
     ],
     enabled: projectReady && !axisResolving,
     throwOnError: false,
@@ -510,7 +548,7 @@ export function CostsExplorer(): JSX.Element {
             from: prevFrom,
             to: prevTo,
             groupBy: groupBy as GroupBy,
-            sortBy: "total_cost",
+            sortBy: rankBy,
             topN: BREAKDOWN_TOP_N,
             filters: filters.length ? filters : undefined,
           },
@@ -678,17 +716,7 @@ export function CostsExplorer(): JSX.Element {
     const table = data?.table ?? [];
     const statsRows =
       collectionDim != null ? table.filter((r) => r.groupValue !== "") : table;
-    const summed = statsRows.reduce<Measures>(
-      (acc, r) => ({
-        cost: acc.cost + (r.measures.totalCost ?? 0),
-        sessions: acc.sessions + (r.measures.totalChats ?? 0),
-        tools: acc.tools + (r.measures.totalToolCalls ?? 0),
-        tokens: acc.tokens + (r.measures.totalTokens ?? 0),
-        cacheCreation:
-          acc.cacheCreation + (r.measures.cacheCreationInputTokens ?? 0),
-      }),
-      { ...EMPTY_MEASURES },
-    );
+    const summed = sumRowMeasures(statsRows);
     const trueSessions =
       collectionDim == null ? detailRow?.measures.totalChats : undefined;
     return { ...summed, sessions: trueSessions ?? summed.sessions };
@@ -712,17 +740,7 @@ export function CostsExplorer(): JSX.Element {
     const table = prevData?.table ?? [];
     const statsRows =
       collectionDim != null ? table.filter((r) => r.groupValue !== "") : table;
-    const summed = statsRows.reduce<Measures>(
-      (acc, r) => ({
-        cost: acc.cost + (r.measures.totalCost ?? 0),
-        sessions: acc.sessions + (r.measures.totalChats ?? 0),
-        tools: acc.tools + (r.measures.totalToolCalls ?? 0),
-        tokens: acc.tokens + (r.measures.totalTokens ?? 0),
-        cacheCreation:
-          acc.cacheCreation + (r.measures.cacheCreationInputTokens ?? 0),
-      }),
-      { ...EMPTY_MEASURES },
-    );
+    const summed = sumRowMeasures(statsRows);
     const trueSessions =
       collectionDim == null
         ? prevDetailData?.table?.[0]?.measures.totalChats
@@ -742,6 +760,8 @@ export function CostsExplorer(): JSX.Element {
     const tools = Array<number>(n).fill(0);
     const tokens = Array<number>(n).fill(0);
     const cacheCreation = Array<number>(n).fill(0);
+    const workUnits = Array<number>(n).fill(0);
+    const scoredCost = Array<number>(n).fill(0);
     for (const s of ts) {
       s.points.forEach((p, i) => {
         cost[i] = (cost[i] ?? 0) + (p.measures.totalCost ?? 0);
@@ -750,9 +770,11 @@ export function CostsExplorer(): JSX.Element {
         tokens[i] = (tokens[i] ?? 0) + (p.measures.totalTokens ?? 0);
         cacheCreation[i] =
           (cacheCreation[i] ?? 0) + (p.measures.cacheCreationInputTokens ?? 0);
+        workUnits[i] = (workUnits[i] ?? 0) + (p.measures.totalWorkUnits ?? 0);
+        scoredCost[i] = (scoredCost[i] ?? 0) + (p.measures.scoredCost ?? 0);
       });
     }
-    return { cost, chats, tools, tokens, cacheCreation };
+    return { cost, chats, tools, tokens, cacheCreation, workUnits, scoredCost };
   }, [data, collectionDim]);
 
   // Per-level secondary breakdowns: the configured cuts for the current axis,
@@ -1178,7 +1200,13 @@ export function CostsExplorer(): JSX.Element {
   const scope = entityLabel
     ? `the ${entityType.toLowerCase()} "${entityLabel}"`
     : `the "${project.name}" project`;
-  const assistantContext = `Cost dashboard — viewing ${scope}, broken down by ${childLabel.toLowerCase()}. Over ${rangeLabel}: ${formatCost(stats.cost)} total cost, ${stats.sessions.toLocaleString()} chat sessions, ${stats.tools.toLocaleString()} tool calls, ${stats.tokens.toLocaleString()} tokens. Active filters: ${filterSummary}.`;
+  // On the efficiency lens, ground the assistant in the work-units numbers the
+  // page is actually showing (the lens swaps the hero/table to them).
+  const efficiencySummary =
+    efficiency && stats.workUnits > 0
+      ? ` Work-units analysis: ${formatWorkUnits(stats.workUnits)} work units delivered, ${formatCost(stats.scoredCost / stats.workUnits)} per unit over the scored sessions.`
+      : "";
+  const assistantContext = `Cost dashboard — viewing ${scope}, broken down by ${childLabel.toLowerCase()}. Over ${rangeLabel}: ${formatCost(stats.cost)} total cost, ${stats.sessions.toLocaleString()} chat sessions, ${stats.tools.toLocaleString()} tool calls, ${stats.tokens.toLocaleString()} tokens.${efficiencySummary} Active filters: ${filterSummary}.`;
   const assistantSuggestions = costExplorerSuggestions({
     level,
     entityLabel,
@@ -1247,6 +1275,7 @@ export function CostsExplorer(): JSX.Element {
       cards={widgetCards}
       rangeLabel={formatDateRange(from, to)}
       cacheMetric={attributionView}
+      efficiency={efficiency}
       onDrill={drillIntoDim}
       onOpenSession={setOpenChatId}
       loading={loadingSlice}
@@ -1263,6 +1292,7 @@ export function CostsExplorer(): JSX.Element {
       data={data}
       groupBy={dataGroupBy}
       serverRollupValue={serverRollupValue}
+      efficiency={efficiency}
       loading={loadingSlice}
       isError={isError}
       onSelectRange={handleChartRangeSelect}
@@ -1311,6 +1341,7 @@ export function CostsExplorer(): JSX.Element {
         path={path}
         collection={collection}
         cacheMetric={attributionView}
+        efficiency={efficiency}
         widgets={widgets}
         onBack={goUp}
         onHome={goHome}

@@ -543,7 +543,18 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     -- append), declared last in the table to match the MV's positional SELECT.
     -- Lets the user breakdown fall back to the device when a session carries
     -- no email (company-credential sessions emit no user identity).
-    hook_hostname String
+    hook_hostname String,
+
+    -- Work-units efficiency measures, fed exclusively by the synthetic
+    -- chat_analysis:work_units:score rows the chat analysis publisher emits
+    -- once per scored session. scored_cost and scored_tokens restate the
+    -- scored session's totals on the score row itself so efficiency ratios
+    -- (cost or tokens per unit) divide spend of SCORED sessions only --
+    -- dividing the group's whole spend would overstate cost per unit whenever
+    -- analysis coverage is partial (it is daily-capped).
+    total_work_units AggregateFunction(sumIf, Float64, UInt8),
+    scored_cost AggregateFunction(sumIf, Float64, UInt8),
+    scored_tokens AggregateFunction(sumIf, Int64, UInt8)
 ) ENGINE = AggregatingMergeTree
 -- Primary key stays the original 12 dimensions; account_type, provider,
 -- billing_mode, attribution dimensions, and generation are appended to ORDER BY
@@ -653,7 +664,13 @@ WITH
         toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
         toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
         toString(id)
-    ) AS tool_call_dedup_id
+    ) AS tool_call_dedup_id,
+    -- Synthetic per-session work-units score rows emitted by the chat
+    -- analysis publisher (one per scored chat, stamped with the session's
+    -- user identity, model, source, and account type). They carry no token
+    -- or cost usage of their own -- every usage guard above excludes them --
+    -- and feed only the work-units measures at the end of the SELECT.
+    (gram_urn = 'chat_analysis:work_units:score') AS is_work_units_score
 SELECT
     gram_project_id,
     toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
@@ -732,9 +749,14 @@ SELECT
     toUInt8(1) AS is_active,
 
     -- Device hostname: on hook rows directly and on Claude OTEL rows via
-    -- session-cache propagation. Declared last to match the table column
-    -- order (positional insert).
-    toString(attributes.gram.hook.hostname) AS hook_hostname
+    -- session-cache propagation.
+    toString(attributes.gram.hook.hostname) AS hook_hostname,
+
+    -- Work-units efficiency measures, fed only by the synthetic score rows.
+    -- Declared last to match the table column order (positional insert).
+    sumIfState(toFloat64OrZero(toString(attributes.gram.chat_analysis.work_units)), is_work_units_score) AS total_work_units,
+    sumIfState(toFloat64OrZero(toString(attributes.gram.chat_analysis.scored_cost)), is_work_units_score) AS scored_cost,
+    sumIfState(toInt64OrZero(toString(attributes.gram.chat_analysis.scored_tokens)), is_work_units_score) AS scored_tokens
 FROM telemetry_logs
 -- Admit only the observed agent surfaces: Claude OTEL api_request/tool_result
 -- rows, Codex OTEL response.completed usage rows, Cursor/Claude-Chat usage
@@ -742,7 +764,7 @@ FROM telemetry_logs
 -- carry no token/cost fields, so they only contribute to the tool-call
 -- counts.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
-  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_agent_tool_call)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_agent_tool_call OR is_work_units_score)
 GROUP BY
     gram_project_id,
     time_bucket,

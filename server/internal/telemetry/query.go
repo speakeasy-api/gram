@@ -833,5 +833,8 @@ func toGenMeasures(m repo.AttributeMetricsMeasures) *telem_gen.QueryMeasures {
 		CacheCreationInputTokens: m.CacheCreationInputTokens,
 		TotalToolCalls:           int64(m.TotalToolCalls), //nolint:gosec // bounded count
 		TotalChats:               int64(m.TotalChats),     //nolint:gosec // bounded count
+		TotalWorkUnits:           m.TotalWorkUnits,
+		ScoredCost:               m.ScoredCost,
+		ScoredTokens:             m.ScoredTokens,
 	}
 }

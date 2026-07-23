@@ -121,14 +121,21 @@ const (
 	// from user.email — the authenticated actor — so adopting cached
 	// attribution never rewrites the canonical user identity; it has no
 	// materialized column yet.
-	ProviderKey                    = attribute.Key("gram.provider")
-	ExternalOrgIDKey               = attribute.Key("gram.external_org_id")
-	AccountTypeKey                 = attribute.Key("gram.account_type")
-	BillingModeKey                 = attribute.Key("gram.billing_mode")
-	DeviceIDKey                    = attribute.Key("gram.device_id")
-	AccountEmailKey                = attribute.Key("gram.account_email")
-	ChatIDKey                      = attribute.Key("gram.chat.id")
-	MessageIDKey                   = attribute.Key("gram.message.id")
+	ProviderKey      = attribute.Key("gram.provider")
+	ExternalOrgIDKey = attribute.Key("gram.external_org_id")
+	AccountTypeKey   = attribute.Key("gram.account_type")
+	BillingModeKey   = attribute.Key("gram.billing_mode")
+	DeviceIDKey      = attribute.Key("gram.device_id")
+	AccountEmailKey  = attribute.Key("gram.account_email")
+	ChatIDKey        = attribute.Key("gram.chat.id")
+	MessageIDKey     = attribute.Key("gram.message.id")
+	// Chat-analysis score event attributes: stamped on the synthetic
+	// chat_analysis:work_units:score telemetry rows the chat analysis
+	// publisher emits once per scored session, and read back by
+	// attribute_metrics_summaries_mv's work-units measures.
+	ChatAnalysisWorkUnitsKey       = attribute.Key("gram.chat_analysis.work_units")
+	ChatAnalysisScoredCostKey      = attribute.Key("gram.chat_analysis.scored_cost")
+	ChatAnalysisScoredTokensKey    = attribute.Key("gram.chat_analysis.scored_tokens")
 	MCPRegistryIDKey               = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey              = attribute.Key("gram.mcp_registry.url")
 	ExternalMCPIDKey               = attribute.Key("gram.external_mcp.id")

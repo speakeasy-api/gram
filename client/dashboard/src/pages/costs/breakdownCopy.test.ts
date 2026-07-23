@@ -286,6 +286,31 @@ describe("breakdown copy", () => {
     });
   });
 
+  describe("the efficiency lens", () => {
+    it("titles by work units, keeping the sessions list name", () => {
+      expect(breakdownTitle(Dimension.Model, Dimension.Model, true)).toBe(
+        "Work units by Model",
+      );
+      expect(breakdownTitle(SESSIONS_AXIS, Dimension.Model, true)).toBe(
+        "Agent sessions",
+      );
+    });
+
+    // The lens swaps the quoted figure, not the grammar: the caller passes a
+    // preformatted work-units label through the same costLabel slot.
+    it("captions with the work-units figure the caller passes", () => {
+      expect(
+        breakdownCaption({
+          axisValue: Dimension.Model,
+          groupBy: Dimension.Model,
+          path: [],
+          costLabel: "1,204.5 work units",
+          groupCount: 3,
+        }),
+      ).toBe("Showing all project spend — 1,204.5 work units across 3 Models.");
+    });
+  });
+
   // The qualifier that produced "$4.04 of Adam": a user is possessed, never
   // used as the object of a preposition.
   it("never says 'of' or 'in' a user", () => {

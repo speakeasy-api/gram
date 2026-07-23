@@ -21,6 +21,14 @@ export type QueryMeasures = {
    */
   cacheReadInputTokens: number;
   /**
+   * Total cost in USD of the sessions that carry a work-units score. Divide by total_work_units for cost per unit; using total_cost would overstate it whenever analysis coverage is partial.
+   */
+  scoredCost: number;
+  /**
+   * Total tokens of the sessions that carry a work-units score. Divide by total_work_units for tokens per unit.
+   */
+  scoredTokens: number;
+  /**
    * Number of distinct chat sessions
    */
   totalChats: number;
@@ -44,6 +52,10 @@ export type QueryMeasures = {
    * Total number of tool calls
    */
   totalToolCalls: number;
+  /**
+   * Total work units delivered by scored sessions (work-units analysis)
+   */
+  totalWorkUnits: number;
 };
 
 /** @internal */
@@ -54,23 +66,29 @@ export const QueryMeasures$inboundSchema: z.ZodMiniType<
   z.object({
     cache_creation_input_tokens: z.int(),
     cache_read_input_tokens: z.int(),
+    scored_cost: z.number(),
+    scored_tokens: z.int(),
     total_chats: z.int(),
     total_cost: z.number(),
     total_input_tokens: z.int(),
     total_output_tokens: z.int(),
     total_tokens: z.int(),
     total_tool_calls: z.int(),
+    total_work_units: z.number(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "cache_creation_input_tokens": "cacheCreationInputTokens",
       "cache_read_input_tokens": "cacheReadInputTokens",
+      "scored_cost": "scoredCost",
+      "scored_tokens": "scoredTokens",
       "total_chats": "totalChats",
       "total_cost": "totalCost",
       "total_input_tokens": "totalInputTokens",
       "total_output_tokens": "totalOutputTokens",
       "total_tokens": "totalTokens",
       "total_tool_calls": "totalToolCalls",
+      "total_work_units": "totalWorkUnits",
     });
   }),
 );

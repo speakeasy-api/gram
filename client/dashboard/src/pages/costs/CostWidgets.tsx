@@ -1,6 +1,6 @@
 import { formatCost } from "@/lib/money";
 import type { Dimension } from "@gram/client/models/components/queryfilter.js";
-import { type Measures, unsetLabel } from "./taxonomy";
+import { formatWorkUnits, type Measures, unsetLabel } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
 import { movingAverage, resample, smoothPath } from "./sparkline-math";
 import { EstimatedCostIndicator } from "@/components/estimated-cost";
@@ -427,6 +427,8 @@ export type WidgetSeries = {
   tools: number[];
   tokens: number[];
   cacheCreation: number[];
+  workUnits: number[];
+  scoredCost: number[];
 };
 
 // A single big-number stat (e.g. cost per session).
@@ -533,6 +535,13 @@ function CardItem({
   }
 }
 
+// Cost of the slice's scored sessions per work unit delivered; null (rendered
+// "—") until the slice has any scored work. Uses scoredCost — not the full
+// total — so partial analysis coverage can't overstate the ratio (see Measures).
+function costPerUnit(m: Measures): number | null {
+  return m.workUnits > 0 ? m.scoredCost / m.workUnits : null;
+}
+
 export function CostWidgets({
   series,
   totals,
@@ -540,6 +549,7 @@ export function CostWidgets({
   cards,
   rangeLabel,
   cacheMetric,
+  efficiency,
   onDrill,
   onOpenSession,
   loading,
@@ -554,6 +564,9 @@ export function CostWidgets({
   rangeLabel: string;
   // Attribution lens: swap the "Tool calls" KPI tile for "Tokens added".
   cacheMetric?: boolean;
+  // Efficiency lens: swap the "Tool calls"/"Tokens" KPI tiles for the
+  // work-units pair (work units delivered, cost per unit).
+  efficiency?: boolean;
   // Drill into a mix-card row by its (dimension, value).
   onDrill?: (dim: Dimension, value: string) => void;
   // Open a session's detail from the "Most costly sessions" widget.
@@ -563,6 +576,83 @@ export function CostWidgets({
   // The view's resolved billing mode; "metered" hides the cost-estimate caveat.
   billingMode?: string;
 }): JSX.Element {
+  // The KPI row's second and third tiles, by lens: work-units pair on the
+  // efficiency lens, cache tokens on attribution cuts, tool calls otherwise.
+  function trailingKpiTiles(): JSX.Element {
+    if (efficiency) {
+      const unitCost = costPerUnit(totals);
+      const prevUnitCost = costPerUnit(prevTotals);
+      // Per-bucket ratio for the sparkline; buckets with no scored work chart
+      // as 0 rather than inheriting a stale ratio.
+      const unitCostSeries = series.workUnits.map((units, i) =>
+        units > 0 ? (series.scoredCost[i] ?? 0) / units : 0,
+      );
+      return (
+        <>
+          <KpiTile
+            label="Work units"
+            value={formatWorkUnits(totals.workUnits)}
+            series={series.workUnits}
+            delta={relDelta(totals.workUnits, prevTotals.workUnits)}
+            range={rangeLabel}
+            loading={loading}
+          />
+          <KpiTile
+            label="Cost / unit"
+            value={unitCost !== null ? formatCost(unitCost) : "—"}
+            series={unitCostSeries}
+            delta={
+              unitCost !== null ? relDelta(unitCost, prevUnitCost ?? 0) : null
+            }
+            range={rangeLabel}
+            loading={loading}
+          />
+        </>
+      );
+    }
+    if (cacheMetric) {
+      return (
+        <>
+          <KpiTile
+            label="Tokens added"
+            value={formatCompact(totals.cacheCreation)}
+            series={series.cacheCreation}
+            delta={relDelta(totals.cacheCreation, prevTotals.cacheCreation)}
+            range={rangeLabel}
+            loading={loading}
+          />
+          <KpiTile
+            label="Tokens"
+            value={formatCompact(totals.tokens)}
+            series={series.tokens}
+            delta={relDelta(totals.tokens, prevTotals.tokens)}
+            range={rangeLabel}
+            loading={loading}
+          />
+        </>
+      );
+    }
+    return (
+      <>
+        <KpiTile
+          label="Tool calls"
+          value={formatCompact(totals.tools)}
+          series={series.tools}
+          delta={relDelta(totals.tools, prevTotals.tools)}
+          range={rangeLabel}
+          loading={loading}
+        />
+        <KpiTile
+          label="Tokens"
+          value={formatCompact(totals.tokens)}
+          series={series.tokens}
+          delta={relDelta(totals.tokens, prevTotals.tokens)}
+          range={rangeLabel}
+          loading={loading}
+        />
+      </>
+    );
+  }
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -592,33 +682,7 @@ export function CostWidgets({
           range={rangeLabel}
           loading={loading}
         />
-        {cacheMetric ? (
-          <KpiTile
-            label="Tokens added"
-            value={formatCompact(totals.cacheCreation)}
-            series={series.cacheCreation}
-            delta={relDelta(totals.cacheCreation, prevTotals.cacheCreation)}
-            range={rangeLabel}
-            loading={loading}
-          />
-        ) : (
-          <KpiTile
-            label="Tool calls"
-            value={formatCompact(totals.tools)}
-            series={series.tools}
-            delta={relDelta(totals.tools, prevTotals.tools)}
-            range={rangeLabel}
-            loading={loading}
-          />
-        )}
-        <KpiTile
-          label="Tokens"
-          value={formatCompact(totals.tokens)}
-          series={series.tokens}
-          delta={relDelta(totals.tokens, prevTotals.tokens)}
-          range={rangeLabel}
-          loading={loading}
-        />
+        {trailingKpiTiles()}
       </div>
     </div>
   );

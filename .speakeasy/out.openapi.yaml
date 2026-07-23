@@ -55808,6 +55808,14 @@ components:
           type: integer
           description: Sum of cache read input tokens
           format: int64
+        scored_cost:
+          type: number
+          description: Total cost in USD of the sessions that carry a work-units score. Divide by total_work_units for cost per unit; using total_cost would overstate it whenever analysis coverage is partial.
+          format: double
+        scored_tokens:
+          type: integer
+          description: Total tokens of the sessions that carry a work-units score. Divide by total_work_units for tokens per unit.
+          format: int64
         total_chats:
           type: integer
           description: Number of distinct chat sessions
@@ -55832,6 +55840,10 @@ components:
           type: integer
           description: Total number of tool calls
           format: int64
+        total_work_units:
+          type: number
+          description: Total work units delivered by scored sessions (work-units analysis)
+          format: double
       description: Aggregated measure values for a group or time bucket
       required:
         - total_cost
@@ -55842,6 +55854,9 @@ components:
         - cache_creation_input_tokens
         - total_tool_calls
         - total_chats
+        - total_work_units
+        - scored_cost
+        - scored_tokens
     QueryPayload:
       type: object
       properties:
@@ -55898,6 +55913,9 @@ components:
             - cache_creation_input_tokens
             - total_tool_calls
             - total_chats
+            - total_work_units
+            - scored_cost
+            - scored_tokens
         to:
           type: string
           description: End time in ISO 8601 format

@@ -6611,6 +6611,15 @@ type QueryMeasuresResponseBody struct {
 	TotalToolCalls *int64 `form:"total_tool_calls,omitempty" json:"total_tool_calls,omitempty" xml:"total_tool_calls,omitempty"`
 	// Number of distinct chat sessions
 	TotalChats *int64 `form:"total_chats,omitempty" json:"total_chats,omitempty" xml:"total_chats,omitempty"`
+	// Total work units delivered by scored sessions (work-units analysis)
+	TotalWorkUnits *float64 `form:"total_work_units,omitempty" json:"total_work_units,omitempty" xml:"total_work_units,omitempty"`
+	// Total cost in USD of the sessions that carry a work-units score. Divide by
+	// total_work_units for cost per unit; using total_cost would overstate it
+	// whenever analysis coverage is partial.
+	ScoredCost *float64 `form:"scored_cost,omitempty" json:"scored_cost,omitempty" xml:"scored_cost,omitempty"`
+	// Total tokens of the sessions that carry a work-units score. Divide by
+	// total_work_units for tokens per unit.
+	ScoredTokens *int64 `form:"scored_tokens,omitempty" json:"scored_tokens,omitempty" xml:"scored_tokens,omitempty"`
 }
 
 // QuerySeriesResponseBody is used to define fields on response body types.
@@ -21020,6 +21029,15 @@ func ValidateQueryMeasuresResponseBody(body *QueryMeasuresResponseBody) (err err
 	}
 	if body.TotalChats == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_chats", "body"))
+	}
+	if body.TotalWorkUnits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_work_units", "body"))
+	}
+	if body.ScoredCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scored_cost", "body"))
+	}
+	if body.ScoredTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scored_tokens", "body"))
 	}
 	return
 }
