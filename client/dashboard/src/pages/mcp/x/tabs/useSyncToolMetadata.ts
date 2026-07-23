@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { fullSyncBatch, newToolsBatch } from "./toolMetadataSync";
-import type { ToolMetadataByName } from "./useToolMetadata";
+import type { ToolMetadataByName } from "@/hooks/useToolMetadata";
 
 export interface UseSyncToolMetadataResult {
   /** Make the stored set mirror the session, removing tools it dropped. */

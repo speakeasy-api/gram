@@ -16,7 +16,8 @@ export interface UseToolMetadataResult {
  * This is the admin-authoritative side of the Inspect tab: the remote server
  * advertises its own annotation hints over the live MCP session, and these
  * stored entries are what Speakeasy asserts on top of them (read by the runtime
- * proxy to fill the disposition dimension of RBAC checks).
+ * proxy to fill the disposition dimension of RBAC checks). The access-role
+ * editor reads the same table to let admins permission remote tools by name.
  *
  * Only servers backed by a remote MCP server carry tool metadata — the API
  * rejects toolset-backed ones, which persist hints on their tool-definition
@@ -24,12 +25,17 @@ export interface UseToolMetadataResult {
  */
 export function useToolMetadata(
   mcpServerId: string | undefined,
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; projectSlug?: string },
 ): UseToolMetadataResult {
   const enabled = (options?.enabled ?? true) && !!mcpServerId;
 
   const { data, isLoading, fetchStatus } = useListMcpServerToolMetadata(
-    { mcpServerId: mcpServerId ?? "" },
+    // `gramProject` sets the per-call `Gram-Project` header. On project-scoped
+    // pages callers omit it and inherit the ambient project; the org-level
+    // access role editor lists servers across every project, so it must name
+    // each server's project explicitly or the request resolves against the
+    // wrong one (the endpoint hard-scopes tool metadata to the header project).
+    { mcpServerId: mcpServerId ?? "", gramProject: options?.projectSlug },
     undefined,
     {
       enabled,
