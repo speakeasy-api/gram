@@ -1,5 +1,27 @@
 # server
 
+## 0.93.0
+
+### Minor Changes
+
+- 5e8e13f: Speed up the Employee Enrollment page (DNO-618). `telemetry.searchUsers` gains a `metrics` level: `full` (default, unchanged) computes the complete set of aggregates, while `basic` projects only user identity, first/last activity, input/output token sums, and the raw user ids the account-enrichment join needs — skipping the per-tool and per-hook-source map aggregations (`sumMapIf`), chat-cardinality (`uniqExactIf`), and cost/cache/avg columns that dominate the per-row ClickHouse work. The enrollment list, which renders only the lean fields (linked accounts come from Postgres), now requests `basic`, so its query no longer builds breakdowns it discards.
+- cc076e2: Serve the Employee Enrollment list from the pre-aggregated `attribute_metrics_summaries` view (DNO-618). `telemetry.searchUsers` gains a `source` level: `logs` (default, unchanged) scans raw `telemetry_logs`, while `agent_metrics` reads the pre-aggregated view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper (the enrollment query drops from ~seconds to tens of milliseconds on large projects). Identities that never carry an email in the window (which have no token usage) are surfaced separately from raw logs with activity but no token counts, so unknown users stay visible.
+
+  Note the enrollment token numbers change: they now reflect the same canonical agent-usage measure the costs/billing pages use, rather than the previous raw `gen_ai.usage.*` sum that mixed in Gram-hosted completions and duplicate usage-metric rows while missing Claude Code OTEL usage. Only the enrollment list opts in via `source=agent_metrics`; all other `searchUsers` consumers are unchanged.
+
+- d85fa7a: Add tool metadata management methods to the mcpServers service.
+
+  Two batch writes with deliberately different contracts:
+
+  - `setToolMetadataBatch` is authoritative — it upserts every tool in the payload and soft-deletes every stored tool the payload omits.
+  - `addToolMetadataBatch` is strictly additive — it inserts the tools in the payload, leaves stored tools absent from the payload untouched, and deletes nothing. A tool that already has a live stored entry fails the whole batch with a 409 rather than being upserted or skipped, so a caller working from a stale view of stored state is told so instead of having the discrepancy silently absorbed. A tool whose only prior entry is soft-deleted is recorded fresh.
+
+  Also adds `listToolMetadata`, `setToolMetadata`, and `deleteToolMetadata`. Mutations require mcp:write, are scoped to the target MCP server, and record one collection-level audit entry per write; reads require mcp:read.
+
+### Patch Changes
+
+- c4f6057: Show actionable permission errors when an organization's access policy blocks an MCP server or tool.
+
 ## 0.92.0
 
 ### Minor Changes
