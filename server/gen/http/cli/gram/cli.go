@@ -113,7 +113,7 @@ func UsageCommands() []string {
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
-		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|delete-mcp-server)",
+		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
@@ -1175,6 +1175,38 @@ func ParseEndpoint(
 		mcpServersListToolFiltersSessionTokenFlag     = mcpServersListToolFiltersFlags.String("session-token", "", "")
 		mcpServersListToolFiltersApikeyTokenFlag      = mcpServersListToolFiltersFlags.String("apikey-token", "", "")
 		mcpServersListToolFiltersProjectSlugInputFlag = mcpServersListToolFiltersFlags.String("project-slug-input", "", "")
+
+		mcpServersSetToolMetadataBatchFlags                = flag.NewFlagSet("set-tool-metadata-batch", flag.ExitOnError)
+		mcpServersSetToolMetadataBatchBodyFlag             = mcpServersSetToolMetadataBatchFlags.String("body", "REQUIRED", "")
+		mcpServersSetToolMetadataBatchSessionTokenFlag     = mcpServersSetToolMetadataBatchFlags.String("session-token", "", "")
+		mcpServersSetToolMetadataBatchApikeyTokenFlag      = mcpServersSetToolMetadataBatchFlags.String("apikey-token", "", "")
+		mcpServersSetToolMetadataBatchProjectSlugInputFlag = mcpServersSetToolMetadataBatchFlags.String("project-slug-input", "", "")
+
+		mcpServersAddToolMetadataBatchFlags                = flag.NewFlagSet("add-tool-metadata-batch", flag.ExitOnError)
+		mcpServersAddToolMetadataBatchBodyFlag             = mcpServersAddToolMetadataBatchFlags.String("body", "REQUIRED", "")
+		mcpServersAddToolMetadataBatchSessionTokenFlag     = mcpServersAddToolMetadataBatchFlags.String("session-token", "", "")
+		mcpServersAddToolMetadataBatchApikeyTokenFlag      = mcpServersAddToolMetadataBatchFlags.String("apikey-token", "", "")
+		mcpServersAddToolMetadataBatchProjectSlugInputFlag = mcpServersAddToolMetadataBatchFlags.String("project-slug-input", "", "")
+
+		mcpServersListToolMetadataFlags                = flag.NewFlagSet("list-tool-metadata", flag.ExitOnError)
+		mcpServersListToolMetadataMcpServerIDFlag      = mcpServersListToolMetadataFlags.String("mcp-server-id", "REQUIRED", "")
+		mcpServersListToolMetadataIncludeDeletedFlag   = mcpServersListToolMetadataFlags.String("include-deleted", "", "")
+		mcpServersListToolMetadataSessionTokenFlag     = mcpServersListToolMetadataFlags.String("session-token", "", "")
+		mcpServersListToolMetadataApikeyTokenFlag      = mcpServersListToolMetadataFlags.String("apikey-token", "", "")
+		mcpServersListToolMetadataProjectSlugInputFlag = mcpServersListToolMetadataFlags.String("project-slug-input", "", "")
+
+		mcpServersSetToolMetadataFlags                = flag.NewFlagSet("set-tool-metadata", flag.ExitOnError)
+		mcpServersSetToolMetadataBodyFlag             = mcpServersSetToolMetadataFlags.String("body", "REQUIRED", "")
+		mcpServersSetToolMetadataSessionTokenFlag     = mcpServersSetToolMetadataFlags.String("session-token", "", "")
+		mcpServersSetToolMetadataApikeyTokenFlag      = mcpServersSetToolMetadataFlags.String("apikey-token", "", "")
+		mcpServersSetToolMetadataProjectSlugInputFlag = mcpServersSetToolMetadataFlags.String("project-slug-input", "", "")
+
+		mcpServersDeleteToolMetadataFlags                = flag.NewFlagSet("delete-tool-metadata", flag.ExitOnError)
+		mcpServersDeleteToolMetadataMcpServerIDFlag      = mcpServersDeleteToolMetadataFlags.String("mcp-server-id", "REQUIRED", "")
+		mcpServersDeleteToolMetadataToolNameFlag         = mcpServersDeleteToolMetadataFlags.String("tool-name", "REQUIRED", "")
+		mcpServersDeleteToolMetadataSessionTokenFlag     = mcpServersDeleteToolMetadataFlags.String("session-token", "", "")
+		mcpServersDeleteToolMetadataApikeyTokenFlag      = mcpServersDeleteToolMetadataFlags.String("apikey-token", "", "")
+		mcpServersDeleteToolMetadataProjectSlugInputFlag = mcpServersDeleteToolMetadataFlags.String("project-slug-input", "", "")
 
 		mcpServersDeleteMcpServerFlags                = flag.NewFlagSet("delete-mcp-server", flag.ExitOnError)
 		mcpServersDeleteMcpServerIDFlag               = mcpServersDeleteMcpServerFlags.String("id", "REQUIRED", "")
@@ -2994,6 +3026,11 @@ func ParseEndpoint(
 	mcpServersListMcpServersForOrgFlags.Usage = mcpServersListMcpServersForOrgUsage
 	mcpServersUpdateMcpServerFlags.Usage = mcpServersUpdateMcpServerUsage
 	mcpServersListToolFiltersFlags.Usage = mcpServersListToolFiltersUsage
+	mcpServersSetToolMetadataBatchFlags.Usage = mcpServersSetToolMetadataBatchUsage
+	mcpServersAddToolMetadataBatchFlags.Usage = mcpServersAddToolMetadataBatchUsage
+	mcpServersListToolMetadataFlags.Usage = mcpServersListToolMetadataUsage
+	mcpServersSetToolMetadataFlags.Usage = mcpServersSetToolMetadataUsage
+	mcpServersDeleteToolMetadataFlags.Usage = mcpServersDeleteToolMetadataUsage
 	mcpServersDeleteMcpServerFlags.Usage = mcpServersDeleteMcpServerUsage
 
 	modelKeysFlags.Usage = modelKeysUsage
@@ -4145,6 +4182,21 @@ func ParseEndpoint(
 
 			case "list-tool-filters":
 				epf = mcpServersListToolFiltersFlags
+
+			case "set-tool-metadata-batch":
+				epf = mcpServersSetToolMetadataBatchFlags
+
+			case "add-tool-metadata-batch":
+				epf = mcpServersAddToolMetadataBatchFlags
+
+			case "list-tool-metadata":
+				epf = mcpServersListToolMetadataFlags
+
+			case "set-tool-metadata":
+				epf = mcpServersSetToolMetadataFlags
+
+			case "delete-tool-metadata":
+				epf = mcpServersDeleteToolMetadataFlags
 
 			case "delete-mcp-server":
 				epf = mcpServersDeleteMcpServerFlags
@@ -5782,6 +5834,21 @@ func ParseEndpoint(
 			case "list-tool-filters":
 				endpoint = c.ListToolFilters()
 				data, err = mcpserversc.BuildListToolFiltersPayload(*mcpServersListToolFiltersIDFlag, *mcpServersListToolFiltersSlugFlag, *mcpServersListToolFiltersSessionTokenFlag, *mcpServersListToolFiltersApikeyTokenFlag, *mcpServersListToolFiltersProjectSlugInputFlag)
+			case "set-tool-metadata-batch":
+				endpoint = c.SetToolMetadataBatch()
+				data, err = mcpserversc.BuildSetToolMetadataBatchPayload(*mcpServersSetToolMetadataBatchBodyFlag, *mcpServersSetToolMetadataBatchSessionTokenFlag, *mcpServersSetToolMetadataBatchApikeyTokenFlag, *mcpServersSetToolMetadataBatchProjectSlugInputFlag)
+			case "add-tool-metadata-batch":
+				endpoint = c.AddToolMetadataBatch()
+				data, err = mcpserversc.BuildAddToolMetadataBatchPayload(*mcpServersAddToolMetadataBatchBodyFlag, *mcpServersAddToolMetadataBatchSessionTokenFlag, *mcpServersAddToolMetadataBatchApikeyTokenFlag, *mcpServersAddToolMetadataBatchProjectSlugInputFlag)
+			case "list-tool-metadata":
+				endpoint = c.ListToolMetadata()
+				data, err = mcpserversc.BuildListToolMetadataPayload(*mcpServersListToolMetadataMcpServerIDFlag, *mcpServersListToolMetadataIncludeDeletedFlag, *mcpServersListToolMetadataSessionTokenFlag, *mcpServersListToolMetadataApikeyTokenFlag, *mcpServersListToolMetadataProjectSlugInputFlag)
+			case "set-tool-metadata":
+				endpoint = c.SetToolMetadata()
+				data, err = mcpserversc.BuildSetToolMetadataPayload(*mcpServersSetToolMetadataBodyFlag, *mcpServersSetToolMetadataSessionTokenFlag, *mcpServersSetToolMetadataApikeyTokenFlag, *mcpServersSetToolMetadataProjectSlugInputFlag)
+			case "delete-tool-metadata":
+				endpoint = c.DeleteToolMetadata()
+				data, err = mcpserversc.BuildDeleteToolMetadataPayload(*mcpServersDeleteToolMetadataMcpServerIDFlag, *mcpServersDeleteToolMetadataToolNameFlag, *mcpServersDeleteToolMetadataSessionTokenFlag, *mcpServersDeleteToolMetadataApikeyTokenFlag, *mcpServersDeleteToolMetadataProjectSlugInputFlag)
 			case "delete-mcp-server":
 				endpoint = c.DeleteMcpServer()
 				data, err = mcpserversc.BuildDeleteMcpServerPayload(*mcpServersDeleteMcpServerIDFlag, *mcpServersDeleteMcpServerSessionTokenFlag, *mcpServersDeleteMcpServerApikeyTokenFlag, *mcpServersDeleteMcpServerProjectSlugInputFlag)
@@ -11124,6 +11191,11 @@ func mcpServersUsage() {
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers-for-org: List all MCP servers across the organization`)
 	fmt.Fprintln(os.Stderr, `    update-mcp-server: Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.`)
 	fmt.Fprintln(os.Stderr, `    list-tool-filters: List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.`)
+	fmt.Fprintln(os.Stderr, `    set-tool-metadata-batch: Authoritative batch upsert of tool metadata for an MCP server. Every tool in the payload is upserted and any stored tool absent from the payload is soft-deleted, all in one transaction.`)
+	fmt.Fprintln(os.Stderr, `    add-tool-metadata-batch: Strictly additive batch insert of tool metadata for an MCP server. Every tool in the payload is inserted; if any of them already has a live stored entry the whole batch fails with a conflict and nothing is inserted. Stored tools absent from the payload are left untouched and nothing is deleted. Callers are expected to send only tools they know are new.`)
+	fmt.Fprintln(os.Stderr, `    list-tool-metadata: List stored tool metadata for an MCP server.`)
+	fmt.Fprintln(os.Stderr, `    set-tool-metadata: Set the annotation hints of a single tool metadata entry (manual override). This is a full-record replace: omitted hints become unset on the stored record.`)
+	fmt.Fprintln(os.Stderr, `    delete-tool-metadata: Soft-delete a single tool metadata entry.`)
 	fmt.Fprintln(os.Stderr, `    delete-mcp-server: Delete an MCP server`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -11273,6 +11345,130 @@ func mcpServersListToolFiltersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers list-tool-filters --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpServersSetToolMetadataBatchUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers set-tool-metadata-batch", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Authoritative batch upsert of tool metadata for an MCP server. Every tool in the payload is upserted and any stored tool absent from the payload is soft-deleted, all in one transaction.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers set-tool-metadata-batch --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tools\": [\n         {\n            \"destructive_hint\": false,\n            \"idempotent_hint\": false,\n            \"open_world_hint\": false,\n            \"read_only_hint\": false,\n            \"title\": \"abc123\",\n            \"tool_name\": \"abc123\"\n         }\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpServersAddToolMetadataBatchUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers add-tool-metadata-batch", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Strictly additive batch insert of tool metadata for an MCP server. Every tool in the payload is inserted; if any of them already has a live stored entry the whole batch fails with a conflict and nothing is inserted. Stored tools absent from the payload are left untouched and nothing is deleted. Callers are expected to send only tools they know are new.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers add-tool-metadata-batch --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tools\": [\n         {\n            \"destructive_hint\": false,\n            \"idempotent_hint\": false,\n            \"open_world_hint\": false,\n            \"read_only_hint\": false,\n            \"title\": \"abc123\",\n            \"tool_name\": \"abc123\"\n         }\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpServersListToolMetadataUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers list-tool-metadata", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -include-deleted BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List stored tool metadata for an MCP server.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-deleted BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers list-tool-metadata --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --include-deleted false --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpServersSetToolMetadataUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers set-tool-metadata", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set the annotation hints of a single tool metadata entry (manual override). This is a full-record replace: omitted hints become unset on the stored record.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers set-tool-metadata --body '{\n      \"destructive_hint\": false,\n      \"idempotent_hint\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"open_world_hint\": false,\n      \"read_only_hint\": false,\n      \"title\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpServersDeleteToolMetadataUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers delete-tool-metadata", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -tool-name STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a single tool metadata entry.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -tool-name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers delete-tool-metadata --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --tool-name \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersDeleteMcpServerUsage() {
@@ -15808,7 +16004,7 @@ func telemetrySearchUsersUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-users --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"account_type\": \"abc123\",\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"external_org_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"hook_source\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"group_by\": \"role\",\n      \"limit\": 2,\n      \"metrics\": \"basic\",\n      \"sort\": \"desc\",\n      \"user_type\": \"external\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry search-users --body '{\n      \"cursor\": \"abc123\",\n      \"filter\": {\n         \"account_type\": \"abc123\",\n         \"deployment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"event_source\": \"abc123\",\n         \"external_org_id\": \"abc123\",\n         \"from\": \"2025-12-19T10:00:00Z\",\n         \"hook_source\": \"abc123\",\n         \"to\": \"2025-12-19T11:00:00Z\",\n         \"user_ids\": [\n            \"abc123\"\n         ]\n      },\n      \"group_by\": \"role\",\n      \"limit\": 2,\n      \"metrics\": \"basic\",\n      \"sort\": \"desc\",\n      \"source\": \"agent_metrics\",\n      \"user_type\": \"external\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryCaptureEventUsage() {

@@ -57,6 +57,46 @@ type UpdateMcpServerRequestBody struct {
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 }
 
+// SetToolMetadataBatchRequestBody is the type of the "mcpServers" service
+// "setToolMetadataBatch" endpoint HTTP request body.
+type SetToolMetadataBatchRequestBody struct {
+	// The ID of the MCP server the tool metadata belongs to
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The authoritative set of tools for the MCP server. Stored tools absent from
+	// this list are soft-deleted.
+	Tools []*ToolMetadataFormRequestBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
+// AddToolMetadataBatchRequestBody is the type of the "mcpServers" service
+// "addToolMetadataBatch" endpoint HTTP request body.
+type AddToolMetadataBatchRequestBody struct {
+	// The ID of the MCP server the tool metadata belongs to
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The net-new tools to record. Every entry must be absent from the server's
+	// stored tool metadata.
+	Tools []*ToolMetadataFormRequestBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
+// SetToolMetadataRequestBody is the type of the "mcpServers" service
+// "setToolMetadata" endpoint HTTP request body.
+type SetToolMetadataRequestBody struct {
+	// The ID of the MCP server the tool metadata belongs to
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The name of the tool to update
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// A human-readable title for the tool
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Hint that the tool does not modify its environment
+	ReadOnlyHint *bool `form:"read_only_hint,omitempty" json:"read_only_hint,omitempty" xml:"read_only_hint,omitempty"`
+	// Hint that the tool may perform destructive updates to its environment
+	DestructiveHint *bool `form:"destructive_hint,omitempty" json:"destructive_hint,omitempty" xml:"destructive_hint,omitempty"`
+	// Hint that calling the tool repeatedly with the same arguments has no
+	// additional effect
+	IdempotentHint *bool `form:"idempotent_hint,omitempty" json:"idempotent_hint,omitempty" xml:"idempotent_hint,omitempty"`
+	// Hint that the tool may interact with an open world of external entities
+	OpenWorldHint *bool `form:"open_world_hint,omitempty" json:"open_world_hint,omitempty" xml:"open_world_hint,omitempty"`
+}
+
 // CreateMcpServerResponseBody is the type of the "mcpServers" service
 // "createMcpServer" endpoint HTTP response body.
 type CreateMcpServerResponseBody struct {
@@ -186,6 +226,57 @@ type ListToolFiltersResponseBody struct {
 	// Tools whose effective tag set is empty: reachable only without a ?tags=
 	// filter.
 	Excluded []*ToolFilterToolResponseBody `form:"excluded" json:"excluded" xml:"excluded"`
+}
+
+// SetToolMetadataBatchResponseBody is the type of the "mcpServers" service
+// "setToolMetadataBatch" endpoint HTTP response body.
+type SetToolMetadataBatchResponseBody struct {
+	// The stored tool metadata after the upsert
+	Tools []*ToolMetadataResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The number of stored tools soft-deleted because they were absent from the
+	// payload
+	Deleted int `form:"deleted" json:"deleted" xml:"deleted"`
+}
+
+// AddToolMetadataBatchResponseBody is the type of the "mcpServers" service
+// "addToolMetadataBatch" endpoint HTTP response body.
+type AddToolMetadataBatchResponseBody struct {
+	// The tool metadata entries created by this call
+	Tools []*ToolMetadataResponseBody `form:"tools" json:"tools" xml:"tools"`
+}
+
+// ListToolMetadataResponseBody is the type of the "mcpServers" service
+// "listToolMetadata" endpoint HTTP response body.
+type ListToolMetadataResponseBody struct {
+	// The stored tool metadata for the MCP server
+	Tools []*ToolMetadataResponseBody `form:"tools" json:"tools" xml:"tools"`
+}
+
+// SetToolMetadataResponseBody is the type of the "mcpServers" service
+// "setToolMetadata" endpoint HTTP response body.
+type SetToolMetadataResponseBody struct {
+	// The ID of the MCP server the tool metadata belongs to
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The name of the tool
+	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
+	// A human-readable title for the tool
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Hint that the tool does not modify its environment
+	ReadOnlyHint *bool `form:"read_only_hint,omitempty" json:"read_only_hint,omitempty" xml:"read_only_hint,omitempty"`
+	// Hint that the tool may perform destructive updates to its environment
+	DestructiveHint *bool `form:"destructive_hint,omitempty" json:"destructive_hint,omitempty" xml:"destructive_hint,omitempty"`
+	// Hint that calling the tool repeatedly with the same arguments has no
+	// additional effect
+	IdempotentHint *bool `form:"idempotent_hint,omitempty" json:"idempotent_hint,omitempty" xml:"idempotent_hint,omitempty"`
+	// Hint that the tool may interact with an open world of external entities
+	OpenWorldHint *bool `form:"open_world_hint,omitempty" json:"open_world_hint,omitempty" xml:"open_world_hint,omitempty"`
+	// When the tool metadata entry was created
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the tool metadata entry was last updated
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When the tool metadata entry was deleted. Only present on deleted entries
+	// returned by listToolMetadata with include_deleted.
+	DeletedAt *string `form:"deleted_at,omitempty" json:"deleted_at,omitempty" xml:"deleted_at,omitempty"`
 }
 
 // CreateMcpServerUnauthorizedResponseBody is the type of the "mcpServers"
@@ -1302,6 +1393,949 @@ type ListToolFiltersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetToolMetadataBatchUnauthorizedResponseBody is the type of the "mcpServers"
+// service "setToolMetadataBatch" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetToolMetadataBatchUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataBatchForbiddenResponseBody is the type of the "mcpServers"
+// service "setToolMetadataBatch" endpoint HTTP response body for the
+// "forbidden" error.
+type SetToolMetadataBatchForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataBatchBadRequestResponseBody is the type of the "mcpServers"
+// service "setToolMetadataBatch" endpoint HTTP response body for the
+// "bad_request" error.
+type SetToolMetadataBatchBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataBatchNotFoundResponseBody is the type of the "mcpServers"
+// service "setToolMetadataBatch" endpoint HTTP response body for the
+// "not_found" error.
+type SetToolMetadataBatchNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataBatchConflictResponseBody is the type of the "mcpServers"
+// service "setToolMetadataBatch" endpoint HTTP response body for the
+// "conflict" error.
+type SetToolMetadataBatchConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataBatchUnsupportedMediaResponseBody is the type of the
+// "mcpServers" service "setToolMetadataBatch" endpoint HTTP response body for
+// the "unsupported_media" error.
+type SetToolMetadataBatchUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataBatchInvalidResponseBody is the type of the "mcpServers"
+// service "setToolMetadataBatch" endpoint HTTP response body for the "invalid"
+// error.
+type SetToolMetadataBatchInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataBatchInvariantViolationResponseBody is the type of the
+// "mcpServers" service "setToolMetadataBatch" endpoint HTTP response body for
+// the "invariant_violation" error.
+type SetToolMetadataBatchInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataBatchUnexpectedResponseBody is the type of the "mcpServers"
+// service "setToolMetadataBatch" endpoint HTTP response body for the
+// "unexpected" error.
+type SetToolMetadataBatchUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataBatchGatewayErrorResponseBody is the type of the "mcpServers"
+// service "setToolMetadataBatch" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetToolMetadataBatchGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddToolMetadataBatchUnauthorizedResponseBody is the type of the "mcpServers"
+// service "addToolMetadataBatch" endpoint HTTP response body for the
+// "unauthorized" error.
+type AddToolMetadataBatchUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddToolMetadataBatchForbiddenResponseBody is the type of the "mcpServers"
+// service "addToolMetadataBatch" endpoint HTTP response body for the
+// "forbidden" error.
+type AddToolMetadataBatchForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddToolMetadataBatchBadRequestResponseBody is the type of the "mcpServers"
+// service "addToolMetadataBatch" endpoint HTTP response body for the
+// "bad_request" error.
+type AddToolMetadataBatchBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddToolMetadataBatchNotFoundResponseBody is the type of the "mcpServers"
+// service "addToolMetadataBatch" endpoint HTTP response body for the
+// "not_found" error.
+type AddToolMetadataBatchNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddToolMetadataBatchConflictResponseBody is the type of the "mcpServers"
+// service "addToolMetadataBatch" endpoint HTTP response body for the
+// "conflict" error.
+type AddToolMetadataBatchConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddToolMetadataBatchUnsupportedMediaResponseBody is the type of the
+// "mcpServers" service "addToolMetadataBatch" endpoint HTTP response body for
+// the "unsupported_media" error.
+type AddToolMetadataBatchUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddToolMetadataBatchInvalidResponseBody is the type of the "mcpServers"
+// service "addToolMetadataBatch" endpoint HTTP response body for the "invalid"
+// error.
+type AddToolMetadataBatchInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddToolMetadataBatchInvariantViolationResponseBody is the type of the
+// "mcpServers" service "addToolMetadataBatch" endpoint HTTP response body for
+// the "invariant_violation" error.
+type AddToolMetadataBatchInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddToolMetadataBatchUnexpectedResponseBody is the type of the "mcpServers"
+// service "addToolMetadataBatch" endpoint HTTP response body for the
+// "unexpected" error.
+type AddToolMetadataBatchUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddToolMetadataBatchGatewayErrorResponseBody is the type of the "mcpServers"
+// service "addToolMetadataBatch" endpoint HTTP response body for the
+// "gateway_error" error.
+type AddToolMetadataBatchGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolMetadataUnauthorizedResponseBody is the type of the "mcpServers"
+// service "listToolMetadata" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListToolMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolMetadataForbiddenResponseBody is the type of the "mcpServers"
+// service "listToolMetadata" endpoint HTTP response body for the "forbidden"
+// error.
+type ListToolMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolMetadataBadRequestResponseBody is the type of the "mcpServers"
+// service "listToolMetadata" endpoint HTTP response body for the "bad_request"
+// error.
+type ListToolMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolMetadataNotFoundResponseBody is the type of the "mcpServers" service
+// "listToolMetadata" endpoint HTTP response body for the "not_found" error.
+type ListToolMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolMetadataConflictResponseBody is the type of the "mcpServers" service
+// "listToolMetadata" endpoint HTTP response body for the "conflict" error.
+type ListToolMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolMetadataUnsupportedMediaResponseBody is the type of the "mcpServers"
+// service "listToolMetadata" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListToolMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolMetadataInvalidResponseBody is the type of the "mcpServers" service
+// "listToolMetadata" endpoint HTTP response body for the "invalid" error.
+type ListToolMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolMetadataInvariantViolationResponseBody is the type of the
+// "mcpServers" service "listToolMetadata" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListToolMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolMetadataUnexpectedResponseBody is the type of the "mcpServers"
+// service "listToolMetadata" endpoint HTTP response body for the "unexpected"
+// error.
+type ListToolMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolMetadataGatewayErrorResponseBody is the type of the "mcpServers"
+// service "listToolMetadata" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListToolMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataUnauthorizedResponseBody is the type of the "mcpServers"
+// service "setToolMetadata" endpoint HTTP response body for the "unauthorized"
+// error.
+type SetToolMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataForbiddenResponseBody is the type of the "mcpServers" service
+// "setToolMetadata" endpoint HTTP response body for the "forbidden" error.
+type SetToolMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataBadRequestResponseBody is the type of the "mcpServers"
+// service "setToolMetadata" endpoint HTTP response body for the "bad_request"
+// error.
+type SetToolMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataNotFoundResponseBody is the type of the "mcpServers" service
+// "setToolMetadata" endpoint HTTP response body for the "not_found" error.
+type SetToolMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataConflictResponseBody is the type of the "mcpServers" service
+// "setToolMetadata" endpoint HTTP response body for the "conflict" error.
+type SetToolMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataUnsupportedMediaResponseBody is the type of the "mcpServers"
+// service "setToolMetadata" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetToolMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataInvalidResponseBody is the type of the "mcpServers" service
+// "setToolMetadata" endpoint HTTP response body for the "invalid" error.
+type SetToolMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataInvariantViolationResponseBody is the type of the
+// "mcpServers" service "setToolMetadata" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetToolMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataUnexpectedResponseBody is the type of the "mcpServers"
+// service "setToolMetadata" endpoint HTTP response body for the "unexpected"
+// error.
+type SetToolMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetToolMetadataGatewayErrorResponseBody is the type of the "mcpServers"
+// service "setToolMetadata" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetToolMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolMetadataUnauthorizedResponseBody is the type of the "mcpServers"
+// service "deleteToolMetadata" endpoint HTTP response body for the
+// "unauthorized" error.
+type DeleteToolMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolMetadataForbiddenResponseBody is the type of the "mcpServers"
+// service "deleteToolMetadata" endpoint HTTP response body for the "forbidden"
+// error.
+type DeleteToolMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolMetadataBadRequestResponseBody is the type of the "mcpServers"
+// service "deleteToolMetadata" endpoint HTTP response body for the
+// "bad_request" error.
+type DeleteToolMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolMetadataNotFoundResponseBody is the type of the "mcpServers"
+// service "deleteToolMetadata" endpoint HTTP response body for the "not_found"
+// error.
+type DeleteToolMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolMetadataConflictResponseBody is the type of the "mcpServers"
+// service "deleteToolMetadata" endpoint HTTP response body for the "conflict"
+// error.
+type DeleteToolMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolMetadataUnsupportedMediaResponseBody is the type of the
+// "mcpServers" service "deleteToolMetadata" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DeleteToolMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolMetadataInvalidResponseBody is the type of the "mcpServers"
+// service "deleteToolMetadata" endpoint HTTP response body for the "invalid"
+// error.
+type DeleteToolMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolMetadataInvariantViolationResponseBody is the type of the
+// "mcpServers" service "deleteToolMetadata" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DeleteToolMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolMetadataUnexpectedResponseBody is the type of the "mcpServers"
+// service "deleteToolMetadata" endpoint HTTP response body for the
+// "unexpected" error.
+type DeleteToolMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteToolMetadataGatewayErrorResponseBody is the type of the "mcpServers"
+// service "deleteToolMetadata" endpoint HTTP response body for the
+// "gateway_error" error.
+type DeleteToolMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteMcpServerUnauthorizedResponseBody is the type of the "mcpServers"
 // service "deleteMcpServer" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1539,6 +2573,49 @@ type ToolFilterToolResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 }
 
+// ToolMetadataResponseBody is used to define fields on response body types.
+type ToolMetadataResponseBody struct {
+	// The ID of the MCP server the tool metadata belongs to
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The name of the tool
+	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
+	// A human-readable title for the tool
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Hint that the tool does not modify its environment
+	ReadOnlyHint *bool `form:"read_only_hint,omitempty" json:"read_only_hint,omitempty" xml:"read_only_hint,omitempty"`
+	// Hint that the tool may perform destructive updates to its environment
+	DestructiveHint *bool `form:"destructive_hint,omitempty" json:"destructive_hint,omitempty" xml:"destructive_hint,omitempty"`
+	// Hint that calling the tool repeatedly with the same arguments has no
+	// additional effect
+	IdempotentHint *bool `form:"idempotent_hint,omitempty" json:"idempotent_hint,omitempty" xml:"idempotent_hint,omitempty"`
+	// Hint that the tool may interact with an open world of external entities
+	OpenWorldHint *bool `form:"open_world_hint,omitempty" json:"open_world_hint,omitempty" xml:"open_world_hint,omitempty"`
+	// When the tool metadata entry was created
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the tool metadata entry was last updated
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When the tool metadata entry was deleted. Only present on deleted entries
+	// returned by listToolMetadata with include_deleted.
+	DeletedAt *string `form:"deleted_at,omitempty" json:"deleted_at,omitempty" xml:"deleted_at,omitempty"`
+}
+
+// ToolMetadataFormRequestBody is used to define fields on request body types.
+type ToolMetadataFormRequestBody struct {
+	// The name of the tool
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// A human-readable title for the tool
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Hint that the tool does not modify its environment
+	ReadOnlyHint *bool `form:"read_only_hint,omitempty" json:"read_only_hint,omitempty" xml:"read_only_hint,omitempty"`
+	// Hint that the tool may perform destructive updates to its environment
+	DestructiveHint *bool `form:"destructive_hint,omitempty" json:"destructive_hint,omitempty" xml:"destructive_hint,omitempty"`
+	// Hint that calling the tool repeatedly with the same arguments has no
+	// additional effect
+	IdempotentHint *bool `form:"idempotent_hint,omitempty" json:"idempotent_hint,omitempty" xml:"idempotent_hint,omitempty"`
+	// Hint that the tool may interact with an open world of external entities
+	OpenWorldHint *bool `form:"open_world_hint,omitempty" json:"open_world_hint,omitempty" xml:"open_world_hint,omitempty"`
+}
+
 // NewCreateMcpServerResponseBody builds the HTTP response body from the result
 // of the "createMcpServer" endpoint of the "mcpServers" service.
 func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerResponseBody {
@@ -1671,6 +2748,83 @@ func NewListToolFiltersResponseBody(res *types.ListToolFiltersResult) *ListToolF
 		}
 	} else {
 		body.Excluded = []*ToolFilterToolResponseBody{}
+	}
+	return body
+}
+
+// NewSetToolMetadataBatchResponseBody builds the HTTP response body from the
+// result of the "setToolMetadataBatch" endpoint of the "mcpServers" service.
+func NewSetToolMetadataBatchResponseBody(res *mcpservers.SetToolMetadataBatchResult) *SetToolMetadataBatchResponseBody {
+	body := &SetToolMetadataBatchResponseBody{
+		Deleted: res.Deleted,
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolMetadataResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesToolMetadataToToolMetadataResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolMetadataResponseBody{}
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchResponseBody builds the HTTP response body from the
+// result of the "addToolMetadataBatch" endpoint of the "mcpServers" service.
+func NewAddToolMetadataBatchResponseBody(res *mcpservers.AddToolMetadataBatchResult) *AddToolMetadataBatchResponseBody {
+	body := &AddToolMetadataBatchResponseBody{}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolMetadataResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesToolMetadataToToolMetadataResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolMetadataResponseBody{}
+	}
+	return body
+}
+
+// NewListToolMetadataResponseBody builds the HTTP response body from the
+// result of the "listToolMetadata" endpoint of the "mcpServers" service.
+func NewListToolMetadataResponseBody(res *mcpservers.ListToolMetadataResult) *ListToolMetadataResponseBody {
+	body := &ListToolMetadataResponseBody{}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolMetadataResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalTypesToolMetadataToToolMetadataResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolMetadataResponseBody{}
+	}
+	return body
+}
+
+// NewSetToolMetadataResponseBody builds the HTTP response body from the result
+// of the "setToolMetadata" endpoint of the "mcpServers" service.
+func NewSetToolMetadataResponseBody(res *types.ToolMetadata) *SetToolMetadataResponseBody {
+	body := &SetToolMetadataResponseBody{
+		McpServerID:     res.McpServerID,
+		ToolName:        res.ToolName,
+		Title:           res.Title,
+		ReadOnlyHint:    res.ReadOnlyHint,
+		DestructiveHint: res.DestructiveHint,
+		IdempotentHint:  res.IdempotentHint,
+		OpenWorldHint:   res.OpenWorldHint,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
+		DeletedAt:       res.DeletedAt,
 	}
 	return body
 }
@@ -2538,6 +3692,741 @@ func NewListToolFiltersGatewayErrorResponseBody(res *goa.ServiceError) *ListTool
 	return body
 }
 
+// NewSetToolMetadataBatchUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "setToolMetadataBatch" endpoint of the
+// "mcpServers" service.
+func NewSetToolMetadataBatchUnauthorizedResponseBody(res *goa.ServiceError) *SetToolMetadataBatchUnauthorizedResponseBody {
+	body := &SetToolMetadataBatchUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataBatchForbiddenResponseBody builds the HTTP response body
+// from the result of the "setToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewSetToolMetadataBatchForbiddenResponseBody(res *goa.ServiceError) *SetToolMetadataBatchForbiddenResponseBody {
+	body := &SetToolMetadataBatchForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataBatchBadRequestResponseBody builds the HTTP response body
+// from the result of the "setToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewSetToolMetadataBatchBadRequestResponseBody(res *goa.ServiceError) *SetToolMetadataBatchBadRequestResponseBody {
+	body := &SetToolMetadataBatchBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataBatchNotFoundResponseBody builds the HTTP response body
+// from the result of the "setToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewSetToolMetadataBatchNotFoundResponseBody(res *goa.ServiceError) *SetToolMetadataBatchNotFoundResponseBody {
+	body := &SetToolMetadataBatchNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataBatchConflictResponseBody builds the HTTP response body
+// from the result of the "setToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewSetToolMetadataBatchConflictResponseBody(res *goa.ServiceError) *SetToolMetadataBatchConflictResponseBody {
+	body := &SetToolMetadataBatchConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataBatchUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setToolMetadataBatch" endpoint of the
+// "mcpServers" service.
+func NewSetToolMetadataBatchUnsupportedMediaResponseBody(res *goa.ServiceError) *SetToolMetadataBatchUnsupportedMediaResponseBody {
+	body := &SetToolMetadataBatchUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataBatchInvalidResponseBody builds the HTTP response body
+// from the result of the "setToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewSetToolMetadataBatchInvalidResponseBody(res *goa.ServiceError) *SetToolMetadataBatchInvalidResponseBody {
+	body := &SetToolMetadataBatchInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataBatchInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setToolMetadataBatch" endpoint of the
+// "mcpServers" service.
+func NewSetToolMetadataBatchInvariantViolationResponseBody(res *goa.ServiceError) *SetToolMetadataBatchInvariantViolationResponseBody {
+	body := &SetToolMetadataBatchInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataBatchUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewSetToolMetadataBatchUnexpectedResponseBody(res *goa.ServiceError) *SetToolMetadataBatchUnexpectedResponseBody {
+	body := &SetToolMetadataBatchUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataBatchGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "setToolMetadataBatch" endpoint of the
+// "mcpServers" service.
+func NewSetToolMetadataBatchGatewayErrorResponseBody(res *goa.ServiceError) *SetToolMetadataBatchGatewayErrorResponseBody {
+	body := &SetToolMetadataBatchGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "addToolMetadataBatch" endpoint of the
+// "mcpServers" service.
+func NewAddToolMetadataBatchUnauthorizedResponseBody(res *goa.ServiceError) *AddToolMetadataBatchUnauthorizedResponseBody {
+	body := &AddToolMetadataBatchUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchForbiddenResponseBody builds the HTTP response body
+// from the result of the "addToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewAddToolMetadataBatchForbiddenResponseBody(res *goa.ServiceError) *AddToolMetadataBatchForbiddenResponseBody {
+	body := &AddToolMetadataBatchForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchBadRequestResponseBody builds the HTTP response body
+// from the result of the "addToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewAddToolMetadataBatchBadRequestResponseBody(res *goa.ServiceError) *AddToolMetadataBatchBadRequestResponseBody {
+	body := &AddToolMetadataBatchBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchNotFoundResponseBody builds the HTTP response body
+// from the result of the "addToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewAddToolMetadataBatchNotFoundResponseBody(res *goa.ServiceError) *AddToolMetadataBatchNotFoundResponseBody {
+	body := &AddToolMetadataBatchNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchConflictResponseBody builds the HTTP response body
+// from the result of the "addToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewAddToolMetadataBatchConflictResponseBody(res *goa.ServiceError) *AddToolMetadataBatchConflictResponseBody {
+	body := &AddToolMetadataBatchConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "addToolMetadataBatch" endpoint of the
+// "mcpServers" service.
+func NewAddToolMetadataBatchUnsupportedMediaResponseBody(res *goa.ServiceError) *AddToolMetadataBatchUnsupportedMediaResponseBody {
+	body := &AddToolMetadataBatchUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchInvalidResponseBody builds the HTTP response body
+// from the result of the "addToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewAddToolMetadataBatchInvalidResponseBody(res *goa.ServiceError) *AddToolMetadataBatchInvalidResponseBody {
+	body := &AddToolMetadataBatchInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "addToolMetadataBatch" endpoint of the
+// "mcpServers" service.
+func NewAddToolMetadataBatchInvariantViolationResponseBody(res *goa.ServiceError) *AddToolMetadataBatchInvariantViolationResponseBody {
+	body := &AddToolMetadataBatchInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchUnexpectedResponseBody builds the HTTP response body
+// from the result of the "addToolMetadataBatch" endpoint of the "mcpServers"
+// service.
+func NewAddToolMetadataBatchUnexpectedResponseBody(res *goa.ServiceError) *AddToolMetadataBatchUnexpectedResponseBody {
+	body := &AddToolMetadataBatchUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddToolMetadataBatchGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "addToolMetadataBatch" endpoint of the
+// "mcpServers" service.
+func NewAddToolMetadataBatchGatewayErrorResponseBody(res *goa.ServiceError) *AddToolMetadataBatchGatewayErrorResponseBody {
+	body := &AddToolMetadataBatchGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolMetadataUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewListToolMetadataUnauthorizedResponseBody(res *goa.ServiceError) *ListToolMetadataUnauthorizedResponseBody {
+	body := &ListToolMetadataUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolMetadataForbiddenResponseBody builds the HTTP response body from
+// the result of the "listToolMetadata" endpoint of the "mcpServers" service.
+func NewListToolMetadataForbiddenResponseBody(res *goa.ServiceError) *ListToolMetadataForbiddenResponseBody {
+	body := &ListToolMetadataForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolMetadataBadRequestResponseBody builds the HTTP response body from
+// the result of the "listToolMetadata" endpoint of the "mcpServers" service.
+func NewListToolMetadataBadRequestResponseBody(res *goa.ServiceError) *ListToolMetadataBadRequestResponseBody {
+	body := &ListToolMetadataBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolMetadataNotFoundResponseBody builds the HTTP response body from
+// the result of the "listToolMetadata" endpoint of the "mcpServers" service.
+func NewListToolMetadataNotFoundResponseBody(res *goa.ServiceError) *ListToolMetadataNotFoundResponseBody {
+	body := &ListToolMetadataNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolMetadataConflictResponseBody builds the HTTP response body from
+// the result of the "listToolMetadata" endpoint of the "mcpServers" service.
+func NewListToolMetadataConflictResponseBody(res *goa.ServiceError) *ListToolMetadataConflictResponseBody {
+	body := &ListToolMetadataConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolMetadataUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewListToolMetadataUnsupportedMediaResponseBody(res *goa.ServiceError) *ListToolMetadataUnsupportedMediaResponseBody {
+	body := &ListToolMetadataUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolMetadataInvalidResponseBody builds the HTTP response body from
+// the result of the "listToolMetadata" endpoint of the "mcpServers" service.
+func NewListToolMetadataInvalidResponseBody(res *goa.ServiceError) *ListToolMetadataInvalidResponseBody {
+	body := &ListToolMetadataInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolMetadataInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewListToolMetadataInvariantViolationResponseBody(res *goa.ServiceError) *ListToolMetadataInvariantViolationResponseBody {
+	body := &ListToolMetadataInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolMetadataUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listToolMetadata" endpoint of the "mcpServers" service.
+func NewListToolMetadataUnexpectedResponseBody(res *goa.ServiceError) *ListToolMetadataUnexpectedResponseBody {
+	body := &ListToolMetadataUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolMetadataGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewListToolMetadataGatewayErrorResponseBody(res *goa.ServiceError) *ListToolMetadataGatewayErrorResponseBody {
+	body := &ListToolMetadataGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewSetToolMetadataUnauthorizedResponseBody(res *goa.ServiceError) *SetToolMetadataUnauthorizedResponseBody {
+	body := &SetToolMetadataUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataForbiddenResponseBody builds the HTTP response body from
+// the result of the "setToolMetadata" endpoint of the "mcpServers" service.
+func NewSetToolMetadataForbiddenResponseBody(res *goa.ServiceError) *SetToolMetadataForbiddenResponseBody {
+	body := &SetToolMetadataForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataBadRequestResponseBody builds the HTTP response body from
+// the result of the "setToolMetadata" endpoint of the "mcpServers" service.
+func NewSetToolMetadataBadRequestResponseBody(res *goa.ServiceError) *SetToolMetadataBadRequestResponseBody {
+	body := &SetToolMetadataBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataNotFoundResponseBody builds the HTTP response body from
+// the result of the "setToolMetadata" endpoint of the "mcpServers" service.
+func NewSetToolMetadataNotFoundResponseBody(res *goa.ServiceError) *SetToolMetadataNotFoundResponseBody {
+	body := &SetToolMetadataNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataConflictResponseBody builds the HTTP response body from
+// the result of the "setToolMetadata" endpoint of the "mcpServers" service.
+func NewSetToolMetadataConflictResponseBody(res *goa.ServiceError) *SetToolMetadataConflictResponseBody {
+	body := &SetToolMetadataConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "setToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewSetToolMetadataUnsupportedMediaResponseBody(res *goa.ServiceError) *SetToolMetadataUnsupportedMediaResponseBody {
+	body := &SetToolMetadataUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataInvalidResponseBody builds the HTTP response body from the
+// result of the "setToolMetadata" endpoint of the "mcpServers" service.
+func NewSetToolMetadataInvalidResponseBody(res *goa.ServiceError) *SetToolMetadataInvalidResponseBody {
+	body := &SetToolMetadataInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewSetToolMetadataInvariantViolationResponseBody(res *goa.ServiceError) *SetToolMetadataInvariantViolationResponseBody {
+	body := &SetToolMetadataInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataUnexpectedResponseBody builds the HTTP response body from
+// the result of the "setToolMetadata" endpoint of the "mcpServers" service.
+func NewSetToolMetadataUnexpectedResponseBody(res *goa.ServiceError) *SetToolMetadataUnexpectedResponseBody {
+	body := &SetToolMetadataUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetToolMetadataGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewSetToolMetadataGatewayErrorResponseBody(res *goa.ServiceError) *SetToolMetadataGatewayErrorResponseBody {
+	body := &SetToolMetadataGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolMetadataUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "deleteToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewDeleteToolMetadataUnauthorizedResponseBody(res *goa.ServiceError) *DeleteToolMetadataUnauthorizedResponseBody {
+	body := &DeleteToolMetadataUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolMetadataForbiddenResponseBody builds the HTTP response body
+// from the result of the "deleteToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewDeleteToolMetadataForbiddenResponseBody(res *goa.ServiceError) *DeleteToolMetadataForbiddenResponseBody {
+	body := &DeleteToolMetadataForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolMetadataBadRequestResponseBody builds the HTTP response body
+// from the result of the "deleteToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewDeleteToolMetadataBadRequestResponseBody(res *goa.ServiceError) *DeleteToolMetadataBadRequestResponseBody {
+	body := &DeleteToolMetadataBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolMetadataNotFoundResponseBody builds the HTTP response body from
+// the result of the "deleteToolMetadata" endpoint of the "mcpServers" service.
+func NewDeleteToolMetadataNotFoundResponseBody(res *goa.ServiceError) *DeleteToolMetadataNotFoundResponseBody {
+	body := &DeleteToolMetadataNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolMetadataConflictResponseBody builds the HTTP response body from
+// the result of the "deleteToolMetadata" endpoint of the "mcpServers" service.
+func NewDeleteToolMetadataConflictResponseBody(res *goa.ServiceError) *DeleteToolMetadataConflictResponseBody {
+	body := &DeleteToolMetadataConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolMetadataUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "deleteToolMetadata" endpoint of the
+// "mcpServers" service.
+func NewDeleteToolMetadataUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteToolMetadataUnsupportedMediaResponseBody {
+	body := &DeleteToolMetadataUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolMetadataInvalidResponseBody builds the HTTP response body from
+// the result of the "deleteToolMetadata" endpoint of the "mcpServers" service.
+func NewDeleteToolMetadataInvalidResponseBody(res *goa.ServiceError) *DeleteToolMetadataInvalidResponseBody {
+	body := &DeleteToolMetadataInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolMetadataInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "deleteToolMetadata" endpoint of the
+// "mcpServers" service.
+func NewDeleteToolMetadataInvariantViolationResponseBody(res *goa.ServiceError) *DeleteToolMetadataInvariantViolationResponseBody {
+	body := &DeleteToolMetadataInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolMetadataUnexpectedResponseBody builds the HTTP response body
+// from the result of the "deleteToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewDeleteToolMetadataUnexpectedResponseBody(res *goa.ServiceError) *DeleteToolMetadataUnexpectedResponseBody {
+	body := &DeleteToolMetadataUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteToolMetadataGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "deleteToolMetadata" endpoint of the "mcpServers"
+// service.
+func NewDeleteToolMetadataGatewayErrorResponseBody(res *goa.ServiceError) *DeleteToolMetadataGatewayErrorResponseBody {
+	body := &DeleteToolMetadataGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteMcpServerUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "deleteMcpServer" endpoint of the "mcpServers"
 // service.
@@ -2770,6 +4659,93 @@ func NewListToolFiltersPayload(id *string, slug *string, sessionToken *string, a
 	return v
 }
 
+// NewSetToolMetadataBatchPayload builds a mcpServers service
+// setToolMetadataBatch endpoint payload.
+func NewSetToolMetadataBatchPayload(body *SetToolMetadataBatchRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.SetToolMetadataBatchPayload {
+	v := &mcpservers.SetToolMetadataBatchPayload{
+		McpServerID: *body.McpServerID,
+	}
+	v.Tools = make([]*mcpservers.ToolMetadataForm, len(body.Tools))
+	for i, val := range body.Tools {
+		if val == nil {
+			v.Tools[i] = nil
+			continue
+		}
+		v.Tools[i] = unmarshalToolMetadataFormRequestBodyToMcpserversToolMetadataForm(val)
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewAddToolMetadataBatchPayload builds a mcpServers service
+// addToolMetadataBatch endpoint payload.
+func NewAddToolMetadataBatchPayload(body *AddToolMetadataBatchRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.AddToolMetadataBatchPayload {
+	v := &mcpservers.AddToolMetadataBatchPayload{
+		McpServerID: *body.McpServerID,
+	}
+	v.Tools = make([]*mcpservers.ToolMetadataForm, len(body.Tools))
+	for i, val := range body.Tools {
+		if val == nil {
+			v.Tools[i] = nil
+			continue
+		}
+		v.Tools[i] = unmarshalToolMetadataFormRequestBodyToMcpserversToolMetadataForm(val)
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListToolMetadataPayload builds a mcpServers service listToolMetadata
+// endpoint payload.
+func NewListToolMetadataPayload(mcpServerID string, includeDeleted *bool, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.ListToolMetadataPayload {
+	v := &mcpservers.ListToolMetadataPayload{}
+	v.McpServerID = mcpServerID
+	v.IncludeDeleted = includeDeleted
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewSetToolMetadataPayload builds a mcpServers service setToolMetadata
+// endpoint payload.
+func NewSetToolMetadataPayload(body *SetToolMetadataRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.SetToolMetadataPayload {
+	v := &mcpservers.SetToolMetadataPayload{
+		McpServerID:     *body.McpServerID,
+		ToolName:        *body.ToolName,
+		Title:           body.Title,
+		ReadOnlyHint:    body.ReadOnlyHint,
+		DestructiveHint: body.DestructiveHint,
+		IdempotentHint:  body.IdempotentHint,
+		OpenWorldHint:   body.OpenWorldHint,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDeleteToolMetadataPayload builds a mcpServers service deleteToolMetadata
+// endpoint payload.
+func NewDeleteToolMetadataPayload(mcpServerID string, toolName string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.DeleteToolMetadataPayload {
+	v := &mcpservers.DeleteToolMetadataPayload{}
+	v.McpServerID = mcpServerID
+	v.ToolName = toolName
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewDeleteMcpServerPayload builds a mcpServers service deleteMcpServer
 // endpoint payload.
 func NewDeleteMcpServerPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.DeleteMcpServerPayload {
@@ -2845,6 +4821,74 @@ func ValidateUpdateMcpServerRequestBody(body *UpdateMcpServerRequestBody) (err e
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
 		}
+	}
+	return
+}
+
+// ValidateSetToolMetadataBatchRequestBody runs the validations defined on
+// SetToolMetadataBatchRequestBody
+func ValidateSetToolMetadataBatchRequestBody(body *SetToolMetadataBatchRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateToolMetadataFormRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAddToolMetadataBatchRequestBody runs the validations defined on
+// AddToolMetadataBatchRequestBody
+func ValidateAddToolMetadataBatchRequestBody(body *AddToolMetadataBatchRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateToolMetadataFormRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSetToolMetadataRequestBody runs the validations defined on
+// SetToolMetadataRequestBody
+func ValidateSetToolMetadataRequestBody(body *SetToolMetadataRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ToolName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateToolMetadataFormRequestBody runs the validations defined on
+// ToolMetadataFormRequestBody
+func ValidateToolMetadataFormRequestBody(body *ToolMetadataFormRequestBody) (err error) {
+	if body.ToolName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
 	}
 	return
 }

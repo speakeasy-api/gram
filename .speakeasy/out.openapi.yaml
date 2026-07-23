@@ -17179,6 +17179,111 @@ paths:
       x-speakeasy-name-override: listRegistries
       x-speakeasy-react-hook:
         name: ListMCPRegistries
+  /rpc/mcpServers.addToolMetadataBatch:
+    post:
+      description: Strictly additive batch insert of tool metadata for an MCP server. Every tool in the payload is inserted; if any of them already has a live stored entry the whole batch fails with a conflict and nothing is inserted. Stored tools absent from the payload are left untouched and nothing is deleted. Callers are expected to send only tools they know are new.
+      operationId: addMcpServerToolMetadataBatch
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetToolMetadataBatchRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddToolMetadataBatchResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: addToolMetadataBatch mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: addToolMetadataBatch
+      x-speakeasy-react-hook:
+        name: AddMcpServerToolMetadataBatch
   /rpc/mcpServers.create:
     post:
       description: Create a new MCP server
@@ -17388,6 +17493,118 @@ paths:
       x-speakeasy-name-override: delete
       x-speakeasy-react-hook:
         name: DeleteMcpServer
+  /rpc/mcpServers.deleteToolMetadata:
+    delete:
+      description: Soft-delete a single tool metadata entry.
+      operationId: deleteMcpServerToolMetadata
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP server the tool metadata belongs to
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The ID of the MCP server the tool metadata belongs to
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The name of the tool to delete
+          in: query
+          name: tool_name
+          required: true
+          schema:
+            description: The name of the tool to delete
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: deleteToolMetadata mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: deleteToolMetadata
+      x-speakeasy-react-hook:
+        name: DeleteMcpServerToolMetadata
   /rpc/mcpServers.get:
     get:
       description: Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
@@ -17821,6 +18038,331 @@ paths:
       x-speakeasy-name-override: listToolFilters
       x-speakeasy-react-hook:
         name: ListMcpServerToolFilters
+  /rpc/mcpServers.listToolMetadata:
+    get:
+      description: List stored tool metadata for an MCP server.
+      operationId: listMcpServerToolMetadata
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP server the tool metadata belongs to
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The ID of the MCP server the tool metadata belongs to
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Include soft-deleted tool metadata entries in the result. Deleted entries carry a deleted_at timestamp.
+          in: query
+          name: include_deleted
+          schema:
+            description: Include soft-deleted tool metadata entries in the result. Deleted entries carry a deleted_at timestamp.
+            type: boolean
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListToolMetadataResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listToolMetadata mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: listToolMetadata
+      x-speakeasy-react-hook:
+        name: ListMcpServerToolMetadata
+  /rpc/mcpServers.setToolMetadata:
+    put:
+      description: 'Set the annotation hints of a single tool metadata entry (manual override). This is a full-record replace: omitted hints become unset on the stored record.'
+      operationId: setMcpServerToolMetadata
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetToolMetadataRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolMetadata'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: setToolMetadata mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: setToolMetadata
+      x-speakeasy-react-hook:
+        name: SetMcpServerToolMetadata
+  /rpc/mcpServers.setToolMetadataBatch:
+    put:
+      description: Authoritative batch upsert of tool metadata for an MCP server. Every tool in the payload is upserted and any stored tool absent from the payload is soft-deleted, all in one transaction.
+      operationId: setMcpServerToolMetadataBatch
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetToolMetadataBatchRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetToolMetadataBatchResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: setToolMetadataBatch mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: setToolMetadataBatch
+      x-speakeasy-react-hook:
+        name: SetMcpServerToolMetadataBatch
   /rpc/mcpServers.update:
     post:
       description: 'Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.'
@@ -45077,6 +45619,17 @@ components:
       required:
         - id
         - content
+    AddToolMetadataBatchResult:
+      type: object
+      properties:
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolMetadata'
+          description: The tool metadata entries created by this call
+      description: Result of a strictly additive tool metadata batch insert.
+      required:
+        - tools
     AdminListOrganizationMembersResult:
       type: object
       properties:
@@ -52991,6 +53544,17 @@ components:
         - filtering_enabled
         - scopes
         - excluded
+    ListToolMetadataResult:
+      type: object
+      properties:
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolMetadata'
+          description: The stored tool metadata for the MCP server
+      description: Result type for listing tool metadata
+      required:
+        - tools
     ListToolUsageTracesPayload:
       type: object
       properties:
@@ -58205,7 +58769,7 @@ components:
           maximum: 1000
         metrics:
           type: string
-          description: 'Level of usage metrics to compute per user. ''full'' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. ''basic'' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under ''basic''.'
+          description: 'Level of usage metrics to compute per user. ''full'' (default) returns the complete set: chat counts, cost, cache tokens, tool-call totals, and the per-tool and per-hook-source breakdowns. ''basic'' computes only user identity, first/last activity, and input/output token sums — a much cheaper aggregation for large orgs (e.g. the employee enrollment list, which renders only those fields). The remaining fields are zero/empty under ''basic''. Ignored when source=''agent_metrics''.'
           default: full
           enum:
             - full
@@ -58217,6 +58781,13 @@ components:
           enum:
             - asc
             - desc
+        source:
+          type: string
+          description: Where per-user summaries are read from (internal employee grouping only). 'logs' (default) scans raw telemetry_logs and computes the metrics selected by 'metrics'. 'agent_metrics' reads the pre-aggregated attribute_metrics_summaries view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper but returns only identity, last activity (hourly), and input/output/total token sums; users without an email in the window are surfaced separately from raw logs with activity but no token counts.
+          default: logs
+          enum:
+            - logs
+            - agent_metrics
         user_type:
           type: string
           description: Type of user identifier to group by
@@ -58864,6 +59435,65 @@ components:
         - source_kind
         - source_slug
         - environment_id
+    SetToolMetadataBatchRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server the tool metadata belongs to
+          format: uuid
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolMetadataForm'
+          description: The authoritative set of tools for the MCP server. Stored tools absent from this list are soft-deleted.
+      required:
+        - mcp_server_id
+        - tools
+    SetToolMetadataBatchResult:
+      type: object
+      properties:
+        deleted:
+          type: integer
+          description: The number of stored tools soft-deleted because they were absent from the payload
+          format: int64
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolMetadata'
+          description: The stored tool metadata after the upsert
+      description: Result of an authoritative tool metadata batch upsert.
+      required:
+        - tools
+        - deleted
+    SetToolMetadataRequestBody:
+      type: object
+      properties:
+        destructive_hint:
+          type: boolean
+          description: Hint that the tool may perform destructive updates to its environment
+        idempotent_hint:
+          type: boolean
+          description: Hint that calling the tool repeatedly with the same arguments has no additional effect
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server the tool metadata belongs to
+          format: uuid
+        open_world_hint:
+          type: boolean
+          description: Hint that the tool may interact with an open world of external entities
+        read_only_hint:
+          type: boolean
+          description: Hint that the tool does not modify its environment
+        title:
+          type: string
+          description: A human-readable title for the tool
+        tool_name:
+          type: string
+          description: The name of the tool to update
+      required:
+        - mcp_server_id
+        - tool_name
     SetToolVariationsGroupForm:
       type: object
       properties:
@@ -60661,6 +61291,73 @@ components:
       required:
         - tool_urn
         - name
+    ToolMetadata:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the tool metadata entry was created
+          format: date-time
+        deleted_at:
+          type: string
+          description: When the tool metadata entry was deleted. Only present on deleted entries returned by listToolMetadata with include_deleted.
+          format: date-time
+        destructive_hint:
+          type: boolean
+          description: Hint that the tool may perform destructive updates to its environment
+        idempotent_hint:
+          type: boolean
+          description: Hint that calling the tool repeatedly with the same arguments has no additional effect
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server the tool metadata belongs to
+          format: uuid
+        open_world_hint:
+          type: boolean
+          description: Hint that the tool may interact with an open world of external entities
+        read_only_hint:
+          type: boolean
+          description: Hint that the tool does not modify its environment
+        title:
+          type: string
+          description: A human-readable title for the tool
+        tool_name:
+          type: string
+          description: The name of the tool
+        updated_at:
+          type: string
+          description: When the tool metadata entry was last updated
+          format: date-time
+      description: Stored metadata about a tool exposed by an MCP server. The annotation hints mirror MCP tool annotations and drive annotation-aware authorization.
+      required:
+        - mcp_server_id
+        - tool_name
+        - created_at
+        - updated_at
+    ToolMetadataForm:
+      type: object
+      properties:
+        destructive_hint:
+          type: boolean
+          description: Hint that the tool may perform destructive updates to its environment
+        idempotent_hint:
+          type: boolean
+          description: Hint that calling the tool repeatedly with the same arguments has no additional effect
+        open_world_hint:
+          type: boolean
+          description: Hint that the tool may interact with an open world of external entities
+        read_only_hint:
+          type: boolean
+          description: Hint that the tool does not modify its environment
+        title:
+          type: string
+          description: A human-readable title for the tool
+        tool_name:
+          type: string
+          description: The name of the tool
+      description: A single tool entry in a tool metadata batch.
+      required:
+        - tool_name
     ToolMetric:
       type: object
       properties:

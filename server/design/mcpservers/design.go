@@ -187,6 +187,154 @@ var _ = Service("mcpServers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMcpServerToolFilters"}`)
 	})
 
+	Method("setToolMetadataBatch", func() {
+		Description("Authoritative batch upsert of tool metadata for an MCP server. Every tool in the payload is upserted and any stored tool absent from the payload is soft-deleted, all in one transaction.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The ID of the MCP server the tool metadata belongs to", func() {
+				Format(FormatUUID)
+			})
+			Attribute("tools", ArrayOf(ToolMetadataForm), "The authoritative set of tools for the MCP server. Stored tools absent from this list are soft-deleted.")
+			Required("mcp_server_id", "tools")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SetToolMetadataBatchResult)
+
+		HTTP(func() {
+			PUT("/rpc/mcpServers.setToolMetadataBatch")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setMcpServerToolMetadataBatch")
+		Meta("openapi:extension:x-speakeasy-name-override", "setToolMetadataBatch")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetMcpServerToolMetadataBatch"}`)
+	})
+
+	Method("addToolMetadataBatch", func() {
+		Description("Strictly additive batch insert of tool metadata for an MCP server. Every tool in the payload is inserted; if any of them already has a live stored entry the whole batch fails with a conflict and nothing is inserted. Stored tools absent from the payload are left untouched and nothing is deleted. Callers are expected to send only tools they know are new.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The ID of the MCP server the tool metadata belongs to", func() {
+				Format(FormatUUID)
+			})
+			Attribute("tools", ArrayOf(ToolMetadataForm), "The net-new tools to record. Every entry must be absent from the server's stored tool metadata.")
+			Required("mcp_server_id", "tools")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(AddToolMetadataBatchResult)
+
+		HTTP(func() {
+			POST("/rpc/mcpServers.addToolMetadataBatch")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "addMcpServerToolMetadataBatch")
+		Meta("openapi:extension:x-speakeasy-name-override", "addToolMetadataBatch")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddMcpServerToolMetadataBatch"}`)
+	})
+
+	Method("listToolMetadata", func() {
+		Description("List stored tool metadata for an MCP server.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The ID of the MCP server the tool metadata belongs to", func() {
+				Format(FormatUUID)
+			})
+			Attribute("include_deleted", Boolean, "Include soft-deleted tool metadata entries in the result. Deleted entries carry a deleted_at timestamp.")
+			Required("mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListToolMetadataResult)
+
+		HTTP(func() {
+			GET("/rpc/mcpServers.listToolMetadata")
+			Param("mcp_server_id")
+			Param("include_deleted")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listMcpServerToolMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "listToolMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListMcpServerToolMetadata"}`)
+	})
+
+	Method("setToolMetadata", func() {
+		Description("Set the annotation hints of a single tool metadata entry (manual override). This is a full-record replace: omitted hints become unset on the stored record.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The ID of the MCP server the tool metadata belongs to", func() {
+				Format(FormatUUID)
+			})
+			Attribute("tool_name", String, "The name of the tool to update")
+			toolMetadataAnnotationHints()
+			Required("mcp_server_id", "tool_name")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ToolMetadata)
+
+		HTTP(func() {
+			PUT("/rpc/mcpServers.setToolMetadata")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setMcpServerToolMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "setToolMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetMcpServerToolMetadata"}`)
+	})
+
+	Method("deleteToolMetadata", func() {
+		Description("Soft-delete a single tool metadata entry.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The ID of the MCP server the tool metadata belongs to", func() {
+				Format(FormatUUID)
+			})
+			Attribute("tool_name", String, "The name of the tool to delete")
+			Required("mcp_server_id", "tool_name")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/mcpServers.deleteToolMetadata")
+			Param("mcp_server_id")
+			Param("tool_name")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteMcpServerToolMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteToolMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteMcpServerToolMetadata"}`)
+	})
+
 	Method("deleteMcpServer", func() {
 		Description("Delete an MCP server")
 
@@ -321,4 +469,71 @@ var ListMcpServersResult = Type("ListMcpServersResult", func() {
 
 	Attribute("mcp_servers", ArrayOf(McpServer))
 	Required("mcp_servers")
+})
+
+// toolMetadataAnnotationHints declares the shared MCP tool annotation hint
+// attributes carried by tool metadata payloads and results. Each hint is
+// tri-state: true, false, or unset (unknown).
+func toolMetadataAnnotationHints() {
+	Attribute("title", String, "A human-readable title for the tool")
+	Attribute("read_only_hint", Boolean, "Hint that the tool does not modify its environment")
+	Attribute("destructive_hint", Boolean, "Hint that the tool may perform destructive updates to its environment")
+	Attribute("idempotent_hint", Boolean, "Hint that calling the tool repeatedly with the same arguments has no additional effect")
+	Attribute("open_world_hint", Boolean, "Hint that the tool may interact with an open world of external entities")
+}
+
+var ToolMetadataForm = Type("ToolMetadataForm", func() {
+	Description("A single tool entry in a tool metadata batch.")
+
+	Attribute("tool_name", String, "The name of the tool")
+	toolMetadataAnnotationHints()
+	Required("tool_name")
+})
+
+var ToolMetadata = Type("ToolMetadata", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Stored metadata about a tool exposed by an MCP server. The annotation hints mirror MCP tool annotations and drive annotation-aware authorization.")
+
+	Attribute("mcp_server_id", String, "The ID of the MCP server the tool metadata belongs to", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tool_name", String, "The name of the tool")
+	toolMetadataAnnotationHints()
+	Attribute("created_at", String, func() {
+		Description("When the tool metadata entry was created")
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Description("When the tool metadata entry was last updated")
+		Format(FormatDateTime)
+	})
+	Attribute("deleted_at", String, func() {
+		Description("When the tool metadata entry was deleted. Only present on deleted entries returned by listToolMetadata with include_deleted.")
+		Format(FormatDateTime)
+	})
+
+	Required("mcp_server_id", "tool_name", "created_at", "updated_at")
+})
+
+var SetToolMetadataBatchResult = Type("SetToolMetadataBatchResult", func() {
+	Description("Result of an authoritative tool metadata batch upsert.")
+
+	Attribute("tools", ArrayOf(ToolMetadata), "The stored tool metadata after the upsert")
+	Attribute("deleted", Int, "The number of stored tools soft-deleted because they were absent from the payload")
+	Required("tools", "deleted")
+})
+
+var AddToolMetadataBatchResult = Type("AddToolMetadataBatchResult", func() {
+	Description("Result of a strictly additive tool metadata batch insert.")
+
+	Attribute("tools", ArrayOf(ToolMetadata), "The tool metadata entries created by this call")
+	Required("tools")
+})
+
+var ListToolMetadataResult = Type("ListToolMetadataResult", func() {
+	Description("Result type for listing tool metadata")
+
+	Attribute("tools", ArrayOf(ToolMetadata), "The stored tool metadata for the MCP server")
+	Required("tools")
 })
