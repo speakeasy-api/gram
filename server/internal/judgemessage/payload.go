@@ -26,8 +26,10 @@ const (
 
 type TrajectoryPayload struct {
 	PriorUserRequest                string `json:"prior_user_request,omitempty"`
+	PriorUserRequestDecoded         string `json:"prior_user_request_decoded,omitempty"`
 	PriorUserRequestTruncated       bool   `json:"prior_user_request_truncated,omitempty"`
 	RecentUntrustedContent          string `json:"recent_untrusted_content,omitempty"`
+	RecentUntrustedContentDecoded   string `json:"recent_untrusted_content_decoded,omitempty"`
 	RecentUntrustedContentTruncated bool   `json:"recent_untrusted_content_truncated,omitempty"`
 }
 
@@ -36,17 +38,21 @@ func RenderTrajectory(t Trajectory) TrajectoryPayload {
 	recent, recentTruncated := truncatePayloadBody(t.RecentUntrustedContent, MaxTrajectoryBodyRunes)
 	return TrajectoryPayload{
 		PriorUserRequest:                priorUserRequest,
+		PriorUserRequestDecoded:         decodedView(priorUserRequest),
 		PriorUserRequestTruncated:       priorUserRequestTruncated,
 		RecentUntrustedContent:          recent,
+		RecentUntrustedContentDecoded:   decodedView(recent),
 		RecentUntrustedContentTruncated: recentTruncated,
 	}
 }
 
 type Payload struct {
-	ProducedBy         string            `json:"produced_by"`
-	Tool               *ToolPayload      `json:"tool,omitempty"`
-	BodyKind           string            `json:"body_kind"`
-	Body               string            `json:"body,omitempty"`
+	ProducedBy string       `json:"produced_by"`
+	Tool       *ToolPayload `json:"tool,omitempty"`
+	BodyKind   string       `json:"body_kind"`
+	Body       string       `json:"body,omitempty"`
+	// Decoded is a bounded deterministic view. Body remains the source evidence.
+	Decoded            string            `json:"decoded,omitempty"`
 	BodyTruncated      bool              `json:"body_truncated,omitempty"`
 	ToolCalls          []ToolCallPayload `json:"tool_calls,omitempty"`
 	ToolCallsTruncated bool              `json:"tool_calls_truncated,omitempty"`
@@ -59,9 +65,11 @@ type ToolPayload struct {
 }
 
 type ToolCallPayload struct {
-	Tool               *ToolPayload `json:"tool,omitempty"`
-	Arguments          string       `json:"arguments"`
-	ArgumentsTruncated bool         `json:"arguments_truncated,omitempty"`
+	Tool      *ToolPayload `json:"tool,omitempty"`
+	Arguments string       `json:"arguments"`
+	// Decoded is a bounded deterministic view. Arguments remain the source evidence.
+	Decoded            string `json:"decoded,omitempty"`
+	ArgumentsTruncated bool   `json:"arguments_truncated,omitempty"`
 }
 
 // Render returns the judge-visible payload as a compact JSON string. It is what
@@ -87,6 +95,7 @@ func RenderPayload(m Message) Payload {
 			rendered = append(rendered, ToolCallPayload{
 				Tool:               payloadTool(c.ToolName, c.MCPServer, c.MCPFunction),
 				Arguments:          args,
+				Decoded:            decodedView(args),
 				ArgumentsTruncated: argsTruncated,
 			})
 		}
@@ -95,6 +104,7 @@ func RenderPayload(m Message) Payload {
 			Tool:               nil,
 			BodyKind:           "tool_calls",
 			Body:               "",
+			Decoded:            "",
 			BodyTruncated:      false,
 			ToolCalls:          rendered,
 			ToolCallsTruncated: truncatedCalls,
@@ -108,6 +118,7 @@ func RenderPayload(m Message) Payload {
 		Tool:               payloadTool(m.ToolName, m.MCPServer, m.MCPFunction),
 		BodyKind:           bodyKind,
 		Body:               body,
+		Decoded:            decodedView(body),
 		BodyTruncated:      truncated,
 		ToolCalls:          nil,
 		ToolCallsTruncated: false,

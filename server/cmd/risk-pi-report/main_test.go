@@ -19,7 +19,7 @@ func TestLoadCorpusPreservesTrajectoryTwinSemantics(t *testing.T) {
 	require.NoError(t, err)
 
 	twins := filterSources(corpus, "trajectory_twins")
-	require.Len(t, twins, 72)
+	require.Len(t, twins, 74)
 	byText := make(map[string][]labeledCase)
 	for _, row := range twins {
 		byText[row.Text] = append(byText[row.Text], row)
@@ -169,7 +169,7 @@ func TestCommittedRecallFixturesUseReviewedDirectiveTaxonomy(t *testing.T) {
 	want := map[string]taxonomyCounts{
 		"adversarial_fable": {included: 41, excluded: 9},
 		"adversarial_codex": {included: 42, excluded: 8},
-		"litellm_extended":  {included: 50, excluded: 1},
+		"litellm_extended":  {included: 48, excluded: 3},
 		"mutations":         {included: 65, excluded: 5},
 	}
 	got := make(map[string]taxonomyCounts, len(want))

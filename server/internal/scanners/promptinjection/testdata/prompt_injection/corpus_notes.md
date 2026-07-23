@@ -14,9 +14,9 @@ This directory holds the labeled corpus consumed by `mise risk:report`. Notes be
 | `agent_fp_benigns.jsonl`    | Synthetic agent-runtime benigns reproducing real FP categories (generic placeholders, fake secrets; no customer data) | Internal   | 83   | 0 malicious / 83 benign    |
 | `adversarial_fable.jsonl`   | Adversarial coverage cases (fable-model authored) that must stay caught despite the policy scope                      | Internal   | 50   | 50 malicious / 0 benign    |
 | `adversarial_codex.jsonl`   | Adversarial coverage cases (codex authored) that must stay caught despite the policy scope                            | Internal   | 50   | 50 malicious / 0 benign    |
-| `trajectory_twins.jsonl`    | Synthetic paired trajectories from the two AIS-324 design experiments; all secrets and destinations are fake          | Internal   | 72   | 36 malicious / 36 benign   |
+| `trajectory_twins.jsonl`    | Synthetic paired trajectories from the AIS-324 design experiments and bounded-decode recall checks; all data is fake  | Internal   | 74   | 37 malicious / 37 benign   |
 
-The first five files are the base corpus (933 after dedup); the remaining files are the **agent-runtime extended slices** (see below). The merged trajectory twins add 72 synthetic rows before cross-file deduplication.
+The first five files are the base corpus (933 after dedup); the remaining files are the **agent-runtime extended slices** (see below). The merged trajectory twins add 74 synthetic rows before cross-file deduplication.
 
 ## Agent-runtime extended slices
 
@@ -27,7 +27,7 @@ The first five files are the base corpus (933 after dedup); the remaining files 
 - **`adversarial_fable.jsonl` / `adversarial_codex.jsonl`** are genuine attacks placed on the surfaces the scope keeps in-scope (user input, tool output, write/exec tool args). They exist to prove the scope exemptions lose no coverage: the harness reports any malicious case a scope would suppress as a coverage regression.
 - **`trajectory_twins.jsonl`** pairs the same operation or a close semantic twin with benign operator context and malicious untrusted context. Context uses the canonical `prior_user_request` and `recent_untrusted_content` fields. `directive_present` explicitly marks the recall-gate population. The planted-file staged action and config-edit flip carry `known_gap` reasons and are excluded under AGE-3048 until session-level detection exists.
 
-The adversarial and LiteLLM fixtures carry reviewed `directive_present` booleans. The review includes 41 of 50 fable rows, 42 of 50 codex rows, and 50 of 51 LiteLLM rows. Excluded rows are raw destructive, credential, or network tool arguments without an operational directive aimed at the guarded agent, plus the inert LiteLLM response-prefix case. Mutation rows use `seed_id` to inherit that annotation from the original LiteLLM case, yielding 65 included and 5 excluded rows. Loading fails for a missing, ambiguous, or cyclic seed, preventing a mutation from silently entering the recall denominator with unknown taxonomy.
+The adversarial and LiteLLM fixtures carry reviewed `directive_present` booleans. The review includes 41 of 50 fable rows, 42 of 50 codex rows, and 48 of 51 LiteLLM rows. Excluded rows are raw destructive, credential, or network tool arguments without an operational manipulation directive aimed at the guarded agent, plus the inert LiteLLM response-prefix case. Mutation rows use `seed_id` to inherit that annotation from the original LiteLLM case, yielding 65 included and 5 excluded rows. Loading fails for a missing, ambiguous, or cyclic seed, preventing a mutation from silently entering the recall denominator with unknown taxonomy.
 
 ## Deepset labeling philosophy mismatch
 
