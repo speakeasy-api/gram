@@ -375,12 +375,14 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		// Cost/token metric rows carry the session's resolved surface (OTEL
 		// service.name first, SessionStart agent variant fallback for older
 		// cowork builds whose OTEL reports "claude-code") so cowork and Claude
-		// Code Desktop spend is not misfiled under claude-code. A cache miss
-		// (metrics beating the logs path) keeps the claude-code default and
-		// self-heals on the session's later batches.
-		surfaceMeta := sessionMeta
-		surfaceMeta.SessionID = m.SessionID
-		if surface := claudeSurfaceFromServiceName(s.claudeSessionSurface(ctx, &surfaceMeta)); surface != "" {
+		// Code Desktop spend is not misfiled under claude-code. The variant
+		// fallback rides sessionMeta's SessionID, which is only populated once
+		// the tenant check above validated the cached metadata — the variant
+		// cache is keyed by session id alone, and an unvalidated id must not
+		// pull another tenant's surface label. Until then (metrics beating the
+		// logs path, or a rejected id) rows keep the claude-code default and
+		// self-heal on the session's later batches.
+		if surface := claudeSurfaceFromServiceName(s.claudeSessionSurface(ctx, &sessionMeta)); surface != "" {
 			attrs[attr.HookSourceKey] = surface
 		}
 
