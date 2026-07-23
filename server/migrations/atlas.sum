@@ -1,4 +1,4 @@
-h1:biREzVUoLh34GOjiT6r/0QmJpzgRWNPtdVYr0/qkmXQ=
+h1:j/Ho3mzo8wgmAu7rq9FO20KFHEOcEXGDUHItJfT4DC4=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -293,4 +293,4 @@ h1:biREzVUoLh34GOjiT6r/0QmJpzgRWNPtdVYr0/qkmXQ=
 20260722165701_add-skill-efficacy-pipeline.sql h1:SWL2LPA0fHEdRohT2mYWmJZJMvB6sAdm2/KZZn7OqsU=
 20260722220532_skill-efficacy-reservation-recovery.sql h1:iSc/QDP1ySptfvBBw0GnH7DKOeMx3bCG6YlrmbbzO4o=
 20260723042033_skill-share-links.sql h1:IM3Yk3pO7qHVuxYd6ANArxKcvciakiqJ5NZVwkZSftc=
-20260723184915_chat-analysis-pipeline.sql h1:4mAGQYmenftc8gBB7Wi945Kapb+AJ3gxD23nGuxkGFA=
+20260723190651_chat-analysis-pipeline.sql h1:5ICmWs0+H88nBTjTh5CkgWE2gYcSe1oGbEiakhaToCI=

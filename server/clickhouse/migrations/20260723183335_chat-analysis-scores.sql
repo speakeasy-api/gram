@@ -12,6 +12,7 @@ CREATE TABLE `chat_analysis_scores` (
   `judge_model` LowCardinality(String) COMMENT 'Model used to judge the session.',
   `judge_prompt_version` LowCardinality(String) COMMENT 'Judge prompt version.',
   CONSTRAINT `score_valid` CHECK (isFinite(score)),
-  CONSTRAINT `judge_valid` CHECK (judge != '')
+  CONSTRAINT `judge_valid` CHECK (judge != ''),
+  CONSTRAINT `detail_valid` CHECK (isValidJSON(detail))
 ) ENGINE = MergeTree
 PRIMARY KEY (`organization_id`, `project_id`, `judge`, `created_at`, `id`) ORDER BY (`organization_id`, `project_id`, `judge`, `created_at`, `id`) PARTITION BY (toYYYYMM(created_at)) TTL toDateTime(created_at) + toIntervalDay(730) SETTINGS index_granularity = 8192 COMMENT 'Chat session analysis verdicts produced by the chat analysis judges.';

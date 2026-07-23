@@ -2076,9 +2076,11 @@ CREATE INDEX IF NOT EXISTS chat_analysis_evaluations_pending_idx
 ON chat_analysis_evaluations (project_id, observed_at DESC, id DESC)
 WHERE state = 'pending';
 
+-- Spend is counted by reserved_on, not state: failed rows keep their
+-- reserved_on as immutable spend history, so they must stay in the index.
 CREATE INDEX IF NOT EXISTS chat_analysis_evaluations_org_spend_idx
 ON chat_analysis_evaluations (organization_id, reserved_on)
-WHERE state IN ('reserved', 'scored');
+WHERE reserved_on IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS chat_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
