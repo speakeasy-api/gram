@@ -105,10 +105,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useApproveShadowMCPApprovalRequestMutation } from "@gram/client/react-query/accessApproveShadowMCPApprovalRequest.js";
+import { useCreateRoleMutation } from "@gram/client/react-query/accessCreateRole.js";
 
 export function Example() {
-  const { mutate, status } = useApproveShadowMCPApprovalRequestMutation();
+  const { mutate, status } = useCreateRoleMutation();
 
   return (
     <form
@@ -118,12 +118,14 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          approveShadowMCPApprovalRequestForm: {
-            accessScope: "organization",
-            displayName: "Danny75",
-            id: "07e9687f-f01e-43f5-9a11-0ddd8f277af1",
-            matchBreadth: "full_url",
-            matchValue: "<value>",
+          createRoleForm: {
+            description: "swerve hm receptor how",
+            grants: [
+              {
+                scope: "environment:write",
+              },
+            ],
+            name: "<value>",
           },
         });
       }}
@@ -141,10 +143,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useApproveShadowMCPApprovalRequestMutation } from "@gram/client/react-query/accessApproveShadowMCPApprovalRequest.js";
+import { useCreateRoleMutation } from "@gram/client/react-query/accessCreateRole.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useApproveShadowMCPApprovalRequestMutation({
+  const { mutate, status } = useCreateRoleMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes

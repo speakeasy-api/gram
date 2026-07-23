@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -201,8 +200,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	cacheAdapter := &countingCache{Cache: cache.NewRedisCacheAdapter(redisClient), mu: sync.Mutex{}, deletes: nil}
-	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore, nil)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	flags := &feature.InMemory{}
 

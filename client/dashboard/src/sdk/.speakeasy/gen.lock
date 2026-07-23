@@ -31,14 +31,9 @@ trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
-  src/funcs/accessApproveShadowMCPApprovalRequest.ts: {}
   src/funcs/accessCreateRole.ts: {}
-  src/funcs/accessCreateShadowMCPAccessRule.ts: {}
-  src/funcs/accessCreateShadowMCPApprovalRequest.ts: {}
   src/funcs/accessDeleteRole.ts: {}
-  src/funcs/accessDeleteShadowMCPAccessRule.ts: {}
   src/funcs/accessDeleteShadowMCPInventoryPolicyBypass.ts: {}
-  src/funcs/accessDenyShadowMCPApprovalRequest.ts: {}
   src/funcs/accessDisableRBAC.ts: {}
   src/funcs/accessEnableRBAC.ts: {}
   src/funcs/accessGetRBACStatus.ts: {}
@@ -50,15 +45,12 @@ trackedFiles:
   src/funcs/accessListMembers.ts: {}
   src/funcs/accessListRoles.ts: {}
   src/funcs/accessListScopes.ts: {}
-  src/funcs/accessListShadowMCPAccessRules.ts: {}
-  src/funcs/accessListShadowMCPApprovalRequests.ts: {}
   src/funcs/accessListShadowMCPInventory.ts: {}
   src/funcs/accessListShadowMCPInventoryUsers.ts: {}
   src/funcs/accessResolveChallenge.ts: {}
   src/funcs/accessResolveShadowMCPInventoryRequest.ts: {}
   src/funcs/accessUpdateMemberRoles.ts: {}
   src/funcs/accessUpdateRole.ts: {}
-  src/funcs/accessUpdateShadowMCPAccessRule.ts: {}
   src/funcs/accessUpdateShadowMCPInventoryServerName.ts: {}
   src/funcs/accessUpsertShadowMCPInventoryPolicyBypass.ts: {}
   src/funcs/adminRemoteSessionsCreateGlobalClient.ts: {}
@@ -512,7 +504,6 @@ trackedFiles:
   src/models/components/aiintegrationconfig.ts: {}
   src/models/components/aiintegrationschedulestate.ts: {}
   src/models/components/allowedorigin.ts: {}
-  src/models/components/approveshadowmcpapprovalrequestform.ts: {}
   src/models/components/archiveskillrequestbody.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assistant.ts: {}
@@ -582,13 +573,11 @@ trackedFiles:
   src/models/components/createrequestbody2.ts: {}
   src/models/components/createresponsebody.ts: {}
   src/models/components/createriskexclusionrequestbody.ts: {}
+  src/models/components/createriskpolicybypassrequestrequestbody.ts: {}
   src/models/components/createriskpolicyrequestbody.ts: {}
   src/models/components/createroleform.ts: {}
   src/models/components/createserverform.ts: {}
   src/models/components/createserverheaderform.ts: {}
-  src/models/components/createshadowmcpaccessruleform.ts: {}
-  src/models/components/createshadowmcpaccessruleresult.ts: {}
-  src/models/components/createshadowmcpapprovalrequestform.ts: {}
   src/models/components/createsignedchatattachmenturlform2.ts: {}
   src/models/components/createsignedchatattachmenturlresult.ts: {}
   src/models/components/createskillrequestbody.ts: {}
@@ -606,7 +595,6 @@ trackedFiles:
   src/models/components/deleteconfigrequestbody.ts: {}
   src/models/components/deleteglobaltoolvariationresult.ts: {}
   src/models/components/deleterequestbody.ts: {}
-  src/models/components/denyshadowmcpapprovalrequestform.ts: {}
   src/models/components/deployment.ts: {}
   src/models/components/deploymentexternalmcp.ts: {}
   src/models/components/deploymentfunctions.ts: {}
@@ -775,8 +763,6 @@ trackedFiles:
   src/models/components/listserversresult.ts: {}
   src/models/components/listsessionspayload.ts: {}
   src/models/components/listsessionsresult.ts: {}
-  src/models/components/listshadowmcpaccessrulesresult.ts: {}
-  src/models/components/listshadowmcpapprovalrequestsresult.ts: {}
   src/models/components/listshadowmcpinventoryresult.ts: {}
   src/models/components/listshadowmcpinventoryusersresult.ts: {}
   src/models/components/listskilldistributionsresult.ts: {}
@@ -999,9 +985,6 @@ trackedFiles:
   src/models/components/settoolsetenvironmentlinkrequestbody.ts: {}
   src/models/components/settoolvariationsgrouprequestbody.ts: {}
   src/models/components/setusersessionissuerrequestbody.ts: {}
-  src/models/components/shadowmcpaccessrule.ts: {}
-  src/models/components/shadowmcpapprovaldecisionresult.ts: {}
-  src/models/components/shadowmcpapprovalrequest.ts: {}
   src/models/components/shadowmcpinventorypolicybypassform.ts: {}
   src/models/components/shadowmcpinventoryrequestsummary.ts: {}
   src/models/components/shadowmcpinventoryserver.ts: {}
@@ -1124,7 +1107,6 @@ trackedFiles:
   src/models/components/updateroleform.ts: {}
   src/models/components/updateserverform.ts: {}
   src/models/components/updateserverheaderform.ts: {}
-  src/models/components/updateshadowmcpaccessruleform.ts: {}
   src/models/components/updateshadowmcpinventoryservernameform.ts: {}
   src/models/components/updateskillrequestbody.ts: {}
   src/models/components/updatetoolsetrequestbody.ts: {}
@@ -1175,7 +1157,6 @@ trackedFiles:
   src/models/operations/addpluginserver.ts: {}
   src/models/operations/addskillversion.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
-  src/models/operations/approveshadowmcpapprovalrequest.ts: {}
   src/models/operations/archiveskill.ts: {}
   src/models/operations/attachservertocollection.ts: {}
   src/models/operations/attachusersessionissuer.ts: {}
@@ -1224,8 +1205,6 @@ trackedFiles:
   src/models/operations/createriskpolicy.ts: {}
   src/models/operations/createriskpolicybypassrequest.ts: {}
   src/models/operations/createrole.ts: {}
-  src/models/operations/createshadowmcpaccessrule.ts: {}
-  src/models/operations/createshadowmcpapprovalrequest.ts: {}
   src/models/operations/createsignedchatattachmenturl.ts: {}
   src/models/operations/createskill.ts: {}
   src/models/operations/createtemplate.ts: {}
@@ -1269,7 +1248,6 @@ trackedFiles:
   src/models/operations/deleteriskpolicy.ts: {}
   src/models/operations/deleterole.ts: {}
   src/models/operations/deleteservernameoverride.ts: {}
-  src/models/operations/deleteshadowmcpaccessrule.ts: {}
   src/models/operations/deleteshadowmcpinventorypolicybypass.ts: {}
   src/models/operations/deletesourceenvironmentlink.ts: {}
   src/models/operations/deletetemplate.ts: {}
@@ -1279,7 +1257,6 @@ trackedFiles:
   src/models/operations/deletetunneledmcpserver.ts: {}
   src/models/operations/deleteusersessionissuer.ts: {}
   src/models/operations/denyriskpolicybypassrequest.ts: {}
-  src/models/operations/denyshadowmcpapprovalrequest.ts: {}
   src/models/operations/detachserverfromcollection.ts: {}
   src/models/operations/detachusersessionissuer.ts: {}
   src/models/operations/disablerbac.ts: {}
@@ -1453,8 +1430,6 @@ trackedFiles:
   src/models/operations/listscopes.ts: {}
   src/models/operations/listservernameoverrides.ts: {}
   src/models/operations/listsessions.ts: {}
-  src/models/operations/listshadowmcpaccessrules.ts: {}
-  src/models/operations/listshadowmcpapprovalrequests.ts: {}
   src/models/operations/listshadowmcpinventory.ts: {}
   src/models/operations/listshadowmcpinventoryusers.ts: {}
   src/models/operations/listskilldistributions.ts: {}
@@ -1587,7 +1562,6 @@ trackedFiles:
   src/models/operations/updateriskexclusion.ts: {}
   src/models/operations/updateriskpolicy.ts: {}
   src/models/operations/updaterole.ts: {}
-  src/models/operations/updateshadowmcpaccessrule.ts: {}
   src/models/operations/updateshadowmcpinventoryservername.ts: {}
   src/models/operations/updateskill.ts: {}
   src/models/operations/updatetemplate.ts: {}
@@ -1626,7 +1600,6 @@ trackedFiles:
   src/react-query/aiIntegrationConfig.ts: {}
   src/react-query/aiIntegrationSchedules.core.ts: {}
   src/react-query/aiIntegrationSchedules.ts: {}
-  src/react-query/approveShadowMCPApprovalRequest.ts: {}
   src/react-query/archiveSkill.ts: {}
   src/react-query/assistantMemoriesDelete.ts: {}
   src/react-query/assistantsCreate.ts: {}
@@ -1698,8 +1671,6 @@ trackedFiles:
   src/react-query/createRemoteSessionClient.ts: {}
   src/react-query/createRemoteSessionIssuer.ts: {}
   src/react-query/createRole.ts: {}
-  src/react-query/createShadowMCPAccessRule.ts: {}
-  src/react-query/createShadowMCPApprovalRequest.ts: {}
   src/react-query/createSignedChatAttachmentURL.ts: {}
   src/react-query/createSkill.ts: {}
   src/react-query/createTemplate.ts: {}
@@ -1734,7 +1705,6 @@ trackedFiles:
   src/react-query/deleteRemoteSessionClient.ts: {}
   src/react-query/deleteRemoteSessionIssuer.ts: {}
   src/react-query/deleteRole.ts: {}
-  src/react-query/deleteShadowMCPAccessRule.ts: {}
   src/react-query/deleteShadowMCPInventoryPolicyBypass.ts: {}
   src/react-query/deleteSourceEnvironmentLink.ts: {}
   src/react-query/deleteTemplate.ts: {}
@@ -1743,7 +1713,6 @@ trackedFiles:
   src/react-query/deleteTrigger.ts: {}
   src/react-query/deleteTunneledMcpServer.ts: {}
   src/react-query/deleteUserSessionIssuer.ts: {}
-  src/react-query/denyShadowMCPApprovalRequest.ts: {}
   src/react-query/deployment.core.ts: {}
   src/react-query/deployment.ts: {}
   src/react-query/deploymentLogs.core.ts: {}
@@ -2140,10 +2109,6 @@ trackedFiles:
   src/react-query/setToolsetEnvironmentLink.ts: {}
   src/react-query/setToolsetToolVariationsGroup.ts: {}
   src/react-query/setToolsetUserSessionIssuer.ts: {}
-  src/react-query/shadowMCPAccessRules.core.ts: {}
-  src/react-query/shadowMCPAccessRules.ts: {}
-  src/react-query/shadowMCPApprovalRequests.core.ts: {}
-  src/react-query/shadowMCPApprovalRequests.ts: {}
   src/react-query/shadowMCPInventory.core.ts: {}
   src/react-query/shadowMCPInventory.ts: {}
   src/react-query/shadowMCPInventoryServer.core.ts: {}
@@ -2218,7 +2183,6 @@ trackedFiles:
   src/react-query/updateRemoteSessionClient.ts: {}
   src/react-query/updateRemoteSessionIssuer.ts: {}
   src/react-query/updateRole.ts: {}
-  src/react-query/updateShadowMCPAccessRule.ts: {}
   src/react-query/updateShadowMCPInventoryServerName.ts: {}
   src/react-query/updateSkill.ts: {}
   src/react-query/updateTemplate.ts: {}

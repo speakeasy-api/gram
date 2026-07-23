@@ -2,20 +2,16 @@ package access
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -23,11 +19,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/email"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -98,16 +92,10 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	auditLogger := audit.NewLogger()
-	accessCache := prefixedTestCache{
-		prefix: "access-test:" + uuid.NewString() + ":",
-		cache:  cache.NewRedisCacheAdapter(redisClient),
-	}
-	accessStore := accesscontrol.NewRedisStore(accessCache, accesscontrol.AlphaTTL)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
-	noopEmailSvc := email.NewService(logger, loops.New(ctx, logger, nil, ""))
-	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopProductFeatures{}, auditLogger, "test-jwt-secret", accessStore, noopEmailSvc, url.URL{})
+	svc := NewService(logger, tracerProvider, conn, chConn, sessionManager, roleManager, authzEngine, noopProductFeatures{}, auditLogger)
 
 	return ctx, &testInstance{
 		service: svc,
@@ -115,99 +103,6 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 		chConn:  chConn,
 		roles:   roles,
 	}
-}
-
-type prefixedTestCache struct {
-	prefix string
-	cache  cache.Cache
-}
-
-func (p prefixedTestCache) key(key string) string {
-	return p.prefix + key
-}
-
-func (p prefixedTestCache) Get(ctx context.Context, key string, value any) error {
-	if err := p.cache.Get(ctx, p.key(key), value); err != nil {
-		return fmt.Errorf("get prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) GetAndDelete(ctx context.Context, key string, value any) error {
-	if err := p.cache.GetAndDelete(ctx, p.key(key), value); err != nil {
-		return fmt.Errorf("get and delete prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
-	if err := p.cache.Set(ctx, p.key(key), value, ttl); err != nil {
-		return fmt.Errorf("set prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) Add(ctx context.Context, key string, ttl time.Duration) (bool, error) {
-	ok, err := p.cache.Add(ctx, p.key(key), ttl)
-	if err != nil {
-		return false, fmt.Errorf("add prefixed test cache: %w", err)
-	}
-	return ok, nil
-}
-
-func (p prefixedTestCache) Update(ctx context.Context, key string, value any) error {
-	if err := p.cache.Update(ctx, p.key(key), value); err != nil {
-		return fmt.Errorf("update prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) Delete(ctx context.Context, key string) error {
-	if err := p.cache.Delete(ctx, p.key(key)); err != nil {
-		return fmt.Errorf("delete prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
-	if err := p.cache.Expire(ctx, p.key(key), ttl); err != nil {
-		return fmt.Errorf("expire prefixed test cache: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error {
-	if err := p.cache.ListAppend(ctx, p.key(key), value, ttl); err != nil {
-		return fmt.Errorf("append prefixed test cache list: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) ListRange(ctx context.Context, key string, start, stop int64, value any) error {
-	if err := p.cache.ListRange(ctx, p.key(key), start, stop, value); err != nil {
-		return fmt.Errorf("range prefixed test cache list: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) DeleteByPrefix(ctx context.Context, prefix string) error {
-	if err := p.cache.DeleteByPrefix(ctx, p.key(prefix)); err != nil {
-		return fmt.Errorf("delete prefixed test cache by prefix: %w", err)
-	}
-	return nil
-}
-
-func (p prefixedTestCache) Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error {
-	mutating, ok := p.cache.(interface {
-		Mutate(context.Context, string, any, time.Duration, func(bool) error) error
-	})
-	if !ok {
-		return fmt.Errorf("prefixed test cache does not support mutation")
-	}
-	if err := mutating.Mutate(ctx, p.key(key), value, ttl, fn); err != nil {
-		return fmt.Errorf("mutate prefixed test cache: %w", err)
-	}
-	return nil
 }
 
 func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {

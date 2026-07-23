@@ -72,7 +72,7 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
     if (!submission) {
       submission = createApprovalRequest({
         request: {
-          createShadowMCPApprovalRequestForm: {
+          createRiskPolicyBypassRequestRequestBody: {
             requestToken: storedRequestToken,
           },
         },

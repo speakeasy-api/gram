@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -59,7 +58,6 @@ type Client struct {
 	repo         *risk_repo.Queries
 	cache        cache.TypedCacheObject[PolicyEnabledCache]
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
-	accessStore  accesscontrol.Store
 	// serverURL is the deployment's own base URL, trusted as a Gram-hosted
 	// MCP host alongside the built-in ones. Nil in contexts that never
 	// classify URLs (the check then falls back to the built-ins plus the
@@ -67,7 +65,7 @@ type Client struct {
 	serverURL *url.URL
 }
 
-func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, accessStore accesscontrol.Store, serverURL *url.URL) *Client {
+func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, serverURL *url.URL) *Client {
 	logger = logger.With(attr.SlogComponent("shadowmcp"))
 	return &Client{
 		logger:    logger,
@@ -84,7 +82,6 @@ func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, acc
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		accessStore: accessStore,
 	}
 }
 

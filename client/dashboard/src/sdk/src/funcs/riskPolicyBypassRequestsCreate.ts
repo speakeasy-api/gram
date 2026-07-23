@@ -103,9 +103,11 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.CreateShadowMCPApprovalRequestForm, {
-    explode: true,
-  });
+  const body = encodeJSON(
+    "body",
+    payload.CreateRiskPolicyBypassRequestRequestBody,
+    { explode: true },
+  );
 
   const path = pathToFunc("/rpc/risk.createPolicyBypassRequest")();
 

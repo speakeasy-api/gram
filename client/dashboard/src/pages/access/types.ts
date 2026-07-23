@@ -1,7 +1,7 @@
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import type {
+  Disposition as SelectorDisposition,
   Selector,
-  SelectorDisposition,
 } from "@gram/client/models/components/selector.js";
 
 /** Derive role slug from name the same way the server does (conv.ToSlug + "org-" prefix). */

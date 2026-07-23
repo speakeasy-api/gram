@@ -24,11 +24,6 @@ type Client struct {
 	ListMembersEndpoint                          goa.Endpoint
 	ListGrantsEndpoint                           goa.Endpoint
 	UpdateMemberRolesEndpoint                    goa.Endpoint
-	ListShadowMCPApprovalRequestsEndpoint        goa.Endpoint
-	CreateShadowMCPApprovalRequestEndpoint       goa.Endpoint
-	ApproveShadowMCPApprovalRequestEndpoint      goa.Endpoint
-	DenyShadowMCPApprovalRequestEndpoint         goa.Endpoint
-	ListShadowMCPAccessRulesEndpoint             goa.Endpoint
 	ListShadowMCPInventoryEndpoint               goa.Endpoint
 	GetShadowMCPInventoryServerEndpoint          goa.Endpoint
 	UpdateShadowMCPInventoryServerNameEndpoint   goa.Endpoint
@@ -36,9 +31,6 @@ type Client struct {
 	UpsertShadowMCPInventoryPolicyBypassEndpoint goa.Endpoint
 	DeleteShadowMCPInventoryPolicyBypassEndpoint goa.Endpoint
 	ResolveShadowMCPInventoryRequestEndpoint     goa.Endpoint
-	CreateShadowMCPAccessRuleEndpoint            goa.Endpoint
-	UpdateShadowMCPAccessRuleEndpoint            goa.Endpoint
-	DeleteShadowMCPAccessRuleEndpoint            goa.Endpoint
 	GetRBACStatusEndpoint                        goa.Endpoint
 	EnableRBACEndpoint                           goa.Endpoint
 	DisableRBACEndpoint                          goa.Endpoint
@@ -48,7 +40,7 @@ type Client struct {
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPApprovalRequests, createShadowMCPApprovalRequest, approveShadowMCPApprovalRequest, denyShadowMCPApprovalRequest, listShadowMCPAccessRules, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, upsertShadowMCPInventoryPolicyBypass, deleteShadowMCPInventoryPolicyBypass, resolveShadowMCPInventoryRequest, createShadowMCPAccessRule, updateShadowMCPAccessRule, deleteShadowMCPAccessRule, getRBACStatus, enableRBAC, disableRBAC, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, upsertShadowMCPInventoryPolicyBypass, deleteShadowMCPInventoryPolicyBypass, resolveShadowMCPInventoryRequest, getRBACStatus, enableRBAC, disableRBAC, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:                            listRoles,
 		GetRoleEndpoint:                              getRole,
@@ -59,11 +51,6 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScope
 		ListMembersEndpoint:                          listMembers,
 		ListGrantsEndpoint:                           listGrants,
 		UpdateMemberRolesEndpoint:                    updateMemberRoles,
-		ListShadowMCPApprovalRequestsEndpoint:        listShadowMCPApprovalRequests,
-		CreateShadowMCPApprovalRequestEndpoint:       createShadowMCPApprovalRequest,
-		ApproveShadowMCPApprovalRequestEndpoint:      approveShadowMCPApprovalRequest,
-		DenyShadowMCPApprovalRequestEndpoint:         denyShadowMCPApprovalRequest,
-		ListShadowMCPAccessRulesEndpoint:             listShadowMCPAccessRules,
 		ListShadowMCPInventoryEndpoint:               listShadowMCPInventory,
 		GetShadowMCPInventoryServerEndpoint:          getShadowMCPInventoryServer,
 		UpdateShadowMCPInventoryServerNameEndpoint:   updateShadowMCPInventoryServerName,
@@ -71,9 +58,6 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScope
 		UpsertShadowMCPInventoryPolicyBypassEndpoint: upsertShadowMCPInventoryPolicyBypass,
 		DeleteShadowMCPInventoryPolicyBypassEndpoint: deleteShadowMCPInventoryPolicyBypass,
 		ResolveShadowMCPInventoryRequestEndpoint:     resolveShadowMCPInventoryRequest,
-		CreateShadowMCPAccessRuleEndpoint:            createShadowMCPAccessRule,
-		UpdateShadowMCPAccessRuleEndpoint:            updateShadowMCPAccessRule,
-		DeleteShadowMCPAccessRuleEndpoint:            deleteShadowMCPAccessRule,
 		GetRBACStatusEndpoint:                        getRBACStatus,
 		EnableRBACEndpoint:                           enableRBAC,
 		DisableRBACEndpoint:                          disableRBAC,
@@ -278,121 +262,6 @@ func (c *Client) UpdateMemberRoles(ctx context.Context, p *UpdateMemberRolesPayl
 	return ires.(*AccessMember), nil
 }
 
-// ListShadowMCPApprovalRequests calls the "listShadowMCPApprovalRequests"
-// endpoint of the "access" service.
-// ListShadowMCPApprovalRequests may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) ListShadowMCPApprovalRequests(ctx context.Context, p *ListShadowMCPApprovalRequestsPayload) (res *ListShadowMCPApprovalRequestsResult, err error) {
-	var ires any
-	ires, err = c.ListShadowMCPApprovalRequestsEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*ListShadowMCPApprovalRequestsResult), nil
-}
-
-// CreateShadowMCPApprovalRequest calls the "createShadowMCPApprovalRequest"
-// endpoint of the "access" service.
-// CreateShadowMCPApprovalRequest may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) CreateShadowMCPApprovalRequest(ctx context.Context, p *CreateShadowMCPApprovalRequestPayload) (res *ShadowMCPApprovalRequest, err error) {
-	var ires any
-	ires, err = c.CreateShadowMCPApprovalRequestEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*ShadowMCPApprovalRequest), nil
-}
-
-// ApproveShadowMCPApprovalRequest calls the "approveShadowMCPApprovalRequest"
-// endpoint of the "access" service.
-// ApproveShadowMCPApprovalRequest may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) ApproveShadowMCPApprovalRequest(ctx context.Context, p *ApproveShadowMCPApprovalRequestPayload) (res *ShadowMCPApprovalDecisionResult, err error) {
-	var ires any
-	ires, err = c.ApproveShadowMCPApprovalRequestEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*ShadowMCPApprovalDecisionResult), nil
-}
-
-// DenyShadowMCPApprovalRequest calls the "denyShadowMCPApprovalRequest"
-// endpoint of the "access" service.
-// DenyShadowMCPApprovalRequest may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) DenyShadowMCPApprovalRequest(ctx context.Context, p *DenyShadowMCPApprovalRequestPayload) (res *ShadowMCPApprovalDecisionResult, err error) {
-	var ires any
-	ires, err = c.DenyShadowMCPApprovalRequestEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*ShadowMCPApprovalDecisionResult), nil
-}
-
-// ListShadowMCPAccessRules calls the "listShadowMCPAccessRules" endpoint of
-// the "access" service.
-// ListShadowMCPAccessRules may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) ListShadowMCPAccessRules(ctx context.Context, p *ListShadowMCPAccessRulesPayload) (res *ListShadowMCPAccessRulesResult, err error) {
-	var ires any
-	ires, err = c.ListShadowMCPAccessRulesEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*ListShadowMCPAccessRulesResult), nil
-}
-
 // ListShadowMCPInventory calls the "listShadowMCPInventory" endpoint of the
 // "access" service.
 // ListShadowMCPInventory may return the following errors:
@@ -548,71 +417,6 @@ func (c *Client) ResolveShadowMCPInventoryRequest(ctx context.Context, p *Resolv
 		return
 	}
 	return ires.(*ShadowMCPInventoryURLState), nil
-}
-
-// CreateShadowMCPAccessRule calls the "createShadowMCPAccessRule" endpoint of
-// the "access" service.
-// CreateShadowMCPAccessRule may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) CreateShadowMCPAccessRule(ctx context.Context, p *CreateShadowMCPAccessRulePayload) (res *CreateShadowMCPAccessRuleResult, err error) {
-	var ires any
-	ires, err = c.CreateShadowMCPAccessRuleEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*CreateShadowMCPAccessRuleResult), nil
-}
-
-// UpdateShadowMCPAccessRule calls the "updateShadowMCPAccessRule" endpoint of
-// the "access" service.
-// UpdateShadowMCPAccessRule may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) UpdateShadowMCPAccessRule(ctx context.Context, p *UpdateShadowMCPAccessRulePayload) (res *ShadowMCPAccessRule, err error) {
-	var ires any
-	ires, err = c.UpdateShadowMCPAccessRuleEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*ShadowMCPAccessRule), nil
-}
-
-// DeleteShadowMCPAccessRule calls the "deleteShadowMCPAccessRule" endpoint of
-// the "access" service.
-// DeleteShadowMCPAccessRule may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) DeleteShadowMCPAccessRule(ctx context.Context, p *DeleteShadowMCPAccessRulePayload) (err error) {
-	_, err = c.DeleteShadowMCPAccessRuleEndpoint(ctx, p)
-	return
 }
 
 // GetRBACStatus calls the "getRBACStatus" endpoint of the "access" service.

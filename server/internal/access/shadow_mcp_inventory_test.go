@@ -17,12 +17,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func createShadowMCPProject(t *testing.T, ctx context.Context, ti *testInstance, organizationID string) projectsrepo.Project {
+	t.Helper()
+
+	projectSlug := uuid.NewString()
+	project, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           projectSlug,
+		Slug:           projectSlug,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+
+	return project
+}
 
 func TestService_ListShadowMCPInventory_ComposesInventoryUsageAndPolicyState(t *testing.T) {
 	t.Parallel()

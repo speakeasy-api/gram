@@ -1,5 +1,5 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
+import type { QueryParamStatus as ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
 import { SessionRow } from "@/components/sessions/SessionRow";
 import { Button } from "@/components/ui/button";
