@@ -167,7 +167,7 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 	}
 	err := repo.New(l.chConn).InsertTelemetryLogs(l.detachedWriteContext(ctx), logParams)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
+		return fmt.Errorf("insert telemetry logs: %w", err)
 	}
 
 	// Shadow dual-write: mirror the rows onto Pub/Sub only after ClickHouse
