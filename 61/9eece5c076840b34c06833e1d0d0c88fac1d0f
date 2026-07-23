@@ -1,0 +1,29 @@
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_7166a3d1a8cd2d::t_b67889f9c432f5 181,736-737,739,757-762,1535,1562
+server/internal/background/activities/risk_analysis/presidio_test.go
+  s_7166a3d1a8cd2d::t_64c9d61652fc56 213
+server/internal/scanners/gitleaks/aws_rules_test.go
+  s_7166a3d1a8cd2d::t_75cfe98ff6d24a 37-94,104,109-120,129,144-146,150-152
+server/internal/scanners/gitleaks/handler_test.go
+  s_7166a3d1a8cd2d::t_0fea3cfe35525a 50-52,73,76-77,79
+server/internal/scanners/gitleaks/scanner.go
+  s_7166a3d1a8cd2d::t_ed2f4330dfc523 16,76-85,208-215,221-224,228,242-252,256-284
+server/internal/scanners/gitleaks/scanner_test.go
+  s_7166a3d1a8cd2d::t_bc33ad71f31036 36-39,46-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "619eece5c076840b34c06833e1d0d0c88fac1d0f",
+  "prompts": {},
+  "sessions": {
+    "s_7166a3d1a8cd2d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ba10fa21-2182-4733-a67d-8f38881959f0",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
