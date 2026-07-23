@@ -42,6 +42,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   });
 
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
+  const isOrgMemoryEnabled = telemetry.isFeatureEnabled("org-memory") ?? false;
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
   const isDeploymentsPageEnabled =
     telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
@@ -83,6 +84,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.costs, scope: observe },
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },
+      ...(isOrgMemoryEnabled
+        ? [{ route: routes.orgMemory, scope: observe }]
+        : []),
       { route: routes.logs, scope: observe },
       { route: routes.riskOverview, scope: read },
       { route: routes.policyCenter, scope: readWrite },
@@ -96,6 +100,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     projectId,
     isAssistantsEnabled,
     isDeploymentsPageEnabled,
+    isOrgMemoryEnabled,
     isSkillsEnabled,
   ]);
 }

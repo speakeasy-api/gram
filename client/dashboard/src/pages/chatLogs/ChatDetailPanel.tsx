@@ -96,6 +96,8 @@ import {
   formatUsageCost,
 } from "./claudeUsage";
 import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
+import { WorkUnitsHeaderMetrics } from "./WorkUnitsMetrics";
+import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
 import { exportTraceDataAsJson } from "./chatExport";
 
@@ -261,6 +263,8 @@ function SessionSummary({
     totalTokens?: number;
     lastMessageTimestamp?: Date;
     updatedAt: Date;
+    workUnits?: number;
+    workUnitsReport?: string;
   };
   userLabel: ReactNode;
   messageCount: number;
@@ -269,6 +273,10 @@ function SessionSummary({
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const {
+    costPerUnit: workUnitsCostPerUnit,
+    tokensPerUnit: workUnitsTokensPerUnit,
+  } = workUnitsEfficiency(chat);
   const accountEmail = personalAccountEmail(chat);
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
@@ -352,6 +360,21 @@ function SessionSummary({
             )}
             {tokens > 0 && (
               <MetaRow label="Total tokens">{tokens.toLocaleString()}</MetaRow>
+            )}
+            {chat.workUnits !== undefined && (
+              <MetaRow label="Work done">
+                {formatWorkUnits(chat.workUnits)} units
+              </MetaRow>
+            )}
+            {workUnitsCostPerUnit !== null && (
+              <MetaRow label="Cost per unit">
+                {formatUsageCost(workUnitsCostPerUnit)}
+              </MetaRow>
+            )}
+            {workUnitsTokensPerUnit !== null && (
+              <MetaRow label="Tokens per unit">
+                {formatTokenCount(workUnitsTokensPerUnit)}
+              </MetaRow>
             )}
           </div>
         </div>
@@ -684,6 +707,7 @@ function ChatDetailHeader({
               ) : (
                 <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
               )}
+              <WorkUnitsHeaderMetrics chat={chat} />
             </div>
           </SheetDescription>
         </div>

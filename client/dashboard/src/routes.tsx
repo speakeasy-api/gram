@@ -13,6 +13,7 @@ import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
+import OrgMemory from "./components/observe/OrgMemory";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import Skills from "./pages/Skills";
 import SkillsList from "./pages/skills/SkillsList";
@@ -515,6 +516,13 @@ const ROUTE_STRUCTURE = {
     url: "agent-sessions",
     icon: "message-square",
     component: ChatSessions,
+  },
+  orgMemory: {
+    title: "Org Memory",
+    url: "org-memory",
+    icon: "brain",
+    stage: "preview",
+    component: OrgMemory,
   },
   riskOverview: {
     title: "Risk Overview",

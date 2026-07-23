@@ -3375,6 +3375,41 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 	return result, nil
 }
 
+// GetChatAnalysisVerdictsByChatIDs retrieves the newest published chat
+// analysis verdict per chat for one judge (e.g. work units). This is used by
+// the chat service to enrich chat responses from ClickHouse.
+func (s *Service) GetChatAnalysisVerdictsByChatIDs(ctx context.Context, organizationID string, projectID string, judge string, chatIDs []string) (map[string]repo.ChatAnalysisVerdict, error) {
+	if s.chRepo == nil {
+		return make(map[string]repo.ChatAnalysisVerdict), nil
+	}
+
+	result, err := s.chRepo.GetChatAnalysisVerdictsByChatIDs(ctx, repo.GetChatAnalysisVerdictsByChatIDsParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		Judge:          judge,
+		ChatIDs:        chatIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get chat analysis verdicts by ids: %w", err)
+	}
+	return result, nil
+}
+
+// ListChatAnalysisVerdicts retrieves the newest published chat analysis
+// verdict per chat for one judge across a scoring-time window, oldest first.
+// This is used by the chat service to build work-units trend aggregates.
+func (s *Service) ListChatAnalysisVerdicts(ctx context.Context, arg repo.ListChatAnalysisVerdictsParams) ([]repo.ChatAnalysisVerdict, error) {
+	if s.chRepo == nil {
+		return nil, nil
+	}
+
+	result, err := s.chRepo.ListChatAnalysisVerdicts(ctx, arg)
+	if err != nil {
+		return nil, fmt.Errorf("list chat analysis verdicts: %w", err)
+	}
+	return result, nil
+}
+
 // GetClaudeTurnUsageByChatIDs retrieves per-turn Claude Code usage for specific chat IDs.
 // This is used by the chat service to enrich chat detail responses from ClickHouse.
 func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string) (map[string][]repo.ClaudeTurnUsageRow, error) {

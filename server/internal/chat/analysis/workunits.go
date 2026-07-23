@@ -21,13 +21,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 const (
 	// WorkUnitsJudgeName keys the work-units judge in queue rows, settings rows
-	// and score rows.
-	WorkUnitsJudgeName = "work_units"
+	// and score rows. The canonical constant lives in the telemetry repo so
+	// score readers that cannot import this package share the same key.
+	WorkUnitsJudgeName = telemetryrepo.ChatAnalysisJudgeWorkUnits
 
 	// workUnitsModel is the same fast, cheap structured-output model the risk
 	// and efficacy judges settled on. Left unconfigurable: scores are only
