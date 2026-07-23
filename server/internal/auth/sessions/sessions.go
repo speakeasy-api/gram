@@ -2,6 +2,8 @@ package sessions
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 
@@ -17,6 +19,26 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
+
+// sessionTokenBytes is the number of random bytes drawn for a session token.
+// 32 bytes yields 256 bits of entropy, base64url-encoded to a 43-character
+// opaque string.
+const sessionTokenBytes = 32
+
+// NewSessionID generates a cryptographically secure, opaque session token.
+//
+// Session tokens are bearer credentials: possession of the token string is
+// sufficient to authenticate as the user (validation is a bare cache lookup in
+// Authenticate). They must therefore be unguessable. A v4 UUID carries only 122
+// bits of entropy in a recognizable, structured format and is not intended as a
+// security token, so we draw 256 bits directly from crypto/rand instead.
+func NewSessionID() (string, error) {
+	b := make([]byte, sessionTokenBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate session token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
 
 // SessionRevoker invalidates an IDP session. Implemented by the WorkOS
 // adapter so sessions.Manager doesn't depend on the WorkOS SDK directly.
