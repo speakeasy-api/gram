@@ -2221,6 +2221,8 @@ async function enableRBACForDevUser(init: {
     { scope: "mcp:connect", kind: "mcp" },
     { scope: "environment:read", kind: "environment" },
     { scope: "environment:write", kind: "environment" },
+    { scope: "skill:read", kind: "skill" },
+    { scope: "skill:write", kind: "skill" },
     { scope: "chat:read", kind: "chat" },
   ];
   const sqlStr = (v: string) => `'${v.replace(/'/g, "''")}'`;
