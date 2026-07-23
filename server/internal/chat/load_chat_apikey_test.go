@@ -43,18 +43,36 @@ func TestLoadChat_APIKey_ReadsAnyProjectChat(t *testing.T) {
 	require.Len(t, got.Messages, 3)
 }
 
-// TestLoadChat_APIKey_WrongProjectBlocked keeps the project boundary: an API key
-// scoped to its own project cannot read a chat that belongs to another project.
-func TestLoadChat_APIKey_WrongProjectBlocked(t *testing.T) {
+// TestLoadChat_Session_CannotReadOtherOrgChat keeps the org boundary for
+// dashboard users: user A (a session in org A) cannot load a chat that lives in
+// org B's project. newTestChatService provisions a distinct org + project per
+// instance, so orgA and orgB are genuinely separate organizations.
+func TestLoadChat_Session_CannotReadOtherOrgChat(t *testing.T) {
 	t.Parallel()
-	owner := newTestChatService(t)
-	other := newTestChatService(t)
+	orgA := newTestChatService(t)
+	orgB := newTestChatService(t)
 
-	seedCtx := initSessionCtx(t, owner)
-	chatID := seedChat(t, seedCtx, owner, "owner-user", "", "cross-project chat")
+	// A chat that lives in org B.
+	chatID := seedChat(t, initSessionCtx(t, orgB), orgB, "owner-user", "", "org B chat")
 
-	// An API key scoped to a different project must not resolve the chat.
-	_, err := owner.service.LoadChat(apiKeyCtx(t, other), loadPayload(chatID.String()))
+	// User A's dashboard session (org A) must not read it.
+	_, err := orgB.service.LoadChat(initSessionCtx(t, orgA), loadPayload(chatID.String()))
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+// TestLoadChat_APIKey_CannotReadOtherOrgChat keeps the org boundary for API
+// keys: a producer key scoped to org A cannot load a chat that lives in org B's
+// project, even though a direct API key is otherwise exempt from owner matching.
+func TestLoadChat_APIKey_CannotReadOtherOrgChat(t *testing.T) {
+	t.Parallel()
+	orgA := newTestChatService(t)
+	orgB := newTestChatService(t)
+
+	// A chat that lives in org B.
+	chatID := seedChat(t, initSessionCtx(t, orgB), orgB, "owner-user", "", "org B chat")
+
+	// API key A (scoped to org A's project) must not read it.
+	_, err := orgB.service.LoadChat(apiKeyCtx(t, orgA), loadPayload(chatID.String()))
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
 
