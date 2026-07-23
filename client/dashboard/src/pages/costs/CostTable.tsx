@@ -360,12 +360,12 @@ export function CostTable({
         <>
           <span className="flex items-center gap-1">
             <HeaderButton
-              label="Work units"
+              label="Work delivered"
               sortKey="units"
               sort={sort}
               onSort={onSort}
             />
-            <InfoTooltip text="Output delivered by this slice's scored sessions, as judged by the work-units analysis. Sessions without a score contribute nothing." />
+            <InfoTooltip text="Work delivered by this slice's scored sessions, as judged by work analysis. Sessions without a score contribute nothing." />
           </span>
           <span className="flex items-center gap-1">
             <HeaderButton
@@ -375,17 +375,17 @@ export function CostTable({
               onSort={onSort}
             />
             <InfoTooltip
-              text={`Share of total work units across all ${groupLabel.toLowerCase()}s in this view.`}
+              text={`Share of total work delivered across all ${groupLabel.toLowerCase()}s in this view.`}
             />
           </span>
           <span className="flex items-center gap-1">
             <HeaderButton
-              label={costMeasureLabel(billingMode) + " / unit"}
+              label="Cost efficiency"
               sortKey="costPerUnit"
               sort={sort}
               onSort={onSort}
             />
-            <InfoTooltip text="Cost of the scored sessions divided by their work units. Unscored spend is excluded, so partial analysis coverage can't overstate the ratio." />
+            <InfoTooltip text="Cost relative to work delivered by scored sessions. Unscored spend is excluded, so partial analysis coverage can't overstate the ratio." />
           </span>
           <span className="flex">
             <HeaderButton
@@ -397,12 +397,12 @@ export function CostTable({
           </span>
           <span className="flex items-center gap-1">
             <HeaderButton
-              label="Tokens / unit"
+              label="Token efficiency"
               sortKey="tokensPerUnit"
               sort={sort}
               onSort={onSort}
             />
-            <InfoTooltip text="Tokens of the scored sessions divided by their work units." />
+            <InfoTooltip text="Tokens relative to work delivered by scored sessions." />
           </span>
           <span className="flex items-center gap-1">
             <HeaderButton

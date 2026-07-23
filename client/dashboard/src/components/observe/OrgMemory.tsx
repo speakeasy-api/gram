@@ -64,7 +64,7 @@ function WorkDoneChart({
       formatChartLabel(b.timestamp, TREND_WINDOW_MS),
     );
     const bars: ChartDataset<"bar", number[]> = {
-      label: "Work units",
+      label: "Work delivered",
       data: buckets.map((b) => b.workUnits),
       backgroundColor: "rgba(96, 165, 250, 0.35)",
       order: 2,
@@ -133,7 +133,7 @@ function WorkDoneChart({
 
   return (
     <ChartCard
-      title="Work done"
+      title="Work delivered"
       chartId="org-memory-work-done"
       expandedChart={expandedChart}
       onExpand={onExpand}
@@ -187,7 +187,7 @@ function EfficiencyChart({
       labels,
       datasets: [
         {
-          label: "Cost per unit",
+          label: "Cost efficiency",
           data: buckets.map((b) => b.costPerUnit ?? null),
           borderColor: "#34d399",
           backgroundColor: "transparent",
@@ -199,7 +199,7 @@ function EfficiencyChart({
           yAxisID: "y",
         },
         {
-          label: "Tokens per unit",
+          label: "Token efficiency",
           data: buckets.map((b) => b.tokensPerUnit ?? null),
           borderColor: "#a78bfa",
           backgroundColor: "transparent",
@@ -241,10 +241,10 @@ function EfficiencyChart({
           callbacks: {
             label: (item) => {
               const value = Number(item.parsed.y ?? 0);
-              if (item.dataset.label === "Cost per unit") {
-                return ` Cost per unit: ${formatUsageCost(value)}`;
+              if (item.dataset.label === "Cost efficiency") {
+                return ` Cost efficiency: ${formatUsageCost(value)}`;
               }
-              return ` Tokens per unit: ${formatCompact(value)}`;
+              return ` Token efficiency: ${formatCompact(value)}`;
             },
           },
         },
@@ -334,14 +334,14 @@ export default function OrgMemory(): JSX.Element {
           <ReleaseStageBadge stage="preview" />
         </div>
         <p className="text-muted-foreground mt-1 text-sm">
-          How much work your agents deliver and what it costs, judged by the
-          work-units session analysis over the last {TREND_WINDOW_DAYS} days.
+          How much work your agents deliver and what it costs, judged by work
+          analysis over the last {TREND_WINDOW_DAYS} days.
         </p>
       </div>
 
       {!isLoading && !error && !scoresAvailable ? (
         <div className="border-border bg-card flex h-64 items-center justify-center rounded-lg border">
-          <WidgetEmptyState message="No work analysis data yet. Sessions appear here once work-units analysis is enabled for your organization." />
+          <WidgetEmptyState message="No work analysis data yet. Sessions appear here once work analysis is enabled for your organization." />
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">

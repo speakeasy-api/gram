@@ -89,10 +89,10 @@ function buildEfficiencyCsv(
   );
   const header = [
     groupLabel,
-    "Work Units",
+    "Work Delivered",
     "% Share",
-    "Cost / Unit",
-    "Tokens / Unit",
+    "Cost Efficiency",
+    "Token Efficiency",
     "Sessions",
     "Total Cost",
   ];
@@ -382,7 +382,7 @@ export function EntityProfile({
     groupBy,
     path,
     costLabel: efficiency
-      ? `${formatWorkUnits(stats.workUnits)} work units`
+      ? `${formatWorkUnits(stats.workUnits)} work delivered`
       : formatCost(stats.cost),
     groupCount: isError ? 0 : rows.length,
   });
@@ -396,11 +396,11 @@ export function EntityProfile({
       return (
         <>
           <HeaderStat
-            label="Work units"
+            label="Work delivered"
             value={formatWorkUnits(stats.workUnits)}
           />
           <HeaderStat
-            label="Cost / unit"
+            label="Cost efficiency"
             value={unitCost !== null ? formatCost(unitCost) : "—"}
           />
         </>

@@ -19,7 +19,7 @@ import {
  * Title the breakdown table by the cut in view ("Cost by Model") rather than by
  * the mechanism ("Breakdown by"): the title echoes whichever axis is lit in the
  * track beside it, which is what teaches the idea on the first click. The
- * efficiency lens leads with what it ranks instead ("Work units by Model").
+ * efficiency lens leads with what it ranks instead ("Work delivered by Model").
  */
 export function breakdownTitle(
   axisValue: string,
@@ -27,7 +27,7 @@ export function breakdownTitle(
   efficiency = false,
 ): string {
   if (isSessionsAxis(axisValue)) return "Agent sessions";
-  const measure = efficiency ? "Work units" : "Cost";
+  const measure = efficiency ? "Work delivered" : "Cost";
   return `${measure} by ${LABELS[groupBy] ?? "group"}`;
 }
 

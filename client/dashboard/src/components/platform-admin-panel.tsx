@@ -433,8 +433,8 @@ function WorkUnitsAnalysisSection(): ReactElement {
   const section = (children: React.ReactNode) => (
     <Section
       icon={BarChart3}
-      title="Work Units Chat Analysis"
-      description="Runs the work-units judge over the organization's quiet chat sessions. Cap is evaluations per UTC day; 0 disables scoring."
+      title="Work Delivered Chat Analysis"
+      description="Evaluates work delivered in the organization's quiet chat sessions. Cap is evaluations per UTC day; 0 disables scoring."
     >
       {children}
     </Section>
@@ -503,7 +503,7 @@ function WorkUnitsAnalysisSection(): ReactElement {
           <Input
             value={cap}
             onChange={setCapInput}
-            aria-label="Work-units daily evaluation cap"
+            aria-label="Work delivered daily evaluation cap"
             className="h-6 w-20 px-2 text-[11px]"
           />
           <ActionButton

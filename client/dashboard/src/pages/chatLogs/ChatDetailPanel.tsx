@@ -362,17 +362,17 @@ function SessionSummary({
               <MetaRow label="Total tokens">{tokens.toLocaleString()}</MetaRow>
             )}
             {chat.workUnits !== undefined && (
-              <MetaRow label="Work done">
-                {formatWorkUnits(chat.workUnits)} units
+              <MetaRow label="Work delivered">
+                {formatWorkUnits(chat.workUnits)}
               </MetaRow>
             )}
             {workUnitsCostPerUnit !== null && (
-              <MetaRow label="Cost per unit">
+              <MetaRow label="Cost efficiency">
                 {formatUsageCost(workUnitsCostPerUnit)}
               </MetaRow>
             )}
             {workUnitsTokensPerUnit !== null && (
-              <MetaRow label="Tokens per unit">
+              <MetaRow label="Token efficiency">
                 {formatTokenCount(workUnitsTokensPerUnit)}
               </MetaRow>
             )}

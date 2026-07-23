@@ -1200,11 +1200,11 @@ export function CostsExplorer(): JSX.Element {
   const scope = entityLabel
     ? `the ${entityType.toLowerCase()} "${entityLabel}"`
     : `the "${project.name}" project`;
-  // On the efficiency lens, ground the assistant in the work-units numbers the
+  // On the efficiency lens, ground the assistant in the work-delivery numbers the
   // page is actually showing (the lens swaps the hero/table to them).
   const efficiencySummary =
     efficiency && stats.workUnits > 0
-      ? ` Work-units analysis: ${formatWorkUnits(stats.workUnits)} work units delivered, ${formatCost(stats.scoredCost / stats.workUnits)} per unit over the scored sessions.`
+      ? ` Work analysis: ${formatWorkUnits(stats.workUnits)} work delivered, with ${formatCost(stats.scoredCost / stats.workUnits)} cost efficiency over the scored sessions.`
       : "";
   const assistantContext = `Cost dashboard — viewing ${scope}, broken down by ${childLabel.toLowerCase()}. Over ${rangeLabel}: ${formatCost(stats.cost)} total cost, ${stats.sessions.toLocaleString()} chat sessions, ${stats.tools.toLocaleString()} tool calls, ${stats.tokens.toLocaleString()} tokens.${efficiencySummary} Active filters: ${filterSummary}.`;
   const assistantSuggestions = costExplorerSuggestions({
