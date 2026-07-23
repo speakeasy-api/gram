@@ -78,6 +78,7 @@ import {
 import { QueryHighlight } from "./QueryHighlight";
 import { getCategoryCodeForFinding } from "@/pages/security/risk-utils";
 import { CreateExclusionContext } from "./exclusionContext";
+import { toolSectionRiskMatches, type ToolRiskField } from "./toolRisk";
 
 type RowDecoration = {
   footer?: ReactNode;
@@ -649,29 +650,36 @@ function toolResults(
   };
 }
 
-// Distinct findings (by matched value) for one tool section, each carrying its
-// rule label and a context-wired "create exclusion" action. The elements
-// ToolUI surfaces the active match's label + action as you step through them.
-function toSectionMatches(
+// Distinct findings that actually belong to and occur within one tool section,
+// each carrying its rule label and a context-wired exclusion action. A risk
+// result is attached to the whole message and can instead target tool.function;
+// filtering here prevents an Arguments badge from opening onto no matching text.
+function toSectionRisk(
   results: RiskResult[] | undefined,
+  content: string | undefined,
+  field: ToolRiskField,
   openExclusion: ((r: RiskResult) => void) | null,
-): SectionMatch[] | undefined {
-  if (!results?.length) return undefined;
-  const byValue = new Map<string, RiskResult>();
-  for (const r of results) {
-    if (r.match && !byValue.has(r.match)) byValue.set(r.match, r);
-  }
-  if (byValue.size === 0) return undefined;
-  return [...byValue.values()]
-    .sort((a, b) => (b.match?.length ?? 0) - (a.match?.length ?? 0))
-    .map((r) => ({
-      value: r.match!,
-      label: r.ruleId && r.ruleId !== "llm_judge" ? r.ruleId : r.source,
+): { matches: SectionMatch[]; results: RiskResult[] } | undefined {
+  const sectionMatches = toolSectionRiskMatches(results, content, field);
+  if (sectionMatches.length === 0) return undefined;
+
+  const matchingResults = new Map<string, RiskResult>();
+  const matches = sectionMatches.map(({ value, result }) => {
+    matchingResults.set(result.id, result);
+    return {
+      value,
+      label:
+        result.ruleId && result.ruleId !== "llm_judge"
+          ? result.ruleId
+          : result.source,
       onExclude:
-        openExclusion && r.ruleId !== "llm_judge"
-          ? () => openExclusion(r)
+        openExclusion && result.ruleId !== "llm_judge"
+          ? () => openExclusion(result)
           : undefined,
-    }));
+    };
+  });
+
+  return { matches, results: [...matchingResults.values()] };
 }
 
 function ToolRowView({
@@ -714,8 +722,18 @@ function ToolRowView({
   // Flag matches inside the tool's own Arguments/Output sections; the elements
   // ToolUI draws the risk badge in the section header, plus the match navigator
   // and active-match exclusion action.
-  const reqMatches = toSectionMatches(callResults, openExclusion);
-  const resMatches = toSectionMatches(resultResults, openExclusion);
+  const requestRisk = toSectionRisk(
+    callResults,
+    request,
+    "tool.args",
+    openExclusion,
+  );
+  const resultRisk = toSectionRisk(
+    resultResults,
+    result,
+    "tool_result",
+    openExclusion,
+  );
   // Search: which of this tool's sections contain the query (case-insensitive,
   // mirroring the server's ILIKE) — drives which section auto-opens + highlights.
   const queryLc = ctx.searchQuery?.trim().toLowerCase();
@@ -730,11 +748,11 @@ function ToolRowView({
   const searchSection: SectionMatch[] = ctx.searchQuery
     ? [{ value: ctx.searchQuery, label: "match" }]
     : [];
-  const requestHighlight = callResults?.length
+  const requestHighlight = requestRisk
     ? {
-        matches: reqMatches ?? [],
-        masked: resultsAreSensitive(callResults),
-        headerBadge: <RiskBadge results={callResults} />,
+        matches: requestRisk.matches,
+        masked: resultsAreSensitive(requestRisk.results),
+        headerBadge: <RiskBadge results={requestRisk.results} />,
       }
     : requestMatches
       ? {
@@ -744,11 +762,11 @@ function ToolRowView({
           activeOccurrence: activeArgsOccurrence,
         }
       : undefined;
-  const resultHighlight = resultResults?.length
+  const resultHighlight = resultRisk
     ? {
-        matches: resMatches ?? [],
-        masked: resultsAreSensitive(resultResults),
-        headerBadge: <RiskBadge results={resultResults} />,
+        matches: resultRisk.matches,
+        masked: resultsAreSensitive(resultRisk.results),
+        headerBadge: <RiskBadge results={resultRisk.results} />,
       }
     : resultMatches
       ? {
