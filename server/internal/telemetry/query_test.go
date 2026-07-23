@@ -13,7 +13,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -319,6 +322,80 @@ func rowByGroup(t *testing.T, rows []*gen.QueryRow, group string) *gen.QueryRow 
 	return nil
 }
 
+func requireQueryOopsCode(t *testing.T, err error, code oops.Code) {
+	t.Helper()
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, code, oopsErr.Code)
+}
+
+func TestQuery_SkillVersionRejectsRangesBeyondRawRetention(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Now().UTC()
+	from := now.Add(-91 * 24 * time.Hour).Format(time.RFC3339)
+	to := now.Add(-90 * 24 * time.Hour).Format(time.RFC3339)
+	_, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("department_name"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err, "aggregate dimensions retain their existing historical range behavior")
+	_, err = ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("department_name"),
+		Filters: []*gen.QueryFilter{{Dimension: "skill_version", Values: []string{}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err, "an empty skill_version filter must stay on the aggregate path")
+
+	_, err = ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("skill_version"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	requireQueryOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "limited to 90 days")
+}
+
+func TestQuery_SkillVersionRejectsPerRowGroupDimensions(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Now().UTC()
+	for _, dimension := range []string{"model", "query_source", "skill_name", "agent_name", "mcp_server_name", "mcp_tool_name"} {
+		_, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:    now.Add(-time.Hour).Format(time.RFC3339),
+			To:      now.Add(time.Hour).Format(time.RFC3339),
+			GroupBy: conv.PtrEmpty(dimension),
+			Filters: []*gen.QueryFilter{{Dimension: "skill_version", Values: []string{uuid.NewString()}}},
+			TopN:    10,
+			SortBy:  "total_cost",
+		})
+		requireQueryOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "can vary within a session")
+	}
+}
+
 func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	t.Parallel()
 
@@ -388,16 +465,26 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.ElementsMatch(t, []string{"opus"}, eng.DimensionValues["model"])
 	require.ElementsMatch(t, []string{"claude-code", "cursor"}, eng.DimensionValues["hook_source"])
 	require.ElementsMatch(t, []string{"admin", "dev"}, eng.DimensionValues["role"])
-	// Unset dimensions are present as keys with empty (filtered) lists.
-	require.Empty(t, eng.DimensionValues["job_title"])
-	// billing_mode is the exception: unclassified rows surface as "" so a scope
-	// mixing metered and unclassified spend can never read as confidently metered.
+	// '' is a real value for groupable dimensions — it is the "(unset)" bucket a
+	// breakdown by that dimension would render, so the collected lists must
+	// count it (DNO-384 for billing_mode, DNO-425 generally): an entirely unset
+	// dimension collapses to the single "" bucket, and a mixed one (Engineering
+	// has a classified team/anthropic Claude row plus an unclassified cursor
+	// row) surfaces both so the slice reads as divisible.
+	require.ElementsMatch(t, []string{""}, eng.DimensionValues["job_title"])
 	require.ElementsMatch(t, []string{""}, eng.DimensionValues["billing_mode"])
+	require.ElementsMatch(t, []string{"team", ""}, eng.DimensionValues["account_type"])
+	require.ElementsMatch(t, []string{"anthropic", ""}, eng.DimensionValues["provider"])
+	// Attribution dims are the exception (emptyIsNotApplicable): '' there marks
+	// rows the attribute doesn't apply to, not an "(unset)" slice, so it stays
+	// filtered out.
+	require.Empty(t, eng.DimensionValues["skill_name"])
 
-	// Sales had a single role-less user; its email surfaces and role is empty.
+	// Sales had a single role-less user; its email surfaces and its empty roles
+	// array collapses to the "(unset)" role bucket.
 	sales := rowByGroup(t, deptResult.Table, "Sales")
 	require.ElementsMatch(t, []string{"c@x.com"}, sales.DimensionValues["email"])
-	require.Empty(t, sales.DimensionValues["role"])
+	require.ElementsMatch(t, []string{""}, sales.DimensionValues["role"])
 
 	// Group by role: dev gets both Engineering rows ($0.35), admin one ($0.25),
 	// and Sales' role-less spend surfaces under the empty-string group ($0.50).
@@ -442,6 +529,273 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.Empty(t, totalResult.Table[0].GroupValue)
 	require.InDelta(t, 0.85, totalResult.Table[0].Measures.TotalCost, 1e-9)
 	require.Len(t, totalResult.Timeseries, 1)
+}
+
+func TestQuery_SkillVersionAttributesFullSessionsWithoutDuplicateMappings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	projectID := uuid.MustParse(ti.projectID)
+	foreignProjectID := uuid.New()
+	versionOne := uuid.New()
+	versionTwo := uuid.New()
+	skillID := uuid.New()
+	now := time.Now().UTC().Truncate(time.Hour)
+	sessionOne := uuid.NewString()
+	sessionTwo := uuid.NewString()
+	assistantSession := uuid.NewString()
+	toolOnlySession := uuid.NewString()
+	outsideSession := uuid.NewString()
+	foreignSession := uuid.NewString()
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID.String(), now, sessionOne, 0.25, 10, 5, 2, 1, "opus", "a@x.com", "Engineering", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID.String(), now.Add(10*time.Minute), sessionTwo, 0.40, 20, 10, 3, 2, "sonnet", "b@x.com", "Engineering", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID.String(), now.Add(70*time.Minute), sessionTwo, 0.10, 4, 1, 0, 0, "sonnet", "b@x.com", "Engineering", nil, "main", "", "", "", "")
+	insertAttributeGramCompletionLog(t, ctx, projectID.String(), now.Add(20*time.Minute), assistantSession, 0.30, 12, "sonnet", "assistants", "assistant@x.com", "Product", nil)
+	insertAttributeClaudeToolResultLog(t, ctx, projectID.String(), now.Add(30*time.Minute), toolOnlySession, uuid.NewString(), "Read", "tools@x.com", "Engineering")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID.String(), now.Add(-3*time.Hour), outsideSession, 0.80, 40, 20, 0, 0, "opus", "c@x.com", "Sales", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, foreignProjectID.String(), now, foreignSession, 1.00, 50, 25, 0, 0, "opus", "d@x.com", "Sales", nil, "main", "", "", "", "")
+
+	mapping := func(id uuid.UUID, mappedProjectID uuid.UUID, sessionID string, versionID uuid.UUID) telemetryrepo.SkillSessionVersion {
+		return telemetryrepo.SkillSessionVersion{
+			ID:              id,
+			CreatedAt:       now,
+			SeenAt:          now,
+			OrganizationID:  ti.orgID,
+			ProjectID:       mappedProjectID,
+			SessionID:       sessionID,
+			SkillID:         skillID,
+			SkillVersionID:  versionID,
+			CanonicalSHA256: uuid.NewString(),
+			Surface:         "dev",
+		}
+	}
+	assistantMapping := mapping(uuid.New(), projectID, assistantSession, versionTwo)
+	assistantMapping.Surface = "assistant"
+	require.NoError(t, ti.chClient.InsertSkillSessionVersions(ctx, []telemetryrepo.SkillSessionVersion{
+		mapping(uuid.New(), projectID, sessionOne, versionOne),
+		mapping(uuid.New(), projectID, sessionOne, versionOne),
+		mapping(uuid.New(), projectID, sessionTwo, versionOne),
+		mapping(uuid.New(), projectID, sessionTwo, versionTwo),
+		mapping(uuid.New(), projectID, toolOnlySession, versionOne),
+		assistantMapping,
+		mapping(uuid.New(), projectID, outsideSession, versionOne),
+		mapping(uuid.New(), foreignProjectID, foreignSession, versionOne),
+	}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(2 * time.Hour).Format(time.RFC3339)
+	grouped, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("skill_version"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, grouped.Table, 2)
+	costs := tableCostByGroup(grouped.Table)
+	require.InDelta(t, 0.75, costs[versionOne.String()], 1e-9)
+	require.InDelta(t, 0.80, costs[versionTwo.String()], 1e-9)
+	versionOneRow := rowByGroup(t, grouped.Table, versionOne.String())
+	versionTwoRow := rowByGroup(t, grouped.Table, versionTwo.String())
+	require.Equal(t, int64(53), versionOneRow.Measures.TotalTokens)
+	require.Equal(t, int64(49), versionTwoRow.Measures.TotalTokens)
+	require.Equal(t, int64(2), versionOneRow.Measures.TotalChats, "tool-call-only sessions must not count as chats")
+	require.Equal(t, int64(2), versionTwoRow.Measures.TotalChats)
+	require.Equal(t, int64(1), versionOneRow.Measures.TotalToolCalls)
+
+	var versionTwoSeries *gen.QuerySeries
+	for _, series := range grouped.Timeseries {
+		if series.GroupValue == versionTwo.String() {
+			versionTwoSeries = series
+			break
+		}
+	}
+	require.NotNil(t, versionTwoSeries)
+	seriesCosts := make(map[string]float64, len(versionTwoSeries.Points))
+	for _, point := range versionTwoSeries.Points {
+		seriesCosts[point.BucketTimeUnixNano] = point.Measures.TotalCost
+	}
+	require.InDelta(t, 0.80, seriesCosts[strconv.FormatInt(now.UnixNano(), 10)], 1e-9, "whole sessions belong in their session-start bucket")
+	require.Zero(t, seriesCosts[strconv.FormatInt(now.Add(time.Hour).UnixNano(), 10)])
+
+	filtered, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		Filters: []*gen.QueryFilter{{Dimension: "skill_version", Values: []string{versionTwo.String(), uuid.NewString()}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered.Table, 1)
+	require.InDelta(t, 0.80, filtered.Table[0].Measures.TotalCost, 1e-9)
+
+	repeatedFilters, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("skill_version"),
+		Filters: []*gen.QueryFilter{
+			{Dimension: "skill_version", Values: []string{versionOne.String()}},
+			{Dimension: "skill_version", Values: []string{versionTwo.String()}},
+		},
+		TopN:   10,
+		SortBy: "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, repeatedFilters.Table, 2)
+	repeatedCosts := tableCostByGroup(repeatedFilters.Table)
+	require.InDelta(t, 0.50, repeatedCosts[versionOne.String()], 1e-9)
+	require.InDelta(t, 0.50, repeatedCosts[versionTwo.String()], 1e-9)
+
+	byDepartment, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("department_name"),
+		Filters: []*gen.QueryFilter{{Dimension: "skill_version", Values: []string{versionOne.String()}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, byDepartment.Table, 1)
+	require.Equal(t, "Engineering", byDepartment.Table[0].GroupValue)
+	require.InDelta(t, 0.75, byDepartment.Table[0].Measures.TotalCost, 1e-9)
+
+	normal, err := ti.service.Query(ctx, &gen.QueryPayload{From: from, To: to, TopN: 10, SortBy: "total_cost"})
+	require.NoError(t, err)
+	require.Len(t, normal.Table, 1)
+	require.InDelta(t, 0.75, normal.Table[0].Measures.TotalCost, 1e-9, "normal aggregate queries must not fan out through mappings")
+}
+
+// insertAttributeClaudeAPIRequestLogWithHostname inserts a Claude api_request
+// row whose identity is only what the caller supplies: email and/or the device
+// hostname (gram.hook.hostname), either of which may be empty. Exercises the
+// email dimension's hostname fallback.
+func insertAttributeClaudeAPIRequestLogWithHostname(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, email, hostname string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gen_ai.conversation.id": chatID,
+		"prompt.id":              uuid.NewString(),
+		"event.name":             "api_request",
+		"input_tokens":           10,
+		"output_tokens":          5,
+		"cost_usd":               cost,
+		"model":                  "opus",
+		"gram.hook.source":       "claude-code",
+		"gram.provider":          "anthropic",
+		"gram.account_type":      "team",
+	}
+	if email != "" {
+		attributes["user.email"] = email
+	}
+	if hostname != "" {
+		attributes["gram.hook.hostname"] = hostname
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "claude_code.api_request",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, "claude-code:otel:logs", "claude-code")
+	require.NoError(t, err)
+}
+
+func TestQuery_EmailFallsBackToHostname(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+
+	// An identified user (email wins over their hostname), a company-credential
+	// session with hooks (hostname only), and a session with no identity at all.
+	insertAttributeClaudeAPIRequestLogWithHostname(t, ctx, projectID, ts, uuid.NewString(), 0.25, "a@x.com", "daves-mbp.local")
+	insertAttributeClaudeAPIRequestLogWithHostname(t, ctx, projectID, ts, uuid.NewString(), 0.40, "", "ci-runner-1")
+	insertAttributeClaudeAPIRequestLogWithHostname(t, ctx, projectID, ts, uuid.NewString(), 0.10, "", "")
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// The MV materializes synchronously with the insert; only the async insert
+	// queue needs draining for the rows to become visible deterministically.
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// Group by email: the identified user keeps their address, the emailless
+	// session surfaces under its hostname, and only the identity-less row
+	// remains in the '' bucket.
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("email"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Table, 3)
+
+	cost := tableCostByGroup(result.Table)
+	require.InDelta(t, 0.25, cost["a@x.com"], 1e-9)
+	require.InDelta(t, 0.40, cost["ci-runner-1"], 1e-9)
+	require.InDelta(t, 0.10, cost[""], 1e-9)
+
+	// A hostname bucket is drillable: filtering the email dimension on the
+	// hostname value narrows to that device's spend.
+	drill, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{"ci-runner-1"}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, drill.Table, 1)
+	require.InDelta(t, 0.40, drill.Table[0].Measures.TotalCost, 1e-9)
+
+	// The standalone Device dimension groups by hostname alone — here the
+	// identified user's spend surfaces under their machine too, unlike the
+	// email dimension where the address wins.
+	byHost, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("hostname"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	hostCost := tableCostByGroup(byHost.Table)
+	require.InDelta(t, 0.25, hostCost["daves-mbp.local"], 1e-9)
+	require.InDelta(t, 0.40, hostCost["ci-runner-1"], 1e-9)
+	require.InDelta(t, 0.10, hostCost[""], 1e-9)
 }
 
 func TestQuery_DefaultSortByAndTopN(t *testing.T) {
@@ -813,7 +1167,8 @@ func insertRetainedGramAggregateRow(t *testing.T, ctx context.Context, projectID
 			'' AS account_type, '' AS provider, '' AS billing_mode,
 			'' AS query_source, '' AS skill_name, '' AS agent_name,
 			'' AS mcp_server_name, '' AS mcp_tool_name,
-			toUInt8(0) AS generation, toUInt8(1) AS is_active
+			toUInt8(0) AS generation, toUInt8(1) AS is_active,
+			'' AS hook_hostname
 	`, projectID, timestamp.UnixNano(), hookSource, tokens, tokens)
 	require.NoError(t, err)
 }

@@ -179,18 +179,10 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		toolName = *payload.ToolName
 	}
 
-	hookSource := "claude"
-	if metadata.ServiceName != "" {
-		hookSource = metadata.ServiceName
-	}
-	// Cowork runs the same claude-code binary and reports the same OTEL
-	// service.name, so ServiceName can't distinguish it — it lands on the
-	// "claude"/"claude-code" default. SessionStart stamps the agent variant
-	// into the cache, so prefer that when it identifies a cowork session, so
-	// per-tool-call tool logs are labelled "cowork" and stay filterable.
-	if s.sessionAgentVariant(ctx, metadata.SessionID) == agentVariantCowork {
-		hookSource = agentVariantCowork
-	}
+	// The resolved product surface (OTEL service.name first, SessionStart
+	// variant fallback) labels per-tool-call rows so cowork sessions stay
+	// filterable in tool logs.
+	hookSource := conv.Default(s.claudeSessionSurface(ctx, metadata), "claude")
 
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
@@ -380,6 +372,19 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			}
 		}
 		stampAccountAttribution(attrs, sessionMeta)
+		// Cost/token metric rows carry the session's resolved surface (OTEL
+		// service.name first, SessionStart agent variant fallback for older
+		// cowork builds whose OTEL reports "claude-code") so cowork and Claude
+		// Code Desktop spend is not misfiled under claude-code. The variant
+		// fallback rides sessionMeta's SessionID, which is only populated once
+		// the tenant check above validated the cached metadata — the variant
+		// cache is keyed by session id alone, and an unvalidated id must not
+		// pull another tenant's surface label. Until then (metrics beating the
+		// logs path, or a rejected id) rows keep the claude-code default and
+		// self-heal on the session's later batches.
+		if surface := claudeSurfaceFromServiceName(s.claudeSessionSurface(ctx, &sessionMeta)); surface != "" {
+			attrs[attr.HookSourceKey] = surface
+		}
 
 		// Only include non-zero values
 		if m.InputTokens > 0 {

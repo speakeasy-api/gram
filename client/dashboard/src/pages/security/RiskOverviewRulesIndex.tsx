@@ -11,6 +11,7 @@ import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router";
+import { riskRuleKey } from "./riskRuleKey";
 import { getRuleTitleFallback } from "./risk-utils";
 
 const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
@@ -153,7 +154,7 @@ function RiskOverviewRulesIndexContent() {
                 </div>
               );
               return (
-                <li key={r.ruleId || `__none_${i}`}>
+                <li key={riskRuleKey(r.source, r.ruleId)}>
                   {href ? (
                     <Link to={href} className="hover:bg-muted/40 block">
                       {body}

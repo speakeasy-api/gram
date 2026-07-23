@@ -6,6 +6,8 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Network } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
+import { MCPActivityIndicator } from "./MCPActivityIndicator";
+import type { McpActivityStatus } from "./mcp-activity";
 
 // MCPServerTableRow renders an mcp_servers row in the /mcp listing table
 // view. Mirrors MCPTableRow.
@@ -16,9 +18,13 @@ import { MCPStatusIndicator } from "./MCPStatusIndicator";
 export function MCPServerTableRow({
   server,
   endpointCount,
+  activityStatus,
+  recentWindowDays,
 }: {
   server: McpServer;
   endpointCount: number;
+  activityStatus?: McpActivityStatus | null;
+  recentWindowDays?: number;
 }): JSX.Element {
   const routes = useRoutes();
 
@@ -36,14 +42,24 @@ export function MCPServerTableRow({
     >
       {/* Name */}
       <td className="px-3 py-3">
-        <Type
-          variant="subheading"
-          as="div"
-          className="group-hover:text-primary truncate text-sm transition-colors"
-          title={server.name ?? undefined}
-        >
-          {server.name || "MCP Server"}
-        </Type>
+        <div className="flex items-center gap-2">
+          <Type
+            variant="subheading"
+            as="div"
+            className="group-hover:text-primary min-w-0 flex-1 truncate text-sm transition-colors"
+            title={server.name ?? undefined}
+          >
+            {server.name || "MCP Server"}
+          </Type>
+          {activityStatus && (
+            <MCPActivityIndicator
+              status={activityStatus}
+              recentWindowDays={recentWindowDays}
+              size="sm"
+              className="shrink-0"
+            />
+          )}
+        </div>
       </td>
 
       {/* Status */}

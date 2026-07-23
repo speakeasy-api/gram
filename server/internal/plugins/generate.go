@@ -37,12 +37,24 @@ type PluginServerInfo struct {
 	EnvConfigs []ServerEnvConfig
 }
 
+// PluginSkillInfo is a skill distributed to a plugin, resolved to the manifest
+// content the plugin package carries (the distribution's pinned version when
+// set, otherwise the skill's latest valid version).
+type PluginSkillInfo struct {
+	// Name is the skill's normalized spec name (lowercase alphanumerics and
+	// single hyphens); it becomes the skill's directory name in the package.
+	Name    string
+	Content string
+}
+
 // PluginInfo contains the data needed to generate packages for a single plugin.
 type PluginInfo struct {
 	Name        string
 	Slug        string
 	Description string
 	Servers     []PluginServerInfo
+	// Skills are emitted into each platform plugin's skills/ directory.
+	Skills []PluginSkillInfo
 }
 
 // GenerateConfig holds org-level configuration for package generation.
@@ -342,9 +354,11 @@ const mcpGeneratorVersion = "9"
 // MCP-only publish leaves the existing hooks subtree untouched. Bump it for ANY
 // change to hooks generation, including behaviour a fingerprint couldn't observe.
 //
-// The Plugin Generate Check CI workflow requires the relevant one of these two
-// constants to change whenever generate.go does.
-const hooksGeneratorVersion = "16"
+// Releases bump it automatically: server/cmd/pin-hooks-release rewrites this
+// line when it pins a new binary, because new checksums always change the
+// rendered bootstrap script. Any other change to hooks generation needs a
+// manual bump, which the Plugin Generate Check CI workflow enforces.
+const hooksGeneratorVersion = "20"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -472,6 +486,7 @@ var ClaudeObservabilityHookEvents = []string{
 // separately.
 var CursorObservabilityHookEvents = []string{
 	"beforeSubmitPrompt",
+	"sessionEnd",
 	"stop",
 	"afterAgentResponse",
 	"afterAgentThought",
@@ -919,6 +934,8 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	}
 	files[path.Join(subdir, ".mcp.json")] = mcpJSON
 
+	emitPluginSkills(files, subdir, p)
+
 	return nil
 }
 
@@ -1200,10 +1217,15 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		timeoutSeconds, async := codexHookParams(event)
+		hookTimeout := 0
+		if event == "SessionEnd" {
+			hookTimeout = timeoutSeconds
+		}
 		hooks := []codexHookCommand{{
 			Type:           "command",
 			Command:        codexHookCommandString(timeoutSeconds, async),
 			CommandWindows: codexHookCommandStringWindows(timeoutSeconds, async),
+			Timeout:        hookTimeout,
 		}}
 		hookEvents[event] = []codexMatcherGroup{{
 			Matcher: "",
@@ -1266,6 +1288,8 @@ func codexEventSnakeCase(event string) string {
 	switch event {
 	case "SessionStart":
 		return "session_start"
+	case "SessionEnd":
+		return "session_end"
 	case "PreToolUse":
 		return "pre_tool_use"
 	case "PermissionRequest":
@@ -1284,7 +1308,7 @@ func codexEventSnakeCase(event string) string {
 // computeCodexHookHash returns the sha256:hex trusted_hash that Codex expects
 // for a single hook entry. Codex's canonical JSON varies by event:
 //
-//   - SessionStart, PreToolUse, PermissionRequest, PostToolUse:
+//   - SessionStart, SessionEnd, PreToolUse, PermissionRequest, PostToolUse:
 //     sha256(canonical_json({event_name, hooks:[{async, command, timeout, type}], matcher:""}))
 //   - UserPromptSubmit, Stop:
 //     sha256(canonical_json({event_name, hooks:[{async, command, timeout, type}]}))
@@ -1294,10 +1318,14 @@ func codexEventSnakeCase(event string) string {
 // variables only after trust verification.
 func computeCodexHookHash(event, command string) (string, error) {
 	eventSnake := codexEventSnakeCase(event)
+	timeoutSeconds := 600
+	if event == "SessionEnd" {
+		timeoutSeconds = 3
+	}
 	hook := map[string]any{
 		"async":   false,
 		"command": command,
-		"timeout": 600,
+		"timeout": timeoutSeconds,
 		"type":    "command",
 	}
 	// json.Marshal on map[string]any sorts keys alphabetically, matching
@@ -1327,10 +1355,13 @@ func computeCodexHookHash(event, command string) (string, error) {
 // so the hooks.json generator and the precomputed approvals must derive them
 // from this single source.
 func codexHookParams(event string) (timeoutSeconds int, async bool) {
-	async = event == "PostToolUse" || event == "Stop"
+	async = event == "PostToolUse" || event == "SessionEnd" || event == "Stop"
 	timeoutSeconds = 60
-	if event == "SessionStart" {
+	switch event {
+	case "SessionStart":
 		timeoutSeconds = 330
+	case "SessionEnd":
+		timeoutSeconds = 3
 	}
 	return timeoutSeconds, async
 }
@@ -1652,7 +1683,45 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 	files[path.Join(subdir, ".mcp.json")] = mcpJSON
 
+	emitPluginSkills(files, subdir, p)
+
 	return nil
+}
+
+// emitPluginSkills writes the plugin's distributed skills as
+// skills/<name>/SKILL.md under the platform plugin directory — the layout
+// Claude Code, Cursor, and Codex all load plugin skills from. Names are
+// normalized at skill creation, but they become filesystem paths in a
+// published repo — refuse anything that isn't a plain lowercase slug rather
+// than trust the invariant across the DB boundary.
+func emitPluginSkills(files map[string][]byte, subdir string, p PluginInfo) {
+	for _, sk := range p.Skills {
+		if !validSkillDirName(sk.Name) {
+			continue
+		}
+		files[path.Join(subdir, "skills", sk.Name, "SKILL.md")] = []byte(sk.Content)
+	}
+}
+
+// validSkillDirName reports whether a skill name is safe to use as a package
+// directory: 1-64 chars of lowercase alphanumerics and single interior
+// hyphens, mirroring the skill spec's name rules.
+func validSkillDirName(name string) bool {
+	if len(name) == 0 || len(name) > 64 || name[0] == '-' || name[len(name)-1] == '-' {
+		return false
+	}
+	previousHyphen := false
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z' || r >= '0' && r <= '9':
+			previousHyphen = false
+		case r == '-' && !previousHyphen:
+			previousHyphen = true
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
@@ -1701,6 +1770,8 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		return fmt.Errorf("marshal mcp.json: %w", err)
 	}
 	files[path.Join(subdir, "mcp.json")] = mcpJSON
+
+	emitPluginSkills(files, subdir, p)
 
 	return nil
 }
@@ -1848,12 +1919,14 @@ type codexHookCommand struct {
 	Type           string `json:"type"`
 	Command        string `json:"command"`
 	CommandWindows string `json:"commandWindows,omitempty"`
+	Timeout        int    `json:"timeout,omitempty"`
 }
 
 // CodexObservabilityHookEvents are Codex's hook event names. Codex uses
 // PascalCase names and has a PermissionRequest event that Claude/Cursor lack.
 var CodexObservabilityHookEvents = []string{
 	"SessionStart",
+	"SessionEnd",
 	"PreToolUse",
 	"PermissionRequest",
 	"PostToolUse",

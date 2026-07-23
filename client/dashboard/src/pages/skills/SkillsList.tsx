@@ -4,19 +4,34 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { Skill } from "@gram/client/models/components/skill.js";
+import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
 import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
-import { Badge, type Column, Icon, Table } from "@speakeasy-api/moonshine";
+import { type Column, Icon, Table } from "@speakeasy-api/moonshine";
+import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
 import { useDeferredValue, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, Navigate, useNavigate } from "react-router";
+import { toast } from "sonner";
+import { skillShareUrl } from "./share-link";
 import { SkillManifestDialog } from "./SkillManifestDialog";
-import { SkillSheet } from "./SkillSheet";
-import { filterSkills, skillCountLabel } from "./skills-list-helpers";
+import {
+  SKILL_CLASSIFICATION_OPTIONS,
+  SKILL_SOURCE_OPTIONS,
+} from "./skill-badge-options";
+import { SkillClassificationBadge, SkillSourceBadge } from "./skill-badges";
+import {
+  filterSkills,
+  skillCountLabel,
+  type SkillSort,
+  sortSkills,
+} from "./skills-list-helpers";
+import { UnknownSkillActivationsSection } from "./UnknownSkillActivationsSection";
 import { useDrainSkillPages } from "./use-drain-skill-pages";
 
 const SKILL_FILTERS = defineFilters([
@@ -30,11 +45,26 @@ const SKILL_FILTERS = defineFilters([
 ]);
 
 const FILTER_OPTIONS = {
-  sourceKind: [{ value: "manual", label: "Manual" }],
-  classification: [{ value: "custom", label: "Custom" }],
+  sourceKind: SKILL_SOURCE_OPTIONS,
+  classification: SKILL_CLASSIFICATION_OPTIONS,
 };
 
 const RESULT_PAGE_SIZE = 200;
+const INSIGHT_SORT_OPTIONS = [
+  { value: "updated", label: "Recently updated" },
+  { value: "activations", label: "Most activated" },
+  { value: "efficacy", label: "Highest efficacy" },
+  { value: "estimated_savings", label: "Most estimated savings" },
+];
+
+function formatEfficacy(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatSavings(minutes: number): string {
+  if (minutes < 60) return `${minutes.toFixed(minutes < 10 ? 1 : 0)} min`;
+  return `${(minutes / 60).toFixed(1)} hr`;
+}
 
 function noResultsMessage(
   draining: boolean,
@@ -48,11 +78,16 @@ function noResultsMessage(
 }
 
 export default function SkillsList(): JSX.Element {
+  const routes = useRoutes();
+  const navigate = useNavigate();
   const filters = useFilterState(SKILL_FILTERS);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SkillSort>("updated");
   const deferredSearch = useDeferredValue(search);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedSkillId, setSelectedSkillId] = useQueryState("skill");
+  // Legacy deep links opened the skill as a sheet via ?skill=<id>; redirect
+  // them to the dedicated detail page.
+  const [legacySkillId] = useQueryState("skill");
   const [displayCount, setDisplayCount] = useState(RESULT_PAGE_SIZE);
   const query = useSkillsInfinite({ limit: 200 }, undefined, {
     throwOnError: false,
@@ -61,28 +96,50 @@ export default function SkillsList(): JSX.Element {
     () => query.data?.pages.flatMap((page) => page.result.skills) ?? [],
     [query.data?.pages],
   );
+  const insightsQuery = useSkillEfficacyInsights({}, undefined, {
+    throwOnError: false,
+    enabled: skills.length > 0,
+  });
+  const metricsBySkill = useMemo(
+    () =>
+      new Map(
+        insightsQuery.data?.insights.map((insight) => [
+          insight.skillId,
+          insight.metrics,
+        ]) ?? [],
+      ),
+    [insightsQuery.data?.insights],
+  );
   const active =
     deferredSearch.trim().length > 0 ||
     filters.values.sourceKind.length > 0 ||
     filters.values.classification.length > 0;
+  const insightsUnavailable = !!insightsQuery.error && !insightsQuery.data;
+  const effectiveSort = insightsUnavailable ? "updated" : sort;
   const visibleSkills = useMemo(
     () =>
-      filterSkills(
-        skills,
-        deferredSearch,
-        filters.values.sourceKind,
-        filters.values.classification,
+      sortSkills(
+        filterSkills(
+          skills,
+          deferredSearch,
+          filters.values.sourceKind,
+          filters.values.classification,
+        ),
+        metricsBySkill,
+        effectiveSort,
       ),
     [
       deferredSearch,
       filters.values.classification,
       filters.values.sourceKind,
+      metricsBySkill,
       skills,
+      effectiveSort,
     ],
   );
 
   useDrainSkillPages({
-    active,
+    active: true,
     hasNextPage: query.hasNextPage,
     isFetchingNextPage: query.isFetchingNextPage,
     isFetchNextPageError: query.isFetchNextPageError,
@@ -101,7 +158,7 @@ export default function SkillsList(): JSX.Element {
       render: (skill) => (
         <div className="min-w-0">
           <Link
-            to={{ search: `?skill=${skill.id}` }}
+            to={routes.skills.detail.href(skill.id)}
             className="font-medium hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
@@ -127,13 +184,68 @@ export default function SkillsList(): JSX.Element {
       key: "source",
       header: "Source",
       width: "120px",
-      render: (skill) => <Badge variant="neutral">{skill.sourceKind}</Badge>,
+      render: (skill) => <SkillSourceBadge value={skill.sourceKind} />,
+    },
+    {
+      key: "classification",
+      header: "Classification",
+      width: "130px",
+      render: (skill) => (
+        <SkillClassificationBadge value={skill.classification} />
+      ),
     },
     {
       key: "versions",
       header: "Versions",
-      width: "100px",
+      width: "90px",
       render: (skill) => <Type small>{skill.versionCount}</Type>,
+    },
+    {
+      key: "activations",
+      header: "Activations (30d)",
+      width: "130px",
+      render: (skill) => (
+        <Type small className="tabular-nums">
+          {metricsBySkill.get(skill.id)?.activations.toLocaleString() ??
+            (insightsQuery.data ? "0" : "-")}
+        </Type>
+      ),
+    },
+    {
+      key: "efficacy",
+      header: "Efficacy",
+      width: "110px",
+      render: (skill) => {
+        const efficacy = metricsBySkill.get(skill.id)?.efficacy;
+        return (
+          <Type
+            small
+            className="tabular-nums"
+            title={
+              efficacy
+                ? `${efficacy.scoredSessions.toLocaleString()} sampled sessions`
+                : "No sampled scores"
+            }
+          >
+            {efficacy ? formatEfficacy(efficacy.averageScore) : "-"}
+          </Type>
+        );
+      },
+    },
+    {
+      key: "estimatedSavings",
+      header: "Estimated savings",
+      width: "150px",
+      render: (skill) => {
+        const efficacy = metricsBySkill.get(skill.id)?.efficacy;
+        return (
+          <Type small className="tabular-nums">
+            {efficacy
+              ? formatSavings(efficacy.estimatedMinutesSavedTotal)
+              : "-"}
+          </Type>
+        );
+      },
     },
     {
       key: "updated",
@@ -148,6 +260,22 @@ export default function SkillsList(): JSX.Element {
           <HumanizeDateTime date={skill.updatedAt} />
         </Type>
       ),
+    },
+    {
+      key: "share",
+      header: "",
+      width: "48px",
+      render: (skill) =>
+        skill.shareToken ? (
+          <CopyButton
+            size="icon-sm"
+            text={skillShareUrl(skill.shareToken)}
+            tooltip="Copy public link"
+            onCopy={() => {
+              toast.success("Public link copied");
+            }}
+          />
+        ) : null,
     },
     {
       key: "open",
@@ -170,133 +298,167 @@ export default function SkillsList(): JSX.Element {
     loadedCount: skills.length,
     resultCount: visibleSkills.length,
   });
-  const draining = active && query.hasNextPage && !query.isFetchNextPageError;
+  const draining = query.hasNextPage && !query.isFetchNextPageError;
+
+  if (legacySkillId) {
+    return <Navigate to={routes.skills.detail.href(legacySkillId)} replace />;
+  }
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Skills</Page.Section.Title>
-      <Page.Section.Description>
-        Record, inspect, and version the skills available to this project.
-      </Page.Section.Description>
-      <Page.Section.CTA>
-        <AddSkillButton onClick={() => setDialogOpen(true)} />
-      </Page.Section.CTA>
-      <Page.Section.Body>
-        <div className="space-y-4">
-          {!isEmptyProject && (
-            <Page.Toolbar>
-              <Page.Toolbar.Search
-                value={search}
-                onChange={(value) => {
-                  setSearch(value);
-                  setDisplayCount(RESULT_PAGE_SIZE);
-                }}
-                debounceMs={150}
-                placeholder="Search skills"
-              />
-              <Page.Toolbar.Filters
-                schema={SKILL_FILTERS}
-                values={filters.values}
-                optionsById={FILTER_OPTIONS}
-                onChange={(id, value) => {
-                  (
-                    filters.setValue as (id: string, value: FilterValue) => void
-                  )(id, value);
-                  setDisplayCount(RESULT_PAGE_SIZE);
-                }}
-                onClear={(id) => {
-                  (filters.clearValue as (id: string) => void)(id);
-                  setDisplayCount(RESULT_PAGE_SIZE);
-                }}
-                onClearAll={() => {
-                  filters.clearAll();
-                  setDisplayCount(RESULT_PAGE_SIZE);
-                }}
-              />
-              <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
-              <Page.Toolbar.Refresh
-                onRefresh={() => void query.refetch()}
-                isRefreshing={query.isFetching && !query.isFetchingNextPage}
-              />
-            </Page.Toolbar>
-          )}
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <Page.Section>
+          <Page.Section.Title>Skills</Page.Section.Title>
+          <Page.Section.Description>
+            Record, inspect, and version the skills available to this project.
+          </Page.Section.Description>
+          <Page.Section.CTA>
+            <AddSkillButton onClick={() => setDialogOpen(true)} />
+          </Page.Section.CTA>
+          <Page.Section.Body>
+            <div className="space-y-4">
+              {!isEmptyProject && (
+                <Page.Toolbar>
+                  <Page.Toolbar.Search
+                    value={search}
+                    onChange={(value) => {
+                      setSearch(value);
+                      setDisplayCount(RESULT_PAGE_SIZE);
+                    }}
+                    debounceMs={150}
+                    placeholder="Search skills"
+                  />
+                  <Page.Toolbar.Filters
+                    schema={SKILL_FILTERS}
+                    values={filters.values}
+                    optionsById={FILTER_OPTIONS}
+                    onChange={(id, value) => {
+                      (
+                        filters.setValue as (
+                          id: string,
+                          value: FilterValue,
+                        ) => void
+                      )(id, value);
+                      setDisplayCount(RESULT_PAGE_SIZE);
+                    }}
+                    onClear={(id) => {
+                      (filters.clearValue as (id: string) => void)(id);
+                      setDisplayCount(RESULT_PAGE_SIZE);
+                    }}
+                    onClearAll={() => {
+                      filters.clearAll();
+                      setDisplayCount(RESULT_PAGE_SIZE);
+                    }}
+                  />
+                  <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
+                  <Page.Toolbar.SortBy
+                    value={effectiveSort}
+                    onChange={(value) => {
+                      setSort(value as SkillSort);
+                      setDisplayCount(RESULT_PAGE_SIZE);
+                    }}
+                    options={INSIGHT_SORT_OPTIONS}
+                  />
+                  <Page.Toolbar.Refresh
+                    onRefresh={() => {
+                      void Promise.all([
+                        query.refetch(),
+                        insightsQuery.refetch(),
+                      ]);
+                    }}
+                    isRefreshing={
+                      (query.isFetching && !query.isFetchingNextPage) ||
+                      insightsQuery.isFetching
+                    }
+                  />
+                </Page.Toolbar>
+              )}
 
-          {draining && (
-            <Type small muted role="status" aria-live="polite">
-              Loading all skills to finish this search...
-            </Type>
-          )}
+              {draining && (
+                <Type small muted role="status" aria-live="polite">
+                  Loading all skills to finish this view...
+                </Type>
+              )}
 
-          {query.isPending && !query.data && <SkeletonTable />}
-          {query.error && !query.data && (
-            <ErrorAlert
-              title="Unable to load skills"
-              error={query.error instanceof Error ? query.error : "Try again."}
+              {insightsUnavailable && (
+                <div className="space-y-2">
+                  <ErrorAlert
+                    title="Unable to load skill insights"
+                    error={insightsQuery.error}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void insightsQuery.refetch()}
+                  >
+                    Retry insights
+                  </Button>
+                </div>
+              )}
+
+              {query.isPending && !query.data && <SkeletonTable />}
+              {query.error && !query.data && (
+                <ErrorAlert
+                  title="Unable to load skills"
+                  error={
+                    query.error instanceof Error ? query.error : "Try again."
+                  }
+                />
+              )}
+              {isEmptyProject && (
+                <SkillsEmptyState onAdd={() => setDialogOpen(true)} />
+              )}
+              {query.data && !isEmptyProject && !draining && (
+                <div className="overflow-x-auto">
+                  <Table
+                    columns={columns}
+                    data={displayedSkills}
+                    rowKey={(skill) => skill.id}
+                    onRowClick={(skill) =>
+                      void navigate(routes.skills.detail.href(skill.id))
+                    }
+                    className="min-w-[1100px]"
+                    noResultsMessage={noResultsMessage(
+                      draining,
+                      active,
+                      query.isFetchNextPageError,
+                    )}
+                  />
+                </div>
+              )}
+
+              {query.isFetchNextPageError && (
+                <LoadMoreError onRetry={() => void query.fetchNextPage()} />
+              )}
+
+              {!draining && displayedSkills.length < visibleSkills.length && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      setDisplayCount((count) => count + RESULT_PAGE_SIZE)
+                    }
+                  >
+                    Show more results
+                  </Button>
+                </div>
+              )}
+
+              <UnknownSkillActivationsSection />
+            </div>
+
+            <SkillManifestDialog
+              mode="create"
+              open={dialogOpen}
+              onOpenChange={setDialogOpen}
             />
-          )}
-          {isEmptyProject && (
-            <SkillsEmptyState onAdd={() => setDialogOpen(true)} />
-          )}
-          {query.data && !isEmptyProject && (
-            <div className="overflow-x-auto">
-              <Table
-                columns={columns}
-                data={displayedSkills}
-                rowKey={(skill) => skill.id}
-                onRowClick={(skill) => void setSelectedSkillId(skill.id)}
-                className="min-w-[900px]"
-                noResultsMessage={noResultsMessage(
-                  draining,
-                  active,
-                  query.isFetchNextPageError,
-                )}
-              />
-            </div>
-          )}
-
-          {query.isFetchNextPageError && (
-            <LoadMoreError onRetry={() => void query.fetchNextPage()} />
-          )}
-
-          {displayedSkills.length < visibleSkills.length && (
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setDisplayCount((count) => count + RESULT_PAGE_SIZE)
-                }
-              >
-                Show more results
-              </Button>
-            </div>
-          )}
-
-          {query.hasNextPage && !query.isFetchNextPageError && (
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                disabled={query.isFetchingNextPage}
-                onClick={() => void query.fetchNextPage()}
-              >
-                {query.isFetchingNextPage ? "Loading..." : "Load more"}
-              </Button>
-            </div>
-          )}
-        </div>
-
-        <SkillManifestDialog
-          mode="create"
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-        />
-        <SkillSheet
-          skillId={selectedSkillId}
-          onOpenChange={(open) => {
-            if (!open) void setSelectedSkillId(null);
-          }}
-        />
-      </Page.Section.Body>
-    </Page.Section>
+          </Page.Section.Body>
+        </Page.Section>
+      </Page.Body>
+    </Page>
   );
 }
 

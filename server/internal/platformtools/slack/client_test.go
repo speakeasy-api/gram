@@ -28,6 +28,7 @@ func testSlackEnv() toolconfig.ToolCallEnv {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}
 }
 
@@ -45,6 +46,7 @@ func TestSlackTool_MissingTokenReturnsHelpfulError(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"user_id":"U123"}`), io.Discard)
 	require.Error(t, err)
 	require.ErrorContains(t, err, slackBotTokenEnvVar)

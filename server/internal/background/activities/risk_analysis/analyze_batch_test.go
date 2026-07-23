@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -30,18 +32,32 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// recordingPromptJudge captures judge inputs under a mutex: judgeFanout calls
+// Evaluate from concurrent goroutines.
 type recordingPromptJudge struct {
+	mu     sync.Mutex
 	inputs []promptpolicy.Input
 }
 
+func (j *recordingPromptJudge) recorded() []promptpolicy.Input {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	out := make([]promptpolicy.Input, len(j.inputs))
+	copy(out, j.inputs)
+	return out
+}
+
 func (j *recordingPromptJudge) Evaluate(_ context.Context, in promptpolicy.Input) (*promptpolicy.Verdict, error) {
+	j.mu.Lock()
 	j.inputs = append(j.inputs, in)
+	j.mu.Unlock()
 	return &promptpolicy.Verdict{
 		Matched:          true,
 		Confidence:       0.9,
@@ -85,6 +101,46 @@ func newGitleaksPub() *gcp.MockPublisher[*riskv1.GitleaksAnalysis] {
 	return pub
 }
 
+func newPromptInjectionPub() *gcp.MockPublisher[*riskv1.PromptInjectionAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.PromptInjectionAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
+func newPromptPolicyPub() *gcp.MockPublisher[*riskv1.PromptPolicyAnalysis] {
+	pub := gcp.NewMockPublisher[*riskv1.PromptPolicyAnalysis]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
+func capturingPromptInjectionPub(t *testing.T) (*gcp.MockPublisher[*riskv1.PromptInjectionAnalysis], *[]*riskv1.PromptInjectionAnalysis) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*riskv1.PromptInjectionAnalysis]()
+	var published []*riskv1.PromptInjectionAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*riskv1.PromptInjectionAnalysis)
+			require.True(t, ok)
+			published = append(published, msg)
+		})
+	return pub, &published
+}
+
+func capturingPromptPolicyPub(t *testing.T) (*gcp.MockPublisher[*riskv1.PromptPolicyAnalysis], *[]*riskv1.PromptPolicyAnalysis) {
+	t.Helper()
+	pub := gcp.NewMockPublisher[*riskv1.PromptPolicyAnalysis]()
+	var published []*riskv1.PromptPolicyAnalysis
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*riskv1.PromptPolicyAnalysis)
+			require.True(t, ok)
+			published = append(published, msg)
+		})
+	return pub, &published
+}
+
 func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 	pub := gcp.NewMockPublisher[*riskv1.CustomRulesAnalysis]()
 	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
@@ -93,7 +149,8 @@ func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
+	require.NoError(t, err)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -121,7 +178,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Role:      "user",
-		Content:   "AWS key AKIAIOSFODNN7REALKEY and email alice@example.com",
+		Content:   "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd and email alice@example.com",
 	})
 	require.NoError(t, err)
 
@@ -136,7 +193,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		testenv.NewLogger(t),
 	)
 
-	ab := risk_analysis.NewAnalyzeBatch(
+	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -149,11 +206,14 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 	)
+	require.NoError(t, err)
 
 	// Execute via Temporal test activity environment to satisfy activity.RecordHeartbeat
 	var ts testsuite.WorkflowTestSuite
@@ -197,6 +257,124 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	assert.True(t, sawDeadLetter, "expected a presidio dead-letter row with dead_letter_reason set")
 }
 
+func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgIDs := seedMessages(t, conn, td, 3)
+	promptInjectionPub, published := capturingPromptInjectionPub(t)
+
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		nil,
+		&feature.InMemory{},
+		newPresidioPub(),
+		newGitleaksPub(),
+		promptInjectionPub,
+		newPromptPolicyPub(),
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+	)
+	require.NoError(t, err)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       msgIDs,
+		Sources:          []string{risk_analysis.SourcePromptInjection},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Len(t, *published, len(msgIDs))
+}
+
+func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "prompt policy",
+		PolicyType:     "prompt_based",
+		Sources:        []string{},
+		Enabled:        true,
+		Action:         "flag",
+		AudienceType:   "everyone",
+		AutoName:       false,
+		Prompt:         pgtype.Text{String: "Block unsafe requests", Valid: true},
+	})
+	require.NoError(t, err)
+	msgIDs := seedMessages(t, conn, td, 2)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
+	promptPolicyPub, published := capturingPromptPolicyPub(t)
+
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		(&recordingPromptJudge{}).Evaluate,
+		flags,
+		newPresidioPub(),
+		newGitleaksPub(),
+		newPromptInjectionPub(),
+		promptPolicyPub,
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+	)
+	require.NoError(t, err)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     policy.ID,
+		PolicyVersion:    policy.Version,
+		MessageIDs:       msgIDs,
+		Sources:          nil,
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Len(t, *published, len(msgIDs))
+}
+
 func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
@@ -230,7 +408,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	ab := risk_analysis.NewAnalyzeBatch(
+	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -243,11 +421,14 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 	)
+	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestActivityEnvironment()
@@ -336,7 +517,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
 	judge := &recordingPromptJudge{}
-	ab := risk_analysis.NewAnalyzeBatch(
+	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -349,11 +530,14 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 	)
+	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestActivityEnvironment()
@@ -376,8 +560,9 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	require.NoError(t, val.Get(&result))
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 1, result.Findings)
-	require.Len(t, judge.inputs, 1)
-	msg := judge.inputs[0].Message
+	inputs := judge.recorded()
+	require.Len(t, inputs, 1)
+	msg := inputs[0].Message
 	require.Equal(t, message.ToolRequest, msg.Type)
 	require.Equal(t, "Bash", msg.ToolName)
 	require.Empty(t, msg.MCPServer, "native tool has no MCP server")
@@ -436,7 +621,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
 	judge := &recordingPromptJudge{}
-	ab := risk_analysis.NewAnalyzeBatch(
+	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -449,11 +634,14 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		flags,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 	)
+	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestActivityEnvironment()
@@ -474,10 +662,11 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 
 	var result risk_analysis.AnalyzeBatchResult
 	require.NoError(t, val.Get(&result))
-	require.Len(t, judge.inputs, 1)
+	inputs := judge.recorded()
+	require.Len(t, inputs, 1)
 
 	// The judge sees both calls, each with its own attribution - not an opaque blob.
-	msg := judge.inputs[0].Message
+	msg := inputs[0].Message
 	require.Equal(t, message.ToolRequest, msg.Type)
 	require.Empty(t, msg.ToolName, "multi-call message carries no single tool name")
 	require.Len(t, msg.ToolCalls, 2)
@@ -533,6 +722,122 @@ func TestAnalyzeBatch_CLIDestructive_BashRmRf(t *testing.T) {
 	assert.Equal(t, risk_analysis.SourceCLIDestructive, rows[0].Source)
 	assert.Equal(t, "destructive.shell.rm_rf", rows[0].RuleID.String)
 	assert.Equal(t, "Bash", rows[0].Match.String)
+}
+
+// TestAnalyzeBatch_Gitleaks_SecretInToolCallArgsOnly plants a secret solely in
+// tool-call arguments (content empty) and asserts the batch gitleaks scan
+// composes the argument surface and reports it - the POC-314 scenario where
+// args-only credentials never triggered risk policies.
+func TestAnalyzeBatch_Gitleaks_SecretInToolCallArgsOnly(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	// A full credential pair: the access key id anchors detection (it is not
+	// itself reported), and the secret access key is the flagged value.
+	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{
+		"command": "aws configure set aws_access_key_id ASIAZ2XY3WNBQR5TUVWX aws_secret_access_key wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd",
+	})
+
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"})
+	require.Equal(t, 1, result.Processed)
+	require.Positive(t, result.Findings)
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+
+	var saw bool
+	for _, row := range rows {
+		if row.Source == "gitleaks" && row.Found {
+			assert.NotEqual(t, "secret.aws_access_token", row.RuleID.String,
+				"the access key id must not be reported as a finding")
+			if row.RuleID.String == "secret.aws_secret_access_key" {
+				assert.Contains(t, row.Match.String, "wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd")
+				saw = true
+			}
+		}
+	}
+	require.True(t, saw, "expected a gitleaks finding from tool-call arguments")
+}
+
+// TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly mirrors the gitleaks case for
+// Presidio: PII only in tool-call arguments must survive the composed scan
+// surface end to end through the batch activity.
+func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	// Not @example.com: placeholder domains are suppressed by the presidiofp
+	// false-positive catalog and would never surface as findings.
+	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__crm__update_contact", map[string]any{
+		"email": "alice.smith@bluesky-mail.com",
+	})
+
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		infra.NewPresidioClient(t),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		newPresidioPub(),
+		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
+		newCustomRulesPub(),
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+	)
+	require.NoError(t, err)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{msgID},
+		Sources:          []string{"presidio"},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Equal(t, 1, result.Processed)
+	require.Positive(t, result.Findings)
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+
+	var saw bool
+	for _, row := range rows {
+		if row.Source == "presidio" && row.Found && row.RuleID.String == "pii.email_address" {
+			assert.Contains(t, row.Match.String, "alice.smith@bluesky-mail.com")
+			saw = true
+		}
+	}
+	require.True(t, saw, "expected a presidio email finding from tool-call arguments")
 }
 
 func TestAnalyzeBatch_CLIDestructive_GitForcePush(t *testing.T) {
@@ -942,12 +1247,21 @@ func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testD
 	return uuid.Nil
 }
 
+// stubProvenanceLookup resolves no MCP provenance, so shadow_mcp scans in
+// these tests exercise the signature fallback. A nil lookup would be a nil
+// interface call the moment a test selects the shadow_mcp source.
+type stubProvenanceLookup struct{}
+
+func (stubProvenanceLookup) LookupMCPProvenanceByToolCallID(_ context.Context, _ uuid.UUID, _ []string, _ time.Time) (map[string]telemetryrepo.MCPProvenance, error) {
+	return map[string]telemetryrepo.MCPProvenance{}, nil
+}
+
 func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageIDs []uuid.UUID, sources []string) risk_analysis.AnalyzeBatchResult {
 	t.Helper()
 
 	accessStore := accesscontrol.NewRedisStore(cache.NoopCache, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, accessStore)
-	ab := risk_analysis.NewAnalyzeBatch(
+	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(t), conn, cache.NoopCache, accessStore, nil)
+	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
@@ -955,16 +1269,19 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		&risk_analysis.StubPIIScanner{},
 		nil,
 		shadowMCPClient,
-		nil,
+		stubProvenanceLookup{},
 		nil,
 		nil,
 		newPresidioPub(),
 		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 	)
+	require.NoError(t, err)
 
 	var ts testsuite.WorkflowTestSuite
 	env := ts.NewTestActivityEnvironment()
@@ -1215,7 +1532,7 @@ func TestAnalyzeBatch_SkipsWhenPolicyDisabled(t *testing.T) {
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Role:      "user",
-		Content:   "AWS key AKIAIOSFODNN7REALKEY",
+		Content:   "token ghp_R2D2C3POLuk3Skywalker1234567890ab",
 	})
 	require.NoError(t, err)
 
@@ -1242,7 +1559,7 @@ func TestAnalyzeBatch_SkipsWhenPolicyDeleted(t *testing.T) {
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Role:      "user",
-		Content:   "AWS key AKIAIOSFODNN7REALKEY",
+		Content:   "token ghp_R2D2C3POLuk3Skywalker1234567890ab",
 	})
 	require.NoError(t, err)
 

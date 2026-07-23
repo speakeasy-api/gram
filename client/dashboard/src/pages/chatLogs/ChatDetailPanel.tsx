@@ -34,6 +34,7 @@ import {
 } from "@speakeasy-api/moonshine";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
@@ -56,9 +57,12 @@ import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { ChatOwnerLabel } from "@/components/chat-owner-label";
+import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
+import { formatPlatform } from "@/lib/formatPlatform";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -240,6 +244,7 @@ function MetaRow({ label, children }: { label: string; children: ReactNode }) {
 
 function SessionSummary({
   chat,
+  userLabel,
   messageCount,
   toolCount,
   compact = false,
@@ -257,6 +262,7 @@ function SessionSummary({
     lastMessageTimestamp?: Date;
     updatedAt: Date;
   };
+  userLabel: ReactNode;
   messageCount: number;
   toolCount: number;
   compact?: boolean;
@@ -311,7 +317,7 @@ function SessionSummary({
         <div className="space-y-1">
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
-            <MetaRow label="User">{chat.externalUserId || "anonymous"}</MetaRow>
+            <MetaRow label="User">{userLabel}</MetaRow>
             {accountEmail && (
               <MetaRow label="Account">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
@@ -324,7 +330,7 @@ function SessionSummary({
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
                   <HookSourceIcon source={chat.source} className="size-3.5" />
-                  {chat.source}
+                  {formatPlatform(chat.source)}
                 </span>
               </MetaRow>
             )}
@@ -392,7 +398,7 @@ function ChatDetailMetadataBadges({
           <Badge.Text>
             <span className="inline-flex items-center gap-1.5">
               <HookSourceIcon source={chat.source} className="size-3" />
-              {chat.source}
+              {formatPlatform(chat.source)}
             </span>
           </Badge.Text>
         </Badge>
@@ -614,6 +620,7 @@ function ThreadSearchBar({
 function ChatDetailHeader({
   chatId,
   chat,
+  userLabel,
   messageCount,
   toolCount,
   canManageChat,
@@ -632,6 +639,7 @@ function ChatDetailHeader({
 }: {
   chatId: string;
   chat: Parameters<typeof SessionSummary>[0]["chat"] & { title?: string };
+  userLabel: ReactNode;
   messageCount: number;
   toolCount: number;
   canManageChat: boolean;
@@ -682,6 +690,7 @@ function ChatDetailHeader({
         <div className="flex shrink-0 items-center gap-1">
           <SessionSummary
             chat={chat}
+            userLabel={userLabel}
             messageCount={messageCount}
             toolCount={toolCount}
             compact={compactMetadata}
@@ -774,6 +783,7 @@ function ChatDetailPanel({
   dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
   const client = useSdkClient();
+  const { user } = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
   const { hasScope } = useRBAC();
   const canManageChat = isPlatformAdmin || hasScope("org:admin");
@@ -852,6 +862,27 @@ function ChatDetailPanel({
   // resolved (otherwise the panel would show "Not found" despite having data).
   const chat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
+  const { data: membersData } = useMembers();
+  const userLabel = chat
+    ? chatOwnerLabel(
+        membersData?.members,
+        chat,
+        user,
+        personalAccountEmail(chat),
+      )
+    : "anonymous";
+  // Same label as a node: unresolved owners get an explanatory tooltip in the
+  // header's session details, while transcript rows keep the plain string.
+  const userLabelNode = chat ? (
+    <ChatOwnerLabel
+      members={membersData?.members}
+      chat={chat}
+      currentUser={user}
+      accountEmail={personalAccountEmail(chat)}
+    />
+  ) : (
+    "anonymous"
+  );
   // Only the primary (or risk) initial load blanks the whole panel; a search
   // re-fetch updates the transcript in place — its loading shows in the search
   // bar and as a "Searching…" empty state instead.
@@ -1113,10 +1144,7 @@ function ChatDetailPanel({
     else transcript.loadRest();
   }, [windowed, transcript]);
 
-  // Personal-account sessions label the user's turns with the account's own
-  // email (mirrors the sessions list) instead of the attributed employee's
-  // work email carried on the messages.
-  const userLabelOverride = chat ? personalAccountEmail(chat) : undefined;
+  const userLabelOverride = chat ? userLabel : undefined;
 
   const rowCtx = useMemo<RowContext>(
     () => ({
@@ -1226,6 +1254,7 @@ function ChatDetailPanel({
       <ChatDetailHeader
         chatId={chatId}
         chat={chat}
+        userLabel={userLabelNode}
         messageCount={chat.numMessages}
         toolCount={toolLogs.length}
         canManageChat={canManageChat}

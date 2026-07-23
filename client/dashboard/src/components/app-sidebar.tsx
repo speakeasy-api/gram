@@ -19,6 +19,7 @@ import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { BuiltInMcpSidebarNav } from "./built-in-mcp-sidebar-nav";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
+import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarUserMenu } from "./sidebar-user-menu";
@@ -167,10 +168,11 @@ export function AppSidebar({
   const activeItem =
     state === "collapsed" && activeGroup ? undefined : activeRoute?.title;
 
-  const isMcpDetailRoute =
+  const isWideSidebarDetailRoute =
     routes.mcp.details.active ||
     routes.mcp.x.active ||
-    routes.mcp.builtIn.active;
+    routes.mcp.builtIn.active ||
+    routes.skills.detail.active;
 
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
@@ -181,6 +183,8 @@ export function AppSidebar({
     sidebarContent = <McpServerXSidebarNav />;
   } else if (routes.mcp.builtIn.active) {
     sidebarContent = <BuiltInMcpSidebarNav />;
+  } else if (routes.skills.detail.active) {
+    sidebarContent = <SkillDetailSidebarNav />;
   } else {
     sidebarContent = (
       <NavGroupProvider
@@ -332,7 +336,7 @@ export function AppSidebar({
     <Sidebar
       collapsible="icon"
       style={
-        isMcpDetailRoute
+        isWideSidebarDetailRoute
           ? ({ "--sidebar-width": "22rem" } as React.CSSProperties)
           : undefined
       }

@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -54,9 +55,12 @@ type Service struct {
 	policyBypass       *risk.PolicyBypassEvaluator
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
-	serverURL          *url.URL
-	siteURL            *url.URL
-	jwtSecret          string
+	// efficacySignaler is optional: when nil, hook paths record exactly as
+	// before and emit no wakes.
+	efficacySignaler efficacy.Signaler
+	serverURL        *url.URL
+	siteURL          *url.URL
+	jwtSecret        string
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the
 	// Codex/OTEL fallbacks). Injectable so tests can pin telemetry event time
@@ -104,6 +108,12 @@ type SessionMetadata struct {
 	// accounts logged in on one machine — the device bridge that links a personal
 	// account to the employee learned from a team session on the same device.
 	DeviceID string
+	// Hostname is the device hostname the Go hooks report on every event
+	// (gram.hook.hostname). Cached with the session so the Claude OTEL path —
+	// whose rows carry no hostname of their own — can stamp it onto cost rows,
+	// letting the user breakdown fall back to the device when the session has
+	// no email (company-credential sessions emit no user identity).
+	Hostname string
 	// AccountType is "team" or "personal" once classified, else empty.
 	AccountType string
 	// BillingMode is the admin-declared billing mode for the provider org this
@@ -143,6 +153,29 @@ type ChatTitleGenerator interface {
 	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
 }
 
+// skillEfficacySignalTimeout bounds one wake. A wake is best-effort and always
+// follows a durable write, so it must never hold a hook response open on a
+// slow coordinator.
+const skillEfficacySignalTimeout = time.Second
+
+// signalSkillEfficacy delivers one best-effort wake for a project. Detached
+// from the request context: the write the wake reports is already durable, so a
+// client disconnect must not drop it. Failures are logged and swallowed —
+// no hook decision, response or tool flow depends on a wake landing.
+func (s *Service) signalSkillEfficacy(ctx context.Context, projectID uuid.UUID) {
+	if s.efficacySignaler == nil || projectID == uuid.Nil {
+		return
+	}
+	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), skillEfficacySignalTimeout)
+	defer cancel()
+	if err := s.efficacySignaler.Signal(signalCtx, projectID); err != nil {
+		s.logger.ErrorContext(ctx, "signal skill efficacy coordinator from hook",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+		)
+	}
+}
+
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
@@ -163,6 +196,7 @@ func NewService(
 	policyBypass *risk.PolicyBypassEvaluator,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
+	efficacySignaler efficacy.Signaler,
 	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
@@ -184,6 +218,7 @@ func NewService(
 		policyBypass:       policyBypass,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
+		efficacySignaler:   efficacySignaler,
 		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,

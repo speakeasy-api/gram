@@ -38,7 +38,7 @@ func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled, nil)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
@@ -138,7 +138,7 @@ func TestToolsCallClickHouseLogInterceptor_DurationMissingSentinel(t *testing.T)
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled, nil)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
@@ -210,7 +210,7 @@ func TestToolsCallClickHouseLogInterceptor_NoAuthContextSkips(t *testing.T) {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled, nil)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	serverID := uuid.New().String()
 	mcpServerID := uuid.New().String()
@@ -347,7 +347,7 @@ func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, conn, logsEnabled, toolIOLogsEnabled, nil)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, logsEnabled, toolIOLogsEnabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()

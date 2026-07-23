@@ -1,35 +1,18 @@
 import { AccountTypeIcon } from "@/components/account-type-icon";
+import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
 import { useCallback, useState } from "react";
-
-// Label for a session's owner. Personal-account sessions show the account's own
-// email (the session's user fields carry the attributed employee's WORK email,
-// which hides which account was actually used — the adjacent AccountTypeIcon
-// marks it personal). Otherwise the caller's own sessions show "You" (matched by
-// internal user id, or by external user id when it equals their email —
-// seeded/dashboard chats carry the email there). Everyone else falls back to the
-// external user id, or "anonymous" when there is none.
-function ownerLabel(
-  chat: ChatOverview,
-  user: { id: string; email: string },
-): string {
-  const accountEmail = personalAccountEmail(chat);
-  if (accountEmail) return accountEmail;
-  const isMe =
-    (!!chat.userId && chat.userId === user.id) ||
-    (!!chat.externalUserId && chat.externalUserId === user.email);
-  if (isMe) return "You";
-  return chat.externalUserId || "anonymous";
-}
 
 interface ChatLogsTableProps {
   chats: ChatOverview[];
@@ -148,6 +131,7 @@ export function ChatLogsTable({
   error,
 }: ChatLogsTableProps): JSX.Element {
   const { user } = useSession();
+  const { data: membersData } = useMembers();
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   if (isLoading && chats.length === 0) {
     return (
@@ -265,15 +249,31 @@ export function ChatLogsTable({
                     {/* Metadata row */}
                     <div className="text-muted-foreground flex items-center gap-4 text-sm">
                       <span className="flex items-center gap-1.5">
-                        <AccountTypeIcon accountType={chat.accountType} />
-                        <span className="max-w-[120px] truncate">
-                          {ownerLabel(chat, user)}
-                        </span>
+                        {chat.assistantName ? (
+                          <>
+                            <Icon name="bot" className="size-4 opacity-60" />
+                            <span className="max-w-[120px] truncate">
+                              {chat.assistantName}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <AccountTypeIcon accountType={chat.accountType} />
+                            <span className="max-w-[120px] truncate">
+                              <ChatOwnerLabel
+                                members={membersData?.members}
+                                chat={chat}
+                                currentUser={user}
+                                accountEmail={personalAccountEmail(chat)}
+                              />
+                            </span>
+                          </>
+                        )}
                       </span>
                       {source && (
                         <span className="flex items-center gap-1.5">
                           <HookSourceIcon source={source} className="size-4" />
-                          {source}
+                          {formatPlatform(source)}
                         </span>
                       )}
                       <span className="flex items-center gap-1.5">

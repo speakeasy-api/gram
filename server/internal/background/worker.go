@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
@@ -148,9 +149,12 @@ func ForDeploymentProcessing(
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
 		Publishers: &Publishers{
-			PresidioAnalysis:    gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
-			GitleaksAnalysis:    gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
-			CustomRulesAnalysis: gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+			PresidioAnalysis:        gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
+			GitleaksAnalysis:        gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
+			PromptInjectionAnalysis: gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
+			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
+			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
 		},
 	}
 }
@@ -268,6 +272,11 @@ func NewTemporalWorker(
 		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
 	})
 
+	skillEfficacyWorker := worker.New(env.Client(), SkillEfficacyTaskQueue(env.Queue()), worker.Options{
+		Interceptors:                       workerInterceptors,
+		MaxConcurrentActivityExecutionSize: perPodSkillEfficacyPublishConcurrency,
+	})
+
 	// The CEL engine is immutable + thread-safe; build one for this worker's
 	// risk activities and pass it down. Construction is deterministic and only
 	// fails on a malformed descriptor (a bug caught by tests), so log and carry
@@ -335,6 +344,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
+	temporalWorker.RegisterActivity(activities.MaybeSendOpenRouterCreditsAlerts)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
@@ -360,6 +370,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
 	temporalWorker.RegisterActivity(activities.MarkMessagesAnalyzed)
 	temporalWorker.RegisterActivity(activities.ReconcileExclusion)
+	temporalWorker.RegisterActivity(activities.ReconcileSkillObservations)
+	temporalWorker.RegisterActivity(activities.SyncSkillSessionVersions)
+	temporalWorker.RegisterActivity(activities.ListProjectsWithPendingSkillObservations)
 	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
@@ -388,6 +401,15 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
+	// Skill efficacy activities — the database steps run on the main queue and
+	// only the judged publication goes to the dedicated worker.
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.ReserveSkillEfficacyEvaluations)
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.LoadReservedSkillEfficacyEvaluations)
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.ListSkillEfficacyProjects)
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.ResetStaleSkillEfficacyReservations)
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.SignalSkillEfficacyCoordinator)
+	skillEfficacyWorker.RegisterActivity(activities.skillEfficacyScorer.PublishSkillEfficacyBatch)
 
 	// AI integration usage syncing runs on its own worker and task queue.
 	aiUsageWorker.RegisterActivity(activities.PollAIData)
@@ -422,6 +444,8 @@ func NewTemporalWorker(
 	// Risk analysis coordinator workflow
 	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
+	temporalWorker.RegisterWorkflow(ReconcileSkillObservationsWorkflow)
+	temporalWorker.RegisterWorkflow(SkillObservationReconciliationSweepWorkflow)
 	temporalWorker.RegisterWorkflow(RiskPolicyCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
@@ -444,6 +468,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
+	// Skill efficacy workflows
+	temporalWorker.RegisterWorkflow(SkillEfficacyCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -507,13 +534,21 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "failed to add staged telemetry sweep schedule", attr.SlogError(err))
 	}
 
+	if err := AddSkillObservationReconciliationSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add skill observation reconciliation schedule", attr.SlogError(err))
+	}
+
+	if err := AddSkillEfficacySweepSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add skill efficacy sweep schedule", attr.SlogError(err))
+	}
+
 	if opts.PluginPublisher != nil {
 		if err := AddPluginGeneratorRolloutSchedule(context.Background(), env); err != nil {
 			logger.ErrorContext(context.Background(), "failed to add plugin generator rollout schedule", attr.SlogError(err))
 		}
 	}
 
-	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker}
+	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker, skillEfficacy: skillEfficacyWorker}
 }
 
 // Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
@@ -530,11 +565,21 @@ func AIUsagePollerTaskQueue(mainQueue tenv.TaskQueueName) string {
 	return string(mainQueue) + "-ai-integration-usage"
 }
 
+// Fleet-wide cap on in-flight skill efficacy publications per worker pod. One
+// publication judges a whole reserved batch sequentially, so this is the number
+// of concurrent judge conversations a pod can hold open.
+const perPodSkillEfficacyPublishConcurrency = 5
+
+func SkillEfficacyTaskQueue(mainQueue tenv.TaskQueueName) string {
+	return string(mainQueue) + "-skill-efficacy"
+}
+
 // Workers bundles the main and dedicated Temporal workers.
 type Workers struct {
-	main         worker.Worker
-	riskAnalysis worker.Worker
-	aiUsage      worker.Worker
+	main          worker.Worker
+	riskAnalysis  worker.Worker
+	aiUsage       worker.Worker
+	skillEfficacy worker.Worker
 }
 
 // Run starts dedicated workers, then blocks running the main worker until
@@ -549,6 +594,11 @@ func (w *Workers) Run(interruptCh <-chan any) error {
 		return fmt.Errorf("start ai integration usage worker: %w", err)
 	}
 	defer w.aiUsage.Stop()
+
+	if err := w.skillEfficacy.Start(); err != nil {
+		return fmt.Errorf("start skill efficacy worker: %w", err)
+	}
+	defer w.skillEfficacy.Stop()
 
 	if err := w.main.Run(interruptCh); err != nil {
 		return fmt.Errorf("run main worker: %w", err)
@@ -570,10 +620,17 @@ func (w *Workers) Start() error {
 		w.main.Stop()
 		return fmt.Errorf("start ai integration usage worker: %w", err)
 	}
+	if err := w.skillEfficacy.Start(); err != nil {
+		w.aiUsage.Stop()
+		w.riskAnalysis.Stop()
+		w.main.Stop()
+		return fmt.Errorf("start skill efficacy worker: %w", err)
+	}
 	return nil
 }
 
 func (w *Workers) Stop() {
+	w.skillEfficacy.Stop()
 	w.aiUsage.Stop()
 	w.riskAnalysis.Stop()
 	w.main.Stop()

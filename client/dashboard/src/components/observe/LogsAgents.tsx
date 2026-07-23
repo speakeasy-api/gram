@@ -2,6 +2,7 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
+import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
@@ -644,13 +645,10 @@ function AgentSessionsPageContent({
   if (isLogsDisabled) {
     return (
       <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-xl font-semibold">Agent Sessions</h1>
-          <p className="text-muted-foreground text-sm">
-            View and debug individual agent sessions captured for organization
-            members in this project
-          </p>
-        </div>
+        <LoggingPageHeader
+          title="Agent Sessions"
+          description="View and debug individual agent sessions captured for organization members in this project"
+        />
         <div className="relative flex-1">
           <div
             className="pointer-events-none h-full select-none"
@@ -668,13 +666,10 @@ function AgentSessionsPageContent({
     <>
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <div className="shrink-0 space-y-4 px-8 py-4">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Agent Sessions</h1>
-            <p className="text-muted-foreground text-sm">
-              View and debug individual agent sessions captured for organization
-              members in this project
-            </p>
-          </div>
+          <LoggingPageHeader
+            title="Agent Sessions"
+            description="View and debug individual agent sessions captured for organization members in this project"
+          />
           {hasAssistantFilter && (
             <Badge
               variant="secondary"
@@ -701,7 +696,7 @@ function AgentSessionsPageContent({
             <Page.Toolbar.Search
               value={searchQuery}
               onChange={setSearchQuery}
-              placeholder="Search by chat ID, user ID, or title..."
+              placeholder="Search by chat ID, user ID, user name, or title..."
               debounceMs={500}
             />
             <Page.Toolbar.Filters

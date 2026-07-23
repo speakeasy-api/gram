@@ -1663,6 +1663,33 @@ function generateChatUUID(chatNumber: number): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
+// $/M-token prices as [input, output, cache read, cache write]. The default is
+// the rough blended Claude rate ($3/$15/$0.30/$3.75) every seeded cohort prices
+// usage at so cost charts are non-zero; the cost-history block passes per-model
+// rates (HISTORY_PRICING) instead.
+type UsagePricing = [number, number, number, number];
+const DEFAULT_USAGE_PRICING: UsagePricing = [3, 15, 0.3, 3.75];
+
+// Cost string for a seeded usage row, 6dp fixed like the raw gen_ai.usage.cost
+// attribute. Single home for the pricing arithmetic — cohort blocks must not
+// re-derive it inline.
+function computeUsageCost(
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens: number,
+  cacheCreationTokens: number,
+  pricing: UsagePricing = DEFAULT_USAGE_PRICING,
+): string {
+  const [pIn, pOut, pRead, pWrite] = pricing;
+  return (
+    (inputTokens * pIn +
+      outputTokens * pOut +
+      cacheReadTokens * pRead +
+      cacheCreationTokens * pWrite) /
+    1_000_000
+  ).toFixed(6);
+}
+
 // Name used to find + reset the seeded detection policy on re-runs. The id is
 // DB-generated (not hardcoded) so re-seeding into a freshly recreated project
 // can't collide on a global primary key and silently skip policy creation.
@@ -2547,8 +2574,8 @@ async function seedPersonalAccounts(init: {
   // materialize into the like-named columns, so usage dashboards can split team
   // vs personal. user.id is the owning employee (matching the identity
   // enrichment), so personal usage rolls up under the employee. Idempotent via
-  // the targeted DELETE on the usage URNs (which observability seeding, running
-  // first, doesn't use).
+  // the targeted DELETE on the usage URNs scoped to this phase's deterministic
+  // session ids (observability seeding emits rows with the same URNs).
   const USAGE_URN: Record<string, string> = {
     anthropic: "claude-code:usage:metrics",
     openai: "codex:usage:metrics",
@@ -2561,6 +2588,7 @@ async function seedPersonalAccounts(init: {
   };
   const EVENTS_PER_ACCOUNT = 8;
   const chRows: string[] = [];
+  const usageSessionIds: string[] = [];
   accounts.forEach((acct, acctIdx) => {
     const models =
       MODELS[acct.provider as Personal["provider"]] ?? MODELS.anthropic;
@@ -2573,12 +2601,11 @@ async function seedPersonalAccounts(init: {
       const timeNano = BigInt(eventTime.getTime()) * BigInt(1000000);
       const traceId = crypto.randomBytes(16).toString("hex");
       const sessionId = seedUUID(`sess:${acct.id}:${k}`);
+      usageSessionIds.push(sessionId);
       const inputTokens = 1200 + ((acctIdx * 7 + k * 53) % 5000);
       const outputTokens = 300 + ((acctIdx * 11 + k * 29) % 1800);
       const totalTokens = inputTokens + outputTokens;
-      const cost = ((inputTokens * 3 + outputTokens * 15) / 1_000_000).toFixed(
-        6,
-      );
+      const cost = computeUsageCost(inputTokens, outputTokens, 0, 0);
       const attrs = `{"gram.provider": "${acct.provider}", "gram.account_type": "${acct.type}", "gram.external_org_id": "${acct.externalOrgId}", "gram.device_id": "${acct.device}", "gen_ai.conversation.id": "${sessionId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${acct.provider}", "gram.resource.urn": "${urn}", "gram.project.id": "${projectId}", "user.id": "${acct.ownerUserId}", "gram.hook.source": "${svc}"}`;
       chRows.push(
         `(${timeNano}, ${timeNano}, 'INFO', '${acct.type} account usage', '${traceId}', '${attrs}', '{"service.name": "${svc}"}', '${projectId}', '${urn}', '${svc}', '${sessionId}')`,
@@ -2645,19 +2672,37 @@ async function seedPersonalAccounts(init: {
     }
   });
 
-  // Idempotency: clear every provider's usage URN (derived from USAGE_URN so new
-  // providers like cursor are covered automatically) and the prior tool-call
-  // traces (by their deterministic chat ids) before re-inserting.
+  // Idempotency: clear this phase's prior rows (usage rows + tool-call traces,
+  // both keyed by their deterministic chat ids) before re-inserting. The usage
+  // delete must ALSO match the chat id, not just the URN: observability
+  // seeding emits codex/cursor \${surface}:usage:metrics rows too (its
+  // agent-session history), and an unscoped URN delete silently clobbered
+  // those after their aggregates were already backfilled, leaving the summary
+  // tables inconsistent with the raw rows.
   const usageUrnList = Object.values(USAGE_URN)
     .map((urn) => `'${urn}'`)
     .join(", ");
+  const usageSessionIdList = usageSessionIds.map((id) => `'${id}'`).join(", ");
   const toolSessionIdList = toolSessionIds.map((id) => `'${id}'`).join(", ");
+  // This phase runs after seedObservabilityData's chat_session_summaries
+  // backfill, so the summary rows for exactly this phase's chats are rebuilt
+  // here. The summary DELETE must run BEFORE the telemetry INSERT: rows with
+  // event times past the MV cutoff are summarized by the MV at insert time,
+  // and a delete placed after the insert would wipe those fresh rows with
+  // nothing to restore them — the scoped backfill below covers only
+  // pre-cutoff rows (an unscoped re-backfill would double the
+  // already-aggregated chats).
+  const personalChatIdList = [...usageSessionIds, ...toolSessionIds]
+    .map((id) => `'${id}'`)
+    .join(", ");
   const chSQL = `
     SET mutations_sync = 1;
-    ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}' AND gram_urn IN (${usageUrnList});
+    ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}' AND gram_urn IN (${usageUrnList}) AND gram_chat_id IN (${usageSessionIdList});
     ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}' AND gram_chat_id IN (${toolSessionIdList});
+    ALTER TABLE chat_session_summaries DELETE WHERE gram_project_id = '${projectId}' AND chat_id IN (${personalChatIdList});
     INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chRows.concat(toolRows).join(",\n")};
+    ${chatSessionBackfillSQL(projectId, "telemetry_logs", `time_unix_nano < chat_session_cutoff_unix_nano AND chat_id IN (${personalChatIdList})`)}
   `;
 
   try {
@@ -3366,15 +3411,12 @@ async function seedObservabilityData(init: {
     const cacheCreationTokens = 1_000 + Math.floor(Math.random() * 15_000);
     const totalTokens =
       inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-    // Rough blended prices ($3/M input, $15/M output, $0.30/M cache read,
-    // $3.75/M cache write) so cost charts are non-zero.
-    const cost = (
-      (inputTokens * 3 +
-        outputTokens * 15 +
-        cacheReadTokens * 0.3 +
-        cacheCreationTokens * 3.75) /
-      1_000_000
-    ).toFixed(6);
+    const cost = computeUsageCost(
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+    );
 
     // Stamp account_type + provider (the new telemetry.query dimensions) so the
     // cost/token/chat breakdowns on /costs and /insights are drillable by them.
@@ -3438,16 +3480,125 @@ async function seedObservabilityData(init: {
       const cacheCreationTokens = Math.floor(Math.random() * 3_000);
       const totalTokens =
         inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-      const cost = (
-        (inputTokens * 3 +
-          outputTokens * 15 +
-          cacheReadTokens * 0.3 +
-          cacheCreationTokens * 3.75) /
-        1_000_000
-      ).toFixed(6);
+      const cost = computeUsageCost(
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
+      );
 
       chInserts.push(
         `(${timeNano}, ${timeNano}, 'INFO', 'Chat completion (OTEL forwarded)', '${traceId}', '{"gen_ai.conversation.id": "${chatId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.cache_read.input_tokens": ${cacheReadTokens}, "gen_ai.usage.cache_creation.input_tokens": ${cacheCreationTokens}, "gen_ai.usage.total_tokens": ${totalTokens}, "gen_ai.usage.cost": ${cost}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}"}', '{}', '${projectId}', 'agents:chat:completion', 'otel-collector', '${chatId}')`,
+      );
+    }
+  }
+
+  // ── DNO-425 regression slice: uniform-team division with unclassified mix ─
+  // The main-loop users spread personal + team + unclassified across every
+  // division, so each drilled division carries ≥2 distinct non-empty
+  // account_type values and the Account Type breakdown always survives
+  // pruning. This cohort reproduces the shape DNO-425 hid: a division whose
+  // spend mixes ONLY team/anthropic with unclassified ('') rows — no personal
+  // accounts — nested over a same-named department (the reported IDP shape,
+  // giving the Engineering / Engineering breadcrumb). Drilling into it must
+  // still offer the Account Type axis (Team + "(unset)"), which requires the
+  // server to surface the '' bucket in dimension_values for account_type.
+  const NESTED_ENG_NAME = "Engineering";
+  const NESTED_ENG_USERS = 6;
+  const NESTED_ENG_SESSIONS_PER_USER = 5;
+  for (let u = 0; u < NESTED_ENG_USERS; u++) {
+    const userAttrs =
+      `"user.email": "eng-div-user${u}@example.com", ` +
+      `"user.attributes.department_name": "${NESTED_ENG_NAME}", ` +
+      `"user.attributes.division_name": "${NESTED_ENG_NAME}", ` +
+      `"user.attributes.job_title": "${JOB_TITLES[u % JOB_TITLES.length]}", ` +
+      `"user.attributes.employee_type": "full_time", ` +
+      `"user.attributes.cost_center_name": "CC-1000", ` +
+      `"user.roles": ["developer"], "user.groups": ["platform"], ` +
+      `"gram.hook.source": "claude-code"`;
+    for (let s = 0; s < NESTED_ENG_SESSIONS_PER_USER; s++) {
+      const n = u * NESTED_ENG_SESSIONS_PER_USER + s;
+      const chatId = generateChatUUID(200_000 + n);
+      // Everything below is deterministic so the slice's numbers — and the
+      // account mix that makes it a regression fixture — are stable across
+      // re-seeds: every third session unclassified, the rest team.
+      const sessionTime = new Date(
+        now - (n % DAYS_BACK) * msPerDay - u * 3_600_000,
+      );
+      const timeNano = BigInt(sessionTime.getTime()) * BigInt(1_000_000);
+      const traceId = crypto.randomBytes(16).toString("hex");
+      const unclassified = n % 3 === 2;
+      const acctFrag = unclassified
+        ? ""
+        : `"gram.account_type": "team", "gram.provider": "anthropic", `;
+      const inputTokens = 1_000 + (n % 5) * 700;
+      const outputTokens = 300 + (n % 4) * 250;
+      const cacheReadTokens = 8_000 + (n % 6) * 4_000;
+      const cacheCreationTokens = 5_000 + (n % 3) * 1_500;
+      const cost = computeUsageCost(
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
+      );
+
+      // Claude api_request shape (claude-code:otel:logs) — the sole Claude
+      // usage source the provenance-first attribute_metrics MV admits for
+      // post-cutoff rows; the pre-cutoff backfill accepts it too, so the whole
+      // window aggregates regardless of where the cutoff falls.
+      chInserts.push(
+        `(${timeNano}, ${timeNano}, 'INFO', 'claude_code.api_request', '${traceId}', '{${acctFrag}"event.name": "api_request", "prompt.id": "prompt-dno425-${n}", "gen_ai.conversation.id": "${chatId}", "model": "claude-sonnet-4-6", "input_tokens": ${inputTokens}, "output_tokens": ${outputTokens}, "cache_read_tokens": ${cacheReadTokens}, "cache_creation_tokens": ${cacheCreationTokens}, "cost_usd": ${cost}, "gram.project.id": "${projectId}", ${userAttrs}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:otel:logs', 'claude-code', '${chatId}')`,
+      );
+    }
+  }
+
+  // ── Value + "(unset)" division: single named department plus dept-less spend
+  // The complementary regression fixture: a division ("Platform Services")
+  // where half the users sit in one department and the rest have NO department
+  // attribute at all. A Department breakdown of this slice renders TWO rows —
+  // "Infrastructure" and the drillable "(unset)" bucket — so the Department
+  // axis must stay offered and be the drill landing here (unlike the
+  // uniform-department cohort above, which skips it). Exercises the server's
+  // "(unset)"-aware dimension_values for org dims (the '' bucket must be
+  // counted, not filtered).
+  const UNSET_DIV_NAME = "Platform Services";
+  const UNSET_DIV_USERS = 4;
+  const UNSET_DIV_SESSIONS_PER_USER = 4;
+  for (let u = 0; u < UNSET_DIV_USERS; u++) {
+    // Users 0-1 belong to Infrastructure; users 2-3 carry no department.
+    const deptFrag =
+      u < 2 ? `"user.attributes.department_name": "Infrastructure", ` : "";
+    const userAttrs =
+      `"user.email": "platform-user${u}@example.com", ` +
+      deptFrag +
+      `"user.attributes.division_name": "${UNSET_DIV_NAME}", ` +
+      `"user.attributes.job_title": "${JOB_TITLES[u % JOB_TITLES.length]}", ` +
+      `"user.attributes.employee_type": "full_time", ` +
+      `"user.attributes.cost_center_name": "CC-2000", ` +
+      `"user.roles": ["developer"], "user.groups": ["platform"], ` +
+      `"gram.hook.source": "claude-code"`;
+    for (let s = 0; s < UNSET_DIV_SESSIONS_PER_USER; s++) {
+      const n = u * UNSET_DIV_SESSIONS_PER_USER + s;
+      const chatId = generateChatUUID(210_000 + n);
+      const sessionTime = new Date(
+        now - (n % DAYS_BACK) * msPerDay - u * 3_600_000,
+      );
+      const timeNano = BigInt(sessionTime.getTime()) * BigInt(1_000_000);
+      const traceId = crypto.randomBytes(16).toString("hex");
+      const inputTokens = 1_200 + (n % 4) * 600;
+      const outputTokens = 400 + (n % 3) * 300;
+      const cacheReadTokens = 10_000 + (n % 5) * 3_000;
+      const cacheCreationTokens = 4_000 + (n % 3) * 2_000;
+      const cost = computeUsageCost(
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
+      );
+
+      // Same Claude api_request shape as the cohort above (see there).
+      chInserts.push(
+        `(${timeNano}, ${timeNano}, 'INFO', 'claude_code.api_request', '${traceId}', '{"gram.account_type": "team", "gram.provider": "anthropic", "event.name": "api_request", "prompt.id": "prompt-unsetdiv-${n}", "gen_ai.conversation.id": "${chatId}", "model": "claude-sonnet-4-6", "input_tokens": ${inputTokens}, "output_tokens": ${outputTokens}, "cache_read_tokens": ${cacheReadTokens}, "cache_creation_tokens": ${cacheCreationTokens}, "cost_usd": ${cost}, "gram.project.id": "${projectId}", ${userAttrs}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:otel:logs', 'claude-code', '${chatId}')`,
       );
     }
   }
@@ -3478,8 +3629,10 @@ async function seedObservabilityData(init: {
   }
 
   // $/M-token prices per model: [input, output, cache read, cache write].
-  const HISTORY_PRICING: Record<string, [number, number, number, number]> = {
-    "claude-sonnet-4-6": [3, 15, 0.3, 3.75],
+  // Sonnet is priced at the shared blended default so the two paths (per-model
+  // history rows and default-priced cohorts) can never drift apart.
+  const HISTORY_PRICING: Record<string, UsagePricing> = {
+    "claude-sonnet-4-6": DEFAULT_USAGE_PRICING,
     "claude-haiku-4-5": [1, 5, 0.1, 1.25],
     "gpt-4": [30, 60, 0, 0],
     "gpt-4o-mini": [0.15, 0.6, 0.075, 0],
@@ -3501,6 +3654,15 @@ async function seedObservabilityData(init: {
     "pr-writer",
     "db-migrate",
     "spec-writer",
+  ];
+  // Device hostnames for the identity-less slice: the user breakdown falls
+  // back to gram.hook.hostname when a session has no email, so these surface
+  // as per-device rows between the named users and the pooled bucket.
+  const ANON_HOSTNAMES = [
+    "build-runner-01",
+    "build-runner-02",
+    "ci-batch-runner",
+    "shared-dev-box.local",
   ];
 
   // telemetry_logs carries a 90-day TTL that ClickHouse applies at INSERT
@@ -3559,32 +3721,47 @@ async function seedObservabilityData(init: {
         BigInt(dayStartMs + Math.floor((8 + r() * 10) * 3_600_000)) *
         BigInt(1_000_000);
 
+      // A slice of sessions comes from devices without an enrolled identity
+      // (no user.email / directory attributes — only the consuming surface):
+      // the company-credential population, since Claude Code on an API
+      // key/gateway emits no user identity (POC-282). Heavier than an
+      // attributed session on average so the pooled bucket — rendered as
+      // "Team-wide API Usage" on the user breakdown, and feeding the "tokens
+      // without user attribution" metric — ranks among the top spenders,
+      // mirroring how a gateway-authenticated org looks in production.
+      const anonymous = r() < 0.12;
+      const anonBoost = anonymous ? 4 : 1;
+      // Most identity-less sessions still ran on a device with the Gram hooks
+      // installed, so their rows carry gram.hook.hostname and the user
+      // breakdown surfaces them per device; the rest have no hostname either
+      // and pool into the "Team-wide API Usage" bucket.
+      const anonHostname =
+        anonymous && r() < 0.7
+          ? ANON_HOSTNAMES[Math.floor(r() * ANON_HOSTNAMES.length)]
+          : null;
+
       // Cache-heavy token mix (agent sessions replay large cached prompts);
       // ~15% are light API-style calls with little cache traffic.
       const cacheDiv = r() < 0.15 ? 10 : 1;
-      const inputTokens = 800 + Math.floor(r() * 7_000);
-      const outputTokens = 300 + Math.floor(r() * 3_500);
-      const cacheReadTokens = Math.floor((8_000 + r() * 80_000) / cacheDiv);
-      const cacheCreationTokens = Math.floor((1_500 + r() * 18_000) / cacheDiv);
+      const inputTokens = (800 + Math.floor(r() * 7_000)) * anonBoost;
+      const outputTokens = (300 + Math.floor(r() * 3_500)) * anonBoost;
+      const cacheReadTokens =
+        Math.floor((8_000 + r() * 80_000) / cacheDiv) * anonBoost;
+      const cacheCreationTokens =
+        Math.floor((1_500 + r() * 18_000) / cacheDiv) * anonBoost;
       const totalTokens =
         inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
-      const [pIn, pOut, pRead, pWrite] = HISTORY_PRICING[model] ?? [
-        3, 15, 0.3, 3.75,
-      ];
-      const cost = (
-        (inputTokens * pIn +
-          outputTokens * pOut +
-          cacheReadTokens * pRead +
-          cacheCreationTokens * pWrite) /
-        1_000_000
-      ).toFixed(6);
+      const cost = computeUsageCost(
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheCreationTokens,
+        HISTORY_PRICING[model],
+      );
 
-      // A small slice of sessions comes from devices without an enrolled
-      // identity (no user.email / directory attributes — only the consuming
-      // surface), populating the "tokens without user attribution" metric.
-      const anonymous = r() < 0.06;
       const uaFrag = anonymous
-        ? `"gram.hook.source": "${hookSource}"`
+        ? `"gram.hook.source": "${hookSource}"` +
+          (anonHostname ? `, "gram.hook.hostname": "${anonHostname}"` : "")
         : userAttrsJSONFragment(userIndex, hookSource);
       const acctFrag = acct.accountType
         ? `"gram.account_type": "${acct.accountType}", "gram.provider": "${acct.provider}", `
@@ -3652,22 +3829,19 @@ async function seedObservabilityData(init: {
           `(${timeNano + BigInt(1_000_000_000)}, ${timeNano + BigInt(1_000_000_000)}, 'INFO', 'claude_code.usage', '${traceId}', '{"gen_ai.conversation.id": "${chatId}", "gen_ai.usage.total_tokens": ${totalTokens}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:usage/tokens', 'claude-code', '${chatId}')`,
         );
 
-        const [pIn, pOut, pRead, pWrite] = HISTORY_PRICING[claudeModel] ?? [
-          3, 15, 0.3, 3.75,
-        ];
         attributions.forEach((attrFrag, i) => {
           const f = fractions[i];
           const rowIn = Math.round(inputTokens * f);
           const rowOut = Math.round(outputTokens * f);
           const rowRead = Math.round(cacheReadTokens * f);
           const rowWrite = Math.round(cacheCreationTokens * f);
-          const rowCost = (
-            (rowIn * pIn +
-              rowOut * pOut +
-              rowRead * pRead +
-              rowWrite * pWrite) /
-            1_000_000
-          ).toFixed(6);
+          const rowCost = computeUsageCost(
+            rowIn,
+            rowOut,
+            rowRead,
+            rowWrite,
+            HISTORY_PRICING[claudeModel],
+          );
           const rowNano = timeNano + BigInt((2 + i) * 1_000_000_000);
           sessionRows.push(
             `(${rowNano}, ${rowNano}, 'INFO', 'claude_code.api_request', '${traceId}', '{${acctFrag}"event.name": "api_request", "prompt.id": "prompt-${dayNum}-${s}-${i}", "gen_ai.conversation.id": "${chatId}", "model": "${claudeModel}", "input_tokens": ${rowIn}, "output_tokens": ${rowOut}, "cache_read_tokens": ${rowRead}, "cache_creation_tokens": ${rowWrite}, "cost_usd": ${rowCost}, ${attrFrag}"gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", ${uaFrag}}', '{"service.name": "claude-code"}', '${projectId}', 'claude-code:otel:logs', 'claude-code', '${chatId}')`,
@@ -4171,10 +4345,12 @@ async function seedObservabilityData(init: {
     ALTER TABLE metrics_summaries DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE chat_token_summaries DELETE WHERE gram_project_id = '${projectId}';
+    ALTER TABLE chat_session_summaries DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE attribute_keys DELETE WHERE gram_project_id = '${projectId}';
     INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chInserts.join(",\n")};
     ${attributeMetricsBackfillSQL(projectId, "telemetry_logs", `time_unix_nano >= ${rawTtlBoundaryNano} AND time_unix_nano < attribute_metrics_cutoff_unix_nano`)}
+    ${chatSessionBackfillSQL(projectId, "telemetry_logs", `time_unix_nano < chat_session_cutoff_unix_nano`)}
     ${scratchBackfillSQL}
   `;
 
@@ -4209,7 +4385,7 @@ function attributeMetricsBackfillSQL(
   timePredicate: string,
 ): string {
   return `
-    INSERT INTO attribute_metrics_summaries (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, total_chats, total_input_tokens, total_output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, total_cost, total_tool_calls, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name)
+    INSERT INTO attribute_metrics_summaries (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups, total_chats, total_input_tokens, total_output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, total_cost, total_tool_calls, account_type, provider, billing_mode, query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name, hook_hostname)
     WITH
         toUnixTimestamp64Nano(toDateTime64('2026-07-14 00:00:00', 9, 'UTC')) AS attribute_metrics_cutoff_unix_nano,
         (
@@ -4269,7 +4445,8 @@ function attributeMetricsBackfillSQL(
         if(is_claude_api_request, toString(attributes.skill.name), '') AS skill_name,
         if(is_claude_api_request, toString(attributes.agent.name), '') AS agent_name,
         if(is_claude_api_request, toString(attributes.mcp_server.name), '') AS mcp_server_name,
-        if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name
+        if(is_claude_api_request, toString(attributes.mcp_tool.name), '') AS mcp_tool_name,
+        toString(attributes.gram.hook.hostname) AS hook_hostname
     FROM ${sourceTable}
     WHERE gram_project_id = '${projectId}'
       AND (${timePredicate})
@@ -4294,7 +4471,104 @@ function attributeMetricsBackfillSQL(
         skill_name,
         agent_name,
         mcp_server_name,
-        mcp_tool_name;
+        mcp_tool_name,
+        hook_hostname;
+  `;
+}
+
+// Backfills chat_session_summaries for telemetry rows older than the MV's
+// live-ingestion cutoff (chat_session_summaries_mv skips rows before
+// 2026-07-21 22:00 UTC). Unlike attributeMetricsBackfillSQL this mirrors the CURRENT MV
+// rules exactly — production's out-of-band backfill for this table uses the
+// same provenance-first predicates, so seeded history stays an honest replica.
+// No scratch-clone (pre-TTL) variant: chat_session_summaries carries the same
+// 90-day TTL as raw telemetry_logs, so older rows would be dropped at insert.
+// `sourceTable` must be telemetry_logs or a clone of it (relies on its
+// materialized columns); `timePredicate` may reference
+// chat_session_cutoff_unix_nano from the WITH clause.
+function chatSessionBackfillSQL(
+  projectId: string,
+  sourceTable: string,
+  timePredicate: string,
+): string {
+  return `
+    INSERT INTO chat_session_summaries (gram_project_id, time_bucket, chat_id, session_user_email, session_hook_source, session_model, start_time_unix_nano, end_time_unix_nano, message_count, tool_call_count, failed_tool_call_count, total_input_tokens, total_output_tokens, total_tokens, cache_read_input_tokens, cache_creation_input_tokens, total_cost, department_names, job_titles, employee_types, division_names, cost_center_names, emails, hostnames, models, hook_sources, account_types, providers, billing_modes, roles, groups, attribution_tuples)
+    WITH
+        toUnixTimestamp64Nano(toDateTime64('2026-07-21 22:00:00', 9, 'UTC')) AS chat_session_cutoff_unix_nano,
+        (gram_urn = 'claude-code:otel:logs') AS is_claude_otel_row,
+        (
+            is_claude_otel_row
+            AND chat_id != ''
+            AND toString(attributes.prompt.id) != ''
+            AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
+        ) AS is_claude_api_request,
+        (
+            is_claude_otel_row
+            AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
+        ) AS is_claude_tool_result,
+        (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
+        (
+            hook_source IN ('codex', 'cursor')
+            AND toString(attributes.gram.tool.name) != ''
+            AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
+            AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
+        ) AS is_agent_tool_call,
+        (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
+        (is_claude_api_request OR is_agent_usage_row) AS is_usage_row,
+        (
+            (is_claude_tool_result AND toString(attributes.success) = 'false')
+            OR (is_agent_tool_call AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
+        ) AS is_failed_tool_call,
+        multiIf(
+            toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
+            toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
+            toString(id)
+        ) AS tool_call_dedup_id,
+        if(is_claude_api_request, toString(attributes.prompt.id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+        multiIf(
+            is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
+            is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
+            toString(attributes.gen_ai.response.model)
+        ) AS effective_model
+    SELECT
+        gram_project_id,
+        toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS time_bucket,
+        chat_id,
+        max(user_email) AS session_user_email,
+        max(hook_source) AS session_hook_source,
+        argMaxIfState(effective_model, time_unix_nano, effective_model != '') AS session_model,
+        min(time_unix_nano) AS start_time_unix_nano,
+        max(time_unix_nano) AS end_time_unix_nano,
+        uniqExactIfState(session_message_id, session_message_id != '') AS message_count,
+        uniqExactIfState(tool_call_dedup_id, is_counted_tool_call) AS tool_call_count,
+        countIf(is_failed_tool_call) AS failed_tool_call_count,
+        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
+        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
+        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
+        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
+        sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS cache_creation_input_tokens,
+        sumIf(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_usage_row) AS total_cost,
+        groupUniqArray(toString(attributes.user.attributes.department_name)) AS department_names,
+        groupUniqArray(toString(attributes.user.attributes.job_title)) AS job_titles,
+        groupUniqArray(toString(attributes.user.attributes.employee_type)) AS employee_types,
+        groupUniqArray(toString(attributes.user.attributes.division_name)) AS division_names,
+        groupUniqArray(toString(attributes.user.attributes.cost_center_name)) AS cost_center_names,
+        groupUniqArray(if(user_email != '', user_email, toString(attributes.gram.hook.hostname))) AS emails,
+        groupUniqArray(toString(attributes.gram.hook.hostname)) AS hostnames,
+        groupUniqArray(effective_model) AS models,
+        groupUniqArray(hook_source) AS hook_sources,
+        groupUniqArray(account_type) AS account_types,
+        groupUniqArray(provider) AS providers,
+        groupUniqArray(billing_mode) AS billing_modes,
+        groupUniqArrayArray(arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))) AS roles,
+        groupUniqArrayArray(arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))) AS groups,
+        groupUniqArrayIf(tuple(toString(attributes.query_source), toString(attributes.skill.name), toString(attributes.agent.name), toString(attributes.mcp_server.name), toString(attributes.mcp_tool.name)), is_claude_api_request) AS attribution_tuples
+    FROM ${sourceTable}
+    WHERE gram_project_id = '${projectId}'
+      AND (${timePredicate})
+      AND chat_id != ''
+      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
+    GROUP BY gram_project_id, time_bucket, chat_id;
   `;
 }
 

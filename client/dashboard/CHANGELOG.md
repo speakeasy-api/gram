@@ -1,5 +1,75 @@
 # dashboard
 
+## 0.93.0
+
+### Minor Changes
+
+- c08521f: Expose per-schedule state for AI integrations and rebuild the dashboard page around it. New aiIntegrations.listSchedules, setScheduleEnabled, and retrySchedule endpoints surface each sync schedule's status (pending/success/failed/auto-paused/disabled), last error, and timestamps, backed by a new user-controlled disabled_at pause that is independent of auto-pause. Each schedule also carries a backend-owned product-level stream identifier and kind (e.g. claude.chat.message events, cursor.usage and claude.chat.cost.usd metrics). The AI Integrations dashboard section moves to a dedicated page with one expandable row per provider connection showing its event and metric streams, each with live status, inline errors, retry, an independent pause toggle, and a link to where the imported data lands.
+- 8567fb6: Promote OpenAI Codex to a supported platform in the onboarding "Instrument agent platforms" step. The tile now covers both the Codex CLI and the Codex desktop app, and its walkthrough documents the two required steps: deploying the Speakeasy device agent via MDM (linking out to the device agent setup page) and forwarding Codex OpenTelemetry logs to Speakeasy. Also refreshes the "coming soon" list (adds opencode, Devin, and Mistral; drops AWS Bedrock) ahead of those integrations landing, and makes the onboarding stepper's step numbers clickable to preview any step (forward or back) without advancing onboarding progress.
+- 572392a: Restructure the costs explorer around a stacked cost-over-time chart and one unified control bar. The chart (the billing token-usage panel generalized into a shared `StackedTimeSeriesPanel`) stacks daily spend by the current breakdown axis, with weekly/monthly bars for week-over-week comparison and click/drag drill-down into a date range. The search box, breakdown axis track, CSV export, a new Reset button, the dataset selector, and the date-range picker now form a two-row control bar under the headline stats that pins to the top of the page when scrolled past. Re-pivoting or drilling updates the page in place instead of flashing back to skeletons. The billing page renders through the same shared chart with no visual change, and `Page.Toolbar` gains multi-row (`Row`/`Leading`) composition.
+- ccdc7f4: Add project skill efficacy, activation, attributed session cost, estimated savings, trends, and scored-session insights.
+- a07dcff: Make the Shadow MCP detector mutually exclusive with other built-in policy detectors in create and edit flows, with disabled-switch tooltips explaining how to change the selection.
+- e980481: Add atomic Shadow MCP policy setup with project inventory URL selection, searchable modal review, and URL allow-rule reconciliation.
+- fd17ed6: Split the tool-usage summary into per-panel endpoints so the MCP & Tools dashboard streams in each card as its data arrives instead of blocking on the slowest aggregate (INC-417).
+
+  `getToolUsageSummary` now has seven sibling endpoints — `getToolUsageTotals`, `getToolUsageTargets`, `getToolUsageUsers`, `getToolUsageTargetTimeSeries`, `getToolUsageUserTimeSeries`, `getToolUsageUsersByTarget`, and `getToolUsageTargetToolBreakdown` — each returning one section of the summary from the same shared query helpers and filter payload. The aggregate endpoint is unchanged for the platform agent tool that wants everything in one call. The MCP & Tools page fetches the seven sections in parallel (the cheap totals query gates the page shell; each panel shows its own loading skeleton and, if its section query fails, its own error state rather than a misleading empty chart), and the MCP overview "Top users" table now fetches only the users section it needs.
+
+### Patch Changes
+
+- 3ca88b2: Add organizationRemoteSessionIssuers.migrate API and UI to consolidate two remote identity providers that point at the same upstream authorization server, re-pointing the source's clients onto the target and soft-deleting the source without forcing anyone to re-authenticate
+- 3203363: Fix Claude Desktop agent sessions showing an opaque user ID instead of the user's name. The Anthropic compliance import no longer clobbers a previously resolved chat owner when a later sync activity carries no actor identity (empty strings defeated the upsert's COALESCE guard — NULL is passed instead), and connected-user email resolution is now case-insensitive on both the server and the dashboard. When a session's owner still can't be matched to an org member, the agent-sessions list and session details now show a tooltip explaining why.
+- 041e7af: feat: add Codex compliance cost polling
+- c2e07e2: Remove stale references to the retired prompt-injection ML classifier. Dashboard copy and the managed-assistant instructions now describe the LLM judge, which has been the only prompt-injection engine since the classifier and heuristics were dropped.
+- bb9aac8: Enable project assistants in the dashboard to emit Elements chart and generative UI blocks by sharing the canonical widget prompts between the client and server.
+- 96f7f73: Skill summaries now stay in sync with the current version: publishing a new version — whether recorded manually or captured from a session — updates the skill's registry summary from the manifest description, so skills captured before their contents arrived no longer show "No summary" forever. The dashboard's Add Skills dialog on the plugin page is now a multi-select that batches distributions, keeps skills without a distributable version listed but disabled with the reason and a Fix link, and the skill page's distribution banner turns red and explains what blocks distribution when a skill has no versions or none pass validation. Version badges in the version history table no longer overlap the Validity column.
+
+## 0.92.0
+
+### Minor Changes
+
+- ce5571d: Rename and edit captured skills, preserve immutable version lineage, and expose curation controls in the dashboard.
+- 7728555: Playground: tunneled MCP servers can now be selected and chatted with (behind the `gram-tunneled-mcp` flag).
+
+### Patch Changes
+
+- 792f487: Fix a crash in the policy scope traffic preview when a matched message produced no highlight spans.
+- 2d80662: Add a "What's shipped this week on the platform?" suggestion to the chat landing page and the project assistant's slash-command menu. Picking it starts a session that asks the assistant to check the changelog for the week's platform releases.
+- eacabda: Make the cost explorer's breakdown machinery treat the "(unset)" bucket as a first-class group everywhere, fixing the hidden Account Type breakdown on drilled slices that mix classified and unclassified spend (DNO-425).
+
+  Server: telemetry.query's dimension_values now keeps the '' bucket for every groupable dimension — it is the "(unset)" row a breakdown by that dimension renders, so consumers can count it. Only dimensions where '' means "not applicable" (the Claude attribution cuts and query_source, flagged in the dimension registry) still drop it. Empty role/group arrays likewise surface as the "(unset)" bucket.
+
+  Dashboard: the breakdown axis is resolved against the slice's actual group counts by one shared resolver, at drill time (using the clicked row's dimension values) and on load — a division whose spend all sits in one department lands directly on its users with no Department selector, while a division splitting into a named department plus department-less spend keeps the Department cut (previously hidden). The entity/detail query no longer depends on the axis (removing an internal resolution cycle), grouped queries wait for the resolved axis instead of fetching twice, a `?by=` naming a pinned or un-splittable dimension falls back to the level's default, and the URL is rewritten in place whenever the rendered axis diverges from `?by=` so links always reflect the view.
+
+- 8571971: Add the standard toolbar search box to the costs breakdown section, filtering the visible breakdown rows (or sessions) client-side while keeping the preset breakdown-axis controls in place.
+- afdca04: Polish the Device Agent install page: replace the distorted Linux mascot with the official Tux, add an MDM rollout recommendation, and drop the preview badges on the page title and sidebar nav item.
+- 86f8a76: Serve the project homepage's hook/agent-view metrics (Total Spend, Sessions, Top Users, Most Agent Sessions by User, Most Used Agents) from the pre-aggregated `attribute_metrics_summaries` table via `telemetry.query` instead of paginating every user through `telemetry.searchUsers` (which scanned raw `telemetry_logs`). This is the same source the Costs page uses, so the homepage and Costs figures now agree. The MCP-hosting fallback view is unchanged.
+- 1a04494: Fall back to the device hostname on the user cost breakdown when a session carries no email. The Go hooks report the machine's hostname on every event; it now rides the session cache onto Claude OTEL cost rows, and the `email` telemetry dimension groups identity-less spend per device instead of pooling it all into one bucket. Only sessions with neither email nor hostname remain under "Team-wide API Usage".
+- 6ea128d: feat: surface issuer setup documentation when creating clients. `remote_session_issuer` records now expose a `client_setup_documentation_url`, settable on create and update across the project-scoped, org-admin, and platform-admin (global) issuer surfaces. The dashboard edits it on the issuer Settings tab and shows it on the Overview tab alongside the discovered RFC 8414 `service_documentation`. Both are linked from the New Client sheet — as **Client Setup Documentation** and **Service Documentation** — so customers can set up an OAuth client with the provider themselves, owning its credentials, access, and rate limits rather than sharing a Gram-owned client. `client_setup_documentation_url` must be an absolute `http(s)` URL (validated with `urls.IsAbsoluteHTTP`, since it is rendered as a link); an empty string clears it.
+- e5800a5: Flag inactive MCP servers on the Distribute MCP listing. A new `telemetry.getMcpServerActivity` endpoint reports per-server tool-call activity, and each card/row now shows a subtle indicator when a server has never received a tool call and a warning when it has had no tool calls in the last two weeks.
+- 72855da: Normalize provider names and product-surface labels across reporting, agent sessions, tool logs, and cost views. Anthropic compliance imports now persist canonical Claude desktop/web source slugs, while historical source aliases remain filterable.
+- 223394c: Add a search bar to the plugin detail page that filters the plugin's MCP servers, assignments, and skills, with distinct empty states for "nothing added yet" vs "no search matches".
+- 0f7a061: Fix dashboard React warnings caused by nested log controls, duplicate risk-rule keys, command-palette focus restoration, and unsupported Moonshine button children.
+- 1a04494: Label the empty user bucket on cost breakdowns as "Team-wide API Usage" instead of "(unset)". Claude Code sessions authenticated with a company API key or gateway emit no user identity, so their pooled spend is the shared team account's usage, not a data gap. The label applies everywhere the user dimension renders — the cost table, the Top spenders widget (which now includes the bucket instead of hiding it), the drill-in profile, breadcrumbs, and the billing token-usage breakdown — while other dimensions keep "(unset)".
+- 1dc4aec: Upgrade recharts from v2 to v3 in the Elements chart plugins, migrating off the deprecated Cell component with no visual changes.
+
+## 0.91.1
+
+### Patch Changes
+
+- 50289f1: Show the number of active skills carried by each plugin on the Plugins page.
+
+## 0.91.0
+
+### Minor Changes
+
+- f83c87f: Manage skill distributions from the dashboard. Skills now open as a dedicated detail page with an at-a-glance sidebar, section navigation, and a plugin distribution banner for distributing the skill to plugins and revoking distributions. The plugin detail page's Skills section replaces the coming-soon placeholder with the actual list of skills the plugin carries, including add and remove controls. Skill distributions can now also be listed filtered by skill or plugin.
+
+### Patch Changes
+
+- b1e392a: Fix the plugin assignments dropdown not scrolling when it contains many users/roles. The multi-select popover is portaled inside the modal assignments sheet, so make its popover modal to restore mouse-wheel scrolling of the options list.
+- f4f4f92: Add a copy-to-clipboard button next to the plugin version badge on the plugin detail page so the version string can be copied in one click.
+- 4f4eff9: Resolve chat session owners from organization members instead of displaying opaque external user IDs.
+
 ## 0.90.0
 
 ### Minor Changes

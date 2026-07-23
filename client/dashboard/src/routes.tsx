@@ -16,6 +16,7 @@ import ChatSessions from "./pages/chatLogs/ChatLogs";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import Skills from "./pages/Skills";
 import SkillsList from "./pages/skills/SkillsList";
+import SkillDetail from "./pages/skills/SkillDetail";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
@@ -46,7 +47,6 @@ import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
-import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
 import Collections, { CollectionsRoot } from "./pages/collections/Collections";
 import CollectionDetail from "./pages/collections/CollectionDetail";
@@ -58,6 +58,7 @@ import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
+import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import {
@@ -178,12 +179,6 @@ const ROUTE_STRUCTURE = {
     url: "/register",
     component: Register,
     unauthenticated: true,
-  },
-  onboarding: {
-    title: "Onboarding",
-    url: "onboarding",
-    component: OnboardingWizard,
-    outsideMainLayout: true, // Break out of normal page structure
   },
   home: {
     title: "Home",
@@ -344,6 +339,13 @@ const ROUTE_STRUCTURE = {
     icon: "terminal",
     component: Skills,
     indexComponent: SkillsList,
+    subPages: {
+      detail: {
+        title: "Skill",
+        url: ":skillId",
+        component: SkillDetail,
+      },
+    },
   },
   mcp: {
     title: "MCP",
@@ -874,6 +876,12 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
+  aiIntegrations: {
+    title: "AI Integrations",
+    url: "ai-integrations",
+    icon: "bot",
+    component: OrgAIIntegrations,
+  },
   webhooks: {
     title: "Webhooks",
     url: "webhooks",
@@ -932,7 +940,6 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Device Agent",
     url: "device-agent",
     icon: "laptop",
-    stage: "preview",
     component: DeviceAgent,
   },
   access: {

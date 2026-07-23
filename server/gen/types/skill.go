@@ -7,8 +7,7 @@
 
 package types
 
-// An active project skill. All API reads return active skills, and archive
-// returns an empty response.
+// Skill is the result type of the skills service update method.
 type Skill struct {
 	// The skill ID.
 	ID string
@@ -16,9 +15,9 @@ type Skill struct {
 	ProjectID string
 	// The normalized project-unique skill name.
 	Name string
-	// The display name from the latest recorded manifest.
+	// The user-facing registry name.
 	DisplayName string
-	// The optional summary from the latest recorded manifest.
+	// The optional registry summary.
 	Summary *string
 	// How the skill entered the registry.
 	SourceKind string
@@ -26,9 +25,19 @@ type Skill struct {
 	Classification string
 	// The derived latest version ID, selected from immutable version creation
 	// order.
-	LatestVersionID string
+	LatestVersionID *string
 	// The number of immutable versions recorded for the skill.
 	VersionCount int64
+	// Whether the skill has at least one valid version available to distribute.
+	HasValidVersion bool
+	// When this skill was first activated.
+	FirstSeenAt *string
+	// When this skill was most recently activated.
+	LastSeenAt *string
+	// The number of reconciled activations observed for this skill.
+	SeenCount int64
+	// The active public share token, absent when the skill is not shared.
+	ShareToken *string
 	// When the skill was created.
 	CreatedAt string
 	// When the skill was last updated.

@@ -895,7 +895,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                 <div className="flex w-full items-center justify-between">
                   <div
                     className={cn(
-                      "flex items-center gap-1",
+                      "flex min-w-0 flex-1 items-center gap-1",
                       singleLine
                         ? "multiselect-singleline-scroll overflow-x-auto overflow-y-hidden"
                         : "flex-wrap",
@@ -932,9 +932,14 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                 "border-transparent text-white",
                               responsiveSettings.compactMode &&
                                 "px-1.5 py-0.5 text-xs",
+                              // Long labels truncate instead of forcing the
+                              // trigger row past the button's right edge
+                              // (DNO-552).
+                              singleLine
+                                ? "shrink-0 whitespace-nowrap"
+                                : "min-w-0 max-w-full shrink",
                               screenSize === "mobile" &&
                                 "max-w-[120px] truncate",
-                              singleLine && "shrink-0 whitespace-nowrap",
                               "[&>svg]:pointer-events-auto",
                             )}
                             style={{
@@ -948,7 +953,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                             {IconComponent && !responsiveSettings.hideIcons && (
                               <IconComponent
                                 className={cn(
-                                  "mr-2 h-4 w-4",
+                                  "mr-2 h-4 w-4 shrink-0",
                                   responsiveSettings.compactMode &&
                                     "mr-1 h-3 w-3",
                                   customStyle?.iconColor && "text-current",
@@ -958,11 +963,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                 })}
                               />
                             )}
-                            <span
-                              className={cn(
-                                screenSize === "mobile" && "truncate",
-                              )}
-                            >
+                            <span className="min-w-0 truncate">
                               {option.label}
                             </span>
                             <div
@@ -983,7 +984,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                 }
                               }}
                               aria-label={`Remove ${option.label} from selection`}
-                              className="flex h-4 w-4 cursor-pointer hover:bg-white/20 focus:ring-1 focus:ring-white/50 focus:outline-none"
+                              className="flex h-4 w-4 shrink-0 cursor-pointer hover:bg-white/20 focus:ring-1 focus:ring-white/50 focus:outline-none"
                             >
                               <XIcon
                                 className={cn(
@@ -1031,7 +1032,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                       </Badge>
                     )}
                   </div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex shrink-0 items-center justify-between">
                     <div
                       role="button"
                       tabIndex={0}

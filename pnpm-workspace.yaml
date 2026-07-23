@@ -20,12 +20,12 @@ catalog:
   "@tanstack/react-query": 5.101.1
   "@types/react": ^19.2.17
   "@types/react-dom": ^19.2.3
-  "@assistant-ui/react": ^0.11.0
+  "@assistant-ui/react": ^0.14.26
   "@vitejs/plugin-react": ^6.0.3
   ai: ^6.0.209
   "lucide-react": ^1.23.0
   typescript: 7.0.2
-  vite: ^8.1.3
+  vite: ^8.1.5
 
 minimumReleaseAge: 10080
 
@@ -40,8 +40,6 @@ minimumReleaseAgeExclude:
 
 overrides:
   glob@>=10.0 <10.5.0: 10.5.0
-  # Without this, @polar-sh/ui resolves Recharts v3 while Elements/Tremor stay on v2.
-  recharts: 2.15.4
   # Radix sub-packages pin exact react-dismissable-layer versions, so mixed Radix
   # releases load multiple copies with separate layer-stack contexts — nested dismiss
   # layers then can't see each other (e.g. the filter sheet closing when dismissing a

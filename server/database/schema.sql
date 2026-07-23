@@ -51,7 +51,6 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
   gram_account_type TEXT NOT NULL DEFAULT 'free',
-  sso_connection_id TEXT, -- links to an organization in the oidc provider to understand if a user is JIT provisioned via SSO. Will be replaced by workos_org_id.
   workos_id TEXT, -- links to an organization in WorkOS to sync metadata like users and groups
   workos_updated_at timestamptz,
   workos_last_event_id TEXT,
@@ -272,6 +271,10 @@ CREATE TABLE IF NOT EXISTS skills (
   source_kind TEXT NOT NULL DEFAULT 'manual',
   classification TEXT NOT NULL DEFAULT 'custom',
 
+  first_seen_at timestamptz,
+  last_seen_at timestamptz,
+  seen_count bigint NOT NULL DEFAULT 0,
+
   archived_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -308,6 +311,108 @@ CREATE TABLE IF NOT EXISTS skill_versions (
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key ON skill_versions (skill_id, canonical_sha256);
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versions (skill_id, id);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS skill_version_lineages (
+  skill_version_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  derived_from_version_id uuid NOT NULL,
+
+  CONSTRAINT skill_version_lineages_pkey PRIMARY KEY (skill_version_id),
+  CONSTRAINT skill_version_lineages_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_version_lineages_skill_id_derived_from_version_id_fkey FOREIGN KEY (skill_id, derived_from_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skill_version_lineages_skill_id_derived_from_version_id_idx ON skill_version_lineages (skill_id, derived_from_version_id);
+
+CREATE TABLE IF NOT EXISTS skill_version_origins (
+  skill_version_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  origin TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_version_origins_pkey PRIMARY KEY (skill_version_id),
+  CONSTRAINT skill_version_origins_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_version_origins_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS skill_version_origins_project_id_skill_id_idx
+ON skill_version_origins (project_id, skill_id);
+
+CREATE TABLE IF NOT EXISTS skill_observations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  idempotency_key TEXT,
+  provider TEXT NOT NULL,
+  user_id TEXT,
+  user_email TEXT,
+  hostname TEXT,
+  session_id TEXT,
+  skill_name TEXT NOT NULL,
+  source TEXT,
+  source_level TEXT,
+  source_path TEXT,
+  raw_sha256 TEXT,
+  seen_at timestamptz NOT NULL,
+  skill_id uuid,
+  skill_version_id uuid,
+  reconciled_at timestamptz,
+  metrics_synced_at timestamptz,
+  efficacy_enqueued_at timestamptz,
+  reconcile_error_code TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_observations_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_observations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_observations_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_observations_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_observations_skill_id_skill_version_id_check CHECK (skill_version_id IS NULL OR skill_id IS NOT NULL)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_observations_project_id_idempotency_key_key
+ON skill_observations (project_id, idempotency_key)
+WHERE idempotency_key IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_name_seen_at_id_idx
+ON skill_observations (project_id, skill_name, seen_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_raw_sha256_idx
+ON skill_observations (project_id, raw_sha256)
+WHERE raw_sha256 IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_pending_reconciliation_idx
+ON skill_observations (project_id, seen_at, id)
+WHERE reconciled_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_pending_metrics_sync_idx
+ON skill_observations (project_id, seen_at, id)
+WHERE reconciled_at IS NOT NULL AND metrics_synced_at IS NULL AND session_id IS NOT NULL AND skill_version_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_pending_efficacy_idx
+ON skill_observations (project_id, seen_at, id)
+WHERE reconciled_at IS NOT NULL AND efficacy_enqueued_at IS NULL AND session_id IS NOT NULL AND skill_version_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_id_seen_at_idx
+ON skill_observations (project_id, skill_id, seen_at DESC)
+WHERE skill_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_project_id_skill_version_id_seen_at_idx
+ON skill_observations (project_id, skill_version_id, seen_at DESC)
+WHERE skill_version_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_observations_skill_id_skill_version_id_idx
+ON skill_observations (skill_id, skill_version_id)
+WHERE skill_version_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS skill_raw_hashes (
+  project_id uuid NOT NULL,
+  raw_sha256 TEXT NOT NULL,
+  canonical_sha256 TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_raw_hashes_pkey PRIMARY KEY (project_id, raw_sha256),
+  CONSTRAINT skill_raw_hashes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
 
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
 -- Admins create plugins and assign them to roles for distribution.
@@ -347,39 +452,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_is_default_key
 
 COMMENT ON COLUMN plugins.is_default IS 'Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).';
 
-CREATE TABLE IF NOT EXISTS skill_distributions (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
-  skill_id uuid NOT NULL,
-  pinned_version_id uuid,
-  plugin_id uuid,
-
-  channel TEXT NOT NULL,
-  created_by_user_id TEXT NOT NULL,
-  revoked_at timestamptz,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT skill_distributions_pkey PRIMARY KEY (id),
-  CONSTRAINT skill_distributions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT skill_distributions_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
-  CONSTRAINT skill_distributions_skill_id_pinned_version_id_fkey FOREIGN KEY (skill_id, pinned_version_id) REFERENCES skill_versions (skill_id, id),
-  -- NULL plugin_id targets the whole project; otherwise targeting is delegated
-  -- to the plugin's own assignment mechanism.
-  CONSTRAINT skill_distributions_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id)
-);
-
--- NULLS NOT DISTINCT so at most one active direct (plugin_id IS NULL)
--- distribution exists per skill and channel alongside per-plugin ones.
-CREATE UNIQUE INDEX IF NOT EXISTS skill_distributions_project_id_skill_id_channel_plugin_id_key
-ON skill_distributions (project_id, skill_id, channel, plugin_id) NULLS NOT DISTINCT
-WHERE revoked_at IS NULL;
-
-CREATE INDEX IF NOT EXISTS skill_distributions_project_id_idx ON skill_distributions (project_id);
-CREATE INDEX IF NOT EXISTS skill_distributions_skill_id_pinned_version_id_idx ON skill_distributions (skill_id, pinned_version_id);
-CREATE INDEX IF NOT EXISTS skill_distributions_plugin_id_idx ON skill_distributions (plugin_id);
-
 CREATE TABLE IF NOT EXISTS skill_sync_receipts (
   project_id uuid NOT NULL,
   skill_id uuid NOT NULL,
@@ -403,6 +475,81 @@ CREATE TABLE IF NOT EXISTS skill_sync_receipts (
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_skill_id_skill_version_id_idx ON skill_sync_receipts (skill_id, skill_version_id);
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_skill_version_id_idx ON skill_sync_receipts (project_id, skill_version_id);
 CREATE INDEX IF NOT EXISTS skill_sync_receipts_project_id_user_id_hostname_provider_idx ON skill_sync_receipts (project_id, user_id, hostname, provider, skill_id);
+
+CREATE TABLE IF NOT EXISTS skill_efficacy_settings (
+  organization_id TEXT NOT NULL,
+  enabled boolean NOT NULL,
+  per_skill_daily_cap integer NOT NULL,
+  org_daily_cap integer NOT NULL,
+  new_version_burst integer NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_efficacy_settings_pkey PRIMARY KEY (organization_id),
+  CONSTRAINT skill_efficacy_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT skill_efficacy_settings_caps_check CHECK (per_skill_daily_cap >= 0 AND org_daily_cap >= 0 AND new_version_burst >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS skill_efficacy_evaluations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  surface TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  chat_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  skill_version_id uuid NOT NULL,
+  canonical_sha256 TEXT NOT NULL,
+  observed_at timestamptz NOT NULL,
+
+  state TEXT NOT NULL DEFAULT 'pending',
+  reserved_on date,
+  claim_token uuid,
+  attempts integer NOT NULL DEFAULT 0,
+  last_error TEXT,
+  scored_at timestamptz,
+  failed_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_efficacy_evaluations_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_efficacy_evaluations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT skill_efficacy_evaluations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_efficacy_evaluations_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT skill_efficacy_evaluations_skill_id_skill_version_id_fkey FOREIGN KEY (skill_id, skill_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_efficacy_evaluations_scoring_unit_key
+ON skill_efficacy_evaluations (project_id, session_id, skill_version_id, surface);
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_pending_idx
+ON skill_efficacy_evaluations (project_id, observed_at DESC, id DESC)
+WHERE state = 'pending';
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_recovered_pending_idx
+ON skill_efficacy_evaluations (project_id, observed_at DESC, id DESC)
+WHERE state = 'pending' AND reserved_on IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_organization_id_idx
+ON skill_efficacy_evaluations (organization_id);
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_org_spend_idx
+ON skill_efficacy_evaluations (organization_id, reserved_on)
+WHERE reserved_on IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_skill_spend_idx
+ON skill_efficacy_evaluations (skill_id, reserved_on)
+WHERE reserved_on IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_version_lifetime_spend_idx
+ON skill_efficacy_evaluations (skill_version_id)
+WHERE reserved_on IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_stale_reserved_idx
+ON skill_efficacy_evaluations (project_id, updated_at, id)
+WHERE state = 'reserved';
 
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -853,6 +1000,12 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   provisioner_kind TEXT NOT NULL DEFAULT 'ingress',
   -- IP addresses or CIDR ranges allowed to access this domain. Empty array = unrestricted.
   ip_allowlist TEXT[] NOT NULL DEFAULT '{}',
+  health_status TEXT,
+  health_issue TEXT,
+  health_checked_at timestamptz,
+  unhealthy_since timestamptz,
+  certificate_expires_at timestamptz,
+  consecutive_failures INTEGER CONSTRAINT custom_domains_consecutive_failures_check CHECK (consecutive_failures >= 0),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1137,6 +1290,16 @@ WHERE deleted IS FALSE AND project_id IS NULL AND organization_id IS NULL;
 
 CREATE INDEX IF NOT EXISTS remote_session_issuers_organization_id_idx
 ON remote_session_issuers (organization_id)
+WHERE deleted IS FALSE;
+
+-- Backs resolving an issuer by its upstream URL, where the URL equality is the
+-- selective predicate and the tenancy tier is applied as a filter on top.
+-- Deliberately NOT unique: a project, an organization and a platform issuer may
+-- all legitimately point at the same authorization server, and a customer may
+-- keep a private duplicate carrying its own client setup documentation. Do not
+-- convert this to a unique index.
+CREATE INDEX IF NOT EXISTS remote_session_issuers_issuer_idx
+ON remote_session_issuers (issuer)
 WHERE deleted IS FALSE;
 
 -- Remote Session Clients are records of Gram's client registrations with
@@ -1491,6 +1654,68 @@ CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
 ON assistants (project_id, name)
 WHERE deleted IS FALSE;
 
+CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_id_key ON assistants (project_id, id);
+
+CREATE TABLE IF NOT EXISTS skill_distributions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+  pinned_version_id uuid,
+  plugin_id uuid,
+  assistant_id uuid,
+
+  channel TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_distributions_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_distributions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_distributions_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_distributions_skill_id_pinned_version_id_fkey FOREIGN KEY (skill_id, pinned_version_id) REFERENCES skill_versions (skill_id, id),
+  CONSTRAINT skill_distributions_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id),
+  CONSTRAINT skill_distributions_project_id_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id)
+);
+
+-- Active distributions target either a plugin or an assistant. NULLS NOT
+-- DISTINCT preserves one active row per complete target tuple.
+CREATE UNIQUE INDEX IF NOT EXISTS skill_distributions_active_target_key
+ON skill_distributions (project_id, skill_id, channel, plugin_id, assistant_id) NULLS NOT DISTINCT
+WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_distributions_project_id_idx ON skill_distributions (project_id);
+CREATE INDEX IF NOT EXISTS skill_distributions_skill_id_pinned_version_id_idx ON skill_distributions (skill_id, pinned_version_id);
+CREATE INDEX IF NOT EXISTS skill_distributions_plugin_id_idx ON skill_distributions (plugin_id);
+CREATE INDEX IF NOT EXISTS skill_distributions_assistant_id_idx ON skill_distributions (assistant_id);
+
+CREATE TABLE IF NOT EXISTS skill_share_links (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+
+  token TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_share_links_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_share_links_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_share_links_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_share_links_token_key ON skill_share_links (token);
+
+-- At most one active public share link per skill.
+CREATE UNIQUE INDEX IF NOT EXISTS skill_share_links_skill_id_key
+ON skill_share_links (skill_id)
+WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_share_links_project_id_idx ON skill_share_links (project_id);
+
 -- project_managed_assistants maps a project to its single platform-managed
 -- assistant (the one powering the AI Insights sidebar). Kept in its own table
 -- rather than a flag on assistants/projects so the relation has an explicit
@@ -1568,6 +1793,8 @@ CREATE TABLE IF NOT EXISTS assistant_threads (
   chat_id uuid NOT NULL,
   source_kind TEXT NOT NULL CHECK (source_kind <> '' AND CHAR_LENGTH(source_kind) <= 50),
   source_ref_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- Versioned delivered skill-set document. NULL means no delivered baseline.
+  skill_set_snapshot JSONB,
   last_event_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1734,6 +1961,20 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
   CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
   CONSTRAINT chat_messages_seq_key UNIQUE (seq)
+) WITH (
+  -- Insert-heavy like risk_results, but also update-heavy: risk_analyzed_at
+  -- is set on every message after analysis, so dead tuples accumulate too.
+  -- With the global 0.2 scale factor a table this size tolerates >1.4M dead
+  -- tuples before autovacuum runs, leaving a large fraction of pages not
+  -- all-visible (observed: 76% visible) and pushing the planner off
+  -- index-only scans for project-wide counts onto full seq scans.
+  --
+  -- Fixed insert threshold keeps the vacuum cadence constant as the table
+  -- grows; the tighter dead-tuple scale factor covers the update churn.
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_vacuum_insert_scale_factor = 0,
+  autovacuum_vacuum_insert_threshold = 250000,
+  autovacuum_vacuum_cost_limit = 2000
 );
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
@@ -2001,6 +2242,11 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key
 ON users (email);
+
+-- Serves case-insensitive email lookups (matching on lower(email), e.g. for
+-- connected-user resolution), which the raw-column users_email_key cannot.
+CREATE INDEX IF NOT EXISTS users_email_lower_idx
+ON users (lower(email));
 
 -- user_accounts is the registry of external AI provider accounts (Claude today;
 -- other providers in the future) observed for a Gram organization, each linked to
@@ -2898,20 +3144,36 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ai_integration_config_id uuid NOT NULL,
+  -- Discriminator for the sync pipeline (e.g. 'cursor', 'anthropic_compliance',
+  -- 'anthropic_analytics_usage').
+  schedule TEXT NOT NULL,
+  -- How the schedule checkpoints progress: 'cursor' or 'time'.
+  kind TEXT NOT NULL,
   poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  poll_checkpoint TEXT,
   last_cursor_id TEXT,
   next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_poll_error TEXT,
   last_poll_failed_at timestamptz,
   last_poll_success_at timestamptz,
   consecutive_failures integer NOT NULL DEFAULT 0,
+  -- Set when the scheduler stops polling this schedule because the provider
+  -- repeatedly rejected the configuration (e.g. a revoked api key). Paused
+  -- schedules are skipped by candidate selection until the user updates the
+  -- integration, which resets the sync state and clears this.
+  auto_paused_at timestamptz,
+  -- Set when a user explicitly pauses this schedule from the dashboard.
+  -- Deliberately separate from auto_paused_at so "you paused this" and "we
+  -- paused this over a rejected configuration" stay distinguishable. Only the
+  -- user re-enabling the schedule clears it; config saves do not.
+  disabled_at timestamptz,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
 
   CONSTRAINT ai_integration_syncs_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_key
-  ON ai_integration_syncs (ai_integration_config_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_syncs_config_id_schedule_key
+  ON ai_integration_syncs (ai_integration_config_id, schedule) NULLS NOT DISTINCT;
 
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -3112,6 +3374,39 @@ COMMENT ON COLUMN tunneled_mcp_servers.created_at IS 'Time when the tunneled MCP
 COMMENT ON COLUMN tunneled_mcp_servers.updated_at IS 'Time when the durable tunneled MCP source record was last updated.';
 COMMENT ON COLUMN tunneled_mcp_servers.deleted_at IS 'Soft-delete timestamp for the tunneled MCP source. NULL means the source is active.';
 COMMENT ON COLUMN tunneled_mcp_servers.deleted IS 'Generated soft-delete flag derived from deleted_at and used by partial indexes.';
+
+-- Configurable request headers attached to a tunneled MCP server. Each header
+-- resolves either to a static value (optionally encrypted at rest when secret)
+-- or to a named inbound request header that is passed through. Values are
+-- injected onto the request forwarded through the tunnel gateway to the
+-- customer's upstream MCP server. Mirrors remote_mcp_server_headers.
+CREATE TABLE IF NOT EXISTS tunneled_mcp_server_headers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  tunneled_mcp_server_id uuid NOT NULL,
+  name TEXT NOT NULL CHECK (name <> ''),
+  description TEXT,
+  is_required BOOLEAN NOT NULL DEFAULT FALSE,
+  is_secret BOOLEAN NOT NULL DEFAULT FALSE,
+  value TEXT,
+  value_from_request_header TEXT CHECK (value_from_request_header IS NULL OR value_from_request_header <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT tunneled_mcp_server_headers_pkey PRIMARY KEY (id),
+  CONSTRAINT tunneled_mcp_server_headers_tunneled_mcp_server_id_fkey FOREIGN KEY (tunneled_mcp_server_id) REFERENCES tunneled_mcp_servers (id) ON DELETE CASCADE,
+  CONSTRAINT tunneled_mcp_server_headers_value_source_check CHECK ((value IS NULL) != (value_from_request_header IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS tunneled_mcp_server_headers_tunneled_mcp_server_id_idx
+ON tunneled_mcp_server_headers (tunneled_mcp_server_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS tunneled_mcp_server_headers_tunneled_mcp_server_id_name_key
+ON tunneled_mcp_server_headers (tunneled_mcp_server_id, name)
+WHERE deleted IS FALSE;
 
 -- MCP Servers: user-facing MCP server configurations that link an MCP
 -- backend (a toolset, a remote MCP server, or a tunneled MCP server) to
@@ -3717,6 +4012,22 @@ CREATE TABLE IF NOT EXISTS risk_results (
   CONSTRAINT risk_results_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
+) WITH (
+  -- This table is append-heavy and rarely updated, so the only autovacuum
+  -- trigger that ever fires is the insert one. With the global 0.2 scale
+  -- factor that threshold scales with the table itself, so on a table this
+  -- size vacuum only runs every several million inserts — longer than the
+  -- window the risk overview queries scan. The freshly inserted pages are
+  -- therefore never marked all-visible, and the overview's index-only scan
+  -- degrades into a random heap scan (observed: ~93% heap fetches).
+  --
+  -- A fixed threshold with no scale factor keeps the vacuum cadence constant
+  -- as the table grows instead of stretching indefinitely. Dead tuples stay
+  -- negligible here, so these passes skip index cleanup and mostly just set
+  -- visibility map bits.
+  autovacuum_vacuum_insert_scale_factor = 0,
+  autovacuum_vacuum_insert_threshold = 250000,
+  autovacuum_vacuum_cost_limit = 2000
 );
 
 CREATE INDEX IF NOT EXISTS risk_results_project_policy_version_message_idx
@@ -3728,6 +4039,25 @@ ON risk_results (project_id, chat_message_id);
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
+
+-- Open-findings reads that join risk_policies (CountFindings*,
+-- ListRiskResultsByProjectFound) filter on the same open-findings predicate
+-- but need risk_policy_id, which _project_found_idx lacks — and the planner
+-- overestimates the predicate's row count ~5x (it multiplies the
+-- found/excluded_at/false_positive_at selectivities as if independent), which
+-- priced the resulting bitmap heap scan above a parallel seq scan of the
+-- whole table. Keying on risk_policy_id makes the policy-join count an
+-- index-only scan, which stays cheap no matter how far off the estimate is.
+CREATE INDEX IF NOT EXISTS risk_results_project_open_policy_idx
+ON risk_results (project_id, risk_policy_id)
+WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
+
+-- Serves the risk overview window scan (GetRiskOverviewCounts): counts every
+-- scanned message in a project's created_at window regardless of found state,
+-- so the partial _project_found_idx cannot help. Range-scans just the window;
+-- trailing chat_message_id enables an index-only distinct for messages_scanned.
+CREATE INDEX IF NOT EXISTS risk_results_project_created_msg_idx
+ON risk_results (project_id, created_at, chat_message_id);
 
 -- Narrows the exclusion sweeps (exact/rule_id/source) by project + policy +
 -- rule. The verbatim match column is intentionally NOT indexed: it can exceed

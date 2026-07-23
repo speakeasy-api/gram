@@ -24,6 +24,9 @@ type RemoteSessionIssuer struct {
 	Name *string
 	// Optional logo asset id; null when unset.
 	LogoAssetID *string
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; null when unset.
+	ClientSetupDocumentationURL *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.

@@ -8,7 +8,7 @@ import {
 } from "react";
 import { Link, Outlet, useNavigate, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { useAssistantRuntime, useAssistantState } from "@assistant-ui/react";
+import { useAssistantRuntime, useAuiState } from "@assistant-ui/react";
 import { ActiveChatTitle, Chat } from "@/elements";
 import {
   ChevronLeft,
@@ -34,6 +34,7 @@ import {
 } from "@gram/client/react-query/listChats.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
+import { resolveChatOwner } from "@/lib/chat-owner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   useHideInsightsDock,
@@ -642,9 +643,10 @@ function RecentRowIcon({
   externalUserId?: string;
 }): ReactElement {
   const { data: membersData } = useMembers();
-  const member = membersData?.members.find(
-    (m) => m.id === userId || (!!externalUserId && m.email === externalUserId),
-  );
+  const member = resolveChatOwner(membersData?.members, {
+    userId,
+    externalUserId,
+  });
 
   if (member) {
     const display = member.name || member.email;
@@ -861,7 +863,7 @@ function ConversationSurface({
 }: {
   chatId: string | undefined;
 }): ReactElement {
-  const activeRemoteId = useAssistantState(
+  const activeRemoteId = useAuiState(
     ({ threadListItem }) => threadListItem.remoteId ?? null,
   );
   // Render the active thread directly when it's a fresh chat ("new") or its id
@@ -927,8 +929,8 @@ function ChatSurface(): ReactElement {
  */
 function SavedConversation({ chatId }: { chatId: string }): ReactElement {
   const runtime = useAssistantRuntime();
-  const isListLoading = useAssistantState(({ threads }) => threads.isLoading);
-  const activeRemoteId = useAssistantState(
+  const isListLoading = useAuiState(({ threads }) => threads.isLoading);
+  const activeRemoteId = useAuiState(
     ({ threadListItem }) => threadListItem.remoteId ?? null,
   );
   // Latch per chatId, not a one-shot boolean: navigating straight from one

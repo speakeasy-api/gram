@@ -17,7 +17,7 @@ import { useMarkdownLink } from "@/elements/contexts/MarkdownLinkContext";
 import { cn } from "@/lib/utils";
 import { useElements } from "@/elements/hooks/useElements";
 import { useComponentsByLanguage } from "@/elements/hooks/usePluginComponents";
-import { useAssistantState } from "@assistant-ui/react";
+import { useAuiState } from "@assistant-ui/react";
 
 const MarkdownTextImpl = () => {
   const { plugins } = useElements();
@@ -47,7 +47,7 @@ const MarkdownTextImpl = () => {
 export const MarkdownText = memo(MarkdownTextImpl);
 
 const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
-  const message = useAssistantState(({ message }) => message);
+  const message = useAuiState(({ message }) => message);
   const messageIsComplete = message.status?.type === "complete";
   const { isCopied, copyToClipboard } = useCopyToClipboard();
   const onCopy = () => {

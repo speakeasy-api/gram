@@ -1069,7 +1069,7 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 }
 
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many
-SELECT cm.id, cm.role, cm.content, cm.tool_calls,
+SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
   COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
 FROM chat_messages cm
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
@@ -1087,6 +1087,8 @@ type GetMessageContentBatchRow struct {
 	Role       string
 	Content    string
 	ToolCalls  []byte
+	CreatedAt  pgtype.Timestamptz
+	Source     pgtype.Text
 	ChatUserID string
 }
 
@@ -1095,6 +1097,16 @@ type GetMessageContentBatchRow struct {
 // attribution rule as ListRiskOverviewTopUsers: the message's own user_id
 // wins, the chat owner's is the fallback — and a soft-deleted chat's owner
 // never is (LEFT JOIN so the message still gets scanned, just unattributed).
+//
+// created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
+// the batch's own time range, keeping that query on the telemetry table's
+// time-ordered primary key instead of scanning the full retention window.
+//
+// source names the agent that recorded the message (Codex, Cursor, the ingest
+// adapter, ...). The shadow-MCP scanner attributes its provenance-resolution
+// metric to it, which is the one attribution available when the call resolved
+// to no telemetry row at all — precisely the population that metric exists to
+// measure.
 func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageContentBatchParams) ([]GetMessageContentBatchRow, error) {
 	rows, err := q.db.Query(ctx, getMessageContentBatch, arg.Ids, arg.ProjectID)
 	if err != nil {
@@ -1109,6 +1121,8 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 			&i.Role,
 			&i.Content,
 			&i.ToolCalls,
+			&i.CreatedAt,
+			&i.Source,
 			&i.ChatUserID,
 		); err != nil {
 			return nil, err
@@ -1215,16 +1229,45 @@ func (q *Queries) GetRiskExclusionForReconcile(ctx context.Context, arg GetRiskE
 	return i, err
 }
 
-const getRiskOverviewCounts = `-- name: GetRiskOverviewCounts :one
+const getRiskOverviewFindingCounts = `-- name: GetRiskOverviewFindingCounts :one
+SELECT
+    COUNT(*)::BIGINT AS findings
+  , COUNT(DISTINCT cm.chat_id)::BIGINT AS flagged_sessions
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+WHERE rr.project_id = $1
+  AND rr.created_at >= $2
+  AND rr.created_at < $3
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+`
+
+type GetRiskOverviewFindingCountsParams struct {
+	ProjectID uuid.UUID
+	FromTime  pgtype.Timestamptz
+	ToTime    pgtype.Timestamptz
+}
+
+type GetRiskOverviewFindingCountsRow struct {
+	Findings        int64
+	FlaggedSessions int64
+}
+
+// findings + flagged_sessions over the live-found subset. Pushing the found
+// predicate into WHERE lets the partial risk_results_project_found_idx serve the
+// scan, so the JOIN to chat_messages only touches found rows instead of every
+// scanned row. COUNT(DISTINCT cm.chat_id) already skips NULL chat_ids.
+func (q *Queries) GetRiskOverviewFindingCounts(ctx context.Context, arg GetRiskOverviewFindingCountsParams) (GetRiskOverviewFindingCountsRow, error) {
+	row := q.db.QueryRow(ctx, getRiskOverviewFindingCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
+	var i GetRiskOverviewFindingCountsRow
+	err := row.Scan(&i.Findings, &i.FlaggedSessions)
+	return i, err
+}
+
+const getRiskOverviewScanCounts = `-- name: GetRiskOverviewScanCounts :one
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
-  , (COUNT(*) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-    ))::BIGINT AS findings
-  , (COUNT(DISTINCT cm.chat_id) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-        AND cm.chat_id IS NOT NULL
-    ))::BIGINT AS flagged_sessions
   , (
       SELECT COUNT(*)::BIGINT
       FROM risk_policies active_rp
@@ -1233,34 +1276,31 @@ SELECT
         AND deleted IS FALSE
     ) AS active_policies
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
 WHERE rr.project_id = $1
   AND rr.created_at >= $2
   AND rr.created_at < $3
 `
 
-type GetRiskOverviewCountsParams struct {
+type GetRiskOverviewScanCountsParams struct {
 	ProjectID uuid.UUID
 	FromTime  pgtype.Timestamptz
 	ToTime    pgtype.Timestamptz
 }
 
-type GetRiskOverviewCountsRow struct {
+type GetRiskOverviewScanCountsRow struct {
 	MessagesScanned int64
-	Findings        int64
-	FlaggedSessions int64
 	ActivePolicies  int64
 }
 
-func (q *Queries) GetRiskOverviewCounts(ctx context.Context, arg GetRiskOverviewCountsParams) (GetRiskOverviewCountsRow, error) {
-	row := q.db.QueryRow(ctx, getRiskOverviewCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
-	var i GetRiskOverviewCountsRow
-	err := row.Scan(
-		&i.MessagesScanned,
-		&i.Findings,
-		&i.FlaggedSessions,
-		&i.ActivePolicies,
-	)
+// messages_scanned counts every scanned message in the window regardless of
+// found state. chat_message_id is NOT NULL with a FK to chat_messages, so the
+// old JOIN was lossless — dropping it lets this be an index-only distinct on
+// risk_results_project_created_msg_idx (project_id, created_at, chat_message_id).
+// active_policies is a cheap scalar subquery, folded in here to save a round trip.
+func (q *Queries) GetRiskOverviewScanCounts(ctx context.Context, arg GetRiskOverviewScanCountsParams) (GetRiskOverviewScanCountsRow, error) {
+	row := q.db.QueryRow(ctx, getRiskOverviewScanCounts, arg.ProjectID, arg.FromTime, arg.ToTime)
+	var i GetRiskOverviewScanCountsRow
+	err := row.Scan(&i.MessagesScanned, &i.ActivePolicies)
 	return i, err
 }
 

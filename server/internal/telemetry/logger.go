@@ -12,9 +12,12 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -57,28 +60,43 @@ type Logger struct {
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
 	users             *UserInfoResolver
+	logPublisher      *LogPublisher
 }
 
 func NewLogger(
 	shutdownCtx context.Context,
 	logger *slog.Logger,
+	// Both providers are unused and kept only for signature stability:
+	// ClickHouse client calls are not individually instrumented (DNO-602
+	// simplified o11y.TraceClickhouseConn to span-context forwarding only).
+	_ trace.TracerProvider,
+	_ metric.MeterProvider,
 	chConn clickhouse.Conn,
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
 	users *UserInfoResolver,
+	logPublisher *LogPublisher,
 ) *Logger {
+	inv.Require(
+		"telemetry logger",
+		"log publisher set", logPublisher != nil,
+	)
+
+	logger = logger.With(attr.SlogComponent("telemetry_logger"))
 	return &Logger{
 		shutdownCtx:       func() context.Context { return shutdownCtx },
-		logger:            logger.With(attr.SlogComponent("telemetry_logger")),
+		logger:            logger,
 		chConn:            chConn,
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
 		users:             users,
+		logPublisher:      logPublisher,
 	}
 }
 
 // NewStub returns a Logger with feature checks hard-wired to disabled. Log
-// is a no-op and the ClickHouse connection is never dialed.
+// is a no-op and the ClickHouse connection is never dialed; the shadow log
+// publisher is an inert noop with all flags off.
 func NewStub(logger *slog.Logger) *Logger {
 	disabled := func(context.Context, string) (bool, error) { return false, nil }
 	return &Logger{
@@ -88,6 +106,7 @@ func NewStub(logger *slog.Logger) *Logger {
 		logsEnabled:       disabled,
 		toolIOLogsEnabled: disabled,
 		users:             nil,
+		logPublisher:      NewNoopLogPublisher(logger),
 	}
 }
 
@@ -146,9 +165,16 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 	if len(logParams) == 0 {
 		return nil
 	}
-	if err := repo.New(l.chConn).InsertTelemetryLogs(l.shutdownCtx(), logParams); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
+	err := repo.New(l.chConn).InsertTelemetryLogs(l.detachedWriteContext(ctx), logParams)
+	if err != nil {
+		return fmt.Errorf("insert telemetry logs: %w", err)
 	}
+
+	// Shadow dual-write: mirror the rows onto Pub/Sub only after ClickHouse
+	// accepted them, so the shadow stream never contains rows the ledger
+	// rejected. Best-effort and non-blocking.
+	l.logPublisher.PublishLogs(ctx, logParams)
+
 	return nil
 }
 
@@ -162,10 +188,19 @@ func (l *Logger) LogBulkStaging(ctx context.Context, params []LogParams) error {
 	if len(logParams) == 0 {
 		return nil
 	}
-	if err := repo.New(l.chConn).InsertTelemetryLogsStaging(l.shutdownCtx(), logParams); err != nil {
+	err := repo.New(l.chConn).InsertTelemetryLogsStaging(l.detachedWriteContext(ctx), logParams)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "insert staged telemetry logs")
 	}
 	return nil
+}
+
+// detachedWriteContext returns the shutdown-scoped context synchronous
+// ClickHouse writes run on (they must survive request cancellation), carrying
+// the caller's span so the connection layer (o11y.TraceClickhouseConn) can
+// forward the request's trace context to ClickHouse's server-side span log.
+func (l *Logger) detachedWriteContext(ctx context.Context) context.Context {
+	return trace.ContextWithSpan(l.shutdownCtx(), trace.SpanFromContext(ctx))
 }
 
 func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo.InsertTelemetryLogParams {

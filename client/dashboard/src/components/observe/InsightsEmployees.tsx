@@ -7,8 +7,8 @@ import {
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { useInsightsState } from "@/components/insights-context";
-import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -33,6 +33,7 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
+import { Metrics } from "@gram/client/models/components/searchuserspayload.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -445,10 +446,7 @@ export function InsightsEmployeesContent(): JSX.Element {
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
           <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">Employee Enrollment</h1>
-                <ReleaseStageBadge stage="preview" />
-              </div>
+              <h1 className="text-xl font-semibold">Employee Enrollment</h1>
               <p className="text-muted-foreground text-sm">
                 Track platform adoption for organization members in this project
                 over {rangeLabel}. Employees with tool or agent session activity
@@ -699,7 +697,9 @@ function EmployeeTable({
         header: (
           <span className="flex items-center gap-1">
             Accounts
-            <SimpleTooltip tooltip="The AI provider accounts (Claude, Codex, Cursor) each employee has been seen using, labelled team or personal. Accounts are linked automatically from tool activity, so this stays blank until an employee is seen using a recognized account.">
+            <SimpleTooltip
+              tooltip={`The AI provider accounts (Claude, Codex, Cursor) each employee has been seen using, labelled team or personal. Accounts are linked automatically from tool activity, so this stays blank until an employee is seen using a recognized account. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`}
+            >
               <Info className="text-muted-foreground size-3 shrink-0" />
             </SimpleTooltip>
           </span>
@@ -1117,6 +1117,11 @@ async function fetchEmployeeUsage(
           limit: 1000,
           sort: "desc",
           userType: "internal",
+          // The enrollment list renders only identity, last activity, token
+          // totals, and linked accounts (the latter from Postgres enrichment),
+          // so request the lean aggregation and skip the per-tool/hook-source
+          // map aggregates that dominate the ClickHouse query cost (DNO-618).
+          metrics: Metrics.Basic,
         },
       }),
     );

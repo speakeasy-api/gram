@@ -47,6 +47,14 @@ const (
 	// agentVariantClaudeCode marks a session that originated from the
 	// standard Claude Code CLI (where `claude mcp list` was reachable).
 	agentVariantClaudeCode = "claude-code"
+	// surfaceClaudeCodeDesktop is the Claude Code Desktop (CCD) product
+	// surface. It is never stamped as an agent variant — the SessionStart
+	// inventory shape cannot tell CCD from the CLI — but the desktop hook
+	// client self-identifies with this adapter slug, which is how CCD
+	// sessions are told apart from CLI ones. Cowork sessions ship the same
+	// adapter, so only the OTEL service.name (or the inventory variant)
+	// separates cowork from CCD.
+	surfaceClaudeCodeDesktop = "claude-code-desktop"
 )
 
 // sessionMCPListTTL is how long the parsed MCP list survives without any

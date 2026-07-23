@@ -1,4 +1,4 @@
-import { useAssistantState } from "@assistant-ui/react";
+import { useAuiState } from "@assistant-ui/react";
 import { useMemo, type FC, type PropsWithChildren } from "react";
 import { useElements } from "@/elements/hooks/useElements";
 import { humanizeToolName } from "@/elements/lib/humanize";
@@ -12,11 +12,11 @@ export const ToolGroup: FC<
   // in the range is a tool-call — the count is simply the range size.
   const toolCount = endIndex - startIndex + 1;
 
-  const firstToolName = useAssistantState(({ message }) => {
+  const firstToolName = useAuiState(({ message }) => {
     const part = message.parts[startIndex];
     return part?.type === "tool-call" ? part.toolName : undefined;
   });
-  const anyMessagePartsAreRunning = useAssistantState(({ message }) => {
+  const anyMessagePartsAreRunning = useAuiState(({ message }) => {
     for (let i = startIndex; i <= endIndex; i++) {
       if (message.parts[i]?.status?.type === "running") return true;
     }

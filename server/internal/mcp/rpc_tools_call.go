@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -226,7 +227,7 @@ func handleToolsCall(
 			Disposition: disposition,
 			ProjectID:   payload.projectID.String(),
 		})); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("authorize MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
 		}
 	}
 
@@ -261,6 +262,7 @@ func handleToolsCall(
 		SystemEnv:  systemConfig,
 		OAuthToken: oauthToken,
 		GramEmail:  gramEmail,
+		GramChatID: payload.chatID,
 	}
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)

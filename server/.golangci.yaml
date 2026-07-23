@@ -61,11 +61,11 @@ linters:
       - path: cmd/|internal/dns/
         linters:
           - forbidigo
-      # riskjudgebench and dev-mcp are developer CLIs (not part of the server
+      # Bench commands and dev-mcp are developer CLIs (not part of the server
       # binary). Like test files, they favor terse partial structs and direct
       # error returns over production-grade hardening, so exempt them from the
       # same dev-tooling linters we exempt tests from.
-      - path: cmd/riskjudgebench/|cmd/dev-mcp/
+      - path: cmd/(riskjudge|skillefficacy)bench/|cmd/dev-mcp/
         linters:
           - exhaustruct
           - wrapcheck
@@ -73,7 +73,7 @@ linters:
           - sloglint
       # gosec stays on for the tool; exempt only G304 (the input cases file is a
       # CLI flag, so a variable path is inherent and not attacker-controlled).
-      - path: cmd/riskjudgebench/
+      - path: cmd/(riskjudge|skillefficacy)bench/
         linters:
           - gosec
         text: G304
@@ -164,6 +164,12 @@ linters:
       # Production observability setup falls back to noop providers when
       # no exporter is configured.
       - path: internal/o11y/setup\.go
+        linters:
+          - forbidigo
+        text: GG008|GG009
+      # NewNoopLogPublisher builds the inert shadow publisher for the stub
+      # telemetry logger from noop providers.
+      - path: internal/telemetry/log_publisher\.go
         linters:
           - forbidigo
         text: GG008|GG009
@@ -274,6 +280,9 @@ linters:
         - pattern: ^time\.Sleep$
           pkg: ^time$
           msg: "GG013: Avoid time.Sleep. In tests, poll with require.EventuallyWithT (wait until assertions pass) or require.Never (assert a condition never holds)."
+        - pattern: ^clickhouse\.With(Std)?Async$
+          pkg: ^github\.com/ClickHouse/clickhouse-go/v2$
+          msg: "GG014: clickhouse.WithAsync does not enable or disable async insert. It always sets async_insert=1 and its bool only picks wait_for_async_insert, so WithAsync(false) is fire-and-forget. State the posture explicitly with WithSettings instead: async_insert 0 for a synchronous insert, or async_insert 1 plus wait_for_async_insert 0 for fire-and-forget."
     sloglint:
       no-mixed-args: true
       attr-only: true

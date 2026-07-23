@@ -4,7 +4,6 @@ import "./App.css"; // Import this second to override certain values in moonshin
 import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
-import { FontTexture, WebGLCanvas } from "@/components/webgl";
 import {
   MoonshineConfigProvider,
   TooltipProvider,
@@ -41,6 +40,8 @@ import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
 import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
 import { BlockPage } from "./pages/blocks/BlockDetail";
+import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
+import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
@@ -130,10 +131,6 @@ function AppContent() {
    * 4. Authenticated user is redirected back to the component.
    */
   const cliFlow = useCliAuthFlow();
-  const location = useLocation();
-
-  // Only render WebGL canvas during onboarding
-  const isOnboarding = location.pathname.includes("/onboarding");
 
   if (cliFlow) {
     return (
@@ -152,12 +149,6 @@ function AppContent() {
   return (
     <AuthProvider>
       <ProjectProvider>
-        {isOnboarding && (
-          <>
-            <WebGLCanvas />
-            <FontTexture />
-          </>
-        )}
         <RouteProvider />
         <PlatformAdminToolbar />
       </ProjectProvider>
@@ -317,6 +308,10 @@ const RouteProvider = () => {
           element={<RiskPolicyChallengeAcknowledge />}
         />
         <Route path="/blocks/:id" element={<BlockPage />} />
+        <Route
+          path={`${SHARED_SKILL_BASE_PATH}/:token`}
+          element={<SharedSkillPage />}
+        />
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}

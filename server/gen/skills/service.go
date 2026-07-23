@@ -26,12 +26,18 @@ type Service interface {
 	// implementation requires the skills product feature and skill write scope,
 	// and returns the existing canonical version as a no-op when appropriate.
 	AddVersion(context.Context, *AddVersionPayload) (res *RecordSkillResult, err error)
+	// Rename an active skill or update its display name and summary. The
+	// implementation requires the skills product feature and skill write scope.
+	Update(context.Context, *UpdatePayload) (res *types.Skill, err error)
 	// List active skills in the project. The implementation requires the skills
 	// product feature and skill read scope.
 	List(context.Context, *ListPayload) (res *ListSkillsResult, err error)
 	// Get an active skill and its latest version. The implementation requires the
 	// skills product feature and skill read scope.
 	Get(context.Context, *GetPayload) (res *GetSkillResult, err error)
+	// List terminal skill activations that could not be attributed to a skill
+	// version.
+	ListUnknownActivations(context.Context, *ListUnknownActivationsPayload) (res *ListUnknownSkillActivationsResult, err error)
 	// List immutable versions of an active skill, newest first. The implementation
 	// requires the skills product feature and skill read scope.
 	ListVersions(context.Context, *ListVersionsPayload) (res *ListSkillVersionsResult, err error)
@@ -39,6 +45,24 @@ type Service interface {
 	// feature and skill write scope. Repeated requests for the same skill succeed
 	// without creating another state transition.
 	Archive(context.Context, *ArchivePayload) (err error)
+	// Create or update the active distribution of a skill to exactly one plugin or
+	// assistant. Repeating the request for the same target updates the version pin
+	// or is a no-op.
+	Distribute(context.Context, *DistributePayload) (res *types.SkillDistribution, err error)
+	// Revoke a skill's active distribution to exactly one plugin or assistant.
+	// Repeated requests are a no-op.
+	Undistribute(context.Context, *UndistributePayload) (err error)
+	// Create a public share link for a skill. Repeated requests return the
+	// existing active link, so each skill has at most one active share token.
+	Share(context.Context, *SharePayload) (res *types.SkillShareLink, err error)
+	// Revoke a skill's active public share link. Repeated requests are a no-op.
+	Unshare(context.Context, *UnsharePayload) (err error)
+	// Fetch the publicly shared view of a skill by its share token. This endpoint
+	// is unauthenticated and only ever exposes the skill name, display name,
+	// summary, and latest content.
+	GetShared(context.Context, *GetSharedPayload) (res *SharedSkill, err error)
+	// List active plugin skill distributions for the current project.
+	ListDistributions(context.Context, *ListDistributionsPayload) (res *ListSkillDistributionsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -61,7 +85,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"create", "addVersion", "list", "get", "listVersions", "archive"}
+var MethodNames = [14]string{"create", "addVersion", "update", "list", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -70,10 +94,12 @@ type AddVersionPayload struct {
 	ID string
 	// The complete uploaded SKILL.md content. Handlers enforce a maximum size of
 	// 65,536 UTF-8 bytes.
-	Content          string
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	Content string
+	// The optional source version this new version was derived from.
+	DerivedFromVersionID *string
+	SessionToken         *string
+	ApikeyToken          *string
+	ProjectSlugInput     *string
 }
 
 // ArchivePayload is the payload type of the skills service archive method.
@@ -95,6 +121,23 @@ type CreatePayload struct {
 	ProjectSlugInput *string
 }
 
+// DistributePayload is the payload type of the skills service distribute
+// method.
+type DistributePayload struct {
+	// The skill ID.
+	ID string
+	// The plugin that carries the skill.
+	PluginID *string
+	// The assistant that carries the skill.
+	AssistantID *string
+	// An optional valid version to pin instead of tracking the latest valid
+	// version.
+	PinnedVersionID  *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // GetPayload is the payload type of the skills service get method.
 type GetPayload struct {
 	// The skill ID.
@@ -104,12 +147,42 @@ type GetPayload struct {
 	ProjectSlugInput *string
 }
 
+// GetSharedPayload is the payload type of the skills service getShared method.
+type GetSharedPayload struct {
+	// The public share token.
+	Token string
+}
+
 // GetSkillResult is the result type of the skills service get method.
 type GetSkillResult struct {
 	// The skill.
 	Skill *types.Skill
 	// The latest immutable version by creation order.
 	LatestVersion *types.SkillVersion
+	// Activation adoption metrics.
+	Adoption *SkillAdoption
+	// Daily activations in the adoption window.
+	SightingTimeline []*SkillSightingTimelinePoint
+	// Active-machine version convergence.
+	Drift *SkillDrift
+	// The number of active, non-deleted assistants using the skill.
+	AssistantCount int64
+}
+
+// ListDistributionsPayload is the payload type of the skills service
+// listDistributions method.
+type ListDistributionsPayload struct {
+	// Only return distributions of this skill.
+	SkillID *string
+	// Only return distributions carried by this plugin.
+	PluginID *string
+	// Cursor for the next page of skill distributions.
+	Cursor *string
+	// The number of skill distributions to return per page.
+	Limit            int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // ListPayload is the payload type of the skills service list method.
@@ -121,6 +194,15 @@ type ListPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// ListSkillDistributionsResult is the result type of the skills service
+// listDistributions method.
+type ListSkillDistributionsResult struct {
+	// The active plugin skill distributions in this page.
+	Distributions []*types.PluginSkillDistribution
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string
 }
 
 // ListSkillVersionsResult is the result type of the skills service
@@ -136,6 +218,27 @@ type ListSkillVersionsResult struct {
 type ListSkillsResult struct {
 	// The active skills in this page.
 	Skills []*types.Skill
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string
+}
+
+// ListUnknownActivationsPayload is the payload type of the skills service
+// listUnknownActivations method.
+type ListUnknownActivationsPayload struct {
+	// Cursor for the next page of unknown activations.
+	Cursor *string
+	// The number of unknown activations to return per page.
+	Limit            int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListUnknownSkillActivationsResult is the result type of the skills service
+// listUnknownActivations method.
+type ListUnknownSkillActivationsResult struct {
+	// Unknown activations in this page.
+	Activations []*UnknownSkillActivation
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string
 }
@@ -165,6 +268,133 @@ type RecordSkillResult struct {
 	// Whether this request created a new immutable version rather than resolving
 	// to an existing canonical version.
 	CreatedVersion bool
+}
+
+// SharePayload is the payload type of the skills service share method.
+type SharePayload struct {
+	// The skill ID.
+	SkillID          string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// SharedSkill is the result type of the skills service getShared method.
+type SharedSkill struct {
+	// The normalized skill name.
+	Name string
+	// The user-facing skill name.
+	DisplayName string
+	// The optional skill summary.
+	Summary *string
+	// The latest SKILL.md content.
+	Content string
+	// When the shared content was last updated.
+	UpdatedAt string
+	// The Cache-Control response header.
+	CacheControl *string
+	// The X-Robots-Tag response header.
+	XRobotsTag *string
+	// The Referrer-Policy response header.
+	ReferrerPolicy *string
+}
+
+// Activation adoption metrics for a skill.
+type SkillAdoption struct {
+	// Start of the rolling adoption window.
+	WindowStart string
+	// End of the rolling adoption window.
+	WindowEnd string
+	// Distinct non-empty hostnames that activated the skill during the rolling
+	// window.
+	DistinctHostnames int64
+	// Activations observed during the rolling window.
+	ActivationsInWindow int64
+}
+
+// Active-machine convergence against the skill's plugin distribution target.
+type SkillDrift struct {
+	// Start of the active-machine window.
+	WindowStart string
+	// End of the active-machine window.
+	WindowEnd string
+	// Whether the skill has no distribution target, one target, or conflicting
+	// targets.
+	TargetState string
+	// Distinct versions targeted by active plugin distributions.
+	TargetVersionIds []string
+	// Machines that activated the skill during the window.
+	ActiveMachines int64
+	// Active machines whose latest activation used the target version.
+	OnTargetMachines int64
+	// Active machines whose latest attributed activation used another version.
+	DriftedMachines int64
+	// Active machines without a version or without one unambiguous target.
+	IndeterminateMachines int64
+}
+
+// A UTC-day activation bucket for a skill.
+type SkillSightingTimelinePoint struct {
+	// Start of the UTC day.
+	BucketStart string
+	// Activations observed during the day.
+	ActivationCount int64
+}
+
+// UndistributePayload is the payload type of the skills service undistribute
+// method.
+type UndistributePayload struct {
+	// The skill ID.
+	ID string
+	// The plugin the skill was distributed to.
+	PluginID *string
+	// The assistant the skill was distributed to.
+	AssistantID      *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// A completed activation that could not be attributed to a skill version.
+type UnknownSkillActivation struct {
+	// The activation observation ID.
+	ID string
+	// The skill name reported by the agent.
+	SkillName string
+	// The agent provider that reported the activation.
+	Provider string
+	// The optional provider-specific source.
+	Source *string
+	// The optional source precedence level.
+	SourceLevel *string
+	// When the activation occurred.
+	SeenAt string
+	// Why exact version attribution failed.
+	Reason string
+}
+
+// UnsharePayload is the payload type of the skills service unshare method.
+type UnsharePayload struct {
+	// The skill ID.
+	SkillID          string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// UpdatePayload is the payload type of the skills service update method.
+type UpdatePayload struct {
+	// The skill ID.
+	ID string
+	// The canonical skill name.
+	Name string
+	// The user-facing skill name.
+	DisplayName string
+	// The optional skill summary.
+	Summary          *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

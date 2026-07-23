@@ -110,6 +110,89 @@ pubsub:
           double score_threshold = 11;
         }
       type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-injection-analysis
+    name: gram-risk-v1-prompt-injection-analysis
+    spec:
+      definition: |
+        edition = "2024";
+        message PromptInjectionAnalysis {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string content = 8;
+          string user_id = 9;
+          bool l1_enabled = 10;
+          string message_type = 11;
+          string body = 12;
+          string tool_name = 13;
+          repeated ToolCall tool_calls = 14;
+          message ToolCall {
+            string name = 1;
+            string arguments = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-policy-analysis
+    name: gram-risk-v1-prompt-policy-analysis
+    spec:
+      definition: |
+        edition = "2024";
+        message PromptPolicyAnalysis {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string content = 8;
+          string user_id = 9;
+          string prompt = 10;
+          bytes model_config = 11;
+          string message_type = 12;
+          string body = 13;
+          string tool_name = 14;
+          repeated ToolCall tool_calls = 15;
+          message ToolCall {
+            string name = 1;
+            string arguments = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-log-record
+    name: gram-telemetry-v1-log-record
+    spec:
+      definition: |
+        edition = "2024";
+        message LogRecord {
+          string id = 1;
+          int64 time_unix_nano = 2;
+          int64 observed_time_unix_nano = 3;
+          string severity_text = 4;
+          string body = 5;
+          string trace_id = 6;
+          string span_id = 7;
+          string attributes_json = 8;
+          string resource_attributes_json = 9;
+          string gram_project_id = 10;
+          string gram_deployment_id = 11;
+          string gram_function_id = 12;
+          string gram_urn = 13;
+          string service_name = 14;
+          string service_version = 15;
+          string gram_chat_id = 16;
+        }
+      type: PROTOCOL_BUFFER
   subscriptions:
   - labels:
       managed_by: proto-pubsub-orchestrator
@@ -163,9 +246,9 @@ pubsub:
         name: gram-risk-v1-custom-rules-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
-      proto_message: gram-risk-v1-finding-bq-writer
+      proto_message: gram-risk-v1-finding-ch-writer
       topic_proto_message: gram-risk-v1-finding
-    name: gram-risk-v1-finding-bq-writer
+    name: gram-risk-v1-finding-ch-writer
     spec:
       ackDeadlineSeconds: 60
       messageRetentionDuration: 604800s
@@ -203,6 +286,48 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-risk-v1-presidio-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-injection-analyzer
+      topic_proto_message: gram-risk-v1-prompt-injection-analysis
+    name: gram-risk-v1-prompt-injection-analyzer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-prompt-injection-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-policy-analyzer
+      topic_proto_message: gram-risk-v1-prompt-policy-analysis
+    name: gram-risk-v1-prompt-policy-analyzer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-prompt-policy-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-noop
+      topic_proto_message: gram-telemetry-v1-log-record
+    name: gram-telemetry-v1-noop
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 86400s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-telemetry-v1-log-record
   topics:
   - labels:
       managed_by: proto-pubsub-orchestrator
@@ -266,3 +391,33 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-presidio-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-injection-analysis
+    name: gram-risk-v1-prompt-injection-analysis
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-prompt-injection-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-prompt-policy-analysis
+    name: gram-risk-v1-prompt-policy-analysis
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-prompt-policy-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-log-record
+    name: gram-telemetry-v1-log-record
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-telemetry-v1-log-record

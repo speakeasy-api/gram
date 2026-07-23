@@ -205,6 +205,13 @@ GRAM_LOG_PRETTY = { default = "1" }
 ## used by the CLI to point to the correct Gram API server
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
 VITE_DEV_HOSTNAMES = "localhost"
+## Base URL of the CDN serving the dashboard's static assets (e.g.
+## https://cdn.dev.getgram.ai). Not a build-time setting: the dashboard
+## container's nginx reads it at runtime to rewrite /assets/ URLs in
+## index.html to the CDN host (see client/dashboard/nginx.conf and the
+## renderBuiltUrl comment in client/dashboard/vite.config.ts). Unset locally
+## and by default in production — assets are then served same-origin.
+# GRAM_CDN_URL = "https://cdn.dev.getgram.ai"
 TEMPORAL_WEB_PORT = "8233"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing
@@ -217,9 +224,6 @@ TEMPORAL_WEB_PORT = "8233"
 ## Set to 1 to disable air hot reload and run server/worker directly
 PUBSUB_EMULATOR_PORT = "8088"
 PUBSUB_EMULATOR_HOST = "localhost:{{env.PUBSUB_EMULATOR_PORT}}"
-## During local development, you can disable BigQuery writes to avoid the extra
-## dependency on a GCP project.
-DISABLE_BIGQUERY_WRITES = { default = "1" }
 
 ####################################
 ## Gram Functions runner settings ##

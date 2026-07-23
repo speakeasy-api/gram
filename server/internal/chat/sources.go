@@ -5,15 +5,22 @@ import (
 	"strings"
 )
 
-// sourceAliases maps a canonical agent source to every raw message-source value
-// that should collapse into it. Legacy chats recorded Claude Code as
-// "ClaudeCode" before the hook pipeline standardized on "claude-code"; without
-// this mapping the agent-type filter shows both as separate entries (the
-// dashboard title-cases "claude-code" into "Claude Code" but leaves the
-// delimiter-less "ClaudeCode" untouched). The canonical value is the
-// delimited form so the dashboard renders a single, correctly spaced label.
+// sourceAliases maps canonical product-surface slugs to raw message-source
+// values written by hook, generic-ingest, and compliance-import pipelines.
+// Keeping legacy aliases here gives the agent-type filter one value per surface
+// while still matching historical sessions.
 var sourceAliases = map[string][]string{
-	"claude-code": {"claude-code", "ClaudeCode"},
+	"claude":          {"claude", "claude-desktop", "claude-chat-desktop", "Claude Chat Desktop"},
+	"claude-chat-web": {"claude-chat-web", "Claude Chat Web"},
+	"claude-code":     {"claude-code", "ClaudeCode"},
+	// Claude Code Desktop is its own surface, distinct from the claude-code
+	// CLI and from cowork. Note: sessions captured before surface resolution
+	// landed stored this adapter slug for cowork sessions too — those
+	// historical rows are indistinguishable from genuine CCD by source alone.
+	"claude-code-desktop": {"claude-code-desktop"},
+	"cowork":              {"cowork", "claude-cowork", "Claude Cowork"},
+	"cursor":              {"cursor", "Cursor"},
+	"codex":               {"codex", "Codex"},
 }
 
 // rawToCanonicalSource is the reverse of sourceAliases: each known raw value

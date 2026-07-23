@@ -249,6 +249,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		HooksFailOpenEnabled:         isEnabled(FeatureHooksFailOpen),
 		CustomModelKeysEnabled:       isEnabled(FeatureCustomModelKeys),
 		SkillsEnabled:                isEnabled(FeatureSkills),
+		SkillCaptureMetadataOnly:     isEnabled(FeatureSkillCaptureMetadataOnly),
 		DeviceAgent:                  deviceAgent,
 	}, nil
 }

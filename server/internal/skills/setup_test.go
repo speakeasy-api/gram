@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -20,8 +21,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -180,6 +183,47 @@ func createSkill(t *testing.T, ctx context.Context, ti *testInstance, name, desc
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	return result
+}
+
+func createPlugin(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, name string) pluginsrepo.Plugin {
+	t.Helper()
+
+	plugin, err := pluginsrepo.New(ti.conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
+		OrganizationID: ti.authContext.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           name,
+		Slug:           name,
+		Description:    pgtype.Text{},
+	})
+	require.NoError(t, err)
+	return plugin
+}
+
+func deletePlugin(t *testing.T, ctx context.Context, ti *testInstance, plugin pluginsrepo.Plugin) {
+	t.Helper()
+
+	err := pluginsrepo.New(ti.conn).DeletePlugin(ctx, pluginsrepo.DeletePluginParams{
+		ID:             plugin.ID,
+		OrganizationID: plugin.OrganizationID,
+		ProjectID:      plugin.ProjectID,
+	})
+	require.NoError(t, err)
+}
+
+func createAssistant(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, name string) assistantsrepo.CreateAssistantRow {
+	t.Helper()
+	assistant, err := assistantsrepo.New(ti.conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+		ProjectID: projectID, OrganizationID: ti.authContext.ActiveOrganizationID,
+		CreatedByUserID: conv.ToPGText(ti.authContext.UserID), Name: name, Model: "test-model",
+		Instructions: "", WarmTtlSeconds: 60, MaxConcurrency: 1, Status: "active",
+	})
+	require.NoError(t, err)
+	return assistant
+}
+
+func deleteAssistant(t *testing.T, ctx context.Context, ti *testInstance, projectID, assistantID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, assistantsrepo.New(ti.conn).DeleteAssistant(ctx, assistantsrepo.DeleteAssistantParams{ProjectID: projectID, AssistantID: assistantID}))
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

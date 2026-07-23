@@ -1,5 +1,6 @@
+import { formatCost } from "@/lib/money";
 import type { Dimension } from "@gram/client/models/components/queryfilter.js";
-import type { Measures } from "./taxonomy";
+import { type Measures, unsetLabel } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
 import { movingAverage, resample, smoothPath } from "./sparkline-math";
 import { EstimatedCostIndicator } from "@/components/estimated-cost";
@@ -49,13 +50,6 @@ const MIX_SKELETON_ROWS = [
   { label: 30, bar: 40 },
   { label: 38, bar: 28 },
 ];
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 function formatCompact(value: number): string {
   return value.toLocaleString(undefined, {
@@ -327,7 +321,7 @@ function MixCard({
             return (
               <MixRowItem
                 key={r.label}
-                label={r.label}
+                label={r.label === "" ? unsetLabel(dim) : r.label}
                 cost={r.cost}
                 barPct={(r.cost / max) * 100}
                 barColor={gradeColor(t)}
@@ -402,28 +396,28 @@ function KpiTile({
   range: string;
   loading: boolean;
 }): JSX.Element {
+  // Shares the Card shell with the row above rather than a squatter box of its
+  // own, so the two rows read as one family: same padding, same title, same
+  // value size, with the sparkline sized to fill the tile instead of tucking
+  // into a corner.
   return (
-    <div className="border-border rounded-lg border p-3">
-      <div className="text-muted-foreground text-xs">
-        {label}
-        <span className="text-muted-foreground/60 ml-1">{range}</span>
-      </div>
+    <Card title={label} range={range}>
       {loading ? (
-        <Skeleton className="mt-2 h-6 w-16" />
+        <Skeleton className="mt-3 h-8 w-20" />
       ) : (
-        <>
-          <div className="mt-1 flex items-end justify-between gap-2">
-            <span className="text-lg font-semibold tabular-nums">{value}</span>
-            <Sparkline values={series} width={64} height={20} color={NEUTRAL} />
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-semibold tabular-nums">{value}</span>
+            {delta !== null && (
+              <span className="text-muted-foreground text-xs font-medium tabular-nums">
+                {formatDelta(delta)}
+              </span>
+            )}
           </div>
-          {delta !== null && (
-            <div className="text-muted-foreground mt-1 text-xs tabular-nums">
-              {formatDelta(delta)}
-            </div>
-          )}
-        </>
+          <Sparkline values={series} width={96} height={36} color={NEUTRAL} />
+        </div>
       )}
-    </div>
+    </Card>
   );
 }
 

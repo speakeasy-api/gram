@@ -18,6 +18,14 @@ export type ChatOverview = {
    */
   accountType?: string | undefined;
   /**
+   * The ID of the assistant that produced this chat, if any
+   */
+  assistantId?: string | undefined;
+  /**
+   * The name of the assistant that produced this chat, if any
+   */
+  assistantName?: string | undefined;
+  /**
    * When the chat was created.
    */
   createdAt: Date;
@@ -81,6 +89,8 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
     z.object({
       account_email: z.optional(z.string()),
       account_type: z.optional(z.string()),
+      assistant_id: z.optional(z.string()),
+      assistant_name: z.optional(z.string()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -109,6 +119,8 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
       return remap$(v, {
         "account_email": "accountEmail",
         "account_type": "accountType",
+        "assistant_id": "assistantId",
+        "assistant_name": "assistantName",
         "created_at": "createdAt",
         "external_user_id": "externalUserId",
         "last_message_timestamp": "lastMessageTimestamp",

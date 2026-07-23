@@ -1,18 +1,13 @@
-import { useProject } from "@/contexts/Auth";
-import { useSession } from "@/contexts/Auth";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
-import { useMcpOAuthRequired } from "@/lib/mcpOAuth";
 import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
-import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
-import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, ShieldAlert } from "lucide-react";
 import { Type } from "@/components/ui/type";
-import { useExternalMcpOAuthStatus } from "./playground-auth-utils";
+import { usePlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
 import { PlaygroundChat } from "./PlaygroundChat";
 
 interface PlaygroundElementsProps {
@@ -28,7 +23,7 @@ interface PlaygroundElementsProps {
 /**
  * The toolset-backed playground variant: resolves a toolset to its Gram-hosted
  * `/mcp/<slug>` URL, mints an issuer-gated gateway token, surfaces
- * missing-auth / OAuth notices, then renders the shared {@link PlaygroundChat}.
+ * missing-auth / login notices, then renders the shared {@link PlaygroundChat}.
  */
 export function PlaygroundElements({
   toolsetSlug,
@@ -37,9 +32,6 @@ export function PlaygroundElements({
   additionalActions,
   playgroundEnvironmentSlug,
 }: PlaygroundElementsProps): JSX.Element {
-  const session = useSession();
-  const project = useProject();
-
   // Get toolset data to construct MCP URL
   const { data: toolset } = useToolset(toolsetSlug ?? undefined);
 
@@ -75,51 +67,21 @@ export function PlaygroundElements({
     mcpMetadata,
   );
 
-  // Standard OAuth discovery against the MCP URL — no toolset-field sniffing.
-  const { oauthRequired } = useMcpOAuthRequired(mcpUrl);
+  // Issuer-gated toolsets mint a user-session JWT and link upstream sessions via
+  // the first-party connect flow. The shared hook mints the token (sent as the
+  // chat's `Authorization: Bearer`) and probes the endpoint so we can block the
+  // chat until the dashboard user has connected. React Query dedupes the mint
+  // and probe with the auth panel (PlaygroundAuth), so this costs no extra calls.
+  const issuerConnection = usePlaygroundIssuerConnection(
+    toolset as Toolset | undefined,
+  );
 
-  const { data: oauthStatus, isLoading: oauthStatusLoading } =
-    useExternalMcpOAuthStatus(toolset?.id, {
-      enabled: oauthRequired,
-    });
-
-  // Mint a user-session JWT scoped to the toolset for issuer-gated toolsets.
-  // This is what the elements MCP client will send as `Authorization: Bearer`
-  // on /mcp/{slug} requests, so the runtime gateway resolves the dashboard
-  // user's stored upstream credentials via the same path a real MCP client
-  // would after an OAuth dance — no special-casing in ApplyIssuerGate.
-  const mintUserSessionMutation = useMintUserSessionMutation();
-  const gatewayTokenQuery = useQuery({
-    queryKey: [
-      "playground-gateway-token",
-      project.id,
-      toolset?.id,
-      session.user.id,
-    ],
-    queryFn: async () => {
-      if (!toolset?.id) return null;
-      const result = await mintUserSessionMutation.mutateAsync({
-        request: {
-          gramProject: project.id,
-          mintUserSessionRequestBody: { toolsetId: toolset.id },
-        },
-        security: {
-          sessionHeaderGramSession: session.session,
-          projectSlugHeaderGramProject: project.slug,
-        },
-      });
-      return result;
-    },
-    // Only mint for issuer-gated toolsets — the mint RPC 400s otherwise.
-    enabled: !!toolset?.id && !!toolset?.userSessionIssuerSlug,
-    // The minted JWT is good for ~1h; refetch every 45 minutes so we always
-    // have headroom before expiry.
-    staleTime: 1000 * 60 * 45,
-    refetchInterval: 1000 * 60 * 45,
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
-  const gatewayToken = gatewayTokenQuery.data?.accessToken;
+  // The minted user-session JWT is what the elements MCP client sends as
+  // `Authorization: Bearer` on /mcp/{slug} requests, so the runtime gateway
+  // resolves the dashboard user's stored upstream credentials via the same path
+  // a real MCP client would after an OAuth dance — no special-casing in
+  // ApplyIssuerGate.
+  const gatewayToken = issuerConnection.accessToken;
 
   // Don't render until we have a valid MCP URL
   if (!mcpUrl || !toolsetSlug) {
@@ -130,13 +92,12 @@ export function PlaygroundElements({
     );
   }
 
-  // Block rendering if OAuth is required but user is not authenticated
-  if (
-    oauthRequired &&
-    !oauthStatusLoading &&
-    oauthStatus?.status !== "authenticated"
-  ) {
-    return <OAuthRequiredNotice providerName={toolset?.name ?? "provider"} />;
+  // Block the chat when an issuer-gated toolset needs the dashboard user to link
+  // their upstream session: the probe 401'd (`needsAuth`), so tool calls would
+  // fail until they Connect in the auth panel. The connect button lives in
+  // PlaygroundAuth (the sidebar), which shares this hook's probe state.
+  if (issuerConnection.isIssuerGated && issuerConnection.needsAuth) {
+    return <LoginRequiredNotice providerName={toolset?.name ?? "provider"} />;
   }
 
   return (
@@ -187,20 +148,20 @@ function AuthWarningBanner({
   );
 }
 
-function OAuthRequiredNotice({ providerName }: { providerName: string }) {
+function LoginRequiredNotice({ providerName }: { providerName: string }) {
   return (
     <div className="flex h-full items-center justify-center">
       <div className="flex max-w-md flex-col items-center gap-3 px-4 text-center">
         <div className="bg-warning/15 rounded-full p-3">
           <ShieldAlert className="text-warning size-6" />
         </div>
-        <Type className="font-medium">OAuth Connection Required</Type>
+        <Type className="font-medium">Login Required</Type>
         <Type muted className="text-sm">
-          This MCP server requires authentication with{" "}
-          <span className="text-foreground font-medium">{providerName}</span>.
-          Use the <span className="text-foreground font-medium">Connect</span>{" "}
-          button in the Authentication section of the sidebar to authorize
-          access.
+          This MCP server requires you to connect your{" "}
+          <span className="text-foreground font-medium">{providerName}</span>{" "}
+          account. Use the{" "}
+          <span className="text-foreground font-medium">Connect</span> button in
+          the Authentication section of the sidebar to sign in.
         </Type>
       </div>
     </div>

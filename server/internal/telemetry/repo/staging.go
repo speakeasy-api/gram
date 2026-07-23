@@ -68,8 +68,16 @@ type StagedTelemetryLogRow struct {
 const stagedTelemetryRowsLimit = 1000
 
 // InsertTelemetryLogsStaging inserts telemetry log records into the staging
-// table in a single synchronous statement.
+// table using a server-side async insert (async_insert=1,
+// wait_for_async_insert=0). The call is fire-and-forget from CH's perspective:
+// it acks once the rows are queued in CH's async insert buffer, not once they
+// are committed to disk. Staging has no read-your-writes requirement — the
+// promotion dispatcher sweeps it on a timer and each pass is idempotent.
 func (q *Queries) InsertTelemetryLogsStaging(ctx context.Context, args []InsertTelemetryLogParams) error {
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert":          1,
+		"wait_for_async_insert": 0,
+	}))
 	return q.insertTelemetryLogsInto(ctx, "telemetry_logs_staging", args)
 }
 
@@ -80,9 +88,16 @@ func (q *Queries) InsertTelemetryLogsStaging(ctx context.Context, args []InsertT
 // the promotion path instead relies on a per-row Redis SET NX claim (see
 // PromoteStagedTelemetry) to prevent a double insert. Promotion batches are
 // tiny (a session's redacted rows), so per-row inserts are fine.
+//
+// The insert is synchronous (async_insert=0) because the dedup guard reads
+// these rows back: ListExistingTelemetryLogIDs must see committed rows, not
+// rows still buffered in CH's async insert queue. It also keeps the
+// deduplication token effective, which async inserts ignore unless
+// async_insert_deduplicate is on.
 func (q *Queries) InsertPromotedTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams) error {
 	for _, arg := range args {
 		tokenCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+			"async_insert":               0,
 			"insert_deduplication_token": "promote:" + arg.ID,
 		}))
 		if err := q.insertTelemetryLogsInto(tokenCtx, "telemetry_logs", []InsertTelemetryLogParams{arg}); err != nil {
@@ -92,12 +107,12 @@ func (q *Queries) InsertPromotedTelemetryLogs(ctx context.Context, args []Insert
 	return nil
 }
 
+// insertTelemetryLogsInto writes rows to table. Callers own the async posture:
+// set it on ctx before calling.
 func (q *Queries) insertTelemetryLogsInto(ctx context.Context, table string, args []InsertTelemetryLogParams) error {
 	if len(args) == 0 {
 		return nil
 	}
-
-	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
 
 	builder := sq.Insert(table).
 		Columns(

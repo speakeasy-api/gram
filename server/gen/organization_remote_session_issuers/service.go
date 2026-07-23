@@ -47,6 +47,22 @@ type Service interface {
 	// project-specific, or omit it to make it organization-level (project_id NULL,
 	// inherited by every project). Requires org:admin.
 	MoveIssuer(context.Context, *MoveIssuerPayload) (res *types.RemoteSessionIssuer, err error)
+	// Authoritative impact summary for migrating a remote_session_issuer's clients
+	// onto another issuer: the clients that would move, the affected MCP servers,
+	// and every blocker (endpoint mismatches, conflicting MCP-server bindings).
+	// Requires org:read.
+	GetIssuerMigratePreflight(context.Context, *GetIssuerMigratePreflightPayload) (res *OrganizationIssuerMigratePreflight, err error)
+	// Consolidate two remote_session_issuers that point at the same upstream
+	// authorization server: re-point every client from the source issuer onto the
+	// target issuer, then soft-delete the source. Existing remote sessions are
+	// preserved, so no user re-authenticates. Both issuers must belong to the
+	// caller's organization and agree on issuer, token_endpoint, and
+	// authorization_endpoint. The target may not be narrower in scope than the
+	// source: a project-specific issuer may migrate onto an issuer in the same
+	// project or onto an organization-level issuer, and an organization-level
+	// issuer may migrate onto another organization-level issuer. Requires
+	// org:admin.
+	MigrateIssuer(context.Context, *MigrateIssuerPayload) (res *MigrateOrganizationRemoteSessionIssuerResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -69,7 +85,7 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer"}
+var MethodNames = [9]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer"}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.
@@ -88,6 +104,9 @@ type CreateIssuerPayload struct {
 	Name *string
 	// Optional logo asset id.
 	LogoAssetID *string
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+	ClientSetupDocumentationURL *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
@@ -143,6 +162,17 @@ type GetIssuerDeletePreflightPayload struct {
 	ApikeyToken  *string
 }
 
+// GetIssuerMigratePreflightPayload is the payload type of the
+// organizationRemoteSessionIssuers service getIssuerMigratePreflight method.
+type GetIssuerMigratePreflightPayload struct {
+	// The remote_session_issuer to migrate away from.
+	SourceID string
+	// The remote_session_issuer to migrate onto.
+	TargetID     string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
 // GetIssuerPayload is the payload type of the organizationRemoteSessionIssuers
 // service getIssuer method.
 type GetIssuerPayload struct {
@@ -171,6 +201,30 @@ type ListOrganizationRemoteSessionIssuersResult struct {
 	NextCursor *string
 }
 
+// MigrateIssuerPayload is the payload type of the
+// organizationRemoteSessionIssuers service migrateIssuer method.
+type MigrateIssuerPayload struct {
+	// The remote_session_issuer to migrate away from; soft-deleted on success.
+	SourceID string
+	// The remote_session_issuer to migrate onto; survives and adopts the source's
+	// clients.
+	TargetID     string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// MigrateOrganizationRemoteSessionIssuerResult is the result type of the
+// organizationRemoteSessionIssuers service migrateIssuer method.
+type MigrateOrganizationRemoteSessionIssuerResult struct {
+	// The surviving target remote_session_issuer.
+	Issuer *types.RemoteSessionIssuer
+	// Number of remote_session_clients re-pointed from the source issuer to the
+	// target issuer. Zero when the source had no active clients.
+	ClientsMigrated int
+	// TRUE when the source issuer was soft-deleted.
+	SourceDeleted bool
+}
+
 // MoveIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service moveIssuer method.
 type MoveIssuerPayload struct {
@@ -190,6 +244,30 @@ type OrganizationIssuerDeletePreflight struct {
 	ClientCount int
 	// Display names of MCP servers attached to this issuer's clients.
 	McpServerNames []string
+}
+
+// OrganizationIssuerMigratePreflight is the result type of the
+// organizationRemoteSessionIssuers service getIssuerMigratePreflight method.
+type OrganizationIssuerMigratePreflight struct {
+	// Number of non-deleted remote_session_clients that would be re-pointed from
+	// the source issuer to the target issuer.
+	ClientCount int
+	// Display names of MCP servers attached to the source issuer's clients.
+	McpServerNames []string
+	// Names of the authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ between source and target. Non-empty
+	// blocks the migration.
+	EndpointMismatches []string
+	// Display names of MCP servers where both the source and the target issuer
+	// already have a client bound. Non-empty blocks the migration; detach one
+	// client per listed server and retry.
+	ConflictingMcpServerNames []string
+	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
+	// issuer's values become authoritative for the migrated clients.
+	Warnings []string
+	// TRUE when the migration would succeed: no endpoint mismatches and no
+	// conflicting MCP-server bindings.
+	CanMigrate bool
 }
 
 // An organization-administrator view of a remote_session_issuer: the issuer
@@ -220,6 +298,10 @@ type UpdateIssuerPayload struct {
 	Name *string
 	// Set the logo asset id.
 	LogoAssetID *string
+	// Set or clear the URL of OAuth client setup documentation shown when creating
+	// clients. An empty string clears it to NULL; any other value must be an
+	// absolute http(s) URL.
+	ClientSetupDocumentationURL *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.

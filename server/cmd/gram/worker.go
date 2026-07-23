@@ -47,6 +47,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -59,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
@@ -374,11 +376,6 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider)
-			if err != nil {
-				return err
-			}
-
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -394,6 +391,11 @@ func newWorkerCommand() *cli.Command {
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
+			}
+
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
+			if err != nil {
+				return err
 			}
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
@@ -557,7 +559,9 @@ func newWorkerCommand() *cli.Command {
 				backgroundWorkOSClient = workos.NewStubClient()
 			}
 
-			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled)
+			telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs, featureFlags)
+
+			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			telemetryService := telemetry.NewService(logger, tracerProvider, db, chDB, nil, nil, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
@@ -580,6 +584,17 @@ func newWorkerCommand() *cli.Command {
 			// returns (below), not via shutdownFuncs, to avoid racing the concurrent
 			// temporalClient.Close() over the same gRPC connection.
 			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
+
+			// Throttled for the same reason riskSignaler is: the writer emits one
+			// wake per durable message write and a wake carries no payload, so a
+			// burst of them coalesces into the single pass they all ask for. Its
+			// flush shares the deferred drain below.
+			efficacySignaler := background.NewThrottledSignaler(
+				&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
+				background.SkillEfficacySignalCooldown,
+				logger.With(attr.SlogComponent("skill-efficacy")),
+			)
+			chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
@@ -650,7 +665,7 @@ func newWorkerCommand() *cli.Command {
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 
 			accessStore := accesscontrol.NewRedisStore(cache.NewRedisCacheAdapter(redisClient), accesscontrol.AlphaTTL)
-			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore)
+			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore, serverURL)
 
 			memorySvc := memory.NewMemoryService(
 				logger,
@@ -661,8 +676,10 @@ func newWorkerCommand() *cli.Command {
 				auditLogger,
 			)
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))
 			// Runner-callable platform tools the runtime must be able to execute.
 			assistantPlatformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
+			assistantPlatformExtras = append(assistantPlatformExtras, skillTools...)
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			remoteChallengeManager := remotesessions.NewChallengeManager(
@@ -729,7 +746,7 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
-			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver)
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
@@ -808,6 +825,9 @@ func newWorkerCommand() *cli.Command {
 			defer func() {
 				if ferr := riskSignaler.Shutdown(ctx); ferr != nil {
 					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(ferr))
+				}
+				if ferr := efficacySignaler.Shutdown(ctx); ferr != nil {
+					logger.ErrorContext(ctx, "flush pending skill efficacy signals", attr.SlogError(ferr))
 				}
 			}()
 

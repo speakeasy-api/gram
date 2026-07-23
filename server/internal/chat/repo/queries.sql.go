@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const addUserFeedbackChatResolution = `-- name: AddUserFeedbackChatResolution :exec
@@ -95,6 +96,8 @@ candidate_chats AS (
   FROM chats c
   LEFT JOIN risk_counts rc ON rc.chat_id = c.id
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
+  -- Join users table to enable searching by user display name
+  LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = $5
     AND c.deleted IS FALSE
     AND ($6 = '' OR c.external_user_id = $6)
@@ -109,6 +112,7 @@ candidate_chats AS (
       OR c.id::text ILIKE '%' || $9 || '%'
       OR c.external_user_id ILIKE '%' || $9 || '%'
       OR c.title ILIKE '%' || $9 || '%'
+      OR u.display_name ILIKE '%' || $9 || '%'
     )
     AND (
       $10 = ''
@@ -230,6 +234,7 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 const countChatsWithResolutions = `-- name: CountChatsWithResolutions :one
 SELECT COUNT(DISTINCT c.id) as total
 FROM chats c
+LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
 WHERE c.project_id = $1
   AND c.deleted IS FALSE
   AND ($2 = '' OR c.external_user_id = $2)
@@ -240,6 +245,7 @@ WHERE c.project_id = $1
     OR c.id::text ILIKE '%' || $5 || '%'
     OR c.external_user_id ILIKE '%' || $5 || '%'
     OR c.title ILIKE '%' || $5 || '%'
+    OR u.display_name ILIKE '%' || $5 || '%'
   )
   AND (
     $6 = ''
@@ -307,6 +313,7 @@ type CountChatsWithResolutionsParams struct {
 	HasRiskFilter    string
 }
 
+// Join users table to enable searching by user display name
 func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsWithResolutionsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countChatsWithResolutions,
 		arg.ProjectID,
@@ -585,9 +592,12 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.user_account_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email
+SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.user_account_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+  at.assistant_id, a.name AS assistant_name
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
+LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.deleted IS FALSE
+LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
 WHERE c.id = $1 AND c.deleted IS FALSE
 `
 
@@ -608,6 +618,8 @@ type GetChatRow struct {
 	Deleted          bool
 	AccountType      string
 	AccountEmail     string
+	AssistantID      uuid.NullUUID
+	AssistantName    pgtype.Text
 }
 
 // Loads a chat plus the team/personal classification of the AI account that
@@ -634,6 +646,8 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (GetChatRow, error)
 		&i.Deleted,
 		&i.AccountType,
 		&i.AccountEmail,
+		&i.AssistantID,
+		&i.AssistantName,
 	)
 	return i, err
 }
@@ -1668,6 +1682,108 @@ func (q *Queries) ListChatSources(ctx context.Context, arg ListChatSourcesParams
 	return items, nil
 }
 
+const listChatTranscriptMessagesPage = `-- name: ListChatTranscriptMessagesPage :many
+SELECT
+  cm.id,
+  cm.seq,
+  cm.created_at,
+  cm.role,
+  cm.content,
+  cm.tool_calls,
+  cm.tool_call_id,
+  cm.tool_urn,
+  cm.tool_outcome,
+  cm.tool_outcome_notes
+FROM chat_messages cm
+WHERE cm.chat_id = $1
+  AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
+  AND (
+    $3::timestamptz IS NULL
+    OR (cm.created_at, cm.seq, cm.id) < (
+      $3::timestamptz,
+      $4::bigint,
+      $5::uuid
+    )
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC, cm.id DESC
+LIMIT $6::integer
+`
+
+type ListChatTranscriptMessagesPageParams struct {
+	ChatID          uuid.UUID
+	ProjectID       uuid.UUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorSeq       pgtype.Int8
+	CursorID        uuid.NullUUID
+	Lim             int32
+}
+
+type ListChatTranscriptMessagesPageRow struct {
+	ID               uuid.UUID
+	Seq              int64
+	CreatedAt        pgtype.Timestamptz
+	Role             string
+	Content          string
+	ToolCalls        []byte
+	ToolCallID       pgtype.Text
+	ToolUrn          urn.Tool
+	ToolOutcome      pgtype.Text
+	ToolOutcomeNotes pgtype.Text
+}
+
+// Keyset page of one chat's messages, newest first, carrying only the columns
+// transcript rendering reads. A transcript reader that pulled the whole chat
+// held every message of an unbounded session in memory to then throw most of
+// them away, so it walks backwards a page at a time instead and stops as soon
+// as the rendering starts dropping messages: the trim is oldest-first, so every
+// unread row is older than the ones already being dropped and would be dropped
+// too.
+//
+// The same project filter as ListChatMessages, so a page can never cross a
+// project boundary. CountChatMessages supplies the total once per transcript;
+// repeating a windowed count on every page makes long transcripts quadratic.
+//
+// The cursor is the full transcript key (created_at, seq, id): created_at and
+// seq alone are not unique, and a tie split across a page boundary would either
+// repeat or skip a message.
+func (q *Queries) ListChatTranscriptMessagesPage(ctx context.Context, arg ListChatTranscriptMessagesPageParams) ([]ListChatTranscriptMessagesPageRow, error) {
+	rows, err := q.db.Query(ctx, listChatTranscriptMessagesPage,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.CursorCreatedAt,
+		arg.CursorSeq,
+		arg.CursorID,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatTranscriptMessagesPageRow
+	for rows.Next() {
+		var i ListChatTranscriptMessagesPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Content,
+			&i.ToolCalls,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.ToolOutcome,
+			&i.ToolOutcomeNotes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChats = `-- name: ListChats :many
 WITH risk_counts AS (
   SELECT cm.chat_id, COUNT(*)::integer AS cnt
@@ -1699,6 +1815,8 @@ candidate_chats AS (
   -- Resolve the AI account that produced the chat (chats.user_account_id has no FK,
   -- matching chats.user_id) to expose its team/personal classification.
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
+  -- Join users table to enable searching by user display name
+  LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
     AND ($4 = '' OR c.external_user_id = $4)
@@ -1713,6 +1831,7 @@ candidate_chats AS (
       OR c.id::text ILIKE '%' || $7 || '%'
       OR c.external_user_id ILIKE '%' || $7 || '%'
       OR c.title ILIKE '%' || $7 || '%'
+      OR u.display_name ILIKE '%' || $7 || '%'
     )
     AND (
       $8 = ''
@@ -1809,10 +1928,14 @@ limited_chats AS (
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
+    at.assistant_id,
+    a.name AS assistant_name,
     -- Window count runs before LIMIT/OFFSET, so every returned row carries the
     -- total number of filtered chats.
     COUNT(*) OVER ()::bigint AS total_count
   FROM filtered_chats fc
+  LEFT JOIN assistant_threads at ON at.chat_id = fc.id AND at.deleted IS FALSE
+  LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
   ORDER BY
     -- Recency is pure message time. Hook rows persist at their occurred_at,
     -- so a chat whose only new traffic is spool-replayed backlog keeps its
@@ -1854,6 +1977,8 @@ SELECT
   ) AS risk_findings_count,
   lc.account_type,
   lc.account_email,
+  lc.assistant_id,
+  lc.assistant_name,
   lc.total_count
 FROM limited_chats lc
 `
@@ -1892,6 +2017,8 @@ type ListChatsRow struct {
 	RiskFindingsCount    int32
 	AccountType          string
 	AccountEmail         string
+	AssistantID          uuid.NullUUID
+	AssistantName        pgtype.Text
 	TotalCount           int64
 }
 
@@ -1945,6 +2072,8 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.RiskFindingsCount,
 			&i.AccountType,
 			&i.AccountEmail,
+			&i.AssistantID,
+			&i.AssistantName,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err
@@ -2530,6 +2659,36 @@ func (q *Queries) SeedChatMessageWithSource(ctx context.Context, arg SeedChatMes
 		arg.ChatID,
 		arg.ProjectID,
 		arg.Source,
+		arg.CreatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedChatTranscriptMessage = `-- name: SeedChatTranscriptMessage :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, created_at)
+VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, clock_timestamp()))
+RETURNING id
+`
+
+type SeedChatTranscriptMessageParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+	Role      string
+	Content   string
+	CreatedAt pgtype.Timestamptz
+}
+
+// Test fixture: insert a chat message with an explicit role, content and
+// created_at, which is what a transcript test needs to build a session long
+// enough that rendering has to drop messages.
+func (q *Queries) SeedChatTranscriptMessage(ctx context.Context, arg SeedChatTranscriptMessageParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedChatTranscriptMessage,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Role,
+		arg.Content,
 		arg.CreatedAt,
 	)
 	var id uuid.UUID

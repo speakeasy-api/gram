@@ -17,6 +17,11 @@ func AddVersionSkillsPath() string {
 	return "/rpc/skills.addVersion"
 }
 
+// UpdateSkillsPath returns the URL path to the skills service update HTTP endpoint.
+func UpdateSkillsPath() string {
+	return "/rpc/skills.update"
+}
+
 // ListSkillsPath returns the URL path to the skills service list HTTP endpoint.
 func ListSkillsPath() string {
 	return "/rpc/skills.list"
@@ -27,6 +32,11 @@ func GetSkillsPath() string {
 	return "/rpc/skills.get"
 }
 
+// ListUnknownActivationsSkillsPath returns the URL path to the skills service listUnknownActivations HTTP endpoint.
+func ListUnknownActivationsSkillsPath() string {
+	return "/rpc/skills.listUnknownActivations"
+}
+
 // ListVersionsSkillsPath returns the URL path to the skills service listVersions HTTP endpoint.
 func ListVersionsSkillsPath() string {
 	return "/rpc/skills.listVersions"
@@ -35,4 +45,34 @@ func ListVersionsSkillsPath() string {
 // ArchiveSkillsPath returns the URL path to the skills service archive HTTP endpoint.
 func ArchiveSkillsPath() string {
 	return "/rpc/skills.archive"
+}
+
+// DistributeSkillsPath returns the URL path to the skills service distribute HTTP endpoint.
+func DistributeSkillsPath() string {
+	return "/rpc/skills.distribute"
+}
+
+// UndistributeSkillsPath returns the URL path to the skills service undistribute HTTP endpoint.
+func UndistributeSkillsPath() string {
+	return "/rpc/skills.undistribute"
+}
+
+// ShareSkillsPath returns the URL path to the skills service share HTTP endpoint.
+func ShareSkillsPath() string {
+	return "/rpc/skills.share"
+}
+
+// UnshareSkillsPath returns the URL path to the skills service unshare HTTP endpoint.
+func UnshareSkillsPath() string {
+	return "/rpc/skills.unshare"
+}
+
+// GetSharedSkillsPath returns the URL path to the skills service getShared HTTP endpoint.
+func GetSharedSkillsPath() string {
+	return "/rpc/skills.getShared"
+}
+
+// ListDistributionsSkillsPath returns the URL path to the skills service listDistributions HTTP endpoint.
+func ListDistributionsSkillsPath() string {
+	return "/rpc/skills.listDistributions"
 }

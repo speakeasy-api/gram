@@ -1,5 +1,11 @@
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
-import { providerLabel } from "@/components/observe/account-display-utils";
+import {
+  providerLabel,
+  unsetLabel,
+} from "@/components/observe/account-display-utils";
+import { formatPlatform } from "@/lib/formatPlatform";
+
+export { unsetLabel };
 
 // Shared cost-taxonomy config + helpers, used by both the CostsExplorer
 // controller and the EntityProfile view. Kept in a non-component module so the
@@ -47,7 +53,9 @@ const CHAIN: DimMeta[] = [
 // Every axis the user can pivot to at any level (dynamic taxonomy). The Claude
 // attribution cuts (MCP Server/Tool, Skill, Subagent) are appended last so they
 // never preempt the org-hierarchy default at the root (see defaultGroupBy).
-const PIVOTS: DimMeta[] = [
+// Exported so breakdownCopy's test can assert its grammar table covers every
+// axis — a new pivot with unreviewed copy should fail the suite, not ship.
+export const PIVOTS: DimMeta[] = [
   ...CHAIN,
   { dim: Dimension.JobTitle, label: "Job Title" },
   { dim: Dimension.EmployeeType, label: "Employment Type" },
@@ -55,6 +63,10 @@ const PIVOTS: DimMeta[] = [
   { dim: Dimension.Model, label: "Model" },
   { dim: Dimension.AccountType, label: "Account Type" },
   { dim: Dimension.Provider, label: "Provider" },
+  // hostname is the machine the Go hooks report (gram.hook.hostname) — the
+  // per-device cut, and the identity the user breakdown falls back to when a
+  // session has no email.
+  { dim: Dimension.Hostname, label: "Device" },
   { dim: Dimension.Role, label: "Role" },
   { dim: Dimension.McpServerName, label: "MCP Server" },
   { dim: Dimension.McpToolName, label: "MCP Tool" },
@@ -82,6 +94,45 @@ export function collectionLabel(dim: Dimension): string | null {
   return COLLECTION_LABELS[dim] ?? null;
 }
 
+// Plural label for a breakdown dimension, for prose that counts its groups
+// ("across 8 Job Titles"). Attribution dims already carry a hand-written plural;
+// every other label pluralizes with a bare "s". Not for SESSIONS_AXIS — its
+// label is already plural, and the sessions list isn't a counted breakdown.
+export function pluralLabel(dim: Dimension): string {
+  return COLLECTION_LABELS[dim] ?? `${LABELS[dim] ?? "Group"}s`;
+}
+
+// The Moonshine Badge variant for an entity's type chip. Moonshine ships five
+// variants and two are spoken for — `destructive` reads as an error, `warning`
+// (amber) is the Preview release badge — so the taxonomy's dimensions group into
+// the three that remain, by what kind of thing the entity is:
+//
+//   information (brand blue) — who spent it: the org/people hierarchy
+//   neutral                  — what ran it: the agent/model/account runtime
+//   success (emerald)        — what it used: the Claude attribution cuts
+//
+// The variant names are hooks rather than literal semantics here (the same
+// reasoning as ReleaseStageBadge); grouping beats an arbitrary colour per
+// dimension, since a reader can learn three families but not fifteen.
+const PEOPLE_DIMS = new Set<Dimension>([
+  Dimension.DivisionName,
+  Dimension.DepartmentName,
+  Dimension.Email,
+  Dimension.JobTitle,
+  Dimension.EmployeeType,
+  Dimension.CostCenterName,
+  Dimension.Role,
+]);
+
+export type EntityBadgeVariant = "neutral" | "information" | "success";
+
+export function entityBadgeVariant(dim: Dimension | null): EntityBadgeVariant {
+  if (dim == null) return "neutral"; // the project root
+  if (PEOPLE_DIMS.has(dim)) return "information";
+  if (isAttributionDim(dim)) return "success";
+  return "neutral";
+}
+
 // The most granular grouping axes — an Agent or a Model is an endpoint, not
 // something you break down further. Drilling a row here jumps straight to that
 // slice's individual sessions (the SESSIONS_AXIS list) instead of another
@@ -89,6 +140,9 @@ export function collectionLabel(dim: Dimension): string | null {
 const SESSION_LEAF_DIMS = new Set<Dimension>([
   Dimension.HookSource,
   Dimension.Model,
+  // A device is an endpoint too: drilling one lists that machine's sessions —
+  // the natural next question about an unattributed CI runner or shared box.
+  Dimension.Hostname,
   // Claude attribution leaves: an MCP *tool* or a *skill* is an endpoint —
   // drilling one lists the sessions that touched it. Their parents (MCP Server,
   // Subagent) are NOT leaves: they drill one level deeper first (Server → Tool,
@@ -276,6 +330,7 @@ const DIM_ATTRIBUTE_KEY: Partial<Record<Dimension, string>> = {
   [Dimension.EmployeeType]: "user.attributes.employee_type",
   [Dimension.CostCenterName]: "user.attributes.cost_center_name",
   [Dimension.Email]: "user.email",
+  [Dimension.Hostname]: "gram.hook.hostname",
   [Dimension.Role]: "user.roles",
   [Dimension.Model]: "gen_ai.response.model",
   [Dimension.HookSource]: "gram.hook.source",
@@ -322,6 +377,33 @@ export function nextAvailableDimension(
   return next;
 }
 
+// The first axis at or below `start` (following the drill chain) that can
+// split a slice into more than one group. `countOf` reports the slice's
+// distinct group count for a dimension — including its "(unset)" bucket, which
+// the server surfaces in dimension_values for every groupable dim — or
+// undefined when unknown (fail open: accept the axis rather than skip on a
+// guess). Attribution dims are never skipped: '' is "not applicable" there,
+// their axes live in their own datasets, and pivotOptions prunes them.
+// Returns `start` itself when nothing below can split — the one-row terminal
+// view is then the honest rendering. Dimensions the drill path already pins
+// need no explicit exclusion: pinned dims count exactly one group.
+export function firstSplittableDimension(
+  start: Dimension,
+  available: Set<Dimension> | undefined,
+  countOf: (dim: Dimension) => number | undefined,
+): Dimension {
+  if (isAttributionDim(start) || (countOf(start) ?? 2) > 1) return start;
+  let next = nextAvailableDimension(start, available);
+  while (
+    next !== null &&
+    !isAttributionDim(next) &&
+    (countOf(next) ?? 2) <= 1
+  ) {
+    next = nextAvailableDimension(next, available);
+  }
+  return next ?? start;
+}
+
 // The breakdown axis a node defaults to: the next chain step below the deepest
 // filter, or — at the org root — the first dimension in pivot order that has
 // data (so a customer whose IDP omits the default chain still lands on a
@@ -354,14 +436,28 @@ export function datasetDefaultGroupBy(
   return DATASET_META[ds].dims[0]!;
 }
 
-// Human label for an entity value: title-cased name for emails, the raw value
-// otherwise. Shared by the profile header and the breadcrumb substitutions.
+// Human label for an entity value, for the breadcrumb trail and the assistant's
+// grounding context. A user stays their address: both callers need to identify
+// one person exactly, and "Adam" doesn't — two people can share a first name,
+// and the assistant can't ground on a name it can't resolve. The friendly
+// title-cased form belongs to the hero, which pairs it with the address anyway
+// (see prettyName in EntityProfile).
 export function displayName(dim: Dimension, value: string): string {
-  if (value === "") return "(unset)";
+  if (value === "") return unsetLabel(dim);
   if (dim === Dimension.Provider) return providerLabel(value);
+  if (dim === Dimension.HookSource) return formatPlatform(value);
   if (dim === Dimension.AccountType) {
     return value.charAt(0).toUpperCase() + value.slice(1);
   }
+  return value;
+}
+
+// The conversational form of an entity's value, for the hero and for prose that
+// talks about it ("Adam's claude-code spend"). A user becomes the name inside
+// their address; everything else is already conversational. Distinct from
+// displayName, which stays exact because the breadcrumb and the assistant have
+// to identify one person rather than read naturally.
+export function friendlyName(dim: Dimension, value: string): string {
   if (dim === Dimension.Email && value.includes("@")) {
     const local = value.split("@")[0] ?? value;
     return local
@@ -370,5 +466,5 @@ export function displayName(dim: Dimension, value: string): string {
       .map((w) => w[0]!.toUpperCase() + w.slice(1))
       .join(" ");
   }
-  return value;
+  return displayName(dim, value);
 }

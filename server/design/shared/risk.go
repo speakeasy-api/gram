@@ -102,6 +102,16 @@ var RiskPolicyEvalReview = Type("RiskPolicyEvalReview", func() {
 	Required("id", "policy_id", "policy_version", "chat_id", "verdict", "reviewed_by", "created_at", "updated_at")
 })
 
+var RiskDetectionScope = Type("RiskDetectionScope", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("category", String, "Risk category key this detection scope applies to.")
+	Attribute("scope_include", String, "CEL scope predicate: the category detects on a message only when this boolean expression is true. Empty means every message surface is included.")
+	Attribute("scope_exempt", String, "CEL exemption predicate: the category skips a message when this boolean expression is true. Empty means no exemption.")
+
+	Required("category")
+})
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -125,6 +135,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	})
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.")
 	Attribute("approved_email_domains", ArrayOf(String), "For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty means the domain rule is inert.")
+	Attribute("detection_scopes", ArrayOf(RiskDetectionScope), "Per-category detection scopes specified for this policy. The scan surface merges these with the recommended scopes, the specified scope winning on category conflict. Empty means every recommendation applies unchanged.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
 	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.")
@@ -157,10 +168,10 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("updated_at", String, "When the policy was last updated.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version.")
-	Attribute("total_messages", Int64, "Total number of messages in the project.")
+	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).")
+	Attribute("total_messages", Int64, "Total number of messages in the project. Populated on single-policy reads; omitted from list responses.")
 
-	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "score", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "score", "version", "created_at", "updated_at")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {

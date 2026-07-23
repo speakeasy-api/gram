@@ -492,6 +492,7 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("description", String, "Optional description.")
 	Attribute("is_default", Boolean, "Whether this is the project's fallback plugin that new servers attach to.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
+	Attribute("skill_count", Int64, "Number of active skills in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")
 	Attribute("servers", ArrayOf(PluginServerModel), "Servers included in this plugin.")
 	Attribute("assignments", ArrayOf(PluginAssignmentModel), "Role/user assignments.")

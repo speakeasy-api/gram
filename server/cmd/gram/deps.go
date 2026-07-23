@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/pubsub/v2"
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -47,6 +46,7 @@ import (
 
 	"github.com/speakeasy-api/gram/infra/gen"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
@@ -56,7 +56,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/bq"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -94,9 +93,9 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (policy *guardian.Policy, err error) {
+func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, redisClient redis.UniversalClient) (policy *guardian.Policy, err error) {
 	breaker := guardian.NewNoopBreaker(logger, meterProvider)
-	limiter := guardian.NewNoopLimiter(logger, meterProvider)
+	limiter := guardian.NewRedisRateLimiter(logger, meterProvider, redisClient)
 
 	// In local development, allow loopback addresses for internal tool-to-tool communication
 	if c.String("environment") == "local" {
@@ -218,7 +217,11 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		}
 		return nil
 	}
-	return conn, shutdown, nil
+	// Every consumer of this connection — all repos, current and future —
+	// forwards the caller's span context to ClickHouse by default, so
+	// server-side spans (system.opentelemetry_span_log) can be joined against
+	// APM traces by trace id; no per-call-site wiring exists or is needed.
+	return o11y.TraceClickhouseConn(conn), shutdown, nil
 }
 
 type dbClientOptions struct {
@@ -770,11 +773,14 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 func newTelemetryLogger(
 	ctx context.Context,
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	cacheImpl cache.Cache,
 	chDB clickhouse.Conn,
 	logsEnabled telemetry.FeatureChecker,
 	toolIOLogsEnabled telemetry.FeatureChecker,
+	logPublisher *telemetry.LogPublisher,
 ) (*telemetry.Logger, func(context.Context) error) {
 	// #nosec G118 -- this context must be tied to the lifetime of the
 	// application and not cancelled coming out of this function.
@@ -786,7 +792,7 @@ func newTelemetryLogger(
 
 	users := telemetry.NewUserInfoResolver(logger, db, cacheImpl)
 
-	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled, users), shutdown
+	return telemetry.NewLogger(shutdownCtx, logger, tracerProvider, meterProvider, chDB, logsEnabled, toolIOLogsEnabled, users, logPublisher), shutdown
 }
 
 func newTriggersApp(
@@ -966,28 +972,6 @@ func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (
 	return client, broker, func(context.Context) error { return client.Close() }, nil
 }
 
-func newBigQueryClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (bq.Client, func(ctx context.Context) error, error) {
-	if c.Bool("disable-bigquery-writes") {
-		return bq.NewNoopClient(), noopShutdown, nil
-	}
-
-	// Fall back to auto-detecting the project from ADC / the GKE metadata
-	// server when the flag is unset, mirroring how the Pub/Sub client behaves.
-	// Without this, an empty project ID yields invalid table references and
-	// every insert fails with a googleapi 400.
-	projectID := conv.Default(c.String("gcp-project-id"), bigquery.DetectProjectID)
-	client, err := bigquery.NewClient(ctx, projectID, option.WithLogger(logger.With(attr.SlogComponent("gcp-bigquery-client"))))
-	if err != nil {
-		return nil, noopShutdown, fmt.Errorf("failed to create bigquery client: %w", err)
-	}
-
-	shutdown := func(ctx context.Context) error {
-		return client.Close()
-	}
-
-	return bq.NewClient(client), shutdown, nil
-}
-
 type labelledStop struct {
 	label string
 	pub   interface {
@@ -1020,11 +1004,40 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "gitleaksAnalysis", pub: gitleaksAnalysis})
 
+	promptInjectionAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PromptInjectionAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for prompt injection analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "promptInjectionAnalysis", pub: promptInjectionAnalysis})
+
+	promptPolicyAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PromptPolicyAnalysis{})
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for prompt policy analysis: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "promptPolicyAnalysis", pub: promptPolicyAnalysis})
+
 	customRulesAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.CustomRulesAnalysis{})
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for custom rules analysis: %w", err)
 	}
 	pubs = append(pubs, labelledStop{label: "customRulesAnalysis", pub: customRulesAnalysis})
+
+	// The telemetry shadow dual-write is best-effort and must stay bounded
+	// during a Pub/Sub outage: cap how long a publish may take and fail fast
+	// at enqueue once the buffer fills, instead of buffering unboundedly.
+	telemetryPublishSettings := pubsub.DefaultPublishSettings
+	telemetryPublishSettings.Timeout = 10 * time.Second
+	telemetryPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+	telemetryPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+	telemetryPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
+	telemetryLogs, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &telemetryv1.LogRecord{},
+		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for telemetry logs: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
 
 	shutdown := func(ctx context.Context) error {
 		var err error
@@ -1037,28 +1050,11 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 
 	return &background.Publishers{
-		PresidioAnalysis:    presidioAnalysis,
-		GitleaksAnalysis:    gitleaksAnalysis,
-		CustomRulesAnalysis: customRulesAnalysis,
+		PresidioAnalysis:        presidioAnalysis,
+		GitleaksAnalysis:        gitleaksAnalysis,
+		PromptInjectionAnalysis: promptInjectionAnalysis,
+		PromptPolicyAnalysis:    promptPolicyAnalysis,
+		CustomRulesAnalysis:     customRulesAnalysis,
+		TelemetryLogs:           telemetryLogs,
 	}, shutdown, nil
-}
-
-func parseBigQueryTableSpec(spec string) (dataset string, table string, err error) {
-	split := strings.Split(spec, ".")
-	switch len(split) {
-	case 2:
-		return split[0], split[1], nil
-	case 3:
-		return split[1], split[2], nil
-	default:
-		return "", "", fmt.Errorf("invalid BigQuery table spec: %s", spec)
-	}
-}
-
-func bqTableFromSpec(client bq.Client, spec string) (bq.TableHandle, error) {
-	dataset, table, err := parseBigQueryTableSpec(spec)
-	if err != nil {
-		return nil, err
-	}
-	return client.Dataset(dataset).Table(table), nil
 }

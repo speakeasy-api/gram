@@ -986,10 +986,13 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		require.Len(t, groups, 1)
 		require.Len(t, groups[0].Hooks, 1)
 
-		async := event == "PostToolUse" || event == "Stop"
+		async := event == "PostToolUse" || event == "SessionEnd" || event == "Stop"
 		timeoutSeconds := 60
-		if event == "SessionStart" {
+		switch event {
+		case "SessionStart":
 			timeoutSeconds = 330
+		case "SessionEnd":
+			timeoutSeconds = 3
 		}
 		expectedSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}/speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
 		expectedWindowsSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}\speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
@@ -999,6 +1002,11 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		}
 		require.Equal(t, `bash "${PLUGIN_ROOT}/hooks/bootstrap.sh"`+expectedSuffix, groups[0].Hooks[0].Command)
 		require.Equal(t, `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "${PLUGIN_ROOT}\hooks\bootstrap.ps1"`+expectedWindowsSuffix, groups[0].Hooks[0].CommandWindows)
+		if event == "SessionEnd" {
+			require.Equal(t, 3, groups[0].Hooks[0].Timeout)
+		} else {
+			require.Zero(t, groups[0].Hooks[0].Timeout)
+		}
 		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async"))
 		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].CommandWindows, " --async"))
 	}
@@ -1023,6 +1031,27 @@ func TestComputeCodexHookApprovalsIncludesSingleSessionStartCommand(t *testing.T
 	require.Len(t, sessionStartApprovals, 1, "SessionStart has one bootstrap command to approve")
 	require.Equal(t, sessionStartPrefix+"0", sessionStartApprovals[0].StateKey)
 	require.NotEmpty(t, sessionStartApprovals[0].TrustedHash)
+}
+
+func TestComputeCodexHookApprovalsIncludesSessionEndTrustState(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
+	plugin := CodexObservabilitySlug(cfg)
+
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	require.NoError(t, err)
+
+	prefix := plugin + "@" + marketplace + ":hooks/hooks.json:session_end:0:"
+	var sessionEndApprovals []codexHookApproval
+	for _, approval := range approvals {
+		if strings.HasPrefix(approval.StateKey, prefix) {
+			sessionEndApprovals = append(sessionEndApprovals, approval)
+		}
+	}
+	require.Len(t, sessionEndApprovals, 1)
+	require.Equal(t, prefix+"0", sessionEndApprovals[0].StateKey)
+	require.NotEmpty(t, sessionEndApprovals[0].TrustedHash)
 }
 
 // runCodexInstallScript executes the generated install script under an
@@ -1831,4 +1860,60 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 
 	require.NotEqual(t, base["plugin-a"], changedFP["plugin-a"], "changed plugin's fingerprint must differ")
 	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
+}
+
+func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai"}
+	content := "---\nname: release-notes\ndescription: d\n---\n\nbody\n"
+	plugins := []PluginInfo{{
+		Name:        "Engineering Tools",
+		Slug:        "engineering-tools",
+		Description: "d",
+		Servers: []PluginServerInfo{
+			{DisplayName: "crm-tools", MCPURL: "https://app.getgram.ai/mcp/acme-abc12"},
+		},
+		Skills: []PluginSkillInfo{
+			{Name: "release-notes", Content: content},
+			// Not a valid normalized skill name — must never become a path.
+			{Name: "../escape", Content: "nope"},
+		},
+	}}
+
+	files, err := generateMCPFiles(plugins, cfg)
+	require.NoError(t, err)
+
+	require.Equal(t, []byte(content), files["engineering-tools/skills/release-notes/SKILL.md"])
+	require.Equal(t, []byte(content), files[cursorPluginRoot+"/engineering-tools-cursor/skills/release-notes/SKILL.md"])
+	require.Equal(t, []byte(content), files["engineering-tools-codex/skills/release-notes/SKILL.md"])
+	for p := range files {
+		require.NotContains(t, p, "escape", "invalid skill names must be dropped, not emitted as paths")
+	}
+}
+
+// Distributing a skill (or changing its resolved content) must move the
+// carrying plugin's fingerprint and only that one — the signal the publish
+// freshness check and the auto-sync rollout key on.
+func TestMCPFingerprintsChangeWithDistributedSkills(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai"}
+	makePlugins := func(skillContent string) []PluginInfo {
+		a := PluginInfo{Name: "Plugin A", Slug: "plugin-a", Description: "A", Servers: []PluginServerInfo{{DisplayName: "a1", MCPURL: "https://app.getgram.ai/mcp/a1"}}}
+		if skillContent != "" {
+			a.Skills = []PluginSkillInfo{{Name: "release-notes", Content: skillContent}}
+		}
+		b := PluginInfo{Name: "Plugin B", Slug: "plugin-b", Description: "B", Servers: []PluginServerInfo{{DisplayName: "b1", MCPURL: "https://app.getgram.ai/mcp/b1"}}}
+		return []PluginInfo{a, b}
+	}
+
+	base, err := MCPFingerprints(makePlugins(""), cfg)
+	require.NoError(t, err)
+	withSkill, err := MCPFingerprints(makePlugins("v1"), cfg)
+	require.NoError(t, err)
+	withNewVersion, err := MCPFingerprints(makePlugins("v2"), cfg)
+	require.NoError(t, err)
+
+	require.NotEqual(t, base["plugin-a"], withSkill["plugin-a"], "distributing a skill must change the plugin's fingerprint")
+	require.NotEqual(t, withSkill["plugin-a"], withNewVersion["plugin-a"], "a new resolved skill version must change the plugin's fingerprint")
+	require.Equal(t, base["plugin-b"], withSkill["plugin-b"], "plugins not carrying the skill must be untouched")
 }
