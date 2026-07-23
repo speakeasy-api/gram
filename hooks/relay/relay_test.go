@@ -520,6 +520,49 @@ func TestCursorModelResponseRelaysMessage(t *testing.T) {
 	require.Equal(t, int64(5), *last.Data.Usage.OutputTokens)
 }
 
+func TestCursorSessionEndRelaysCanonicalLifecycle(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	payload := []byte(`{"hook_event_name":"sessionEnd","conversation_id":"sess-cursor-end","status":"completed"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCursor, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 1, fs.count())
+	last := fs.last()
+	require.Equal(t, components.TypeSessionEnded, last.Event.Type)
+	require.NotNil(t, last.Session)
+	require.NotNil(t, last.Session.ID)
+	require.Equal(t, "sess-cursor-end", *last.Session.ID)
+}
+
+func TestCodexSessionEndRelaysCanonicalLifecycle(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	payload := []byte(`{"session_id":"sess-codex-end","cwd":"/work/repo","hook_event_name":"SessionEnd","reason":"other"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 1, fs.count())
+	last := fs.last()
+	require.Equal(t, components.TypeSessionEnded, last.Event.Type)
+	require.NotNil(t, last.Session)
+	require.NotNil(t, last.Session.ID)
+	require.Equal(t, "sess-codex-end", *last.Session.ID)
+}
+
+func TestStopEventsRemainPerTurn(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+
+	invoke(t, cfg, agenthooks.ProviderCursor, "cursor/stop.json")
+	require.Equal(t, components.TypeUsageReported, fs.last().Event.Type)
+
+	invoke(t, cfg, agenthooks.ProviderCodex, "codex/stop.json")
+	require.Equal(t, components.TypeAssistantResponded, fs.last().Event.Type)
+}
+
 // TestLoginCommandCarriesConfig pins the nudge → login contract: the sign-in
 // command must reference the plugin's speakeasy.json so the minted credential
 // matches the server/project the hook path authenticates against.
@@ -553,12 +596,12 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 		{
 			provider: "cursor",
 			path:     filepath.Join("hooks", "hooks.json"),
-			want:     []string{"afterAgentResponse", "afterAgentThought", "afterMCPExecution", "beforeMCPExecution", "beforeSubmitPrompt", "postToolUse", "postToolUseFailure", "preToolUse", "sessionStart", "stop"},
+			want:     []string{"afterAgentResponse", "afterAgentThought", "afterMCPExecution", "beforeMCPExecution", "beforeSubmitPrompt", "postToolUse", "postToolUseFailure", "preToolUse", "sessionEnd", "sessionStart", "stop"},
 		},
 		{
 			provider: "codex",
 			path:     "hooks.json",
-			want:     []string{"PermissionRequest", "PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"},
+			want:     []string{"PermissionRequest", "PostToolUse", "PreToolUse", "SessionEnd", "SessionStart", "Stop", "UserPromptSubmit"},
 		},
 	}
 	for _, tt := range tests {
