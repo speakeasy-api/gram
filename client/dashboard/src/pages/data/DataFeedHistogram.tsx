@@ -1,5 +1,7 @@
+import { CHART_COLORS, OTHER_COLOR } from "@/components/stacked-time-series";
 import { Type } from "@/components/ui/type";
 import { dateTimeFormatters } from "@/lib/dates";
+import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import {
   BarController,
   BarElement,
@@ -21,55 +23,21 @@ ChartJS.register(
   Tooltip,
 );
 
-const BUCKET_MINUTES = 5;
-const BUCKET_COUNT = 12; // one hour of five-minute buckets, newest at the right
+const BUCKET_MINUTES = 2;
+const BUCKET_COUNT = 30; // one hour of two-minute buckets, newest at the right
 
-// Chart.js needs literal colors. These match the kind treatment in the table:
-// logs are neutral, metrics are the information blue.
-const LOG_COLOR = "#a3a3a3";
-const METRIC_COLOR = "#60a5fa";
+// Series colors come from the shared stacked time-series palette (the billing
+// token-usage chart) so the feed reads like the rest of the dashboard:
+// metrics in the palette blue, logs in the neutral remainder slate.
+const METRIC_COLOR = CHART_COLORS[0]!;
+const LOG_COLOR = OTHER_COLOR;
 
-const CHART_OPTIONS: ChartOptions<"bar"> = {
-  responsive: true,
-  maintainAspectRatio: false,
-  animation: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: "#171717",
-      titleColor: "#fafafa",
-      bodyColor: "#d4d4d4",
-      borderColor: "#262626",
-      borderWidth: 1,
-      displayColors: true,
-      boxWidth: 8,
-      boxHeight: 8,
-    },
-  },
-  scales: {
-    x: {
-      stacked: true,
-      grid: { display: false },
-      ticks: {
-        maxTicksLimit: 6,
-        maxRotation: 0,
-        font: { size: 10 },
-        color: "#737373",
-      },
-    },
-    y: {
-      stacked: true,
-      beginAtZero: true,
-      grid: { color: "#e5e5e51a" },
-      ticks: {
-        precision: 0,
-        maxTicksLimit: 4,
-        font: { size: 10 },
-        color: "#737373",
-      },
-    },
-  },
-};
+const BAR_SIZING = {
+  stack: "events",
+  maxBarThickness: 10,
+  barPercentage: 0.8,
+  categoryPercentage: 0.8,
+} as const;
 
 interface HistogramBuckets {
   labels: string[];
@@ -78,8 +46,8 @@ interface HistogramBuckets {
 }
 
 /**
- * Buckets events into fixed five-minute windows ending at the newest event
- * (the feed is a live stream, so the right edge is "now").
+ * Buckets events into fixed two-minute windows ending now (the feed is a
+ * live stream, so the right edge is the present).
  */
 function bucketEvents(events: DataEvent[]): HistogramBuckets {
   const bucketMs = BUCKET_MINUTES * 60_000;
@@ -107,6 +75,7 @@ function bucketEvents(events: DataEvent[]): HistogramBuckets {
   return { labels, logCounts, metricCounts };
 }
 
+// Static legend chip matching the StackedTimeSeriesPanel legend styling.
 function LegendSwatch({
   color,
   label,
@@ -115,10 +84,10 @@ function LegendSwatch({
   label: string;
 }): JSX.Element {
   return (
-    <span className="flex items-center gap-1.5">
+    <span className="flex items-center gap-1.5 px-2 py-0.5">
       <span
         aria-hidden
-        className="size-2 rounded-xs"
+        className="size-2.5 rounded-[3px]"
         style={{ backgroundColor: color }}
       />
       <Type muted small>
@@ -130,7 +99,8 @@ function LegendSwatch({
 
 /**
  * Volume-over-time histogram above the feed, the way standard log viewers
- * lead with one. Reflects the currently filtered events, stacked by kind.
+ * lead with one. Reflects the currently filtered events, stacked by kind,
+ * styled after the billing token-usage breakdown chart.
  */
 export function DataFeedHistogram({
   events,
@@ -138,6 +108,52 @@ export function DataFeedHistogram({
   events: DataEvent[];
 }): JSX.Element {
   const buckets = useMemo(() => bucketEvents(events), [events]);
+
+  // Chart.js paints the canvas with static defaults that ignore the CSS
+  // theme, so axis text and gridlines need explicit dark-mode colors.
+  const { theme } = useMoonshineConfig();
+  const isDark = theme === "dark";
+
+  const options = useMemo<ChartOptions<"bar">>(() => {
+    const textColor = isDark ? "rgba(255, 255, 255, 0.85)" : "#666";
+    const gridColor = isDark ? "#666" : "rgba(0, 0, 0, 0.08)";
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => `${item.dataset.label}: ${item.formattedValue}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { display: false },
+          ticks: {
+            maxTicksLimit: 6,
+            maxRotation: 0,
+            font: { size: 10 },
+            color: textColor,
+          },
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          grid: { color: gridColor },
+          ticks: {
+            precision: 0,
+            maxTicksLimit: 4,
+            font: { size: 10 },
+            color: textColor,
+          },
+        },
+      },
+    };
+  }, [isDark]);
 
   const data = useMemo(
     () => ({
@@ -147,17 +163,13 @@ export function DataFeedHistogram({
           label: "Logs",
           data: buckets.logCounts,
           backgroundColor: LOG_COLOR,
-          stack: "events",
-          barPercentage: 0.9,
-          categoryPercentage: 0.9,
+          ...BAR_SIZING,
         },
         {
           label: "Metrics",
           data: buckets.metricCounts,
           backgroundColor: METRIC_COLOR,
-          stack: "events",
-          barPercentage: 0.9,
-          categoryPercentage: 0.9,
+          ...BAR_SIZING,
         },
       ],
     }),
@@ -165,13 +177,13 @@ export function DataFeedHistogram({
   );
 
   return (
-    <div className="border-border rounded-md border p-3">
-      <div className="mb-2 flex items-center justify-end gap-4">
+    <div className="border-border rounded-lg border p-4">
+      <div className="h-24">
+        <Bar data={data} options={options} />
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
         <LegendSwatch color={LOG_COLOR} label="Logs" />
         <LegendSwatch color={METRIC_COLOR} label="Metrics" />
-      </div>
-      <div className="h-24">
-        <Bar data={data} options={CHART_OPTIONS} />
       </div>
     </div>
   );
