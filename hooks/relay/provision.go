@@ -134,7 +134,7 @@ func alignPublishedHookEvents(provider agenthooks.Provider, dir string) error {
 		}
 		doc.Hooks["ConfigChange"] = append(json.RawMessage(nil), notification...)
 	case agenthooks.ProviderCursor:
-		for _, event := range []string{"sessionEnd", "beforeShellExecution", "beforeReadFile", "afterShellExecution"} {
+		for _, event := range []string{"beforeShellExecution", "beforeReadFile", "afterShellExecution"} {
 			delete(doc.Hooks, event)
 		}
 		var entries []map[string]any
