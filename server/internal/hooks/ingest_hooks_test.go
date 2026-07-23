@@ -95,6 +95,50 @@ func TestIngest_AcceptsCustomHookSource(t *testing.T) {
 	require.Equal(t, "allow", result.Decision)
 }
 
+// The OTEL logs path caches service.name "cowork" for a session's metadata;
+// the desktop hook client then sends its generic "claude-code-desktop"
+// adapter slug on every canonical event (cowork and Claude Code Desktop share
+// it). The metadata merge must keep the more specific cowork identity so
+// chat sources and hook_source stay "cowork", and a session.started re-cache
+// never downgrades it back to the adapter.
+func TestCanonicalSessionMetadata_KeepsCachedCoworkServiceName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-cowork-surface"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "cowork",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}, 0))
+
+	payload := canonicalIngestPayload("claude-code-desktop", "session.started", sessionID)
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: "", Email: ""})
+	require.Equal(t, "cowork", metadata.ServiceName)
+}
+
+// With no cached OTEL identity (the session's log stream has not arrived
+// yet), the canonical metadata keeps the adapter slug — for the desktop
+// client that means "claude-code-desktop", which is itself a distinct surface
+// from the claude-code CLI.
+func TestCanonicalSessionMetadata_AdapterStandsWithoutCachedServiceName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	payload := canonicalIngestPayload("claude-code-desktop", "session.started", "canonical-ccd-no-cache")
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: "", Email: ""})
+	require.Equal(t, "claude-code-desktop", metadata.ServiceName)
+}
+
 func TestIngest_RequiresCurrentSchemaVersion(t *testing.T) {
 	t.Parallel()
 

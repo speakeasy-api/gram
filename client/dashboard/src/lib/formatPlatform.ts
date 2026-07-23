@@ -10,6 +10,10 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   "claude-chat-web": "Claude Chat Web",
   claudecode: "Claude Code",
   "claude-code": "Claude Code",
+  // Claude Code Desktop is its own surface, distinct from the claude-code CLI
+  // and from cowork (which shares CCD's hook adapter slug but resolves to
+  // "cowork" server-side via the OTEL service.name).
+  "claude-code-desktop": "Claude Code Desktop",
   cowork: "Claude Cowork",
   "claude-cowork": "Claude Cowork",
   cursor: "Cursor",

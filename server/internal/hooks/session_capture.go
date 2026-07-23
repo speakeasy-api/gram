@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -46,20 +47,105 @@ func isConversationEvent(eventName string) bool {
 }
 
 // defaultChatTitleForSession picks the default chat title based on the
-// session's agent variant stamped by SessionStart. If the variant is
-// unknown (no SessionStart cached yet, or stamped with an unrecognized
-// value) we fall back to the ambiguous "Claude Session" title rather than
-// assuming claude-code — the title generator will replace it with a real
-// one once enough conversation is on file.
-func (s *Service) defaultChatTitleForSession(ctx context.Context, sessionID string) string {
-	switch s.sessionAgentVariant(ctx, sessionID) {
+// session's resolved product surface. If the surface is unknown (no OTEL
+// service.name or SessionStart variant on file yet) we fall back to the
+// ambiguous "Claude Session" title rather than assuming claude-code — the
+// title generator will replace it with a real one once enough conversation
+// is on file.
+func (s *Service) defaultChatTitleForSession(ctx context.Context, metadata *SessionMetadata) string {
+	switch s.claudeSessionSurface(ctx, metadata) {
 	case agentVariantCowork:
 		return activities.DefaultCoworkChatTitle
-	case agentVariantClaudeCode:
+	case agentVariantClaudeCode, surfaceClaudeCodeDesktop:
 		return activities.DefaultClaudeChatTitle
 	default:
 		return activities.DefaultClaudeAmbiguous
 	}
+}
+
+// claudeSurfaceFromServiceName maps a reported service name or hook adapter
+// slug to the canonical Claude product surface: "cowork", "claude-code-desktop"
+// (CCD), or "claude-code" (the CLI). The OTEL resource service.name is the
+// source of truth where it disambiguates: cowork self-identifies on it, while
+// the CLI and CCD both report "claude-code" — CCD is identified by the desktop
+// hook client's adapter slug instead. Returns "" when the value identifies no
+// Claude surface (Cursor, Codex, unknown adapters).
+func claudeSurfaceFromServiceName(name string) string {
+	switch n := strings.ToLower(strings.TrimSpace(name)); {
+	case strings.Contains(n, "cowork"):
+		return agentVariantCowork
+	case n == surfaceClaudeCodeDesktop:
+		return surfaceClaudeCodeDesktop
+	case n == "claude-code" || n == "claudecode":
+		return agentVariantClaudeCode
+	default:
+		return ""
+	}
+}
+
+// claudeServiceNameSpecificity ranks how precisely a service name or adapter
+// slug identifies the product surface. "cowork" is unambiguous; the desktop
+// adapter slug narrows to CCD; "claude-code" is the OTEL name shared by the
+// CLI and CCD, so it is the least specific Claude value. Non-Claude values
+// rank zero.
+func claudeServiceNameSpecificity(name string) int {
+	switch claudeSurfaceFromServiceName(name) {
+	case agentVariantCowork:
+		return 3
+	case surfaceClaudeCodeDesktop:
+		return 2
+	case agentVariantClaudeCode:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// preferClaudeServiceName merges a freshly reported service name (or adapter
+// slug) with the session's previously cached one, keeping whichever identifies
+// the Claude product surface more precisely. This is what lets the two signals
+// compose: the OTEL stream's "cowork" upgrades a cached desktop adapter slug,
+// while a cached "claude-code-desktop" survives OTEL batches that only report
+// the ambiguous "claude-code". Ties keep the fresh value. A non-empty incoming
+// value that identifies no Claude surface (Cursor, Codex, unknown adapters)
+// always wins: non-Claude senders keep their reported name instead of being
+// overwritten by a Claude value cached under the same session id.
+func preferClaudeServiceName(incoming, cached string) string {
+	if incoming == "" {
+		return cached
+	}
+	if claudeSurfaceFromServiceName(incoming) == "" {
+		return incoming
+	}
+	if claudeServiceNameSpecificity(cached) > claudeServiceNameSpecificity(incoming) {
+		return cached
+	}
+	return incoming
+}
+
+// claudeSessionSurface resolves the product surface for a session from the
+// service name carried on SessionMetadata (the OTEL service.name once the
+// session's log stream has been seen, the hook adapter slug before then) with
+// the inventory-shape variant stamped at SessionStart as fallback — it covers
+// cowork builds that predate the cowork service.name and sessions whose OTEL
+// stream has not arrived yet. Values that identify no Claude surface pass
+// through unchanged so non-Claude senders keep their reported name.
+func (s *Service) claudeSessionSurface(ctx context.Context, metadata *SessionMetadata) string {
+	surface := claudeSurfaceFromServiceName(metadata.ServiceName)
+	if surface == agentVariantCowork {
+		return surface
+	}
+	variant := s.sessionAgentVariant(ctx, metadata.SessionID)
+	if variant == agentVariantCowork {
+		return agentVariantCowork
+	}
+	if surface != "" {
+		return surface
+	}
+	if variant != "" {
+		return variant
+	}
+	return metadata.ServiceName
 }
 
 // sessionAgentVariant returns the agent variant ("cowork" or "claude-code")
@@ -331,7 +417,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		Content:          content,
 		Model:            model,
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText(metadata.ServiceName),
+		Source:           conv.ToPGText(s.claudeSessionSurface(ctx, metadata)),
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
@@ -350,7 +436,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		Generation:       0,
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, ""))); err != nil {
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, metadata)); err != nil {
 		return err
 	}
 
@@ -429,7 +515,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Content:          "", // Tool call requests typically have empty content
 		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText(metadata.ServiceName),
+		Source:           conv.ToPGText(s.claudeSessionSurface(ctx, metadata)),
 		ToolCalls:        toolCallsJSON,
 		FinishReason:     conv.ToPGText("tool_calls"),
 		PromptTokens:     0,
@@ -448,7 +534,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, "")))
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, metadata))
 }
 
 // writeToolCallResultToPG writes a tool result message to PostgreSQL.
@@ -481,7 +567,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 		Role:             "tool",
 		Content:          content,
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText(metadata.ServiceName),
+		Source:           conv.ToPGText(s.claudeSessionSurface(ctx, metadata)),
 		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolUseID, "")),
 		PromptTokens:     0,
 		CompletionTokens: 0,
@@ -504,7 +590,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 	// If this was an error, we could optionally set tool_outcome based on isError
 	_ = isError
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, "")))
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, metadata))
 }
 
 // marshalToJSON converts any value to a JSON string.
