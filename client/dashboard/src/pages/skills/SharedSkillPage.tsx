@@ -6,6 +6,7 @@ import { dateTimeFormatters } from "@/lib/dates";
 import type { SharedSkill2 } from "@gram/client/models/components/sharedskill2.js";
 import { useSharedSkill } from "@gram/client/react-query/sharedSkill.js";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { useEffect } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { stripSkillFrontmatter } from "./skill-manifest";
@@ -17,8 +18,28 @@ import { stripSkillFrontmatter } from "./skill-manifest";
  * credential, so anonymous visitors can read the latest version of a shared
  * skill without signing in.
  */
+/**
+ * Injects <meta name="robots" content="noindex, nofollow"> for the lifetime
+ * of the page. The production nginx config also sends X-Robots-Tag for
+ * /shared/* responses; this is the belt-and-braces signal for environments
+ * that serve the SPA shell without that header (Google honors
+ * client-rendered robots meta tags).
+ */
+function useNoIndexMeta(): void {
+  useEffect(() => {
+    const meta = document.createElement("meta");
+    meta.name = "robots";
+    meta.content = "noindex, nofollow";
+    document.head.appendChild(meta);
+    return () => {
+      meta.remove();
+    };
+  }, []);
+}
+
 export function SharedSkillPage(): JSX.Element {
   const { token } = useParams<{ token: string }>();
+  useNoIndexMeta();
 
   return (
     <div className="bg-background flex min-h-screen w-full flex-col">
