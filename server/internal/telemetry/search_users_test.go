@@ -1309,6 +1309,12 @@ func TestSearchUsers_AgentMetricsSource(t *testing.T) {
 		byID[u.UserID] = u
 	}
 
+	// Global sort across the two sources: the email-less identity's activity
+	// (-8m) is more recent than the agent user's (-10m), so it sorts first even
+	// though the supplement rows are appended after the view rows.
+	require.NotEmpty(t, res.Users)
+	assert.Equal(t, emaillessUserID, res.Users[0].UserID, "merged results should be globally sorted by last activity")
+
 	// Email-keyed user comes from the view, keyed by email, with token totals.
 	agentUser := byID[email]
 	require.NotNil(t, agentUser, "email-keyed agent user should be present from the view")
@@ -1322,6 +1328,35 @@ func TestSearchUsers_AgentMetricsSource(t *testing.T) {
 	assert.Equal(t, int64(0), emaillessUser.TotalInputTokens)
 	assert.Equal(t, int64(0), emaillessUser.TotalOutputTokens)
 	assert.NotEqual(t, "0", emaillessUser.LastSeenUnixNano, "email-less identity should carry last activity")
+}
+
+// TestSearchUsers_AgentMetricsSourceRejectsUnsupportedFilters pins that the
+// agent-metrics source fails loud rather than silently returning project-wide
+// data when given a filter it cannot honor (the view is keyed by email + time
+// only).
+func TestSearchUsers_AgentMetricsSourceRejectsUnsupportedFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	now := time.Now().UTC()
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	deploymentID := uuid.New().String()
+
+	_, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:         from,
+			To:           to,
+			DeploymentID: &deploymentID,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+		Source:   "agent_metrics",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported with source=agent_metrics")
 }
 
 func insertHookLogWithUser(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, userID, externalUserID, hookSource string, success bool) {
