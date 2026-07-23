@@ -153,7 +153,7 @@ func TestPublish_ModelFailureChargesAttempt(t *testing.T) {
 
 	fixture := newAnalysisFixture(t, "publish_model_failure")
 	roster := testJudges(t, stubNamedJudge{name: "work_units", verdict: JudgeResult{}, err: fmt.Errorf("bad output: %w", ErrModelFailure)})
-	fixture.enableJudge(t, "work_units", 10)
+	fixture.enableJudge(t, "work_units", 1)
 
 	fixture.seedChat(t, 2, time.Hour)
 	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
@@ -180,6 +180,16 @@ func TestPublish_ModelFailureChargesAttempt(t *testing.T) {
 		}
 	}
 	require.Empty(t, sink.rows(t))
+
+	// The failed evaluation keeps its reserved_on and still counts toward the
+	// daily cap: failure never refunds budget, so a fresh candidate cannot be
+	// reserved today.
+	fixture.seedChat(t, 2, time.Hour)
+	_, err = EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	require.NoError(t, err)
+	again, _, err := Reserve(ctx, fixture.db, roster, fixture.projectID, PendingCursor{}, MaxReservedClaimBatch)
+	require.NoError(t, err)
+	require.Empty(t, again, "the failed evaluation's spend is not returned")
 }
 
 func TestPublish_AlreadyPublishedSkipsJudge(t *testing.T) {

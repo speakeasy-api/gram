@@ -18,7 +18,6 @@ FROM chat_analysis_evaluations e
 JOIN projects p ON p.organization_id = e.organization_id
 WHERE p.id = $1::uuid
   AND e.reserved_on = $2::date
-  AND e.state IN ('reserved', 'scored')
 GROUP BY e.judge
 `
 
@@ -34,7 +33,9 @@ type CountChatAnalysisJudgeSpendForProjectRow struct {
 
 // Per-judge spend for the day, organization-grained and entered through the
 // project: counts every project in the organization. Judges with no spend are
-// simply absent.
+// simply absent. Spend is counted by reserved_on alone: failed evaluations
+// keep their reserved_on as immutable spend history, so they still count —
+// a failure never refunds budget.
 func (q *Queries) CountChatAnalysisJudgeSpendForProject(ctx context.Context, arg CountChatAnalysisJudgeSpendForProjectParams) ([]CountChatAnalysisJudgeSpendForProjectRow, error) {
 	rows, err := q.db.Query(ctx, countChatAnalysisJudgeSpendForProject, arg.ProjectID, arg.ReservedOn)
 	if err != nil {
