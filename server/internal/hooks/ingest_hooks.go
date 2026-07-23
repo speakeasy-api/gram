@@ -1051,14 +1051,40 @@ func canonicalToolCallsJSON(payload *gen.IngestPayload) ([]byte, error) {
 	return toolCallsJSON, nil
 }
 
+// canonicalChatToolCallID falls back to the shared per-(session, tool) key
+// when the sender supplied no per-call id, matching canonicalTraceID's
+// fallback: hashing the recorded id must reproduce the trace id, or the
+// shadow-MCP provenance lookup can never join the recorded call to its hook
+// log (DNO-604).
 func canonicalChatToolCallID(payload *gen.IngestPayload) string {
 	if id := canonicalToolCallID(payload); id != "" {
 		return id
+	}
+	if key := canonicalSyntheticToolCallID(payload); key != "" {
+		return key
 	}
 	if name := canonicalToolName(payload); name != "" {
 		return name
 	}
 	return canonicalTraceID(payload)
+}
+
+// canonicalSyntheticToolCallID returns the shared per-(session, tool) fallback
+// key for tool events only. canonicalTraceID runs for every ingested event
+// (hookTelemetryBaseAttrs), and the schema permits tool_call data on any
+// event, but only tool events have a recorded chat side to join — a
+// skill.activated or prompt row carrying a tool name must keep its
+// session-level trace instead of migrating into the tool's trace.
+func canonicalSyntheticToolCallID(payload *gen.IngestPayload) string {
+	if payload == nil || payload.Event == nil {
+		return ""
+	}
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "tool.requested", "tool.completed", "tool.failed":
+		return syntheticToolCallID(canonicalSessionID(payload), canonicalToolName(payload))
+	default:
+		return ""
+	}
 }
 
 func canonicalToolResultContent(payload *gen.IngestPayload) string {
@@ -1164,6 +1190,11 @@ func canonicalToolCallID(payload *gen.IngestPayload) string {
 func canonicalTraceID(payload *gen.IngestPayload) string {
 	if id := canonicalToolCallID(payload); id != "" {
 		return hashToolCallIDToTraceID(id)
+	}
+	// Tool events without a per-call id trace per (session, tool), keeping the
+	// trace id derivable from the id canonicalChatToolCallID records (DNO-604).
+	if key := canonicalSyntheticToolCallID(payload); key != "" {
+		return hashToolCallIDToTraceID(key)
 	}
 	if sessionID := canonicalSessionID(payload); sessionID != "" {
 		return hashToolCallIDToTraceID(sessionID)
