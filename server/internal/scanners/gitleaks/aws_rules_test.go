@@ -34,9 +34,32 @@ func ruleSet(t *testing.T, content string) map[string]bool {
 	return out
 }
 
-// The extended config must detect all three AWS credential flavors — the id
-// (built-in) plus the secret access key and session token (our added rules).
-func TestExtendedConfig_DetectsAllThreeFlavors(t *testing.T) {
+// A label-anchored rule's reported match must be the secret VALUE only, never
+// the surrounding label — so downstream masking covers the secret and leaves
+// the (non-sensitive) JSON key visible. Also asserts the span brackets the value.
+func TestExtendedConfig_MatchIsValueNotLabel(t *testing.T) {
+	t.Parallel()
+
+	content := `{ "SessionToken": "` + fakeToken + `" }`
+	findings, err := gitleaks.NewScanner().Scan(context.Background(), content)
+	require.NoError(t, err)
+
+	var tok *scanners.Finding
+	for i := range findings {
+		if findings[i].RuleID == gitleaks.SessionTokenRuleID {
+			tok = &findings[i]
+		}
+	}
+	require.NotNil(t, tok, "session token should be detected")
+	require.Equal(t, fakeToken, tok.Match, "match must be the token value, not include the SessionToken label")
+	require.NotContains(t, tok.Match, "SessionToken")
+	require.Equal(t, content[tok.StartPos:tok.EndPos], tok.Match, "span must bracket exactly the value")
+}
+
+// The access key id is an identifier, not a secret: it anchors detection but is
+// NEVER surfaced as its own finding. The secret access key and session token
+// are the values that get flagged.
+func TestExtendedConfig_FlagsSecretsNotID(t *testing.T) {
 	t.Parallel()
 
 	content := `{
@@ -46,13 +69,23 @@ func TestExtendedConfig_DetectsAllThreeFlavors(t *testing.T) {
 }`
 
 	got := ruleSet(t, content)
-	require.True(t, got[gitleaks.AccessKeyIDRuleID], "access key id (built-in) should be detected")
+	require.False(t, got[gitleaks.AccessKeyIDRuleID], "the access key id must NOT be reported as a leaked secret")
 	require.True(t, got[gitleaks.SecretAccessKeyRuleID], "secret access key should be detected")
 	require.True(t, got[gitleaks.SessionTokenRuleID], "session token should be detected")
 }
 
-// The secret access key must also be caught with no label, purely by proximity
-// to the access key id — the native composite (RequiredRules) path.
+// A lone access key id, with no secret nearby, produces no AWS finding — an id
+// on its own is not a credential leak.
+func TestExtendedConfig_LoneAccessKeyIDNotFlagged(t *testing.T) {
+	t.Parallel()
+
+	got := ruleSet(t, `{ "AccessKeyId": "`+fakeAccessKeyID+`" }`)
+	require.False(t, got[gitleaks.AccessKeyIDRuleID], "the access key id must not be reported")
+	require.False(t, got[gitleaks.SecretAccessKeyRuleID])
+}
+
+// The secret access key must be caught with no label, purely by proximity to the
+// (unreported) access key id — the native composite (RequiredRules) path.
 func TestExtendedConfig_SecretAnchoredToIDWithoutLabel(t *testing.T) {
 	t.Parallel()
 
@@ -61,7 +94,7 @@ func TestExtendedConfig_SecretAnchoredToIDWithoutLabel(t *testing.T) {
 	content := "creds  " + fakeAccessKeyID + "  " + fakeSecret + "\n"
 
 	got := ruleSet(t, content)
-	require.True(t, got[gitleaks.AccessKeyIDRuleID])
+	require.False(t, got[gitleaks.AccessKeyIDRuleID], "the id anchors but is not reported")
 	require.True(t, got[gitleaks.SecretAccessKeyRuleID],
 		"a bare secret within WithinLines of the id should be reported via the composite rule")
 }
@@ -76,18 +109,15 @@ func TestExtendedConfig_BareSecretWithoutAnchorNotDetected(t *testing.T) {
 		"an unanchored, unlabeled base64 blob must not be flagged as a secret access key")
 }
 
-// A 40-char lowercase hex hash sitting next to a real access key id must not be
-// reported: the composite rule's entropy floor rejects it.
+// A 40-char lowercase hex hash sitting next to an access key id must not be
+// reported: the composite rule's entropy floor rejects it. A positive control
+// proves the anchor works (the id itself is no longer a reportable finding).
 func TestExtendedConfig_HashNextToIDNotDetected(t *testing.T) {
 	t.Parallel()
 
-	content := fakeAccessKeyID + " " + sha1Empty + "\n"
-	got := ruleSet(t, content)
-	// Assert the anchor fired: otherwise the composite rule couldn't have run at
-	// all, and the negative result below would be a broken fixture, not entropy
-	// rejection.
-	require.True(t, got[gitleaks.AccessKeyIDRuleID], "the access key id anchor must be detected")
-	require.False(t, got[gitleaks.SecretAccessKeyRuleID],
+	require.True(t, ruleSet(t, fakeAccessKeyID+" "+fakeSecret+"\n")[gitleaks.SecretAccessKeyRuleID],
+		"positive control: a real secret next to the id IS detected, so the anchor works")
+	require.False(t, ruleSet(t, fakeAccessKeyID+" "+sha1Empty+"\n")[gitleaks.SecretAccessKeyRuleID],
 		"a lowercase-hex hash must fall below the entropy floor")
 }
 

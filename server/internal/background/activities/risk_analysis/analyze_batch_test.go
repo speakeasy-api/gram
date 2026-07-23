@@ -178,7 +178,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Role:      "user",
-		Content:   "AWS key AKIAIOSFODNN7REALKEY and email alice@example.com",
+		Content:   "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd and email alice@example.com",
 	})
 	require.NoError(t, err)
 
@@ -733,8 +733,10 @@ func TestAnalyzeBatch_Gitleaks_SecretInToolCallArgsOnly(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
+	// A full credential pair: the access key id anchors detection (it is not
+	// itself reported), and the secret access key is the flagged value.
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{
-		"command": "aws configure set aws_access_key_id AKIAIOSFODNN7REALKEY",
+		"command": "aws configure set aws_access_key_id ASIAZ2XY3WNBQR5TUVWX aws_secret_access_key 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",
 	})
 
 	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"})
@@ -752,9 +754,12 @@ func TestAnalyzeBatch_Gitleaks_SecretInToolCallArgsOnly(t *testing.T) {
 	var saw bool
 	for _, row := range rows {
 		if row.Source == "gitleaks" && row.Found {
-			assert.Equal(t, "secret.aws_access_token", row.RuleID.String)
-			assert.Contains(t, row.Match.String, "AKIA")
-			saw = true
+			assert.NotEqual(t, "secret.aws_access_token", row.RuleID.String,
+				"the access key id must not be reported as a finding")
+			if row.RuleID.String == "secret.aws_secret_access_key" {
+				assert.Contains(t, row.Match.String, "wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd")
+				saw = true
+			}
 		}
 	}
 	require.True(t, saw, "expected a gitleaks finding from tool-call arguments")
@@ -1527,7 +1532,7 @@ func TestAnalyzeBatch_SkipsWhenPolicyDisabled(t *testing.T) {
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Role:      "user",
-		Content:   "AWS key AKIAIOSFODNN7REALKEY",
+		Content:   "token ghp_R2D2C3POLuk3Skywalker1234567890ab",
 	})
 	require.NoError(t, err)
 
@@ -1554,7 +1559,7 @@ func TestAnalyzeBatch_SkipsWhenPolicyDeleted(t *testing.T) {
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Role:      "user",
-		Content:   "AWS key AKIAIOSFODNN7REALKEY",
+		Content:   "token ghp_R2D2C3POLuk3Skywalker1234567890ab",
 	})
 	require.NoError(t, err)
 
