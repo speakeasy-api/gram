@@ -1139,7 +1139,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 // Spans aren't given a redacted counterpart here because nothing on this
 // (non-agent) redacted path renders them.
 func redactResultMatchInPlace(r *types.RiskResult, orgID string) {
-	matchRedacted := redactMatch(r.Source, r.Match, orgID)
+	matchRedacted := redactMatch(r.Source, conv.PtrValOrEmpty(r.RuleID, ""), r.Match, orgID)
 	r.MatchRedacted = &matchRedacted
 	r.Match = nil
 	r.Spans = nil
@@ -1361,7 +1361,8 @@ func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskR
 // secret across organizations even if some future code path widens the
 // surface beyond org-scoped access.
 func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedacted {
-	matchRedacted := redactMatch(r.Source, r.Match, orgID)
+	ruleID := conv.PtrValOrEmpty(r.RuleID, "")
+	matchRedacted := redactMatch(r.Source, ruleID, r.Match, orgID)
 
 	var spansRedacted []*types.RiskSpanRedacted
 	if len(r.Spans) > 0 {
@@ -1369,7 +1370,7 @@ func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedact
 		for _, sp := range r.Spans {
 			match := sp.Match
 			spansRedacted = append(spansRedacted, &types.RiskSpanRedacted{
-				MatchRedacted: redactMatch(r.Source, &match, orgID),
+				MatchRedacted: redactMatch(r.Source, ruleID, &match, orgID),
 				Field:         sp.Field,
 				Path:          sp.Path,
 				PositionKnown: sp.StartPos != nil && sp.EndPos != nil,
@@ -1424,14 +1425,25 @@ func RedactMatchAll(match string, orgID string) string {
 	return fmt.Sprintf("<redacted len=%d sha=%s>", len(match), hex.EncodeToString(sum[:4]))
 }
 
-// redactMatch is the API-facing redaction: like RedactMatchAll, except
-// shadow_mcp and account_identity findings pass through verbatim — an MCP server
-// URL or an account email IS the report, not a secret.
-func redactMatch(source string, match *string, orgID string) string {
+// redactMatch is the API-facing redaction: like RedactMatchAll, except certain
+// findings pass through verbatim because the matched value is an identifier, not
+// a secret:
+//   - shadow_mcp / account_identity: an MCP server URL or account email IS the
+//     report.
+//   - an AWS access key id (the gitleaks aws-access-token rule): an identifier,
+//     non-sensitive (AWS logs it in CloudTrail). Its paired secret access key
+//     and session token still redact like any other secret.
+func redactMatch(source, ruleID string, match *string, orgID string) string {
 	if match == nil || *match == "" {
 		return "<redacted len=0>"
 	}
 	if source == shadowmcp.SourceShadowMCP || source == ra.SourceAccountIdentity {
+		return *match
+	}
+	// Scoped to the gitleaks source so only the built-in aws-access-token rule
+	// gets the carve-out; another source reusing this rule id must not bypass
+	// redaction if its match is a secret.
+	if source == gitleaks.Source && ruleID == gitleaks.AccessKeyIDRuleID {
 		return *match
 	}
 	return RedactMatchAll(*match, orgID)
