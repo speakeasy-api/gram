@@ -183,7 +183,11 @@ func (l *loginFlow) dashboardURL(port int, state string) string {
 	if l.cfg.OrgID != "" {
 		q.Set("organization_id", l.cfg.OrgID)
 	}
-	return strings.TrimRight(l.cfg.ServerURL, "/") + "/?" + q.Encode()
+	base := l.cfg.SiteURL
+	if base == "" {
+		base = l.cfg.ServerURL
+	}
+	return strings.TrimRight(base, "/") + "/?" + q.Encode()
 }
 
 // cooldownElapsed reports whether enough time has passed since the last sign-in
