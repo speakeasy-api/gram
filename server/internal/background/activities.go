@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
@@ -192,6 +193,9 @@ func NewActivities(
 		customRuleScanner,
 		celEng,
 		builtinPresets,
+		&shadowMCPPolicyBypassChecker{
+			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
+		},
 	)
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))

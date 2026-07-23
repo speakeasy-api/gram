@@ -147,6 +147,7 @@ func newAccountIdentityAnalyzeBatch(t *testing.T, conn *pgxpool.Pool) *risk_anal
 		mustCustomRuleScanner(t, nil),
 		mustCELEngine(t),
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	return ab
