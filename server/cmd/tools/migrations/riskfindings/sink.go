@@ -32,10 +32,11 @@ const insertStatement = `INSERT INTO risk_findings (
 // channel exposed by Input; the pipeline's transform stage is the sole producer
 // and closes the channel when the source is exhausted.
 type Sink struct {
-	conn      clickhouse.Conn
-	in        chan FindingRow
-	batchSize int
-	dryRun    bool
+	conn               clickhouse.Conn
+	in                 chan FindingRow
+	batchSize          int
+	dryRun             bool
+	liftPartitionGuard bool
 
 	inserted      int64
 	lastCommitted uuid.UUID
@@ -43,8 +44,10 @@ type Sink struct {
 
 // NewSink builds a ClickHouse sink. conn may be nil when dryRun is true, in which
 // case rows are counted but never written. bufferSize sizes the input channel;
-// batchSize bounds each insert.
-func NewSink(conn clickhouse.Conn, bufferSize, batchSize int, dryRun bool) *Sink {
+// batchSize bounds each insert. liftPartitionGuard sets
+// max_partitions_per_insert_block=0 on each insert; pass false against servers
+// whose settings profile constrains that setting (constraint violation, code 452).
+func NewSink(conn clickhouse.Conn, bufferSize, batchSize int, dryRun, liftPartitionGuard bool) *Sink {
 	if bufferSize < 0 {
 		bufferSize = 0
 	}
@@ -52,12 +55,13 @@ func NewSink(conn clickhouse.Conn, bufferSize, batchSize int, dryRun bool) *Sink
 		batchSize = DefaultSinkBatchSize
 	}
 	return &Sink{
-		conn:          conn,
-		in:            make(chan FindingRow, bufferSize),
-		batchSize:     batchSize,
-		dryRun:        dryRun,
-		inserted:      0,
-		lastCommitted: uuid.Nil,
+		conn:               conn,
+		in:                 make(chan FindingRow, bufferSize),
+		batchSize:          batchSize,
+		dryRun:             dryRun,
+		liftPartitionGuard: liftPartitionGuard,
+		inserted:           0,
+		lastCommitted:      uuid.Nil,
 	}
 }
 
@@ -127,14 +131,17 @@ func (s *Sink) flush(ctx context.Context, rows []FindingRow) error {
 	}
 
 	token := deduplicationToken(rows)
-	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+	settings := clickhouse.Settings{
 		"insert_deduplication_token": token,
+	}
+	if s.liftPartitionGuard {
 		// risk_findings is PARTITION BY toYYYYMMDD(created_at). A single backfill
 		// batch is time-ordered but can still span more than the default 100
 		// partitions when historical data is sparse, so lift the guard (0 = no
 		// limit) for this one-shot operator insert.
-		"max_partitions_per_insert_block": 0,
-	}))
+		settings["max_partitions_per_insert_block"] = 0
+	}
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(settings))
 
 	batch, err := s.conn.PrepareBatch(ctx, insertStatement)
 	if err != nil {
