@@ -98,25 +98,25 @@ func toolMetadataCollectionUnchanged(before, after []*types.ToolMetadata) bool {
 	})
 }
 
-// toolMetadataAuditEvent assembles the collection-level audit event shared by
-// every tool metadata mutation. The subject is the server's metadata collection,
-// so one entry covers a write of any size.
+// toolMetadataAuditEvent assembles the audit event shared by every tool
+// metadata mutation. The subject is the MCP server itself, so one entry covers
+// a write of any size.
 func toolMetadataAuditEvent(
 	authCtx *contextvalues.AuthContext,
 	server repo.McpServer,
 	before, after []*types.ToolMetadata,
 ) audit.LogMcpServerToolMetadataUpdateEvent {
 	return audit.LogMcpServerToolMetadataUpdateEvent{
-		OrganizationID:           authCtx.ActiveOrganizationID,
-		ProjectID:                *authCtx.ProjectID,
-		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:         authCtx.Email,
-		ActorSlug:                nil,
-		McpServerToolMetadataURN: urn.NewMcpServerToolMetadata(server.ID),
-		McpServerName:            conv.FromPGTextOrEmpty[string](server.Name),
-		McpServerSlug:            conv.FromPGTextOrEmpty[string](server.Slug),
-		SnapshotBefore:           before,
-		SnapshotAfter:            after,
+		OrganizationID:             authCtx.ActiveOrganizationID,
+		ProjectID:                  *authCtx.ProjectID,
+		Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:           authCtx.Email,
+		ActorSlug:                  nil,
+		McpServerURN:               urn.NewMcpServer(server.ID),
+		McpServerName:              conv.FromPGTextOrEmpty[string](server.Name),
+		McpServerSlug:              conv.FromPGTextOrEmpty[string](server.Slug),
+		ToolMetadataSnapshotBefore: before,
+		ToolMetadataSnapshotAfter:  after,
 	}
 }
 

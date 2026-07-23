@@ -37,7 +37,6 @@ var (
 	McpCollectionV1             = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_collection_event_v1", "Emitted when changes to MCP collections are made")
 	McpEndpointV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_endpoint_event_v1", "Emitted when changes to MCP endpoints are made")
 	McpServerV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_server_event_v1", "Emitted when changes to MCP servers are made")
-	McpServerToolMetadataV1     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_server_tool_metadata_event_v1", "Emitted when changes to MCP server tool metadata are made")
 	ModelProviderKeyV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.model_provider_key_event_v1", "Emitted when changes to customer model provider keys are made")
 	OrganizationHooksFailOpenV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_hooks_fail_open_event_v1", "Emitted when the organization's hooks fail-open setting is toggled")
 	OrganizationInviteV1        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")

@@ -28,7 +28,6 @@ const (
 	subjectTypeMcpCollection            subjectType = "mcp_collection"
 	subjectTypeMcpEndpoint              subjectType = "mcp_endpoint"
 	subjectTypeMcpServer                subjectType = "mcp_server"
-	subjectTypeMcpServerToolMetadata    subjectType = "mcp_server_tool_metadata"
 	subjectTypeModelProviderKey         subjectType = "model_provider_key"
 	subjectTypeOtelForwarding           subjectType = "otel_forwarding_config"
 	subjectTypeOrganizationInvite       subjectType = "organization_invitation"

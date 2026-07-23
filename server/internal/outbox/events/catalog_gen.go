@@ -28,7 +28,6 @@ var All = []outbox.EventRegistration{
 	GcpKmsKeyV1,
 	McpCollectionV1,
 	McpEndpointV1,
-	McpServerToolMetadataV1,
 	McpServerV1,
 	ModelProviderKeyV1,
 	OrganizationHooksFailOpenV1,
