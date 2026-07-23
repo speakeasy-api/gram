@@ -47,6 +47,37 @@ describe("toolSectionRiskMatches", () => {
     ).toEqual([{ value: "DROP TABLE", result: visible }]);
   });
 
+  it("keeps one entry per finding when two findings flag the same value", () => {
+    const judge = riskResult("judge", "sk-live-123", [
+      { field: "tool.args", match: "sk-live-123" },
+    ]);
+    const gitleaks = riskResult("gitleaks", "sk-live-123", [
+      { field: "tool.args", match: "sk-live-123" },
+    ]);
+
+    expect(
+      toolSectionRiskMatches(
+        [judge, gitleaks],
+        '{"token":"sk-live-123"}',
+        "tool.args",
+      ),
+    ).toEqual([
+      { value: "sk-live-123", result: judge },
+      { value: "sk-live-123", result: gitleaks },
+    ]);
+  });
+
+  it("deduplicates identical spans within one finding", () => {
+    const result = riskResult("risk-1", "sk-live-123", [
+      { field: "tool.args", match: "sk-live-123" },
+      { field: "tool.args", match: "sk-live-123" },
+    ]);
+
+    expect(
+      toolSectionRiskMatches([result], '{"token":"sk-live-123"}', "tool.args"),
+    ).toEqual([{ value: "sk-live-123", result }]);
+  });
+
   it("selects tool output spans for the Output section", () => {
     const result = riskResult("risk-1", "secret-value", [
       { field: "tool_result", match: "secret-value" },
