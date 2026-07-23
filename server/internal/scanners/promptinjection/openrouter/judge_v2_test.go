@@ -50,10 +50,10 @@ func TestValidVerdictRejectsCrossFieldContradictions(t *testing.T) {
 	require.False(t, ValidVerdict(typedVerdict(DirectiveInstructionOverride, TargetNone, true)))
 }
 
-func TestRedesignedSystemMessageUsesEphemeralCacheControl(t *testing.T) {
+func TestTypedSystemMessageUsesEphemeralCacheControl(t *testing.T) {
 	t.Parallel()
 
-	encoded, err := json.Marshal(RedesignedSystemMessage())
+	encoded, err := json.Marshal(TypedSystemMessage())
 	require.NoError(t, err)
 	require.Contains(t, string(encoded), `"cache_control"`)
 	require.Contains(t, string(encoded), `"ephemeral"`)
@@ -85,7 +85,7 @@ func TestOptionalMultiSampleOverrideAggregatesInParallel(t *testing.T) {
 		}
 		return "malformed"
 	}}
-	engine := newEngine(t, client).WithRedesign(3)
+	engine := newEngine(t, client).WithTypedSamples(3)
 	in := req("current event")
 	in.Trajectories = []judgemessage.Trajectory{{PriorUserRequest: "inspect output", RecentUntrustedContent: "untrusted context"}}
 
@@ -120,11 +120,11 @@ func TestOptionalMultiSampleOverrideAggregatesInParallel(t *testing.T) {
 	}
 }
 
-func TestRedesignUsesOneSharedDeadline(t *testing.T) {
+func TestTypedSamplesUseOneSharedDeadline(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeCompletionClient{blockUntilCanceled: true}
-	engine := newEngine(t, client).WithRedesign(3)
+	engine := newEngine(t, client).WithTypedSamples(3)
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
@@ -162,13 +162,13 @@ func TestTypedPathIsDefaultAndMakesOnePhysicalCall(t *testing.T) {
 	require.Equal(t, VerdictSchema(), request.JSONSchema.Schema)
 }
 
-func TestRedesignLimiterStoreFailureStillCallsModel(t *testing.T) {
+func TestTypedLimiterStoreFailureStillCallsModel(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeCompletionClient{responder: func(string) string {
 		return `{"directive_kind":"instruction_override","target":"guarded_agent","operational":true,"rationale":"override"}`
 	}}
-	engine := newEngine(t, client).WithRedesign(3)
+	engine := newEngine(t, client).WithTypedSamples(3)
 	engine.limiter = ratelimit.New(nil, "unavailable", ratelimit.Rate{})
 
 	results, err := engine.Classify(t.Context(), req("current event"))
@@ -177,14 +177,14 @@ func TestRedesignLimiterStoreFailureStillCallsModel(t *testing.T) {
 	require.Equal(t, int64(3), client.calls.Load(), "limiter infrastructure failure is not a throttle")
 }
 
-func TestRedesignFailOpenReasonsAreBounded(t *testing.T) {
+func TestTypedFailOpenReasonsAreBounded(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "none", redesignFailureReason(nil, o11y.OutcomeSuccess))
-	require.Equal(t, "rate_limited", redesignFailureReason(errRedesignRateLimit, o11y.OutcomeFailure))
-	require.Equal(t, "timeout", redesignFailureReason(context.DeadlineExceeded, o11y.OutcomeTimeout))
-	require.Equal(t, "malformed", redesignFailureReason(errMalformedVerdict, o11y.OutcomeFailure))
-	require.Equal(t, "error", redesignFailureReason(context.Canceled, o11y.OutcomeFailure))
+	require.Equal(t, "none", typedFailureReason(nil, o11y.OutcomeSuccess))
+	require.Equal(t, "rate_limited", typedFailureReason(errTypedRateLimit, o11y.OutcomeFailure))
+	require.Equal(t, "timeout", typedFailureReason(context.DeadlineExceeded, o11y.OutcomeTimeout))
+	require.Equal(t, "malformed", typedFailureReason(errMalformedVerdict, o11y.OutcomeFailure))
+	require.Equal(t, "error", typedFailureReason(context.Canceled, o11y.OutcomeFailure))
 }
 
 func TestLegacyProfileOverrideRestoresBinaryRequest(t *testing.T) {
@@ -206,7 +206,7 @@ func TestLegacyProfileOverrideRestoresBinaryRequest(t *testing.T) {
 	require.Len(t, legacyClient.requests, 1)
 	request := legacyClient.requests[0]
 	legacyClient.mu.Unlock()
-	require.Equal(t, defaultModel, request.Model)
+	require.Equal(t, LegacyModel, request.Model)
 	require.NotNil(t, request.Temperature)
 	require.Zero(t, *request.Temperature)
 	require.NotNil(t, request.Reasoning)

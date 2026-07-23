@@ -30,15 +30,11 @@ import (
 )
 
 const (
-	// judgeTimeout bounds a single judge completion call. The judge runs inline
-	// on the realtime hook path, so this is also the worst-case added latency
-	// before a fail-open allow on a stuck model.
-	judgeTimeout = 10 * time.Second
-	// JudgeTimeout is the one shared event deadline used by all typed calls. It
-	// is exported so the offline evaluator drives the same bound.
-	JudgeTimeout = judgeTimeout
-	// defaultModel is retained only for the explicit legacy rollback profile.
-	defaultModel = "google/gemini-3.1-flash-lite"
+	// JudgeTimeout bounds a single inline completion and is shared with the
+	// offline evaluator.
+	JudgeTimeout = 10 * time.Second
+	// LegacyModel is retained only for the explicit binary rollback profile.
+	LegacyModel = "google/gemini-3.1-flash-lite"
 	// DefaultModel, DefaultReasoningEffort, and SamplesPerEvent define the
 	// production profile. Operators may override them through normal process
 	// configuration or select ProfileLegacy for rollback.
@@ -51,8 +47,8 @@ const (
 	defaultTemperature = 0.0
 	// concurrency bounds how many judge calls run in parallel for one batched
 	// Classify call. Mirrors the batch analyzer's judge fan-out.
-	concurrency              = 8
-	redesignEventConcurrency = 4
+	concurrency           = 8
+	typedEventConcurrency = 4
 	// stageJudge tags metrics emitted by this single-stage engine. The cascade
 	// adds a second stage value when it escalates, so dashboards split by stage
 	// without a metric rename.
@@ -102,7 +98,7 @@ Return a JSON object:
 
 Output ONLY the JSON object, no prose or markdown fences.`
 
-// SystemPrompt is the typed redesign prompt shared by production and the
+// SystemPrompt is the typed prompt shared by production and the
 // evaluator. It asks only for semantic evidence; detection eligibility is
 // derived in code and enforcement remains owned by the existing risk policy.
 const SystemPrompt = `You detect prompt injection in an AI agent runtime.
@@ -141,10 +137,10 @@ type Engine struct {
 	model       string
 	temperature float64
 	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
-	redesign    *redesignConfig
+	typed       *typedConfig
 }
 
-type redesignConfig struct {
+type typedConfig struct {
 	model     string
 	reasoning string
 	samples   int
@@ -163,9 +159,9 @@ type Config struct {
 var _ promptinjection.Classifier = (*Engine)(nil).Classify
 
 var (
-	safeResult           = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
-	errRedesignRateLimit = errors.New("pi redesign judge rate limited")
-	errMalformedVerdict  = errors.New("malformed pi redesign verdict")
+	safeResult          = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
+	errTypedRateLimit   = errors.New("typed pi judge rate limited")
+	errMalformedVerdict = errors.New("malformed typed pi verdict")
 )
 
 // New constructs an Engine. The composition root constructs the completions
@@ -179,24 +175,24 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		metrics:     newMetrics(meterProvider, logger),
 		client:      client,
 		limiter:     limiter,
-		model:       defaultModel,
+		model:       LegacyModel,
 		temperature: defaultTemperature,
-		redesign:    nil,
+		typed:       nil,
 		schema: or.ChatJSONSchemaConfig{
 			Name:        "prompt_attack_verdict",
 			Schema:      legacyVerdictSchema(),
 			Description: nil,
 			Strict:      optionalnullable.From(&strict),
 		},
-	}).withRedesign(SamplesPerEvent, DefaultModel, DefaultReasoningEffort)
+	}).withTyped(SamplesPerEvent, DefaultModel, DefaultReasoningEffort)
 }
 
 // Configure applies process-wide overrides. The zero value selects the typed
 // production defaults; ProfileLegacy explicitly restores the prior request.
 func (c *Engine) Configure(config Config) *Engine {
 	if config.Profile == ProfileLegacy {
-		c.redesign = nil
-		c.model = defaultModel
+		c.typed = nil
+		c.model = LegacyModel
 		return c
 	}
 	if config.Samples < 1 {
@@ -208,21 +204,21 @@ func (c *Engine) Configure(config Config) *Engine {
 	if config.Reasoning == "" {
 		config.Reasoning = DefaultReasoningEffort
 	}
-	return c.withRedesign(config.Samples, config.Model, config.Reasoning)
+	return c.withTyped(config.Samples, config.Model, config.Reasoning)
 }
 
-// WithRedesign configures a sample count for tests of the optional multi-sample
+// WithTypedSamples configures a sample count for tests of the optional multi-sample
 // path. Production composition roots use Configure.
-func (c *Engine) WithRedesign(samples int) *Engine {
-	return c.withRedesign(samples, DefaultModel, DefaultReasoningEffort)
+func (c *Engine) WithTypedSamples(samples int) *Engine {
+	return c.withTyped(samples, DefaultModel, DefaultReasoningEffort)
 }
 
-func (c *Engine) withRedesign(samples int, model, reasoning string) *Engine {
+func (c *Engine) withTyped(samples int, model, reasoning string) *Engine {
 	if samples < 1 {
 		samples = 1
 	}
 	strict := true
-	c.redesign = &redesignConfig{
+	c.typed = &typedConfig{
 		model:     model,
 		reasoning: reasoning,
 		samples:   samples,
@@ -248,8 +244,8 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 	}
 
 	profile, model, reasoning, samples := ProfileLegacy, c.model, "none", 1
-	if c.redesign != nil {
-		profile, model, reasoning, samples = ProfileTyped, c.redesign.model, c.redesign.reasoning, c.redesign.samples
+	if c.typed != nil {
+		profile, model, reasoning, samples = ProfileTyped, c.typed.model, c.typed.reasoning, c.typed.samples
 	}
 	sessionContextCount := 0
 	for _, trajectory := range req.Trajectories {
@@ -287,8 +283,8 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 
 	results := make([]promptinjection.Result, n)
 	maxConcurrency := concurrency
-	if c.redesign != nil {
-		maxConcurrency = redesignEventConcurrency
+	if c.typed != nil {
+		maxConcurrency = typedEventConcurrency
 	}
 	sem := make(chan struct{}, maxConcurrency)
 	var wg sync.WaitGroup
@@ -326,8 +322,8 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	if ctx.Err() != nil {
 		return safeResult
 	}
-	if c.redesign != nil {
-		return c.classifyRedesign(ctx, req, msg, trajectory, userID)
+	if c.typed != nil {
+		return c.classifyTyped(ctx, req, msg, trajectory, userID)
 	}
 
 	// A Store outage is not a throttle — proceed rather than let limiter infra
@@ -371,29 +367,29 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	return promptinjection.Result{Label: promptinjection.LabelInjection, Score: verdict.Confidence, Rationale: verdict.Rationale, DirectiveKind: "", Target: "", Operational: false}
 }
 
-// classifyRedesign uses one physical call on the production path. Configured
+// classifyTyped uses one physical call on the production path. Configured
 // multi-sample overrides retain strict-majority aggregation for rollback
 // experiments, and every failed sample remains an explicit safe vote.
-func (c *Engine) classifyRedesign(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) promptinjection.Result {
+func (c *Engine) classifyTyped(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) promptinjection.Result {
 	decisionCtx, cancel := context.WithTimeout(ctx, JudgeTimeout)
 	defer cancel()
 
 	start := time.Now()
 	failOpen := false
 	var stabilized Stabilized
-	if c.redesign.samples == 1 {
-		verdict, err := c.classifyRedesignSample(decisionCtx, req, msg, trajectory, userID)
+	if c.typed.samples == 1 {
+		verdict, err := c.classifyTypedSample(decisionCtx, req, msg, trajectory, userID)
 		failOpen = err != nil
 		stabilized = StabilizeSingle(verdict)
 	} else {
-		verdicts := make([]Verdict, c.redesign.samples)
+		verdicts := make([]Verdict, c.typed.samples)
 		var failures atomic.Int64
 		var wg sync.WaitGroup
-		for sample := range c.redesign.samples {
+		for sample := range c.typed.samples {
 			wg.Add(1)
 			go func(sample int) {
 				defer wg.Done()
-				verdict, err := c.classifyRedesignSample(decisionCtx, req, msg, trajectory, userID)
+				verdict, err := c.classifyTypedSample(decisionCtx, req, msg, trajectory, userID)
 				if err != nil {
 					failures.Add(1)
 					return
@@ -407,7 +403,7 @@ func (c *Engine) classifyRedesign(ctx context.Context, req promptinjection.Reque
 	}
 
 	duration := time.Since(start)
-	c.metrics.RecordEvent(ctx, req.OrgID, c.redesign.model, c.redesign.reasoning, trajectory.HasContent(), stabilized.IsInjection, failOpen, duration)
+	c.metrics.RecordEvent(ctx, req.OrgID, c.typed.model, c.typed.reasoning, trajectory.HasContent(), stabilized.IsInjection, failOpen, duration)
 	trace.SpanFromContext(ctx).AddEvent("pi_judge.typed_result", trace.WithAttributes(
 		attribute.String("pi_judge.directive_kind", stabilized.DirectiveKind),
 		attribute.String("pi_judge.target", stabilized.Target),
@@ -419,7 +415,7 @@ func (c *Engine) classifyRedesign(ctx context.Context, req promptinjection.Reque
 		return safeResult
 	}
 
-	c.metrics.RecordDetection(ctx, req.OrgID, stabilized.DirectiveKind, stabilized.Target, stabilized.Operational, c.redesign.model, c.redesign.reasoning)
+	c.metrics.RecordDetection(ctx, req.OrgID, stabilized.DirectiveKind, stabilized.Target, stabilized.Operational, c.typed.model, c.typed.reasoning)
 	c.logger.InfoContext(ctx, "PI judge detected prompt injection",
 		attr.SlogOrganizationID(req.OrgID),
 	)
@@ -433,22 +429,22 @@ func (c *Engine) classifyRedesign(ctx context.Context, req promptinjection.Reque
 	}
 }
 
-func (c *Engine) classifyRedesignSample(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) (Verdict, error) {
+func (c *Engine) classifyTypedSample(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) (Verdict, error) {
 	start := time.Now()
 	var verdict Verdict
 	var err error
 	physicalCall := false
 
-	res, allowErr := c.limiter.Allow(ctx, gramopenrouter.JudgeRateLimitKey(req.OrgID, c.redesign.model))
+	res, allowErr := c.limiter.Allow(ctx, gramopenrouter.JudgeRateLimitKey(req.OrgID, c.typed.model))
 	if allowErr != nil {
-		c.logger.WarnContext(ctx, "PI redesign rate limiter unavailable, allowing sample",
+		c.logger.WarnContext(ctx, "typed PI judge rate limiter unavailable, allowing sample",
 			attr.SlogError(allowErr),
 			attr.SlogOrganizationID(req.OrgID),
 		)
 	}
 	if allowErr == nil && !res.Allowed {
-		c.metrics.RecordRateLimited(ctx, req.OrgID, c.redesign.model, c.redesign.reasoning)
-		err = errRedesignRateLimit
+		c.metrics.RecordRateLimited(ctx, req.OrgID, c.typed.model, c.typed.reasoning)
+		err = errTypedRateLimit
 	} else {
 		physicalCall = true
 		verdict, err = c.callTyped(ctx, req, msg, trajectory, userID)
@@ -456,14 +452,14 @@ func (c *Engine) classifyRedesignSample(ctx context.Context, req promptinjection
 
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	duration := time.Since(start)
-	reason := redesignFailureReason(err, outcome)
+	reason := typedFailureReason(err, outcome)
 	if physicalCall {
-		c.metrics.RecordPhysicalCall(ctx, req.OrgID, c.redesign.model, c.redesign.reasoning, outcome, reason, duration)
-		c.metrics.RecordClassification(ctx, req.OrgID, labelFor(IsInjection(verdict), err), c.redesign.model, c.redesign.reasoning, outcome, duration)
+		c.metrics.RecordPhysicalCall(ctx, req.OrgID, c.typed.model, c.typed.reasoning, outcome, reason, duration)
+		c.metrics.RecordClassification(ctx, req.OrgID, labelFor(IsInjection(verdict), err), c.typed.model, c.typed.reasoning, outcome, duration)
 	}
 	if err != nil {
-		c.metrics.RecordFailOpen(ctx, req.OrgID, c.redesign.model, c.redesign.reasoning, reason)
-		c.logger.WarnContext(ctx, "PI redesign judge sample failed; recording safe vote",
+		c.metrics.RecordFailOpen(ctx, req.OrgID, c.typed.model, c.typed.reasoning, reason)
+		c.logger.WarnContext(ctx, "typed PI judge sample failed; recording safe vote",
 			attr.SlogError(err),
 			attr.SlogOutcome(string(outcome)),
 			attr.SlogOrganizationID(req.OrgID),
@@ -472,11 +468,11 @@ func (c *Engine) classifyRedesignSample(ctx context.Context, req promptinjection
 	return verdict, err
 }
 
-func redesignFailureReason(err error, outcome o11y.Outcome) string {
+func typedFailureReason(err error, outcome o11y.Outcome) string {
 	if err == nil {
 		return "none"
 	}
-	if errors.Is(err, errRedesignRateLimit) {
+	if errors.Is(err, errTypedRateLimit) {
 		return "rate_limited"
 	}
 	if outcome == o11y.OutcomeTimeout {
@@ -521,10 +517,10 @@ func cachedSystemMessage() or.ChatMessages {
 	})
 }
 
-// RedesignedSystemMessage renders the typed prompt with the production cache
+// TypedSystemMessage renders the typed prompt with the production cache
 // breakpoint. The offline evaluator reuses it so measured token costs match
 // the production request shape.
-func RedesignedSystemMessage() or.ChatMessages {
+func TypedSystemMessage() or.ChatMessages {
 	return or.CreateChatMessagesSystem(or.ChatSystemMessage{
 		Role: or.ChatSystemMessageRoleSystem,
 		Content: or.CreateChatSystemMessageContentArrayOfChatContentText([]or.ChatContentText{{
@@ -544,7 +540,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		payload = []byte(msg.Body)
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
+	callCtx, cancel := context.WithTimeout(ctx, JudgeTimeout)
 	defer cancel()
 
 	// Build the request directly (not the GetObjectCompletion string helper) so
@@ -621,7 +617,7 @@ func (c *Engine) callTyped(ctx context.Context, req promptinjection.Request, msg
 	}
 
 	messages := []or.ChatMessages{
-		RedesignedSystemMessage(),
+		TypedSystemMessage(),
 		or.CreateChatMessagesUser(or.ChatUserMessage{
 			Role:    or.ChatUserMessageRoleUser,
 			Content: or.CreateChatUserMessageContentStr(string(payload)),
@@ -634,7 +630,7 @@ func (c *Engine) callTyped(ctx context.Context, req promptinjection.Request, msg
 		ProjectID:                 req.ProjectID,
 		Tools:                     nil,
 		Temperature:               &c.temperature,
-		Model:                     c.redesign.model,
+		Model:                     c.typed.model,
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceRiskAnalysis,
 		KeyType:                   gramopenrouter.KeyTypeInternal,
@@ -645,8 +641,8 @@ func (c *Engine) callTyped(ctx context.Context, req promptinjection.Request, msg
 		UserEmail:                 "",
 		HTTPMetadata:              nil,
 		APIKeyID:                  "",
-		JSONSchema:                &c.redesign.schema,
-		Reasoning:                 &gramopenrouter.Reasoning{Effort: c.redesign.reasoning, MaxTokens: nil, Exclude: nil, Enabled: nil},
+		JSONSchema:                &c.typed.schema,
+		Reasoning:                 &gramopenrouter.Reasoning{Effort: c.typed.reasoning, MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
 	})

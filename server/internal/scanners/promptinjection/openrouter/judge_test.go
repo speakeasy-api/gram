@@ -198,7 +198,7 @@ func TestClassifyRateLimitedFailsOpen(t *testing.T) {
 // throttled.
 func drainLimiter(t *testing.T, c *Engine, org string) {
 	t.Helper()
-	key := openrouter.JudgeRateLimitKey(org, defaultModel)
+	key := openrouter.JudgeRateLimitKey(org, LegacyModel)
 	for {
 		res, err := c.limiter.Allow(t.Context(), key)
 		require.NoError(t, err)

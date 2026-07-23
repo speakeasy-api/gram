@@ -1024,13 +1024,15 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 				return
 			}
 			out[i] = append(out[i], scanners.Finding{
-				RuleID:           ruleID,
-				Description:      description,
-				Match:            text,
-				StartPos:         0,
-				EndPos:           len(text),
-				Source:           promptinjection.Source,
-				Confidence:       0,
+				RuleID:      ruleID,
+				Description: description,
+				Match:       text,
+				StartPos:    0,
+				EndPos:      len(text),
+				Source:      promptinjection.Source,
+				// Report-only score keeps optional multi-sample tuning sortable.
+				// Production typed findings leave legacy confidence untouched.
+				Confidence:       float64(result.PositiveVotes) / float64(result.Samples),
 				Tags:             []string{"llm-judge", "layer-1", "semantic-typed", "directive_kind:" + result.DirectiveKind, "target:" + result.Target, "operational:true"},
 				DeadLetterReason: "",
 
@@ -1142,7 +1144,7 @@ func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, r
 	}
 	temp := 0.0
 	messages := []or.ChatMessages{
-		piopenrouter.RedesignedSystemMessage(),
+		piopenrouter.TypedSystemMessage(),
 		or.CreateChatMessagesUser(or.ChatUserMessage{Role: or.ChatUserMessageRoleUser, Content: or.CreateChatUserMessageContentStr(string(payload)), Name: nil}),
 	}
 
