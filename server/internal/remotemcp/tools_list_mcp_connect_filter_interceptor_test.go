@@ -1,6 +1,7 @@
 package remotemcp_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -48,7 +49,7 @@ func newToolsListResponse(t *testing.T, tools []*mcp.Tool) *proxy.ToolsListRespo
 func TestToolsListMCPConnectFilterInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 	require.Equal(t, "tools-list-mcp-connect-filter", interceptor.Name())
 }
 
@@ -56,7 +57,7 @@ func TestToolsListMCPConnectFilterInterceptor_NilEnginePassesThrough(t *testing.
 	t.Parallel()
 
 	// A nil engine must not panic; pass the response through unchanged.
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(nil, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(nil, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{}},
@@ -79,7 +80,7 @@ func TestToolsListMCPConnectFilterInterceptor_KeepsOnlyGrantedTools(t *testing.T
 		}),
 	)
 
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "search_tickets", InputSchema: map[string]any{}},
@@ -102,7 +103,7 @@ func TestToolsListMCPConnectFilterInterceptor_EmptyArrayWhenNoGrantsMatch(t *tes
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{}},
@@ -133,7 +134,7 @@ func TestToolsListMCPConnectFilterInterceptor_PreservesInputOrderInFilteredResul
 		}),
 	)
 
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{}},
@@ -154,7 +155,7 @@ func TestToolsListMCPConnectFilterInterceptor_NilResultPassesThrough(t *testing.
 	// An error-shaped response (no Result) must short-circuit without
 	// touching the typed view. The downstream relay surfaces the
 	// upstream's JSON-RPC error envelope to the user unchanged.
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(newAuthzEngineForTest(t), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := &proxy.ToolsListResponse{
 		Error:         &jsonrpc.Error{Code: -32601, Message: "method not found", Data: nil},
@@ -175,9 +176,68 @@ func TestToolsListMCPConnectFilterInterceptor_EmptyToolsListShortCircuits(t *tes
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	resp := newToolsListResponse(t, nil)
 	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
 	require.Empty(t, resp.Result.Tools)
+}
+
+func TestToolsListMCPConnectFilterInterceptor_FiltersByDisposition(t *testing.T) {
+	t.Parallel()
+
+	engine := newAuthzEngineForTest(t)
+	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+	// Grant covers any read_only tool on the server (no tool key).
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   testServerID,
+			"disposition":   "read_only",
+		}),
+	)
+
+	resolver := fakeToolDispositionResolver{dispositions: map[string]string{
+		"list_items":  "read_only",
+		"delete_item": "destructive",
+	}}
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
+
+	resp := newToolsListResponse(t, []*mcp.Tool{
+		{Name: "list_items", InputSchema: map[string]any{}},
+		{Name: "delete_item", InputSchema: map[string]any{}},
+	})
+	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
+
+	require.Len(t, resp.Result.Tools, 1)
+	require.Equal(t, "list_items", resp.Result.Tools[0].Name)
+}
+
+func TestToolsListMCPConnectFilterInterceptor_ResolverErrorFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	engine := newAuthzEngineForTest(t)
+	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+	// A grant that would otherwise keep the tool — the resolver error must
+	// short-circuit the whole filter rather than fall back to filtering on the
+	// empty disposition.
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   testServerID,
+			"tool":          "list_items",
+		}),
+	)
+
+	resolver := fakeToolDispositionResolver{err: errors.New("metadata store unavailable")}
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
+
+	resp := newToolsListResponse(t, []*mcp.Tool{
+		{Name: "list_items", InputSchema: map[string]any{}},
+	})
+	err := interceptor.InterceptToolsListResponse(ctx, resp)
+	require.Error(t, err)
+	// The tools slice is left untouched: the error propagates for the proxy to
+	// surface, rather than a silently emptied or unfiltered list.
+	require.Len(t, resp.Result.Tools, 1)
 }
