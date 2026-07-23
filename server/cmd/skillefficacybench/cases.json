@@ -1,5 +1,5 @@
 {
-  "judge_prompt_version": "v2",
+  "judge_prompt_version": "v3",
   "judge_model": "google/gemini-3.1-flash-lite",
   "minimum_agreement": 0.8,
   "cases": [
@@ -226,7 +226,11 @@
             "role": "assistant",
             "content": "The focused tests pass. I am running the linter before committing.",
             "tool_calls": [
-              { "id": "call-2", "name": "lint", "arguments": "{}" }
+              {
+                "id": "call-2",
+                "name": "lint",
+                "arguments": "{}"
+              }
             ]
           },
           {

@@ -111,7 +111,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skillefficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills"
-	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/templates"
@@ -733,17 +732,8 @@ func newStartCommand() *cli.Command {
 			// so a burst of them and one of them ask the coordinator for exactly
 			// the same pass. The trailing edge is what keeps the last write of a
 			// burst from being the one that goes unanswered.
-			// efficacySignaler.Shutdown is NOT registered as a shutdownFunc, for
-			// the same reason riskSignaler's is not: see below.
-			efficacySignaler := background.NewThrottledSignaler(
-				&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
-				background.SkillEfficacySignalCooldown,
-				logger.With(attr.SlogComponent("skill-efficacy")),
-			)
-			chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
-
-			// Chat analysis rides the same durable-write event as efficacy, with
-			// its own coordinator and the same throttle/flush rationale.
+			// chatAnalysisSignaler.Shutdown is NOT registered as a shutdownFunc,
+			// for the same reason riskSignaler's is not: see below.
 			chatAnalysisSignaler := background.NewThrottledSignaler(
 				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 				background.ChatAnalysisSignalCooldown,
@@ -794,7 +784,7 @@ func newStartCommand() *cli.Command {
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
-			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))
+			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(chatAnalysisSignaler))
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
 			// mcpService captures this map by reference now; the remaining
 			// insights tools (chat/orgs/risk/deployments/skills) are merged in once
@@ -1083,7 +1073,7 @@ func newStartCommand() *cli.Command {
 				policyBypass,
 				shadowMCPClient,
 				chatWriter,
-				efficacySignaler,
+				chatAnalysisSignaler,
 				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
@@ -1352,9 +1342,6 @@ func newStartCommand() *cli.Command {
 				// Temporal client is still open - runShutdown closes it concurrently.
 				if err := riskSignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending risk signals", attr.SlogError(err))
-				}
-				if err := efficacySignaler.Shutdown(graceCtx); err != nil {
-					logger.ErrorContext(ctx, "flush pending skill efficacy signals", attr.SlogError(err))
 				}
 				if err := chatAnalysisSignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending chat analysis signals", attr.SlogError(err))

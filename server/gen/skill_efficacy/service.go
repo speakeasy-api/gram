@@ -126,13 +126,8 @@ type SkillEfficacySettings struct {
 	OrganizationID string
 	// Whether skill efficacy scoring is enabled.
 	Enabled bool
-	// Maximum evaluations reserved per skill each UTC day.
-	PerSkillDailyCap int
-	// Maximum evaluations reserved across the organization each UTC day.
-	OrgDailyCap int
-	// Lifetime evaluations a new skill version may reserve before the per-skill
-	// daily cap applies.
-	NewVersionBurst int
+	// Maximum session evaluations reserved across the organization each UTC day.
+	DailyCap int
 	// Whether these values are platform defaults rather than stored organization
 	// settings.
 	IsDefault bool
@@ -170,13 +165,8 @@ type UpsertSettingsPayload struct {
 	SessionToken *string
 	// Whether skill efficacy scoring is enabled.
 	Enabled bool
-	// Maximum evaluations reserved per skill each UTC day.
-	PerSkillDailyCap int
-	// Maximum evaluations reserved across the organization each UTC day.
-	OrgDailyCap int
-	// Lifetime evaluations a new skill version may reserve before the per-skill
-	// daily cap applies.
-	NewVersionBurst int
+	// Maximum session evaluations reserved across the organization each UTC day.
+	DailyCap int
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

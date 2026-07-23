@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -68,9 +70,11 @@ const (
 // resumes where it left off, and each reset once its walk reaches the end of
 // its queue.
 type ChatAnalysisCoordinatorParams struct {
-	ProjectID     uuid.UUID              `json:"project_id"`
-	Cursor        analysis.EnqueueCursor `json:"cursor"`
-	PendingCursor analysis.PendingCursor `json:"pending_cursor"`
+	ProjectID uuid.UUID `json:"project_id"`
+	// EnqueueCursors holds one opaque cursor per enqueue source (the shared
+	// chats walk plus each judge-owned unit source), keyed by source name.
+	EnqueueCursors map[string]json.RawMessage `json:"enqueue_cursors"`
+	PendingCursor  analysis.PendingCursor     `json:"pending_cursor"`
 }
 
 // ChatAnalysisSweepParams is where a sweep's project pagination resumes.
@@ -126,30 +130,44 @@ func ChatAnalysisCoordinatorWorkflow(ctx workflow.Context, params ChatAnalysisCo
 	})
 
 	var a *activities.ChatAnalysisScorer
+
+	// The source list is recorded once per run: the roster only changes across
+	// deploys, and a replay must observe the answer the original run saw.
+	var sources []string
+	if err := workflow.ExecuteActivity(ctx, a.ListChatAnalysisEnqueueSources).Get(ctx, &sources); err != nil {
+		return fmt.Errorf("list chat analysis enqueue sources: %w", err)
+	}
+	if params.EnqueueCursors == nil {
+		params.EnqueueCursors = make(map[string]json.RawMessage, len(sources))
+	}
+
 	// A run that spends all its passes on work ran out of history budget, not
 	// out of work. The flag tells the two apart at the end.
 	exhausted := false
 	for range chatAnalysisMaxPasses {
-		for range chatAnalysisMaxEnqueuePages {
-			var page activities.EnqueueChatAnalysisPageResult
-			if err := workflow.ExecuteActivity(ctx, a.EnqueueChatAnalysisPage, activities.EnqueueChatAnalysisPageParams{
-				ProjectID: params.ProjectID,
-				Cursor:    params.Cursor,
-				PageSize:  analysis.MaxEnqueuePageSize,
-			}).Get(ctx, &page); err != nil {
-				return fmt.Errorf("enqueue chat analysis page: %w", err)
-			}
+		for _, source := range sources {
+			for range chatAnalysisMaxEnqueuePages {
+				var page activities.EnqueueChatAnalysisPageResult
+				if err := workflow.ExecuteActivity(ctx, a.EnqueueChatAnalysisPage, activities.EnqueueChatAnalysisPageParams{
+					ProjectID: params.ProjectID,
+					Source:    source,
+					Cursor:    params.EnqueueCursors[source],
+					PageSize:  analysis.MaxEnqueuePageSize,
+				}).Get(ctx, &page); err != nil {
+					return fmt.Errorf("enqueue chat analysis page: %w", err)
+				}
 
-			params.Cursor = page.NextCursor
-			if page.Exhausted {
-				// The walk reached the end of the candidate set. Starting the next
-				// one at the head is what reaches a chat that went quiet behind the
-				// cursor.
-				params.Cursor = analysis.EnqueueCursor{CreatedAt: time.Time{}, ID: uuid.Nil}
-				break
-			}
-			if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
-				return workflow.NewContinueAsNewError(ctx, ChatAnalysisCoordinatorWorkflow, params)
+				params.EnqueueCursors[source] = page.NextCursor
+				if page.Exhausted {
+					// The walk reached the end of its source. Starting the next
+					// one at the head is what reaches work written behind the
+					// cursor.
+					delete(params.EnqueueCursors, source)
+					break
+				}
+				if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+					return workflow.NewContinueAsNewError(ctx, ChatAnalysisCoordinatorWorkflow, params)
+				}
 			}
 		}
 
@@ -354,9 +372,9 @@ func (s *TemporalChatAnalysisSignaler) Signal(ctx context.Context, projectID uui
 		},
 		ChatAnalysisCoordinatorWorkflow,
 		ChatAnalysisCoordinatorParams{
-			ProjectID:     projectID,
-			Cursor:        analysis.EnqueueCursor{CreatedAt: time.Time{}, ID: uuid.Nil},
-			PendingCursor: analysis.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil},
+			ProjectID:      projectID,
+			EnqueueCursors: nil,
+			PendingCursor:  analysis.PendingCursor{ObservedAt: time.Time{}, ID: uuid.Nil},
 		},
 	)
 	if err != nil {
@@ -369,4 +387,23 @@ func (s *TemporalChatAnalysisSignaler) Signal(ctx context.Context, projectID uui
 	)
 
 	return nil
+}
+
+// legacySkillEfficacySweepScheduleID is the schedule the pre-unification skill
+// efficacy pipeline registered. Its workflow no longer exists, so the schedule
+// is torn down at worker startup rather than left firing into not-found errors.
+const legacySkillEfficacySweepScheduleID = "v1:skill-efficacy-sweep-schedule"
+
+// RemoveLegacySkillEfficacySweepSchedule deletes the retired skill efficacy
+// sweep schedule. Best-effort: a schedule that is already gone is success, and
+// any other failure is logged and retried on the next worker start.
+func RemoveLegacySkillEfficacySweepSchedule(ctx context.Context, logger *slog.Logger, temporalEnv *tenv.Environment) {
+	handle := temporalEnv.Client().ScheduleClient().GetHandle(ctx, legacySkillEfficacySweepScheduleID)
+	if err := handle.Delete(ctx); err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return
+		}
+		logger.WarnContext(ctx, "failed to remove legacy skill efficacy sweep schedule", attr.SlogError(err))
+	}
 }

@@ -18,7 +18,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
-	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -108,7 +107,7 @@ func (j *WorkUnitsJudge) Name() string {
 // prose means hostile transcript text is always a quoted string in a known
 // field and can never forge a digest section.
 type workUnitsPromptPayload struct {
-	Transcript efficacy.Transcript `json:"transcript"`
+	Transcript Transcript `json:"transcript"`
 }
 
 // Judge scores one session. Errors wrap ErrModelFailure or ErrRetryable so the

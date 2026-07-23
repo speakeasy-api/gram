@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -44,7 +45,7 @@ func TestLoadBenchSetRejectsStalePromptVersion(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, b, 0o600))
 
 	_, err = loadBenchSet(path)
-	require.EqualError(t, err, `corpus prompt version "stale" does not match production "v2"`)
+	require.EqualError(t, err, `corpus prompt version "stale" does not match production "v3"`)
 }
 
 func TestBuildRequestMatchesProductionJudgeSettings(t *testing.T) {
@@ -61,7 +62,7 @@ func TestBuildRequestMatchesProductionJudgeSettings(t *testing.T) {
 	require.NotNil(t, request.Temperature)
 	require.Zero(t, *request.Temperature)
 	require.NotNil(t, request.JSONSchema)
-	require.Equal(t, efficacy.VerdictSchema(), request.JSONSchema.Schema)
+	require.Equal(t, efficacy.SessionVerdictSchema(), request.JSONSchema.Schema)
 }
 
 func TestSummarizeUsesSuccessfulRunMedianAndReportsErrors(t *testing.T) {
@@ -112,7 +113,7 @@ func validTestBenchSet() benchSet {
 			SkillContent: "Run the relevant check.",
 			Surface:      "dev",
 			ActivatedAt:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-			Transcript: efficacy.Transcript{Messages: []efficacy.TranscriptMessage{{
+			Transcript: analysis.Transcript{Messages: []analysis.TranscriptMessage{{
 				Index:   1,
 				Role:    "assistant",
 				Content: "The focused check passes.",

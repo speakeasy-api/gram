@@ -46,25 +46,13 @@ func BuildUpsertSettingsPayload(skillEfficacyUpsertSettingsBody string, skillEff
 	{
 		err = json.Unmarshal([]byte(skillEfficacyUpsertSettingsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"new_version_burst\": 1,\n      \"org_daily_cap\": 1,\n      \"per_skill_daily_cap\": 1\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"daily_cap\": 1,\n      \"enabled\": false\n   }'")
 		}
-		if body.PerSkillDailyCap < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.per_skill_daily_cap", body.PerSkillDailyCap, 0, true))
+		if body.DailyCap < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.daily_cap", body.DailyCap, 0, true))
 		}
-		if body.PerSkillDailyCap > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.per_skill_daily_cap", body.PerSkillDailyCap, 10000, false))
-		}
-		if body.OrgDailyCap < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.org_daily_cap", body.OrgDailyCap, 0, true))
-		}
-		if body.OrgDailyCap > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.org_daily_cap", body.OrgDailyCap, 10000, false))
-		}
-		if body.NewVersionBurst < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.new_version_burst", body.NewVersionBurst, 0, true))
-		}
-		if body.NewVersionBurst > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.new_version_burst", body.NewVersionBurst, 10000, false))
+		if body.DailyCap > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.daily_cap", body.DailyCap, 10000, false))
 		}
 		if err != nil {
 			return nil, err
@@ -83,10 +71,8 @@ func BuildUpsertSettingsPayload(skillEfficacyUpsertSettingsBody string, skillEff
 		}
 	}
 	v := &skillefficacy.UpsertSettingsPayload{
-		Enabled:          body.Enabled,
-		PerSkillDailyCap: body.PerSkillDailyCap,
-		OrgDailyCap:      body.OrgDailyCap,
-		NewVersionBurst:  body.NewVersionBurst,
+		Enabled:  body.Enabled,
+		DailyCap: body.DailyCap,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

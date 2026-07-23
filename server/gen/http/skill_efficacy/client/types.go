@@ -17,13 +17,8 @@ import (
 type UpsertSettingsRequestBody struct {
 	// Whether skill efficacy scoring is enabled.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// Maximum evaluations reserved per skill each UTC day.
-	PerSkillDailyCap int `form:"per_skill_daily_cap" json:"per_skill_daily_cap" xml:"per_skill_daily_cap"`
-	// Maximum evaluations reserved across the organization each UTC day.
-	OrgDailyCap int `form:"org_daily_cap" json:"org_daily_cap" xml:"org_daily_cap"`
-	// Lifetime evaluations a new skill version may reserve before the per-skill
-	// daily cap applies.
-	NewVersionBurst int `form:"new_version_burst" json:"new_version_burst" xml:"new_version_burst"`
+	// Maximum session evaluations reserved across the organization each UTC day.
+	DailyCap int `form:"daily_cap" json:"daily_cap" xml:"daily_cap"`
 }
 
 // GetSettingsResponseBody is the type of the "skillEfficacy" service
@@ -33,13 +28,8 @@ type GetSettingsResponseBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Whether skill efficacy scoring is enabled.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Maximum evaluations reserved per skill each UTC day.
-	PerSkillDailyCap *int `form:"per_skill_daily_cap,omitempty" json:"per_skill_daily_cap,omitempty" xml:"per_skill_daily_cap,omitempty"`
-	// Maximum evaluations reserved across the organization each UTC day.
-	OrgDailyCap *int `form:"org_daily_cap,omitempty" json:"org_daily_cap,omitempty" xml:"org_daily_cap,omitempty"`
-	// Lifetime evaluations a new skill version may reserve before the per-skill
-	// daily cap applies.
-	NewVersionBurst *int `form:"new_version_burst,omitempty" json:"new_version_burst,omitempty" xml:"new_version_burst,omitempty"`
+	// Maximum session evaluations reserved across the organization each UTC day.
+	DailyCap *int `form:"daily_cap,omitempty" json:"daily_cap,omitempty" xml:"daily_cap,omitempty"`
 	// Whether these values are platform defaults rather than stored organization
 	// settings.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
@@ -52,13 +42,8 @@ type UpsertSettingsResponseBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Whether skill efficacy scoring is enabled.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Maximum evaluations reserved per skill each UTC day.
-	PerSkillDailyCap *int `form:"per_skill_daily_cap,omitempty" json:"per_skill_daily_cap,omitempty" xml:"per_skill_daily_cap,omitempty"`
-	// Maximum evaluations reserved across the organization each UTC day.
-	OrgDailyCap *int `form:"org_daily_cap,omitempty" json:"org_daily_cap,omitempty" xml:"org_daily_cap,omitempty"`
-	// Lifetime evaluations a new skill version may reserve before the per-skill
-	// daily cap applies.
-	NewVersionBurst *int `form:"new_version_burst,omitempty" json:"new_version_burst,omitempty" xml:"new_version_burst,omitempty"`
+	// Maximum session evaluations reserved across the organization each UTC day.
+	DailyCap *int `form:"daily_cap,omitempty" json:"daily_cap,omitempty" xml:"daily_cap,omitempty"`
 	// Whether these values are platform defaults rather than stored organization
 	// settings.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
@@ -711,10 +696,8 @@ type SkillEfficacyScoredSessionResponseBody struct {
 // of the "upsertSettings" endpoint of the "skillEfficacy" service.
 func NewUpsertSettingsRequestBody(p *skillefficacy.UpsertSettingsPayload) *UpsertSettingsRequestBody {
 	body := &UpsertSettingsRequestBody{
-		Enabled:          p.Enabled,
-		PerSkillDailyCap: p.PerSkillDailyCap,
-		OrgDailyCap:      p.OrgDailyCap,
-		NewVersionBurst:  p.NewVersionBurst,
+		Enabled:  p.Enabled,
+		DailyCap: p.DailyCap,
 	}
 	return body
 }
@@ -723,12 +706,10 @@ func NewUpsertSettingsRequestBody(p *skillefficacy.UpsertSettingsPayload) *Upser
 // "getSettings" endpoint result from a HTTP "OK" response.
 func NewGetSettingsSkillEfficacySettingsOK(body *GetSettingsResponseBody) *skillefficacy.SkillEfficacySettings {
 	v := &skillefficacy.SkillEfficacySettings{
-		OrganizationID:   *body.OrganizationID,
-		Enabled:          *body.Enabled,
-		PerSkillDailyCap: *body.PerSkillDailyCap,
-		OrgDailyCap:      *body.OrgDailyCap,
-		NewVersionBurst:  *body.NewVersionBurst,
-		IsDefault:        *body.IsDefault,
+		OrganizationID: *body.OrganizationID,
+		Enabled:        *body.Enabled,
+		DailyCap:       *body.DailyCap,
+		IsDefault:      *body.IsDefault,
 	}
 
 	return v
@@ -888,12 +869,10 @@ func NewGetSettingsGatewayError(body *GetSettingsGatewayErrorResponseBody) *goa.
 // "upsertSettings" endpoint result from a HTTP "OK" response.
 func NewUpsertSettingsSkillEfficacySettingsOK(body *UpsertSettingsResponseBody) *skillefficacy.SkillEfficacySettings {
 	v := &skillefficacy.SkillEfficacySettings{
-		OrganizationID:   *body.OrganizationID,
-		Enabled:          *body.Enabled,
-		PerSkillDailyCap: *body.PerSkillDailyCap,
-		OrgDailyCap:      *body.OrgDailyCap,
-		NewVersionBurst:  *body.NewVersionBurst,
-		IsDefault:        *body.IsDefault,
+		OrganizationID: *body.OrganizationID,
+		Enabled:        *body.Enabled,
+		DailyCap:       *body.DailyCap,
+		IsDefault:      *body.IsDefault,
 	}
 
 	return v
@@ -1237,46 +1216,20 @@ func ValidateGetSettingsResponseBody(body *GetSettingsResponseBody) (err error) 
 	if body.Enabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
-	if body.PerSkillDailyCap == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("per_skill_daily_cap", "body"))
-	}
-	if body.OrgDailyCap == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("org_daily_cap", "body"))
-	}
-	if body.NewVersionBurst == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("new_version_burst", "body"))
+	if body.DailyCap == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("daily_cap", "body"))
 	}
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
-	if body.PerSkillDailyCap != nil {
-		if *body.PerSkillDailyCap < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.per_skill_daily_cap", *body.PerSkillDailyCap, 0, true))
+	if body.DailyCap != nil {
+		if *body.DailyCap < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.daily_cap", *body.DailyCap, 0, true))
 		}
 	}
-	if body.PerSkillDailyCap != nil {
-		if *body.PerSkillDailyCap > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.per_skill_daily_cap", *body.PerSkillDailyCap, 10000, false))
-		}
-	}
-	if body.OrgDailyCap != nil {
-		if *body.OrgDailyCap < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.org_daily_cap", *body.OrgDailyCap, 0, true))
-		}
-	}
-	if body.OrgDailyCap != nil {
-		if *body.OrgDailyCap > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.org_daily_cap", *body.OrgDailyCap, 10000, false))
-		}
-	}
-	if body.NewVersionBurst != nil {
-		if *body.NewVersionBurst < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.new_version_burst", *body.NewVersionBurst, 0, true))
-		}
-	}
-	if body.NewVersionBurst != nil {
-		if *body.NewVersionBurst > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.new_version_burst", *body.NewVersionBurst, 10000, false))
+	if body.DailyCap != nil {
+		if *body.DailyCap > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.daily_cap", *body.DailyCap, 10000, false))
 		}
 	}
 	return
@@ -1291,46 +1244,20 @@ func ValidateUpsertSettingsResponseBody(body *UpsertSettingsResponseBody) (err e
 	if body.Enabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
-	if body.PerSkillDailyCap == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("per_skill_daily_cap", "body"))
-	}
-	if body.OrgDailyCap == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("org_daily_cap", "body"))
-	}
-	if body.NewVersionBurst == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("new_version_burst", "body"))
+	if body.DailyCap == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("daily_cap", "body"))
 	}
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
-	if body.PerSkillDailyCap != nil {
-		if *body.PerSkillDailyCap < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.per_skill_daily_cap", *body.PerSkillDailyCap, 0, true))
+	if body.DailyCap != nil {
+		if *body.DailyCap < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.daily_cap", *body.DailyCap, 0, true))
 		}
 	}
-	if body.PerSkillDailyCap != nil {
-		if *body.PerSkillDailyCap > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.per_skill_daily_cap", *body.PerSkillDailyCap, 10000, false))
-		}
-	}
-	if body.OrgDailyCap != nil {
-		if *body.OrgDailyCap < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.org_daily_cap", *body.OrgDailyCap, 0, true))
-		}
-	}
-	if body.OrgDailyCap != nil {
-		if *body.OrgDailyCap > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.org_daily_cap", *body.OrgDailyCap, 10000, false))
-		}
-	}
-	if body.NewVersionBurst != nil {
-		if *body.NewVersionBurst < 0 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.new_version_burst", *body.NewVersionBurst, 0, true))
-		}
-	}
-	if body.NewVersionBurst != nil {
-		if *body.NewVersionBurst > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.new_version_burst", *body.NewVersionBurst, 10000, false))
+	if body.DailyCap != nil {
+		if *body.DailyCap > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.daily_cap", *body.DailyCap, 10000, false))
 		}
 	}
 	return

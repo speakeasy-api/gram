@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -78,7 +77,7 @@ type Publisher struct {
 	logger *slog.Logger
 	tracer trace.Tracer
 	db     *pgxpool.Pool
-	chats  efficacy.TranscriptSource
+	chats  TranscriptSource
 	scores ScoreSink
 	judges *Judges
 	// evaluationTimeout is publishEvaluationTimeout, held on the struct so a test
@@ -155,7 +154,7 @@ func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, ids []uuid
 	// A batch can hold several evaluations of the same chat — one per judge — and
 	// they all judge the same messages, so the read and the render are paid once
 	// per chat for the length of this pass.
-	transcripts := make(map[uuid.UUID]efficacy.Transcript, len(inputs))
+	transcripts := make(map[uuid.UUID]Transcript, len(inputs))
 
 	var retryable []error
 	for _, input := range inputs {
@@ -267,7 +266,7 @@ func guardWindow(inputs []repo.GetChatAnalysisJudgeInputsRow, now time.Time) (ti
 // Every step it covers can hang — a chat read, a judge call, a ClickHouse
 // insert — and without a bound one hung step holds the batch past the lease
 // that owns its rows, letting a second pass judge them concurrently.
-func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, input repo.GetChatAnalysisJudgeInputsRow, transcripts map[uuid.UUID]efficacy.Transcript, result *PublishResult) error {
+func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, input repo.GetChatAnalysisJudgeInputsRow, transcripts map[uuid.UUID]Transcript, result *PublishResult) error {
 	evaluationCtx, cancel := context.WithTimeout(ctx, p.evaluationTimeout)
 	defer cancel()
 
@@ -284,7 +283,7 @@ func (p *Publisher) publishEvaluation(ctx context.Context, projectID uuid.UUID, 
 // publishOne judges one evaluation and publishes its verdict. It returns an
 // error only for infrastructure failures; model failures and deterministic row
 // validation failures are charged locally so the rest of the batch still runs.
-func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input repo.GetChatAnalysisJudgeInputsRow, transcripts map[uuid.UUID]efficacy.Transcript, result *PublishResult) error {
+func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input repo.GetChatAnalysisJudgeInputsRow, transcripts map[uuid.UUID]Transcript, result *PublishResult) error {
 	judge, ok := p.judges.Get(input.Judge)
 	if !ok {
 		// The roster no longer runs this judge; a retry reads the same row and
@@ -302,7 +301,7 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 
 	transcript, ok := transcripts[input.ChatID]
 	if !ok {
-		loaded, err := efficacy.LoadTranscript(ctx, p.chats, projectID, input.ChatID)
+		loaded, err := LoadTranscript(ctx, p.chats, projectID, input.ChatID)
 		if err != nil {
 			result.Retryable++
 			return fmt.Errorf("load chat analysis transcript: %w: %w", ErrRetryable, err)
@@ -314,12 +313,27 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, input r
 	}
 
 	judged, err := judge.Judge(ctx, JudgeInput{
-		OrgID:      input.OrganizationID,
-		ProjectID:  projectID.String(),
-		ChatID:     input.ChatID,
-		Transcript: transcript,
+		OrgID:               input.OrganizationID,
+		ProjectID:           projectID.String(),
+		ChatID:              input.ChatID,
+		SessionID:           input.SessionID,
+		EvaluationID:        input.ID,
+		EvaluationCreatedAt: input.EvaluationCreatedAt.Time,
+		Transcript:          transcript,
 	})
 	switch {
+	case err != nil && errors.Is(err, ErrUnitInvalid):
+		// The unit's domain inputs are gone or deterministically unusable, so a
+		// retry reads the same state and reaches the same conclusion.
+		terminal, chargeErr := p.chargeAttempt(ctx, projectID, input, validationFailureClass, 1)
+		if chargeErr != nil {
+			result.Retryable++
+			return chargeErr
+		}
+		if terminal {
+			result.Failed++
+		}
+		return nil
 	case err != nil && errors.Is(err, ErrModelFailure):
 		return p.recordAttempt(ctx, projectID, input, result)
 	case err != nil:

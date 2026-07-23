@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
@@ -18,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
-	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -32,6 +33,11 @@ var (
 	// transport error. The publisher leaves the evaluation reserved and its
 	// attempt counter untouched, so the same row is retried.
 	ErrRetryable = errors.New("chat analysis judge failure is retryable")
+	// ErrUnitInvalid marks a unit a retry can never fix: its domain inputs are
+	// gone or deterministically unusable (for example a skill efficacy unit
+	// whose activations no longer resolve). The publisher terminates the
+	// evaluation immediately without charging further model attempts.
+	ErrUnitInvalid = errors.New("chat analysis unit is invalid")
 )
 
 // JudgeInput is one scoring unit: a finished session's rendered transcript and
@@ -39,10 +45,20 @@ var (
 // the skill efficacy judge, so every session judge sees the same
 // prompt-injection-hardened shape.
 type JudgeInput struct {
-	OrgID      string
-	ProjectID  string
-	ChatID     uuid.UUID
-	Transcript efficacy.Transcript
+	OrgID     string
+	ProjectID string
+	ChatID    uuid.UUID
+	// SessionID is the raw agent session id the unit was enqueued under, empty
+	// for units from the generic chats walk.
+	SessionID string
+	// EvaluationID is the queue row's id. It is the verdict's logical event
+	// identity in every sink, so a judge deriving extra sink rows keys them off
+	// it to keep retries idempotent.
+	EvaluationID uuid.UUID
+	// EvaluationCreatedAt is the queue row's birth stamp — the lower bound any
+	// judge-owned dedup guard should read from.
+	EvaluationCreatedAt time.Time
+	Transcript          Transcript
 }
 
 // Verdict is a judge's normalized answer. Score is the headline metric whose
@@ -119,6 +135,52 @@ func (j *Judges) Names() []string {
 func (j *Judges) Get(name string) (Judge, bool) {
 	judge, ok := j.byName[name]
 	return judge, ok
+}
+
+// ChatsEnqueueSource names the shared chats walk that enqueues units for every
+// judge that does not bring its own UnitSource.
+const ChatsEnqueueSource = "chats"
+
+// UnitSource is an optional Judge extension: a judge whose scoring units come
+// from a domain source rather than the generic chats walk (skill efficacy
+// derives its units from reconciled skill activations). The source owns its
+// cursor encoding; the coordinator persists it opaquely between calls.
+type UnitSource interface {
+	// EnqueueUnitsPage scans one bounded page of the judge's domain source and
+	// enqueues (chat, judge) units for it. A nil cursor starts at the head.
+	EnqueueUnitsPage(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, cursor json.RawMessage, pageSize int32) (EnqueueSourcePage, error)
+}
+
+// EnqueueSourcePage reports what one unit-source page did.
+type EnqueueSourcePage struct {
+	Scanned    int             `json:"scanned"`
+	NextCursor json.RawMessage `json:"next_cursor"`
+	Exhausted  bool            `json:"exhausted"`
+}
+
+// EnqueueSources lists the walks one enqueue pass runs: the shared chats walk
+// first, then one source per judge that brings its own. The order is stable so
+// the coordinator's per-source cursor map keys stay meaningful across runs.
+func (j *Judges) EnqueueSources() []string {
+	sources := []string{ChatsEnqueueSource}
+	for _, judge := range j.ordered {
+		if _, ok := judge.(UnitSource); ok {
+			sources = append(sources, judge.Name())
+		}
+	}
+	return sources
+}
+
+// chatsWalkJudges lists the judges the shared chats walk enqueues for: every
+// registered judge that does not bring its own unit source.
+func (j *Judges) chatsWalkJudges() map[string]struct{} {
+	names := make(map[string]struct{}, len(j.ordered))
+	for _, judge := range j.ordered {
+		if _, ok := judge.(UnitSource); !ok {
+			names[judge.Name()] = struct{}{}
+		}
+	}
+	return names
 }
 
 // StructuredCall is one structured-output judge completion: the model, the

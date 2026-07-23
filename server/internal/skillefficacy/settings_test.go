@@ -13,10 +13,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	analysisrepo "github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
-	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -30,12 +30,12 @@ func TestGetSettingsReturnsPlatformDefaults(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.Equal(t, &gen.SkillEfficacySettings{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		Enabled:          efficacy.DefaultEnabled,
-		PerSkillDailyCap: efficacy.DefaultPerSkillDailyCap,
-		OrgDailyCap:      efficacy.DefaultOrgDailyCap,
-		NewVersionBurst:  efficacy.DefaultNewVersionBurst,
-		IsDefault:        true,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		// Scoring is opt-in per judge: an organization with no settings row is
+		// off, and the default cap is only what it would run on when enabled.
+		Enabled:   false,
+		DailyCap:  int(analysis.DefaultJudgeDailyCap),
+		IsDefault: true,
 	}, result)
 }
 
@@ -48,7 +48,7 @@ func TestSettingsRequireProductFeature(t *testing.T) {
 
 	_, err = ti.service.UpsertSettings(withGrant(t, ctx, authz.ScopeOrgAdmin), &gen.UpsertSettingsPayload{
 		ApikeyToken: nil, SessionToken: nil, Enabled: true,
-		PerSkillDailyCap: 1, OrgDailyCap: 2, NewVersionBurst: 3,
+		DailyCap: 2,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
@@ -62,7 +62,7 @@ func TestSettingsEnforceOrganizationScopes(t *testing.T) {
 
 	_, err = ti.service.UpsertSettings(withGrant(t, ctx, authz.ScopeOrgRead), &gen.UpsertSettingsPayload{
 		ApikeyToken: nil, SessionToken: nil, Enabled: true,
-		PerSkillDailyCap: 1, OrgDailyCap: 2, NewVersionBurst: 3,
+		DailyCap: 2,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
@@ -73,9 +73,8 @@ func TestUpsertSettingsValidatesCaps(t *testing.T) {
 	ctx = withGrant(t, ctx, authz.ScopeOrgAdmin)
 
 	invalid := []*gen.UpsertSettingsPayload{
-		{ApikeyToken: nil, SessionToken: nil, Enabled: true, PerSkillDailyCap: -1, OrgDailyCap: 2, NewVersionBurst: 3},
-		{ApikeyToken: nil, SessionToken: nil, Enabled: true, PerSkillDailyCap: 1, OrgDailyCap: 10001, NewVersionBurst: 3},
-		{ApikeyToken: nil, SessionToken: nil, Enabled: true, PerSkillDailyCap: 1, OrgDailyCap: 2, NewVersionBurst: -1},
+		{ApikeyToken: nil, SessionToken: nil, Enabled: true, DailyCap: -1},
+		{ApikeyToken: nil, SessionToken: nil, Enabled: true, DailyCap: 10001},
 	}
 	for _, payload := range invalid {
 		_, err := ti.service.UpsertSettings(ctx, payload)
@@ -93,23 +92,21 @@ func TestUpsertSettingsPersistsAndAuditsBeforeAfter(t *testing.T) {
 
 	first, err := ti.service.UpsertSettings(adminCtx, &gen.UpsertSettingsPayload{
 		ApikeyToken: nil, SessionToken: nil, Enabled: true,
-		PerSkillDailyCap: 0, OrgDailyCap: 0, NewVersionBurst: 0,
+		DailyCap: 0,
 	})
 	require.NoError(t, err)
 	require.False(t, first.IsDefault)
 
 	second, err := ti.service.UpsertSettings(adminCtx, &gen.UpsertSettingsPayload{
 		ApikeyToken: nil, SessionToken: nil, Enabled: false,
-		PerSkillDailyCap: 10000, OrgDailyCap: 10000, NewVersionBurst: 10000,
+		DailyCap: 10000,
 	})
 	require.NoError(t, err)
 	require.Equal(t, &gen.SkillEfficacySettings{
-		OrganizationID:   second.OrganizationID,
-		Enabled:          false,
-		PerSkillDailyCap: 10000,
-		OrgDailyCap:      10000,
-		NewVersionBurst:  10000,
-		IsDefault:        false,
+		OrganizationID: second.OrganizationID,
+		Enabled:        false,
+		DailyCap:       10000,
+		IsDefault:      false,
 	}, second)
 
 	stored, err := ti.service.GetSettings(withGrant(t, ctx, authz.ScopeOrgRead), &gen.GetSettingsPayload{ApikeyToken: nil, SessionToken: nil})
@@ -128,12 +125,12 @@ func TestUpsertSettingsPersistsAndAuditsBeforeAfter(t *testing.T) {
 	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{
-		"enabled": true, "per_skill_daily_cap": float64(0), "org_daily_cap": float64(0), "new_version_burst": float64(0),
+		"enabled": true, "daily_cap": float64(0),
 	}, beforeSnapshot)
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{
-		"enabled": false, "per_skill_daily_cap": float64(10000), "org_daily_cap": float64(10000), "new_version_burst": float64(10000),
+		"enabled": false, "daily_cap": float64(10000),
 	}, afterSnapshot)
 }
 
@@ -146,18 +143,18 @@ func TestConcurrentUpsertSettingsAuditsCommittedTransitions(t *testing.T) {
 
 	_, err := ti.service.UpsertSettings(adminCtx, &gen.UpsertSettingsPayload{
 		ApikeyToken: nil, SessionToken: nil, Enabled: true,
-		PerSkillDailyCap: 1, OrgDailyCap: 10, NewVersionBurst: 100,
+		DailyCap: 10,
 	})
 	require.NoError(t, err)
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillEfficacySettingsUpsert)
 	require.NoError(t, err)
 
 	lockTx := testenv.BeginTx(t, ctx, ti.conn)
-	require.NoError(t, skillsrepo.New(lockTx).LockOrganizationSkillEfficacyBudget(ctx, authCtx.ActiveOrganizationID))
+	require.NoError(t, analysisrepo.New(lockTx).LockOrganizationChatAnalysisBudget(ctx, authCtx.ActiveOrganizationID))
 
 	payloads := []*gen.UpsertSettingsPayload{
-		{ApikeyToken: nil, SessionToken: nil, Enabled: true, PerSkillDailyCap: 2, OrgDailyCap: 20, NewVersionBurst: 200},
-		{ApikeyToken: nil, SessionToken: nil, Enabled: false, PerSkillDailyCap: 3, OrgDailyCap: 30, NewVersionBurst: 300},
+		{ApikeyToken: nil, SessionToken: nil, Enabled: true, DailyCap: 20},
+		{ApikeyToken: nil, SessionToken: nil, Enabled: false, DailyCap: 30},
 	}
 	results := make(chan error, len(payloads))
 	var wg sync.WaitGroup
@@ -186,6 +183,6 @@ func TestConcurrentUpsertSettingsAuditsCommittedTransitions(t *testing.T) {
 	require.NoError(t, err)
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
-	require.InEpsilon(t, float64(stored.PerSkillDailyCap), afterSnapshot["per_skill_daily_cap"], 1e-9)
-	require.NotEqual(t, float64(1), beforeSnapshot["per_skill_daily_cap"])
+	require.InEpsilon(t, float64(stored.DailyCap), afterSnapshot["daily_cap"], 1e-9)
+	require.NotEqual(t, float64(10), beforeSnapshot["daily_cap"])
 }

@@ -60037,40 +60037,26 @@ components:
         SkillEfficacySettings:
             type: object
             properties:
+                daily_cap:
+                    type: integer
+                    description: Maximum session evaluations reserved across the organization each UTC day.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
                 enabled:
                     type: boolean
                     description: Whether skill efficacy scoring is enabled.
                 is_default:
                     type: boolean
                     description: Whether these values are platform defaults rather than stored organization settings.
-                new_version_burst:
-                    type: integer
-                    description: Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.
-                    format: int64
-                    minimum: 0
-                    maximum: 10000
-                org_daily_cap:
-                    type: integer
-                    description: Maximum evaluations reserved across the organization each UTC day.
-                    format: int64
-                    minimum: 0
-                    maximum: 10000
                 organization_id:
                     type: string
                     description: Organization these settings apply to.
-                per_skill_daily_cap:
-                    type: integer
-                    description: Maximum evaluations reserved per skill each UTC day.
-                    format: int64
-                    minimum: 0
-                    maximum: 10000
-            description: Per-organization sampling settings for skill efficacy scoring.
+            description: 'Per-organization settings for skill efficacy scoring. Scoring is session-grained: one evaluation covers every skill a session activated, so the cap counts sessions per day.'
             required:
                 - organization_id
                 - enabled
-                - per_skill_daily_cap
-                - org_daily_cap
-                - new_version_burst
+                - daily_cap
                 - is_default
         SkillInsightMetrics:
             type: object
@@ -63938,32 +63924,18 @@ components:
         UpsertSettingsRequestBody:
             type: object
             properties:
+                daily_cap:
+                    type: integer
+                    description: Maximum session evaluations reserved across the organization each UTC day.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
                 enabled:
                     type: boolean
                     description: Whether skill efficacy scoring is enabled.
-                new_version_burst:
-                    type: integer
-                    description: Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.
-                    format: int64
-                    minimum: 0
-                    maximum: 10000
-                org_daily_cap:
-                    type: integer
-                    description: Maximum evaluations reserved across the organization each UTC day.
-                    format: int64
-                    minimum: 0
-                    maximum: 10000
-                per_skill_daily_cap:
-                    type: integer
-                    description: Maximum evaluations reserved per skill each UTC day.
-                    format: int64
-                    minimum: 0
-                    maximum: 10000
             required:
                 - enabled
-                - per_skill_daily_cap
-                - org_daily_cap
-                - new_version_burst
+                - daily_cap
         UsageTiers:
             type: object
             properties:
