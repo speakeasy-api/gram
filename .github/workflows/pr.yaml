@@ -771,6 +771,60 @@ jobs:
           CH_URL: clickhouse://127.0.0.1:9000/default?username=gram&password=gram&secure=false&x-multi-statement=true
         run: mise run clickhouse:migrate --engine golang-migrate --url ${CH_URL}
 
+  lint-migrations:
+    name: Lint migrations
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: changes
+    # On pull_request, only run when migration files changed (the `changes` gate).
+    # In the merge queue always run, ignoring `changes`: dorny/paths-filter has no
+    # reliable base on merge_group, so its `migrations` output can't be trusted
+    # there. Merge-queue coverage is the point of this job: two PRs branched from
+    # the same head can each pass ordering individually and still land out of order
+    # once both merge (the INC-418 failure mode), which is only catchable when the
+    # check re-evaluates against the queued head.
+    if: >-
+      (github.event_name == 'pull_request' && needs.changes.outputs.migrations == 'true')
+      || github.event_name == 'merge_group'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
+      # The ordering check needs both the checked-out head and the base commit
+      # present, but not full history, so shallow-fetch just the base rather than
+      # using fetch-depth: 0 (a full clone on this large repo). checkout's `ref`
+      # can't do this: it sets the single HEAD, whereas we need head + base
+      # available together.
+      #
+      # In the merge queue, compare against the exact commit the group was built
+      # on, not live origin/main which may have advanced past it.
+      - name: Resolve and fetch base ref
+        id: base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: |
+          if [ "$EVENT_NAME" = "merge_group" ]; then
+            git fetch --depth=1 origin "$MERGE_BASE_SHA"
+            echo "ref=$MERGE_BASE_SHA" >> "$GITHUB_OUTPUT"
+          else
+            git fetch --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+            echo "ref=origin/main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check migration ordering
+        env:
+          BASE_REF: ${{ steps.base.outputs.ref }}
+        run: mise run lint:migrations --git-base "$BASE_REF" --no-atlas
+
   atlas-lint:
     name: Lint migrations with Atlas
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -810,13 +864,6 @@ jobs:
           install: true
           cache: true
           env: false
-
-      - name: Run gram migration static checks
-        shell: bash
-        env:
-          usage_git_base: origin/main
-          usage_no_atlas: "true"
-        run: bash .mise-tasks/lint/migrations.sh
 
       - name: Lint PostgreSQL migrations
         uses: ariga/atlas-action/migrate/lint@v1.15.6
@@ -2023,6 +2070,7 @@ jobs:
       - otel-collector
       - ts-framework-test
       - golang-migrate-clickhouse
+      - lint-migrations
       - atlas-lint
       - atlas-push
       - webhooks-catalog-breaking-changes
