@@ -632,14 +632,16 @@ WITH
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
     (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row) AS is_usage_row,
-    -- Codex/Cursor tool calls arrive as hook rows, one
-    -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
-    -- tool events are deliberately not counted — hook rows stay the sole
-    -- source). The hook.event guard is required: every call also emits a
-    -- PreToolUse row with the same gram.tool.name. Provider names (the
-    -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
+    -- Tool calls from hook-relayed providers arrive as hook rows, one
+    -- PostToolUse/PostToolUseFailure row per completed call. Every non-empty
+    -- hook source counts except claude-code, whose counted tool source is the
+    -- OTEL tool_result stream (Codex raw OTEL tool events are likewise not
+    -- counted — hook rows stay its sole source). The hook.event guard is
+    -- required: every call also emits a PreToolUse row with the same
+    -- gram.tool.name. Provider names (the usage-metrics rows' tool.name) are
+    -- excluded — they are not tool calls.
     (
-        toString(attributes.gram.hook.source) IN ('codex', 'cursor')
+        toString(attributes.gram.hook.source) NOT IN ('', 'claude-code')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
@@ -738,9 +740,9 @@ SELECT
 FROM telemetry_logs
 -- Admit only the observed agent surfaces: Claude OTEL api_request/tool_result
 -- rows, Codex OTEL response.completed usage rows, Cursor/Claude-Chat usage
--- and cost rows, and Codex/Cursor completed tool-call hook rows. Tool rows
--- carry no token/cost fields, so they only contribute to the tool-call
--- counts.
+-- and cost rows, and Codex/Cursor/OpenCode completed tool-call hook rows.
+-- Tool rows carry no token/cost fields, so they only contribute to the
+-- tool-call counts.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
   AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_agent_tool_call)
 GROUP BY
@@ -930,7 +932,7 @@ WITH
     (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
     (
-        hook_source IN ('codex', 'cursor')
+        hook_source NOT IN ('', 'claude-code')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
