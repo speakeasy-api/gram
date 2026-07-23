@@ -1733,6 +1733,17 @@ type SkillRawHash struct {
 	CreatedAt       pgtype.Timestamptz
 }
 
+type SkillShareLink struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	Token           string
+	CreatedByUserID string
+	RevokedAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type SkillSyncReceipt struct {
 	ProjectID      uuid.UUID
 	SkillID        uuid.UUID

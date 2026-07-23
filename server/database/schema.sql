@@ -1690,6 +1690,32 @@ CREATE INDEX IF NOT EXISTS skill_distributions_skill_id_pinned_version_id_idx ON
 CREATE INDEX IF NOT EXISTS skill_distributions_plugin_id_idx ON skill_distributions (plugin_id);
 CREATE INDEX IF NOT EXISTS skill_distributions_assistant_id_idx ON skill_distributions (assistant_id);
 
+CREATE TABLE IF NOT EXISTS skill_share_links (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  skill_id uuid NOT NULL,
+
+  token TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL,
+  revoked_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_share_links_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_share_links_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT skill_share_links_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_share_links_token_key ON skill_share_links (token);
+
+-- At most one active public share link per skill.
+CREATE UNIQUE INDEX IF NOT EXISTS skill_share_links_skill_id_key
+ON skill_share_links (skill_id)
+WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_share_links_project_id_idx ON skill_share_links (project_id);
+
 -- project_managed_assistants maps a project to its single platform-managed
 -- assistant (the one powering the AI Insights sidebar). Kept in its own table
 -- rather than a flag on assistants/projects so the relation has an explicit
