@@ -83,6 +83,10 @@ func TestExtendedConfig_HashNextToIDNotDetected(t *testing.T) {
 
 	content := fakeAccessKeyID + " " + sha1Empty + "\n"
 	got := ruleSet(t, content)
+	// Assert the anchor fired: otherwise the composite rule couldn't have run at
+	// all, and the negative result below would be a broken fixture, not entropy
+	// rejection.
+	require.True(t, got[gitleaks.AccessKeyIDRuleID], "the access key id anchor must be detected")
 	require.False(t, got[gitleaks.SecretAccessKeyRuleID],
 		"a lowercase-hex hash must fall below the entropy floor")
 }
