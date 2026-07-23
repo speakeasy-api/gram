@@ -435,17 +435,237 @@ const FIXTURES: FixtureSpec[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Generated backfill
+//
+// The curated fixtures above carry the interesting stories (missing
+// attributes, unclassified rows); the generated stream supplies realistic
+// volume so the histogram has texture. Deterministic so the feed is stable
+// across renders within a page load.
+// ---------------------------------------------------------------------------
+
+interface StreamTemplate extends Omit<DataEvent, "id" | "timestamp"> {
+  /** Relative sampling weight in the generated stream. */
+  weight: number;
+}
+
+const STREAM_TEMPLATES: StreamTemplate[] = [
+  {
+    weight: 5,
+    project: "default",
+    origin: "provider_otel",
+    kind: "log",
+    type: "api_request",
+    producer: "claude-code",
+    body: "claude_code.api_request",
+    attributes: {
+      "event.name": "api_request",
+      "session.id": "0aa7c3f1-83b4-4e6e-9a2f-6a51c22e8d10",
+      "gen_ai.request.model": "claude-sonnet-4-5",
+      "service.version": "2.1.19",
+    },
+  },
+  {
+    weight: 4,
+    project: "default",
+    origin: "provider_otel",
+    kind: "metric",
+    type: "usage",
+    producer: "claude-code",
+    body: "claude_code.token.usage",
+    attributes: {
+      "gen_ai.usage.input_tokens": 2210,
+      "gen_ai.usage.output_tokens": 480,
+      "gen_ai.usage.cost_usd": 0.0187,
+      "gen_ai.request.model": "claude-sonnet-4-5",
+      "session.id": "0aa7c3f1-83b4-4e6e-9a2f-6a51c22e8d10",
+      "service.version": "2.1.19",
+    },
+  },
+  {
+    weight: 4,
+    project: "internal-tools",
+    origin: "agent_hook",
+    kind: "log",
+    type: "pretooluse",
+    producer: "cursor",
+    body: "preToolUse: shell (allowed)",
+    attributes: {
+      "gram.hook.event": "preToolUse",
+      "gram.hook.source": "cursor",
+      "gram.hook.decision": "allow",
+      "gram.tool.name": "shell",
+      "conversation.id": "c7e6c1a2-0d31-45c2-8a75-3f0d19b3a144",
+    },
+  },
+  {
+    weight: 2,
+    project: "internal-tools",
+    origin: "agent_hook",
+    kind: "metric",
+    type: "usage",
+    producer: "cursor",
+    body: "afterAgentResponse token usage",
+    attributes: {
+      "gram.hook.source": "cursor",
+      "gen_ai.usage.input_tokens": 7420,
+      "gen_ai.usage.output_tokens": 990,
+      "conversation.id": "c7e6c1a2-0d31-45c2-8a75-3f0d19b3a144",
+      // Missing gen_ai.request.model, like the curated fixture.
+    },
+  },
+  {
+    weight: 3,
+    project: "internal-tools",
+    origin: "provider_otel",
+    kind: "metric",
+    type: "usage",
+    producer: "codex",
+    body: "codex.sse_event response.completed",
+    attributes: {
+      "gen_ai.usage.input_tokens": 5030,
+      "gen_ai.usage.output_tokens": 780,
+      "gen_ai.request.model": "gpt-5.3-codex",
+      "session.id": "conv_88f1a0c2b3d4",
+      // Missing gen_ai.usage.cost_usd, like the curated fixture.
+    },
+  },
+  {
+    weight: 5,
+    project: "default",
+    origin: "gram_service",
+    kind: "log",
+    type: "tool_call",
+    producer: "gram-server",
+    body: "POST tools:http:petstore:list_pets 200",
+    attributes: {
+      "gram.event.source": "tool_call",
+      "gram.tool.urn": "tools:http:petstore:list_pets",
+      "http.request.method": "POST",
+      "http.response.status_code": 200,
+      "trace.id": "6f2a9c01d4e88b3a51c0aa8f9e2d7b41",
+      "gram.duration_ms": 380,
+    },
+  },
+  {
+    weight: 2,
+    project: "platform",
+    origin: "gram_service",
+    kind: "log",
+    type: "chat_completion",
+    producer: "gram-server",
+    body: "chat completion via openrouter",
+    attributes: {
+      "gram.event.source": "chat_completion",
+      "gen_ai.request.model": "openai/gpt-5.2",
+      "gen_ai.usage.input_tokens": 1980,
+      "gen_ai.usage.output_tokens": 350,
+      "trace.id": "b81f3ce09a2d47f6a1e5dd0c2b9e8a63",
+    },
+  },
+  {
+    weight: 2,
+    project: "default",
+    origin: "provider_otel",
+    kind: "log",
+    type: "tool_result",
+    producer: "claude-code",
+    body: "claude_code.tool_result",
+    attributes: {
+      "event.name": "tool_result",
+      "session.id": "0aa7c3f1-83b4-4e6e-9a2f-6a51c22e8d10",
+      "gram.tool.name": "Read",
+      "service.version": "2.1.19",
+    },
+  },
+  {
+    weight: 1,
+    project: "platform",
+    origin: "unknown",
+    kind: "log",
+    type: "agent_heartbeat",
+    producer: "unknown",
+    body: '{"kind":"heartbeat","agent":"acme-internal-agent","v":"0.3"}',
+    attributes: {
+      "log.severity": "INFO",
+    },
+  },
+];
+
+/** mulberry32: tiny deterministic PRNG so the generated stream is stable. */
+function mulberry32(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state |= 0;
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const BACKFILL_MINUTES = 60;
+
+function pickTemplate(rand: () => number): StreamTemplate {
+  const totalWeight = STREAM_TEMPLATES.reduce((sum, t) => sum + t.weight, 0);
+  let roll = rand() * totalWeight;
+  for (const template of STREAM_TEMPLATES) {
+    roll -= template.weight;
+    if (roll <= 0) return template;
+  }
+  return STREAM_TEMPLATES[0]!;
+}
+
+/**
+ * Per-minute event volume: overlapping waves plus noise, so the histogram
+ * shows busy spells and lulls instead of a flat line.
+ */
+function minuteVolume(minute: number, rand: () => number): number {
+  const wave =
+    5 +
+    3 * Math.sin(minute / 5.5) +
+    2.5 * Math.sin(minute / 2.3 + 1.7) +
+    (rand() - 0.5) * 5;
+  return Math.max(0, Math.round(wave));
+}
+
+function buildBackfillEvents(now: Date): DataEvent[] {
+  const rand = mulberry32(0x5eed);
+  const events: DataEvent[] = [];
+
+  for (let minute = 0; minute < BACKFILL_MINUTES; minute++) {
+    const count = minuteVolume(minute, rand);
+    for (let i = 0; i < count; i++) {
+      const { weight: _weight, ...template } = pickTemplate(rand);
+      events.push({
+        ...template,
+        id: `gen_${String(events.length + 1).padStart(4, "0")}`,
+        timestamp: new Date(
+          now.getTime() - minute * 60_000 - Math.floor(rand() * 60_000),
+        ),
+      });
+    }
+  }
+
+  return events;
+}
+
 /**
  * Builds the fixture feed with timestamps relative to now so the page always
- * looks freshly ingested. Sorted reverse-chronologically, newest first.
+ * looks freshly ingested: the curated fixtures on top of a generated volume
+ * stream. Sorted reverse-chronologically, newest first.
  */
 export function buildMockEvents(now: Date = new Date()): DataEvent[] {
-  return FIXTURES.map((fixture, index) => {
+  const curated = FIXTURES.map((fixture, index) => {
     const { minutesAgo, ...event } = fixture;
     return {
       ...event,
       id: `evt_${String(index + 1).padStart(3, "0")}`,
       timestamp: new Date(now.getTime() - minutesAgo * 60_000),
     };
-  }).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  });
+
+  return [...curated, ...buildBackfillEvents(now)].sort(
+    (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+  );
 }

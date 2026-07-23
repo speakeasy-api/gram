@@ -1,6 +1,7 @@
 import { CHART_COLORS, OTHER_COLOR } from "@/components/stacked-time-series";
-import { Type } from "@/components/ui/type";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { dateTimeFormatters } from "@/lib/dates";
+import { formatCompact } from "@/lib/format";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import {
   BarController,
@@ -11,6 +12,7 @@ import {
   Tooltip,
   type ChartOptions,
 } from "chart.js";
+import { Info } from "lucide-react";
 import { useMemo } from "react";
 import { Bar } from "react-chartjs-2";
 import type { DataEvent } from "./data-events";
@@ -26,18 +28,10 @@ ChartJS.register(
 const BUCKET_MINUTES = 2;
 const BUCKET_COUNT = 30; // one hour of two-minute buckets, newest at the right
 
-// Series colors come from the shared stacked time-series palette (the billing
-// token-usage chart) so the feed reads like the rest of the dashboard:
-// metrics in the palette blue, logs in the neutral remainder slate.
+// Series colors from the shared stacked time-series palette (the billing
+// token-usage chart): metrics in the palette blue, logs in the neutral slate.
 const METRIC_COLOR = CHART_COLORS[0]!;
 const LOG_COLOR = OTHER_COLOR;
-
-const BAR_SIZING = {
-  stack: "events",
-  maxBarThickness: 10,
-  barPercentage: 0.8,
-  categoryPercentage: 0.8,
-} as const;
 
 interface HistogramBuckets {
   labels: string[];
@@ -84,23 +78,21 @@ function LegendSwatch({
   label: string;
 }): JSX.Element {
   return (
-    <span className="flex items-center gap-1.5 px-2 py-0.5">
+    <span className="text-muted-foreground flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs">
       <span
         aria-hidden
         className="size-2.5 rounded-[3px]"
         style={{ backgroundColor: color }}
       />
-      <Type muted small>
-        {label}
-      </Type>
+      {label}
     </span>
   );
 }
 
 /**
- * Volume-over-time histogram above the feed, the way standard log viewers
- * lead with one. Reflects the currently filtered events, stacked by kind,
- * styled after the billing token-usage breakdown chart.
+ * Event volume over time above the feed — a copy of the billing page's
+ * token-usage time-series chart (StackedTimeSeriesPanel), stacked by kind
+ * and fed by the currently filtered events.
  */
 export function DataFeedHistogram({
   events,
@@ -110,7 +102,7 @@ export function DataFeedHistogram({
   const buckets = useMemo(() => bucketEvents(events), [events]);
 
   // Chart.js paints the canvas with static defaults that ignore the CSS
-  // theme, so axis text and gridlines need explicit dark-mode colors.
+  // theme, so axis/legend text and gridlines need explicit dark-mode colors.
   const { theme } = useMoonshineConfig();
   const isDark = theme === "dark";
 
@@ -125,7 +117,8 @@ export function DataFeedHistogram({
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (item) => `${item.dataset.label}: ${item.formattedValue}`,
+            label: (item) =>
+              `${item.dataset.label}: ${Number(item.raw).toLocaleString()} events`,
           },
         },
       },
@@ -133,22 +126,16 @@ export function DataFeedHistogram({
         x: {
           stacked: true,
           grid: { display: false },
-          ticks: {
-            maxTicksLimit: 6,
-            maxRotation: 0,
-            font: { size: 10 },
-            color: textColor,
-          },
+          ticks: { maxTicksLimit: 16, color: textColor },
         },
         y: {
           stacked: true,
           beginAtZero: true,
           grid: { color: gridColor },
           ticks: {
-            precision: 0,
-            maxTicksLimit: 4,
-            font: { size: 10 },
             color: textColor,
+            precision: 0,
+            callback: (value) => formatCompact(Number(value)),
           },
         },
       },
@@ -163,13 +150,11 @@ export function DataFeedHistogram({
           label: "Logs",
           data: buckets.logCounts,
           backgroundColor: LOG_COLOR,
-          ...BAR_SIZING,
         },
         {
           label: "Metrics",
           data: buckets.metricCounts,
           backgroundColor: METRIC_COLOR,
-          ...BAR_SIZING,
         },
       ],
     }),
@@ -178,10 +163,16 @@ export function DataFeedHistogram({
 
   return (
     <div className="border-border rounded-lg border p-4">
-      <div className="h-24">
+      <div className="flex items-center gap-1.5 text-sm font-semibold">
+        Event Volume
+        <SimpleTooltip tooltip="Events ingested over the last hour, stacked by kind. Reflects the active filters.">
+          <Info className="text-muted-foreground size-3.5" />
+        </SimpleTooltip>
+      </div>
+      <div className="mt-4" style={{ height: 280 }}>
         <Bar data={data} options={options} />
       </div>
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
         <LegendSwatch color={LOG_COLOR} label="Logs" />
         <LegendSwatch color={METRIC_COLOR} label="Metrics" />
       </div>
