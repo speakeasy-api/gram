@@ -1553,6 +1553,10 @@ jobs:
           path: dist/assets
           destination: ${{ secrets[matrix.bucket_secret] }}/assets
           parent: false
+          # Resumable sessions flake under high concurrency ("offset is lower
+          # than the number of bytes written"); these files are small enough
+          # that simple uploads with client retries are safer.
+          resumable: false
           # The CDN compresses at the edge (compression_mode AUTOMATIC) and
           # skips responses that are already content-encoded, so objects must
           # be stored uncompressed.
