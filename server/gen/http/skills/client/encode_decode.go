@@ -2684,6 +2684,7 @@ func unmarshalSkillResponseBodyToTypesSkill(v *SkillResponseBody) *types.Skill {
 		Classification:  *v.Classification,
 		LatestVersionID: v.LatestVersionID,
 		VersionCount:    *v.VersionCount,
+		HasValidVersion: *v.HasValidVersion,
 		FirstSeenAt:     v.FirstSeenAt,
 		LastSeenAt:      v.LastSeenAt,
 		SeenCount:       *v.SeenCount,

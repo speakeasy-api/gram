@@ -9,6 +9,7 @@ require (
 	cloud.google.com/go/pubsub/v2 v2.3.0
 	cloud.google.com/go/storage v1.62.1
 	github.com/BurntSushi/toml v1.6.0
+	github.com/ClickHouse/ch-go v0.71.0
 	github.com/ClickHouse/clickhouse-go/v2 v2.43.0
 	github.com/GoogleCloudPlatform/k8s-config-connector v1.151.0
 	github.com/KimMachineGun/automemlimit v0.7.5
@@ -123,7 +124,6 @@ require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/BobuSumisu/aho-corasick v1.0.3 // indirect
-	github.com/ClickHouse/ch-go v0.71.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.31.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0 // indirect

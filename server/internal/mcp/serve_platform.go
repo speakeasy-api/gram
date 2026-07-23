@@ -308,6 +308,7 @@ func (s *Service) callPlatformToolsetTool(
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  gramEmail,
+		GramChatID: chatIDHeader,
 	}
 
 	var mcpURL string

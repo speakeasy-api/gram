@@ -68,6 +68,10 @@ vi.mock("./SkillPluginBanner", () => ({
 vi.mock("./SkillDistributionsSection", () => ({
   SkillDistributionsSection: () => <div>Distribution controls</div>,
 }));
+vi.mock("./SkillInsightsSection", () => ({
+  SKILL_INSIGHTS_SECTION_ID: "insights",
+  SkillInsightsSection: () => <div>Skill insights</div>,
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => testState.queryClient,
 }));
@@ -268,7 +272,8 @@ describe("SkillDetail", () => {
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Edit SKILL.md" })).toBeNull();
     expect(screen.queryByText("Version history")).toBeNull();
-    expect(screen.queryByText("Distribution banner")).toBeNull();
+    // The banner stays visible so it can explain why distribution is blocked.
+    expect(screen.getByText("Distribution banner")).toBeTruthy();
     expect(screen.queryByText("Distribution controls")).toBeNull();
   });
 

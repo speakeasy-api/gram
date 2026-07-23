@@ -171,7 +171,13 @@ WHERE sd.assistant_id = ANY(@assistant_ids::uuid[])
 ORDER BY s.name ASC, s.id ASC;
 
 -- name: LoadAttachedAssistantSkill :one
-SELECT resolved.content
+SELECT
+  s.id AS skill_id,
+  s.name,
+  resolved.id AS skill_version_id,
+  resolved.content,
+  resolved.canonical_sha256,
+  resolved.raw_sha256
 FROM skill_distributions sd
 JOIN assistants a
   ON a.id = sd.assistant_id
@@ -182,7 +188,7 @@ JOIN skills s
   AND s.project_id = sd.project_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.id, sv.content
+  SELECT sv.id, sv.content, sv.canonical_sha256, sv.raw_sha256
   FROM skill_versions sv
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
@@ -197,6 +203,43 @@ WHERE sd.assistant_id = @assistant_id
   AND sd.assistant_id IS NOT NULL
   AND sd.revoked_at IS NULL
   AND s.name = @name;
+
+-- name: RecordAssistantSkillObservation :execrows
+WITH observed AS (
+  SELECT clock_timestamp() AS seen_at
+)
+INSERT INTO skill_observations (
+    project_id
+  , idempotency_key
+  , provider
+  , session_id
+  , skill_name
+  , raw_sha256
+  , seen_at
+  , skill_id
+  , skill_version_id
+  , reconciled_at
+)
+SELECT
+    s.project_id
+  , 'assistant:' || @session_id::text || ':' || sv.id::text
+  , 'assistant'
+  , @session_id::text
+  , s.name
+  , sv.raw_sha256
+  , observed.seen_at
+  , s.id
+  , sv.id
+  , observed.seen_at
+FROM skills s
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = @skill_version_id
+CROSS JOIN observed
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+DO NOTHING;
 
 -- name: ClearAssistantToolsets :exec
 DELETE FROM assistant_toolsets

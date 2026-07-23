@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -58,13 +60,43 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *Service
-	conn           *pgxpool.Pool
-	chConn         clickhouse.Conn
-	redisClient    *redis.Client
-	spendGateCache cache.Cache
-	accessStore    accesscontrol.Store
-	sessionManager *sessions.Manager
+	service         *Service
+	conn            *pgxpool.Pool
+	chConn          clickhouse.Conn
+	redisClient     *redis.Client
+	spendGateCache  cache.Cache
+	accessStore     accesscontrol.Store
+	sessionManager  *sessions.Manager
+	efficacySignals *recordingEfficacySignaler
+}
+
+// recordingEfficacySignaler captures the skill efficacy wakes a hook path
+// emits, and can be made to fail so tests can prove a failed wake never
+// reaches the hook response. Signal is called synchronously by the producers,
+// so a test reads it straight after the call under test.
+type recordingEfficacySignaler struct {
+	mu      sync.Mutex
+	err     error
+	signals []uuid.UUID
+}
+
+func (r *recordingEfficacySignaler) Signal(_ context.Context, projectID uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.signals = append(r.signals, projectID)
+	return r.err
+}
+
+func (r *recordingEfficacySignaler) failWith(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.err = err
+}
+
+func (r *recordingEfficacySignaler) signaled() []uuid.UUID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.signals)
 }
 
 // namespacedSpendGateCache keeps snapshots isolated even though hook tests use
@@ -147,6 +179,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	serverURL, err := url.Parse("https://localhost:8080")
 	require.NoError(t, err)
+	efficacySignals := &recordingEfficacySignaler{mu: sync.Mutex{}, err: nil, signals: nil}
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore, serverURL)
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	spendGate := spendrules.NewGate(logger, spendGateCache)
@@ -168,18 +201,21 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		spendGate,
 		shadowMCPClient,
 		chatWriter,
+		efficacySignals,
+		serverURL,
 		siteURL,
 		"test-jwt-secret",
 	)
 
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		chConn:         chConn,
-		redisClient:    redisClient,
-		spendGateCache: spendGateCache,
-		accessStore:    accessStore,
-		sessionManager: sessionManager,
+		service:         svc,
+		conn:            conn,
+		chConn:          chConn,
+		redisClient:     redisClient,
+		spendGateCache:  spendGateCache,
+		accessStore:     accessStore,
+		sessionManager:  sessionManager,
+		efficacySignals: efficacySignals,
 	}
 }
 

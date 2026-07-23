@@ -33,6 +33,7 @@ import (
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
 	externalc "github.com/speakeasy-api/gram/server/gen/http/external/client"
 	externalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/external_credentials/client"
+	externalkeysc "github.com/speakeasy-api/gram/server/gen/http/external_keys/client"
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
@@ -59,6 +60,7 @@ import (
 	remotesessionsc "github.com/speakeasy-api/gram/server/gen/http/remote_sessions/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
 	riskc "github.com/speakeasy-api/gram/server/gen/http/risk/client"
+	skillefficacyc "github.com/speakeasy-api/gram/server/gen/http/skill_efficacy/client"
 	skillsc "github.com/speakeasy-api/gram/server/gen/http/skills/client"
 	telemetryc "github.com/speakeasy-api/gram/server/gen/http/telemetry/client"
 	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
@@ -100,6 +102,7 @@ func UsageCommands() []string {
 		"domains (get-domain|create-domain|update-domain|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|delete-aws-iam-credential|delete-gcp-iam-credential)",
+		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
@@ -128,8 +131,9 @@ func UsageCommands() []string {
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|update|list|get|list-unknown-activations|list-versions|archive|distribute|undistribute|list-distributions)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
@@ -854,6 +858,50 @@ func ParseEndpoint(
 		externalCredentialsDeleteGcpIamCredentialFlags            = flag.NewFlagSet("delete-gcp-iam-credential", flag.ExitOnError)
 		externalCredentialsDeleteGcpIamCredentialIDFlag           = externalCredentialsDeleteGcpIamCredentialFlags.String("id", "REQUIRED", "")
 		externalCredentialsDeleteGcpIamCredentialSessionTokenFlag = externalCredentialsDeleteGcpIamCredentialFlags.String("session-token", "", "")
+
+		externalKeysFlags = flag.NewFlagSet("external-keys", flag.ContinueOnError)
+
+		externalKeysCreateAwsKmsKeyFlags            = flag.NewFlagSet("create-aws-kms-key", flag.ExitOnError)
+		externalKeysCreateAwsKmsKeyBodyFlag         = externalKeysCreateAwsKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysCreateAwsKmsKeySessionTokenFlag = externalKeysCreateAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysUpdateAwsKmsKeyFlags            = flag.NewFlagSet("update-aws-kms-key", flag.ExitOnError)
+		externalKeysUpdateAwsKmsKeyBodyFlag         = externalKeysUpdateAwsKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysUpdateAwsKmsKeySessionTokenFlag = externalKeysUpdateAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysCreateGcpKmsKeyFlags            = flag.NewFlagSet("create-gcp-kms-key", flag.ExitOnError)
+		externalKeysCreateGcpKmsKeyBodyFlag         = externalKeysCreateGcpKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysCreateGcpKmsKeySessionTokenFlag = externalKeysCreateGcpKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysUpdateGcpKmsKeyFlags            = flag.NewFlagSet("update-gcp-kms-key", flag.ExitOnError)
+		externalKeysUpdateGcpKmsKeyBodyFlag         = externalKeysUpdateGcpKmsKeyFlags.String("body", "REQUIRED", "")
+		externalKeysUpdateGcpKmsKeySessionTokenFlag = externalKeysUpdateGcpKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysListExternalKeysFlags            = flag.NewFlagSet("list-external-keys", flag.ExitOnError)
+		externalKeysListExternalKeysProviderFlag     = externalKeysListExternalKeysFlags.String("provider", "", "")
+		externalKeysListExternalKeysSessionTokenFlag = externalKeysListExternalKeysFlags.String("session-token", "", "")
+
+		externalKeysListAwsKmsKeysFlags            = flag.NewFlagSet("list-aws-kms-keys", flag.ExitOnError)
+		externalKeysListAwsKmsKeysSessionTokenFlag = externalKeysListAwsKmsKeysFlags.String("session-token", "", "")
+
+		externalKeysListGcpKmsKeysFlags            = flag.NewFlagSet("list-gcp-kms-keys", flag.ExitOnError)
+		externalKeysListGcpKmsKeysSessionTokenFlag = externalKeysListGcpKmsKeysFlags.String("session-token", "", "")
+
+		externalKeysGetAwsKmsKeyFlags            = flag.NewFlagSet("get-aws-kms-key", flag.ExitOnError)
+		externalKeysGetAwsKmsKeyIDFlag           = externalKeysGetAwsKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysGetAwsKmsKeySessionTokenFlag = externalKeysGetAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysGetGcpKmsKeyFlags            = flag.NewFlagSet("get-gcp-kms-key", flag.ExitOnError)
+		externalKeysGetGcpKmsKeyIDFlag           = externalKeysGetGcpKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysGetGcpKmsKeySessionTokenFlag = externalKeysGetGcpKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysDeleteAwsKmsKeyFlags            = flag.NewFlagSet("delete-aws-kms-key", flag.ExitOnError)
+		externalKeysDeleteAwsKmsKeyIDFlag           = externalKeysDeleteAwsKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysDeleteAwsKmsKeySessionTokenFlag = externalKeysDeleteAwsKmsKeyFlags.String("session-token", "", "")
+
+		externalKeysDeleteGcpKmsKeyFlags            = flag.NewFlagSet("delete-gcp-kms-key", flag.ExitOnError)
+		externalKeysDeleteGcpKmsKeyIDFlag           = externalKeysDeleteGcpKmsKeyFlags.String("id", "REQUIRED", "")
+		externalKeysDeleteGcpKmsKeySessionTokenFlag = externalKeysDeleteGcpKmsKeyFlags.String("session-token", "", "")
 
 		mcpRegistriesFlags = flag.NewFlagSet("mcp-registries", flag.ContinueOnError)
 
@@ -2028,6 +2076,26 @@ func ParseEndpoint(
 		riskDeleteRiskEvalReviewSessionTokenFlag     = riskDeleteRiskEvalReviewFlags.String("session-token", "", "")
 		riskDeleteRiskEvalReviewProjectSlugInputFlag = riskDeleteRiskEvalReviewFlags.String("project-slug-input", "", "")
 
+		skillEfficacyFlags = flag.NewFlagSet("skill-efficacy", flag.ContinueOnError)
+
+		skillEfficacyGetSettingsFlags            = flag.NewFlagSet("get-settings", flag.ExitOnError)
+		skillEfficacyGetSettingsApikeyTokenFlag  = skillEfficacyGetSettingsFlags.String("apikey-token", "", "")
+		skillEfficacyGetSettingsSessionTokenFlag = skillEfficacyGetSettingsFlags.String("session-token", "", "")
+
+		skillEfficacyUpsertSettingsFlags            = flag.NewFlagSet("upsert-settings", flag.ExitOnError)
+		skillEfficacyUpsertSettingsBodyFlag         = skillEfficacyUpsertSettingsFlags.String("body", "REQUIRED", "")
+		skillEfficacyUpsertSettingsApikeyTokenFlag  = skillEfficacyUpsertSettingsFlags.String("apikey-token", "", "")
+		skillEfficacyUpsertSettingsSessionTokenFlag = skillEfficacyUpsertSettingsFlags.String("session-token", "", "")
+
+		skillEfficacyQueryInsightsFlags                     = flag.NewFlagSet("query-insights", flag.ExitOnError)
+		skillEfficacyQueryInsightsSkillIdsFlag              = skillEfficacyQueryInsightsFlags.String("skill-ids", "", "")
+		skillEfficacyQueryInsightsFromFlag                  = skillEfficacyQueryInsightsFlags.String("from", "", "")
+		skillEfficacyQueryInsightsToFlag                    = skillEfficacyQueryInsightsFlags.String("to", "", "")
+		skillEfficacyQueryInsightsIncludeVersionsFlag       = skillEfficacyQueryInsightsFlags.String("include-versions", "", "")
+		skillEfficacyQueryInsightsIncludeScoredSessionsFlag = skillEfficacyQueryInsightsFlags.String("include-scored-sessions", "", "")
+		skillEfficacyQueryInsightsSessionTokenFlag          = skillEfficacyQueryInsightsFlags.String("session-token", "", "")
+		skillEfficacyQueryInsightsProjectSlugInputFlag      = skillEfficacyQueryInsightsFlags.String("project-slug-input", "", "")
+
 		skillsFlags = flag.NewFlagSet("skills", flag.ContinueOnError)
 
 		skillsCreateFlags                = flag.NewFlagSet("create", flag.ExitOnError)
@@ -2201,6 +2269,48 @@ func ParseEndpoint(
 		telemetryGetToolUsageSummaryApikeyTokenFlag      = telemetryGetToolUsageSummaryFlags.String("apikey-token", "", "")
 		telemetryGetToolUsageSummarySessionTokenFlag     = telemetryGetToolUsageSummaryFlags.String("session-token", "", "")
 		telemetryGetToolUsageSummaryProjectSlugInputFlag = telemetryGetToolUsageSummaryFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageTotalsFlags                = flag.NewFlagSet("get-tool-usage-totals", flag.ExitOnError)
+		telemetryGetToolUsageTotalsBodyFlag             = telemetryGetToolUsageTotalsFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageTotalsApikeyTokenFlag      = telemetryGetToolUsageTotalsFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageTotalsSessionTokenFlag     = telemetryGetToolUsageTotalsFlags.String("session-token", "", "")
+		telemetryGetToolUsageTotalsProjectSlugInputFlag = telemetryGetToolUsageTotalsFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageTargetsFlags                = flag.NewFlagSet("get-tool-usage-targets", flag.ExitOnError)
+		telemetryGetToolUsageTargetsBodyFlag             = telemetryGetToolUsageTargetsFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageTargetsApikeyTokenFlag      = telemetryGetToolUsageTargetsFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageTargetsSessionTokenFlag     = telemetryGetToolUsageTargetsFlags.String("session-token", "", "")
+		telemetryGetToolUsageTargetsProjectSlugInputFlag = telemetryGetToolUsageTargetsFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageUsersFlags                = flag.NewFlagSet("get-tool-usage-users", flag.ExitOnError)
+		telemetryGetToolUsageUsersBodyFlag             = telemetryGetToolUsageUsersFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageUsersApikeyTokenFlag      = telemetryGetToolUsageUsersFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageUsersSessionTokenFlag     = telemetryGetToolUsageUsersFlags.String("session-token", "", "")
+		telemetryGetToolUsageUsersProjectSlugInputFlag = telemetryGetToolUsageUsersFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageTargetTimeSeriesFlags                = flag.NewFlagSet("get-tool-usage-target-time-series", flag.ExitOnError)
+		telemetryGetToolUsageTargetTimeSeriesBodyFlag             = telemetryGetToolUsageTargetTimeSeriesFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageTargetTimeSeriesApikeyTokenFlag      = telemetryGetToolUsageTargetTimeSeriesFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageTargetTimeSeriesSessionTokenFlag     = telemetryGetToolUsageTargetTimeSeriesFlags.String("session-token", "", "")
+		telemetryGetToolUsageTargetTimeSeriesProjectSlugInputFlag = telemetryGetToolUsageTargetTimeSeriesFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageUserTimeSeriesFlags                = flag.NewFlagSet("get-tool-usage-user-time-series", flag.ExitOnError)
+		telemetryGetToolUsageUserTimeSeriesBodyFlag             = telemetryGetToolUsageUserTimeSeriesFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageUserTimeSeriesApikeyTokenFlag      = telemetryGetToolUsageUserTimeSeriesFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageUserTimeSeriesSessionTokenFlag     = telemetryGetToolUsageUserTimeSeriesFlags.String("session-token", "", "")
+		telemetryGetToolUsageUserTimeSeriesProjectSlugInputFlag = telemetryGetToolUsageUserTimeSeriesFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageUsersByTargetFlags                = flag.NewFlagSet("get-tool-usage-users-by-target", flag.ExitOnError)
+		telemetryGetToolUsageUsersByTargetBodyFlag             = telemetryGetToolUsageUsersByTargetFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageUsersByTargetApikeyTokenFlag      = telemetryGetToolUsageUsersByTargetFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageUsersByTargetSessionTokenFlag     = telemetryGetToolUsageUsersByTargetFlags.String("session-token", "", "")
+		telemetryGetToolUsageUsersByTargetProjectSlugInputFlag = telemetryGetToolUsageUsersByTargetFlags.String("project-slug-input", "", "")
+
+		telemetryGetToolUsageTargetToolBreakdownFlags                = flag.NewFlagSet("get-tool-usage-target-tool-breakdown", flag.ExitOnError)
+		telemetryGetToolUsageTargetToolBreakdownBodyFlag             = telemetryGetToolUsageTargetToolBreakdownFlags.String("body", "REQUIRED", "")
+		telemetryGetToolUsageTargetToolBreakdownApikeyTokenFlag      = telemetryGetToolUsageTargetToolBreakdownFlags.String("apikey-token", "", "")
+		telemetryGetToolUsageTargetToolBreakdownSessionTokenFlag     = telemetryGetToolUsageTargetToolBreakdownFlags.String("session-token", "", "")
+		telemetryGetToolUsageTargetToolBreakdownProjectSlugInputFlag = telemetryGetToolUsageTargetToolBreakdownFlags.String("project-slug-input", "", "")
 
 		telemetryListToolUsageTracesFlags                = flag.NewFlagSet("list-tool-usage-traces", flag.ExitOnError)
 		telemetryListToolUsageTracesBodyFlag             = telemetryListToolUsageTracesFlags.String("body", "REQUIRED", "")
@@ -2791,6 +2901,19 @@ func ParseEndpoint(
 	externalCredentialsDeleteAwsIamCredentialFlags.Usage = externalCredentialsDeleteAwsIamCredentialUsage
 	externalCredentialsDeleteGcpIamCredentialFlags.Usage = externalCredentialsDeleteGcpIamCredentialUsage
 
+	externalKeysFlags.Usage = externalKeysUsage
+	externalKeysCreateAwsKmsKeyFlags.Usage = externalKeysCreateAwsKmsKeyUsage
+	externalKeysUpdateAwsKmsKeyFlags.Usage = externalKeysUpdateAwsKmsKeyUsage
+	externalKeysCreateGcpKmsKeyFlags.Usage = externalKeysCreateGcpKmsKeyUsage
+	externalKeysUpdateGcpKmsKeyFlags.Usage = externalKeysUpdateGcpKmsKeyUsage
+	externalKeysListExternalKeysFlags.Usage = externalKeysListExternalKeysUsage
+	externalKeysListAwsKmsKeysFlags.Usage = externalKeysListAwsKmsKeysUsage
+	externalKeysListGcpKmsKeysFlags.Usage = externalKeysListGcpKmsKeysUsage
+	externalKeysGetAwsKmsKeyFlags.Usage = externalKeysGetAwsKmsKeyUsage
+	externalKeysGetGcpKmsKeyFlags.Usage = externalKeysGetGcpKmsKeyUsage
+	externalKeysDeleteAwsKmsKeyFlags.Usage = externalKeysDeleteAwsKmsKeyUsage
+	externalKeysDeleteGcpKmsKeyFlags.Usage = externalKeysDeleteGcpKmsKeyUsage
+
 	mcpRegistriesFlags.Usage = mcpRegistriesUsage
 	mcpRegistriesClearCacheFlags.Usage = mcpRegistriesClearCacheUsage
 	mcpRegistriesListRegistriesFlags.Usage = mcpRegistriesListRegistriesUsage
@@ -3049,6 +3172,11 @@ func ParseEndpoint(
 	riskListRiskEvalReviewsFlags.Usage = riskListRiskEvalReviewsUsage
 	riskDeleteRiskEvalReviewFlags.Usage = riskDeleteRiskEvalReviewUsage
 
+	skillEfficacyFlags.Usage = skillEfficacyUsage
+	skillEfficacyGetSettingsFlags.Usage = skillEfficacyGetSettingsUsage
+	skillEfficacyUpsertSettingsFlags.Usage = skillEfficacyUpsertSettingsUsage
+	skillEfficacyQueryInsightsFlags.Usage = skillEfficacyQueryInsightsUsage
+
 	skillsFlags.Usage = skillsUsage
 	skillsCreateFlags.Usage = skillsCreateUsage
 	skillsAddVersionFlags.Usage = skillsAddVersionUsage
@@ -3080,6 +3208,13 @@ func ParseEndpoint(
 	telemetryListAttributeKeysFlags.Usage = telemetryListAttributeKeysUsage
 	telemetryGetHooksSummaryFlags.Usage = telemetryGetHooksSummaryUsage
 	telemetryGetToolUsageSummaryFlags.Usage = telemetryGetToolUsageSummaryUsage
+	telemetryGetToolUsageTotalsFlags.Usage = telemetryGetToolUsageTotalsUsage
+	telemetryGetToolUsageTargetsFlags.Usage = telemetryGetToolUsageTargetsUsage
+	telemetryGetToolUsageUsersFlags.Usage = telemetryGetToolUsageUsersUsage
+	telemetryGetToolUsageTargetTimeSeriesFlags.Usage = telemetryGetToolUsageTargetTimeSeriesUsage
+	telemetryGetToolUsageUserTimeSeriesFlags.Usage = telemetryGetToolUsageUserTimeSeriesUsage
+	telemetryGetToolUsageUsersByTargetFlags.Usage = telemetryGetToolUsageUsersByTargetUsage
+	telemetryGetToolUsageTargetToolBreakdownFlags.Usage = telemetryGetToolUsageTargetToolBreakdownUsage
 	telemetryListToolUsageTracesFlags.Usage = telemetryListToolUsageTracesUsage
 	telemetryGetToolUsageFilterOptionsFlags.Usage = telemetryGetToolUsageFilterOptionsUsage
 	telemetryGetMcpServerActivityFlags.Usage = telemetryGetMcpServerActivityUsage
@@ -3226,6 +3361,8 @@ func ParseEndpoint(
 			svcf = environmentsFlags
 		case "external-credentials":
 			svcf = externalCredentialsFlags
+		case "external-keys":
+			svcf = externalKeysFlags
 		case "mcp-registries":
 			svcf = mcpRegistriesFlags
 		case "collections":
@@ -3282,6 +3419,8 @@ func ParseEndpoint(
 			svcf = resourcesFlags
 		case "risk":
 			svcf = riskFlags
+		case "skill-efficacy":
+			svcf = skillEfficacyFlags
 		case "skills":
 			svcf = skillsFlags
 		case "telemetry":
@@ -3775,6 +3914,43 @@ func ParseEndpoint(
 
 			case "delete-gcp-iam-credential":
 				epf = externalCredentialsDeleteGcpIamCredentialFlags
+
+			}
+
+		case "external-keys":
+			switch epn {
+			case "create-aws-kms-key":
+				epf = externalKeysCreateAwsKmsKeyFlags
+
+			case "update-aws-kms-key":
+				epf = externalKeysUpdateAwsKmsKeyFlags
+
+			case "create-gcp-kms-key":
+				epf = externalKeysCreateGcpKmsKeyFlags
+
+			case "update-gcp-kms-key":
+				epf = externalKeysUpdateGcpKmsKeyFlags
+
+			case "list-external-keys":
+				epf = externalKeysListExternalKeysFlags
+
+			case "list-aws-kms-keys":
+				epf = externalKeysListAwsKmsKeysFlags
+
+			case "list-gcp-kms-keys":
+				epf = externalKeysListGcpKmsKeysFlags
+
+			case "get-aws-kms-key":
+				epf = externalKeysGetAwsKmsKeyFlags
+
+			case "get-gcp-kms-key":
+				epf = externalKeysGetGcpKmsKeyFlags
+
+			case "delete-aws-kms-key":
+				epf = externalKeysDeleteAwsKmsKeyFlags
+
+			case "delete-gcp-kms-key":
+				epf = externalKeysDeleteGcpKmsKeyFlags
 
 			}
 
@@ -4496,6 +4672,19 @@ func ParseEndpoint(
 
 			}
 
+		case "skill-efficacy":
+			switch epn {
+			case "get-settings":
+				epf = skillEfficacyGetSettingsFlags
+
+			case "upsert-settings":
+				epf = skillEfficacyUpsertSettingsFlags
+
+			case "query-insights":
+				epf = skillEfficacyQueryInsightsFlags
+
+			}
+
 		case "skills":
 			switch epn {
 			case "create":
@@ -4585,6 +4774,27 @@ func ParseEndpoint(
 
 			case "get-tool-usage-summary":
 				epf = telemetryGetToolUsageSummaryFlags
+
+			case "get-tool-usage-totals":
+				epf = telemetryGetToolUsageTotalsFlags
+
+			case "get-tool-usage-targets":
+				epf = telemetryGetToolUsageTargetsFlags
+
+			case "get-tool-usage-users":
+				epf = telemetryGetToolUsageUsersFlags
+
+			case "get-tool-usage-target-time-series":
+				epf = telemetryGetToolUsageTargetTimeSeriesFlags
+
+			case "get-tool-usage-user-time-series":
+				epf = telemetryGetToolUsageUserTimeSeriesFlags
+
+			case "get-tool-usage-users-by-target":
+				epf = telemetryGetToolUsageUsersByTargetFlags
+
+			case "get-tool-usage-target-tool-breakdown":
+				epf = telemetryGetToolUsageTargetToolBreakdownFlags
 
 			case "list-tool-usage-traces":
 				epf = telemetryListToolUsageTracesFlags
@@ -5333,6 +5543,43 @@ func ParseEndpoint(
 				endpoint = c.DeleteGcpIamCredential()
 				data, err = externalcredentialsc.BuildDeleteGcpIamCredentialPayload(*externalCredentialsDeleteGcpIamCredentialIDFlag, *externalCredentialsDeleteGcpIamCredentialSessionTokenFlag)
 			}
+		case "external-keys":
+			c := externalkeysc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-aws-kms-key":
+				endpoint = c.CreateAwsKmsKey()
+				data, err = externalkeysc.BuildCreateAwsKmsKeyPayload(*externalKeysCreateAwsKmsKeyBodyFlag, *externalKeysCreateAwsKmsKeySessionTokenFlag)
+			case "update-aws-kms-key":
+				endpoint = c.UpdateAwsKmsKey()
+				data, err = externalkeysc.BuildUpdateAwsKmsKeyPayload(*externalKeysUpdateAwsKmsKeyBodyFlag, *externalKeysUpdateAwsKmsKeySessionTokenFlag)
+			case "create-gcp-kms-key":
+				endpoint = c.CreateGcpKmsKey()
+				data, err = externalkeysc.BuildCreateGcpKmsKeyPayload(*externalKeysCreateGcpKmsKeyBodyFlag, *externalKeysCreateGcpKmsKeySessionTokenFlag)
+			case "update-gcp-kms-key":
+				endpoint = c.UpdateGcpKmsKey()
+				data, err = externalkeysc.BuildUpdateGcpKmsKeyPayload(*externalKeysUpdateGcpKmsKeyBodyFlag, *externalKeysUpdateGcpKmsKeySessionTokenFlag)
+			case "list-external-keys":
+				endpoint = c.ListExternalKeys()
+				data, err = externalkeysc.BuildListExternalKeysPayload(*externalKeysListExternalKeysProviderFlag, *externalKeysListExternalKeysSessionTokenFlag)
+			case "list-aws-kms-keys":
+				endpoint = c.ListAwsKmsKeys()
+				data, err = externalkeysc.BuildListAwsKmsKeysPayload(*externalKeysListAwsKmsKeysSessionTokenFlag)
+			case "list-gcp-kms-keys":
+				endpoint = c.ListGcpKmsKeys()
+				data, err = externalkeysc.BuildListGcpKmsKeysPayload(*externalKeysListGcpKmsKeysSessionTokenFlag)
+			case "get-aws-kms-key":
+				endpoint = c.GetAwsKmsKey()
+				data, err = externalkeysc.BuildGetAwsKmsKeyPayload(*externalKeysGetAwsKmsKeyIDFlag, *externalKeysGetAwsKmsKeySessionTokenFlag)
+			case "get-gcp-kms-key":
+				endpoint = c.GetGcpKmsKey()
+				data, err = externalkeysc.BuildGetGcpKmsKeyPayload(*externalKeysGetGcpKmsKeyIDFlag, *externalKeysGetGcpKmsKeySessionTokenFlag)
+			case "delete-aws-kms-key":
+				endpoint = c.DeleteAwsKmsKey()
+				data, err = externalkeysc.BuildDeleteAwsKmsKeyPayload(*externalKeysDeleteAwsKmsKeyIDFlag, *externalKeysDeleteAwsKmsKeySessionTokenFlag)
+			case "delete-gcp-kms-key":
+				endpoint = c.DeleteGcpKmsKey()
+				data, err = externalkeysc.BuildDeleteGcpKmsKeyPayload(*externalKeysDeleteGcpKmsKeyIDFlag, *externalKeysDeleteGcpKmsKeySessionTokenFlag)
+			}
 		case "mcp-registries":
 			c := mcpregistriesc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -6051,6 +6298,19 @@ func ParseEndpoint(
 				endpoint = c.DeleteRiskEvalReview()
 				data, err = riskc.BuildDeleteRiskEvalReviewPayload(*riskDeleteRiskEvalReviewPolicyIDFlag, *riskDeleteRiskEvalReviewChatIDFlag, *riskDeleteRiskEvalReviewApikeyTokenFlag, *riskDeleteRiskEvalReviewSessionTokenFlag, *riskDeleteRiskEvalReviewProjectSlugInputFlag)
 			}
+		case "skill-efficacy":
+			c := skillefficacyc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-settings":
+				endpoint = c.GetSettings()
+				data, err = skillefficacyc.BuildGetSettingsPayload(*skillEfficacyGetSettingsApikeyTokenFlag, *skillEfficacyGetSettingsSessionTokenFlag)
+			case "upsert-settings":
+				endpoint = c.UpsertSettings()
+				data, err = skillefficacyc.BuildUpsertSettingsPayload(*skillEfficacyUpsertSettingsBodyFlag, *skillEfficacyUpsertSettingsApikeyTokenFlag, *skillEfficacyUpsertSettingsSessionTokenFlag)
+			case "query-insights":
+				endpoint = c.QueryInsights()
+				data, err = skillefficacyc.BuildQueryInsightsPayload(*skillEfficacyQueryInsightsSkillIdsFlag, *skillEfficacyQueryInsightsFromFlag, *skillEfficacyQueryInsightsToFlag, *skillEfficacyQueryInsightsIncludeVersionsFlag, *skillEfficacyQueryInsightsIncludeScoredSessionsFlag, *skillEfficacyQueryInsightsSessionTokenFlag, *skillEfficacyQueryInsightsProjectSlugInputFlag)
+			}
 		case "skills":
 			c := skillsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -6142,6 +6402,27 @@ func ParseEndpoint(
 			case "get-tool-usage-summary":
 				endpoint = c.GetToolUsageSummary()
 				data, err = telemetryc.BuildGetToolUsageSummaryPayload(*telemetryGetToolUsageSummaryBodyFlag, *telemetryGetToolUsageSummaryApikeyTokenFlag, *telemetryGetToolUsageSummarySessionTokenFlag, *telemetryGetToolUsageSummaryProjectSlugInputFlag)
+			case "get-tool-usage-totals":
+				endpoint = c.GetToolUsageTotals()
+				data, err = telemetryc.BuildGetToolUsageTotalsPayload(*telemetryGetToolUsageTotalsBodyFlag, *telemetryGetToolUsageTotalsApikeyTokenFlag, *telemetryGetToolUsageTotalsSessionTokenFlag, *telemetryGetToolUsageTotalsProjectSlugInputFlag)
+			case "get-tool-usage-targets":
+				endpoint = c.GetToolUsageTargets()
+				data, err = telemetryc.BuildGetToolUsageTargetsPayload(*telemetryGetToolUsageTargetsBodyFlag, *telemetryGetToolUsageTargetsApikeyTokenFlag, *telemetryGetToolUsageTargetsSessionTokenFlag, *telemetryGetToolUsageTargetsProjectSlugInputFlag)
+			case "get-tool-usage-users":
+				endpoint = c.GetToolUsageUsers()
+				data, err = telemetryc.BuildGetToolUsageUsersPayload(*telemetryGetToolUsageUsersBodyFlag, *telemetryGetToolUsageUsersApikeyTokenFlag, *telemetryGetToolUsageUsersSessionTokenFlag, *telemetryGetToolUsageUsersProjectSlugInputFlag)
+			case "get-tool-usage-target-time-series":
+				endpoint = c.GetToolUsageTargetTimeSeries()
+				data, err = telemetryc.BuildGetToolUsageTargetTimeSeriesPayload(*telemetryGetToolUsageTargetTimeSeriesBodyFlag, *telemetryGetToolUsageTargetTimeSeriesApikeyTokenFlag, *telemetryGetToolUsageTargetTimeSeriesSessionTokenFlag, *telemetryGetToolUsageTargetTimeSeriesProjectSlugInputFlag)
+			case "get-tool-usage-user-time-series":
+				endpoint = c.GetToolUsageUserTimeSeries()
+				data, err = telemetryc.BuildGetToolUsageUserTimeSeriesPayload(*telemetryGetToolUsageUserTimeSeriesBodyFlag, *telemetryGetToolUsageUserTimeSeriesApikeyTokenFlag, *telemetryGetToolUsageUserTimeSeriesSessionTokenFlag, *telemetryGetToolUsageUserTimeSeriesProjectSlugInputFlag)
+			case "get-tool-usage-users-by-target":
+				endpoint = c.GetToolUsageUsersByTarget()
+				data, err = telemetryc.BuildGetToolUsageUsersByTargetPayload(*telemetryGetToolUsageUsersByTargetBodyFlag, *telemetryGetToolUsageUsersByTargetApikeyTokenFlag, *telemetryGetToolUsageUsersByTargetSessionTokenFlag, *telemetryGetToolUsageUsersByTargetProjectSlugInputFlag)
+			case "get-tool-usage-target-tool-breakdown":
+				endpoint = c.GetToolUsageTargetToolBreakdown()
+				data, err = telemetryc.BuildGetToolUsageTargetToolBreakdownPayload(*telemetryGetToolUsageTargetToolBreakdownBodyFlag, *telemetryGetToolUsageTargetToolBreakdownApikeyTokenFlag, *telemetryGetToolUsageTargetToolBreakdownSessionTokenFlag, *telemetryGetToolUsageTargetToolBreakdownProjectSlugInputFlag)
 			case "list-tool-usage-traces":
 				endpoint = c.ListToolUsageTraces()
 				data, err = telemetryc.BuildListToolUsageTracesPayload(*telemetryListToolUsageTracesBodyFlag, *telemetryListToolUsageTracesApikeyTokenFlag, *telemetryListToolUsageTracesSessionTokenFlag, *telemetryListToolUsageTracesProjectSlugInputFlag)
@@ -9536,6 +9817,243 @@ func externalCredentialsDeleteGcpIamCredentialUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-credentials delete-gcp-iam-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+// externalKeysUsage displays the usage of the external-keys command and its
+// subcommands.
+func externalKeysUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] external-keys COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-aws-kms-key: Create an AWS KMS external key. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-aws-kms-key: Replace an AWS KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    create-gcp-kms-key: Create a GCP KMS external key. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-gcp-kms-key: Replace a GCP KMS external key's configuration. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-external-keys: List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-aws-kms-keys: List the organization's AWS KMS external keys. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-gcp-kms-keys: List the organization's GCP KMS external keys. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-aws-kms-key: Get an AWS KMS external key by ID. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-gcp-kms-key: Get a GCP KMS external key by ID. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    delete-aws-kms-key: Soft-delete an AWS KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    delete-gcp-kms-key: Soft-delete a GCP KMS external key by ID. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s external-keys COMMAND --help\n", os.Args[0])
+}
+func externalKeysCreateAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys create-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an AWS KMS external key. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys create-aws-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"key_arn\": \"abc123\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysUpdateAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys update-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace an AWS KMS external key's configuration. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-aws-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"key_arn\": \"abc123\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysCreateGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys create-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a GCP KMS external key. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys create-gcp-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysUpdateGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys update-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a GCP KMS external key's configuration. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys update-gcp-kms-key --body '{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func externalKeysListExternalKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys list-external-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys list-external-keys --provider \"gcp_kms\" --session-token \"abc123\"")
+}
+
+func externalKeysListAwsKmsKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys list-aws-kms-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's AWS KMS external keys. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys list-aws-kms-keys --session-token \"abc123\"")
+}
+
+func externalKeysListGcpKmsKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys list-gcp-kms-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's GCP KMS external keys. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys list-gcp-kms-keys --session-token \"abc123\"")
+}
+
+func externalKeysGetAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys get-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an AWS KMS external key by ID. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys get-aws-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalKeysGetGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys get-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a GCP KMS external key by ID. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys get-gcp-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalKeysDeleteAwsKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys delete-aws-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete an AWS KMS external key by ID. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys delete-aws-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func externalKeysDeleteGcpKmsKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external-keys delete-gcp-kms-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a GCP KMS external key by ID. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external-keys delete-gcp-kms-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 // mcpRegistriesUsage displays the usage of the mcp-registries command and its
@@ -13632,7 +14150,7 @@ func riskCreateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"score\": 5,\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesUsage() {
@@ -13724,7 +14242,7 @@ func riskUpdateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"score\": 5,\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteRiskPolicyUsage() {
@@ -14671,6 +15189,91 @@ func riskDeleteRiskEvalReviewUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk delete-risk-eval-review --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+// skillEfficacyUsage displays the usage of the skill-efficacy command and its
+// subcommands.
+func skillEfficacyUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization-wide skill efficacy sampling settings.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] skill-efficacy COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-settings: Get effective organization-wide skill efficacy sampling settings.`)
+	fmt.Fprintln(os.Stderr, `    upsert-settings: Create or replace organization-wide skill efficacy sampling settings.`)
+	fmt.Fprintln(os.Stderr, `    query-insights: Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s skill-efficacy COMMAND --help\n", os.Args[0])
+}
+func skillEfficacyGetSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skill-efficacy get-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get effective organization-wide skill efficacy sampling settings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skill-efficacy get-settings --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func skillEfficacyUpsertSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skill-efficacy upsert-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or replace organization-wide skill efficacy sampling settings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skill-efficacy upsert-settings --body '{\n      \"enabled\": false,\n      \"new_version_burst\": 1,\n      \"org_daily_cap\": 1,\n      \"per_skill_daily_cap\": 1\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func skillEfficacyQueryInsightsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] skill-efficacy query-insights", os.Args[0])
+	fmt.Fprint(os.Stderr, " -skill-ids JSON")
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -include-versions BOOL")
+	fmt.Fprint(os.Stderr, " -include-scored-sessions BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -skill-ids JSON: `)
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-versions BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -include-scored-sessions BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skill-efficacy query-insights --skill-ids '[\n      \"abc123\"\n   ]' --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --include-versions false --include-scored-sessions false --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 // skillsUsage displays the usage of the skills command and its subcommands.
 func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.`)
@@ -14992,6 +15595,13 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    list-attribute-keys: List distinct attribute keys available for filtering`)
 	fmt.Fprintln(os.Stderr, `    get-hooks-summary: Get aggregated hooks metrics grouped by server`)
 	fmt.Fprintln(os.Stderr, `    get-tool-usage-summary: Get target-aware MCP and tool usage metrics`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-totals: Get overall MCP and tool usage totals`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-targets: Get top MCP and tool usage targets`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-users: Get top MCP and tool usage user identities`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-target-time-series: Get time-series MCP and tool usage grouped by target`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-user-time-series: Get time-series MCP and tool usage grouped by user identity`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-users-by-target: Get cross-dimensional MCP and tool usage grouped by target and user identity`)
+	fmt.Fprintln(os.Stderr, `    get-tool-usage-target-tool-breakdown: Get per-tool MCP and tool usage grouped by target`)
 	fmt.Fprintln(os.Stderr, `    list-tool-usage-traces: List target-aware MCP and tool usage traces`)
 	fmt.Fprintln(os.Stderr, `    get-tool-usage-filter-options: Get filter options for target-aware MCP and tool usage metrics`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-activity: Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.`)
@@ -15396,6 +16006,174 @@ func telemetryGetToolUsageSummaryUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-summary --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageTotalsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-totals", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get overall MCP and tool usage totals`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-totals --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageTargetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-targets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get top MCP and tool usage targets`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-targets --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageUsersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-users", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get top MCP and tool usage user identities`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-users --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageTargetTimeSeriesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-target-time-series", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get time-series MCP and tool usage grouped by target`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-target-time-series --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageUserTimeSeriesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-user-time-series", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get time-series MCP and tool usage grouped by user identity`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-user-time-series --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageUsersByTargetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-users-by-target", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get cross-dimensional MCP and tool usage grouped by target and user identity`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-users-by-target --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func telemetryGetToolUsageTargetToolBreakdownUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-tool-usage-target-tool-breakdown", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get per-tool MCP and tool usage grouped by target`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-tool-usage-target-tool-breakdown --body '{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryListToolUsageTracesUsage() {

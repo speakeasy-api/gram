@@ -611,6 +611,8 @@ tags:
     description: Managing toolset environments.
   - name: externalCredentials
     description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
+  - name: externalKeys
+    description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.
   - name: mcpRegistries
     description: External MCP registry operations
   - name: collections
@@ -667,6 +669,8 @@ tags:
     description: Dashboard API for interacting with resources.
   - name: risk
     description: Manage risk analysis policies and view scan results.
+  - name: skillEfficacy
+    description: Manage organization-wide skill efficacy sampling settings.
   - name: skills
     description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
   - name: spendRules

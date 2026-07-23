@@ -1,4 +1,4 @@
-h1:z0T211/cuUS0VXREzqIKIN65a4sTRclGVy9k8gtdrUM=
+h1:ImSS2bneaLrkc8q0GNDNnbhwYu1ZWutNjeHb3/bZxMk=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -67,5 +67,9 @@ h1:z0T211/cuUS0VXREzqIKIN65a4sTRclGVy9k8gtdrUM=
 20260717174514_gen2-attribute-metrics-mv.up.sql h1:YV083n3VlLLt30ZJGPw01GmS8YjQ/zED8J23JKjk48c=
 20260720185505_attribute-metrics-hook-hostname.up.sql h1:Ggjec/JEHOOMKS9zMX+djrpEBfSvKxfJlTuVbdCFyKg=
 20260720233842_claude-chat-usage-cost-metrics.up.sql h1:TtR9XV8rHMzy6dWfU4sjSWf5x0E+YGgDo7Nf8JoiHeI=
-20260721203204_chat-session-summaries.up.sql h1:CguJIsZLLbP9+g9Uanw2u7ShlPXbLOv8g5R8I49lhvI=
-20260723004015_add-spend-rule-usage-summaries.up.sql h1:AcuqI3M70Zz3yP2q0NaA/I6HZQvJX/LGJDJT0UXQvVw=
+20260721110206_add-skill-efficacy-scores.up.sql h1:yLULRRhE+zNj3CegTohy2vsBNPAJUx62UFD8hStRhB0=
+20260721123657_add-skill-session-versions.up.sql h1:UbepO/1Sv7ZnCAnY8sajotVE55zRzjOaLVcCwUXuwrQ=
+20260721203204_chat-session-summaries.up.sql h1:p+aVOW1F8VkbEiwB7AToNz+IxTgMTyF5YxBQuqrCFSg=
+20260722190436_trace-summaries-start-time-index.up.sql h1:8L7oNfTfclSq/MKHf1TeuuwtUrhxFV6qlRsekEkHOFI=
+20260722201116_codex-otel-usage-in-summaries.up.sql h1:1LpbU+CABtmUHyRnEVlnhZr6PA5/UwReoH/g6/BBugQ=
+20260723012021_add-spend-rule-usage-summaries.up.sql h1:TEULLvYyVN0wRGIR2wyk47oaIvM2qupzlmmfvJ8p9Cg=

@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	spendrulesch "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -126,6 +127,7 @@ type Activities struct {
 	pluginPublisher                 *activities.PluginPublisher
 	listSpendRuleOrgs               *spend_rules.ListOrgs
 	evaluateOrgSpendRules           *spend_rules.EvaluateOrg
+	skillEfficacyScorer             *activities.SkillEfficacyScorer
 }
 
 func NewActivities(
@@ -242,7 +244,7 @@ func NewActivities(
 		analyzeBatch:                    analyzeBatch,
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
-		skillObservationReconciler:      activities.NewSkillObservationReconciler(db),
+		skillObservationReconciler:      activities.NewSkillObservationReconciler(db, telemetryRepo),
 		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
@@ -266,6 +268,17 @@ func NewActivities(
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
 		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter),
+		// The judge draws on the same per-(org, model) bucket and the same
+		// completion client as every other platform judge, so efficacy scoring
+		// cannot outspend the org's key behind their backs.
+		skillEfficacyScorer: activities.NewSkillEfficacyScorer(
+			logger,
+			meterProvider,
+			db,
+			productFeatures,
+			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter)),
+			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
+		),
 	}
 }
 
@@ -476,6 +489,14 @@ func (a *Activities) ReconcileSkillObservations(ctx context.Context, input activ
 	result, err := a.skillObservationReconciler.Reconcile(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("reconcile skill observations: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) SyncSkillSessionVersions(ctx context.Context, input activities.SyncSkillSessionVersionsParams) (*activities.SyncSkillSessionVersionsResult, error) {
+	result, err := a.skillObservationReconciler.SyncSessionVersions(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("sync skill session versions: %w", err)
 	}
 	return result, nil
 }

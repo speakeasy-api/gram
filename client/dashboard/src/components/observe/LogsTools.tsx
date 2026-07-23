@@ -4,6 +4,7 @@ import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
+import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -487,13 +488,10 @@ export function LogsTools(): JSX.Element {
       />
       {isLogsDisabled ? (
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Tool Logs</h1>
-            <p className="text-muted-foreground text-sm">
-              Dive into tool traces across all tools, skills, and MCP servers
-              used by organization members in this project
-            </p>
-          </div>
+          <LoggingPageHeader
+            title="Tool Logs"
+            description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+          />
           <div className="relative flex-1">
             <div
               className="pointer-events-none h-full select-none"
@@ -678,13 +676,10 @@ function LogsToolsContent({
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
           <div className="flex shrink-0 items-start justify-between gap-4">
-            <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Tool Logs</h1>
-              <p className="text-muted-foreground text-sm">
-                Dive into tool traces across all tools, skills, and MCP servers
-                used by organization members in this project
-              </p>
-            </div>
+            <LoggingPageHeader
+              title="Tool Logs"
+              description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
+            />
             <div className="flex items-center gap-2">
               <HooksSetupButton />
               <Button variant="outline" size="sm" asChild>

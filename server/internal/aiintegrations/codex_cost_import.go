@@ -27,9 +27,21 @@ const (
 	codexComplianceCostsEventType = "COSTS"
 	codexCompliancePageLimit      = 100
 	codexUsageMetricsURN          = "codex:usage:metrics"
-	codexHookSource               = "codex"
-	codexProviderOpenAI           = "openai"
-	codexCreditValueUSD           = 0.04
+	// chatgptUsageMetricsURN parks non-Codex COSTS events. The compliance
+	// feed mixes product surfaces (observed values: "codex", "ChatGPT",
+	// "Work"), and only true Codex rows may carry the codex:usage URN — the
+	// codex.cost.usd stream and the ClickHouse agent-usage predicates match
+	// on that prefix. Non-Codex rows are still ingested for retention under
+	// this URN, which nothing reads yet; codex.compliance.product keeps the
+	// exact surface for a later per-product split.
+	chatgptUsageMetricsURN = "chatgpt:usage:metrics"
+	codexHookSource        = "codex"
+	chatgptHookSource      = "chatgpt"
+	// codexComplianceProductCodex is the payload.product value marking Codex
+	// rows in COSTS events.
+	codexComplianceProductCodex = "codex"
+	codexProviderOpenAI         = "openai"
+	codexCreditValueUSD         = 0.04
 )
 
 type codexComplianceClient interface {
@@ -100,7 +112,7 @@ func (s *CodexCostImportService) SyncCodexCosts(ctx context.Context, cfg Config,
 		Heartbeat: func(ctx context.Context, page int) {
 			s.heartbeat(ctx, page)
 		},
-		InitialLookback: InitialUsagePollLookback,
+		InitialLookback: codexComplianceInitialLookback,
 		MaxWindow:       0,
 		Granularity:     0,
 		ResumeOffset:    0,
@@ -249,7 +261,7 @@ func codexUpperBoundStart(cfg Config, endTime time.Time) time.Time {
 	if !cfg.PollWatermarkAt.IsZero() {
 		return cfg.PollWatermarkAt
 	}
-	return endTime.UTC().Add(-InitialUsagePollLookback)
+	return endTime.UTC().Add(-codexComplianceInitialLookback)
 }
 
 func buildCodexCostLogParams(cfg Config, file codexapi.LogFile, body []byte) ([]telemetry.LogParams, error) {
@@ -308,13 +320,23 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	totalTokens := usage.TextInputTokens + usage.TextCachedInputTokens + usage.TextOutputTokens
 	totalCostUSD, costUnit, billingSKUs := codexBillingSummary(event.Payload.Measures.Billing)
 
+	// Route rows by product surface so the codex metric only counts Codex:
+	// ChatGPT/Work (and any unknown surface) land under the parked chatgpt
+	// URN instead of polluting codex:usage aggregates.
+	urn := codexUsageMetricsURN
+	hookSource := codexHookSource
+	if !strings.EqualFold(strings.TrimSpace(event.Payload.Product), codexComplianceProductCodex) {
+		urn = chatgptUsageMetricsURN
+		hookSource = chatgptHookSource
+	}
+
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:           string(telemetry.EventSourceAPI),
 		attr.LogBodyKey:               "Codex cost metrics",
 		attr.ProjectIDKey:             cfg.ProjectID.String(),
 		attr.OrganizationIDKey:        cfg.OrganizationID,
-		attr.ResourceURNKey:           codexUsageMetricsURN,
-		attr.HookSourceKey:            codexHookSource,
+		attr.ResourceURNKey:           urn,
+		attr.HookSourceKey:            hookSource,
 		attr.ProviderKey:              codexProviderOpenAI,
 		attr.GenAIProviderNameKey:     codexProviderOpenAI,
 		attr.AIIntegrationConfigIDKey: cfg.ID.String(),
@@ -353,11 +375,11 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	return telemetry.LogParams{
 		Timestamp: timestamp,
 		ToolInfo: telemetry.ToolInfo{
-			Name:           "codex",
+			Name:           hookSource,
 			OrganizationID: cfg.OrganizationID,
 			ProjectID:      cfg.ProjectID.String(),
 			ID:             "",
-			URN:            codexUsageMetricsURN,
+			URN:            urn,
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},

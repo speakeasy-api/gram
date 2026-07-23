@@ -270,6 +270,11 @@ func NewTemporalWorker(
 		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
 	})
 
+	skillEfficacyWorker := worker.New(env.Client(), SkillEfficacyTaskQueue(env.Queue()), worker.Options{
+		Interceptors:                       workerInterceptors,
+		MaxConcurrentActivityExecutionSize: perPodSkillEfficacyPublishConcurrency,
+	})
+
 	// The CEL engine is immutable + thread-safe; build one for this worker's
 	// risk activities and pass it down. Construction is deterministic and only
 	// fails on a malformed descriptor (a bug caught by tests), so log and carry
@@ -364,6 +369,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.MarkMessagesAnalyzed)
 	temporalWorker.RegisterActivity(activities.ReconcileExclusion)
 	temporalWorker.RegisterActivity(activities.ReconcileSkillObservations)
+	temporalWorker.RegisterActivity(activities.SyncSkillSessionVersions)
 	temporalWorker.RegisterActivity(activities.ListProjectsWithPendingSkillObservations)
 	temporalWorker.RegisterActivity(activities.CleanRiskPolicyResults)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
@@ -396,6 +402,15 @@ func NewTemporalWorker(
 	// Spend rule evaluation activities
 	temporalWorker.RegisterActivity(activities.ListSpendRuleOrgs)
 	temporalWorker.RegisterActivity(activities.EvaluateOrgSpendRules)
+	// Skill efficacy activities — the database steps run on the main queue and
+	// only the judged publication goes to the dedicated worker.
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.ReserveSkillEfficacyEvaluations)
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.LoadReservedSkillEfficacyEvaluations)
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.ListSkillEfficacyProjects)
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.ResetStaleSkillEfficacyReservations)
+	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.SignalSkillEfficacyCoordinator)
+	skillEfficacyWorker.RegisterActivity(activities.skillEfficacyScorer.PublishSkillEfficacyBatch)
 
 	// AI integration usage syncing runs on its own worker and task queue.
 	aiUsageWorker.RegisterActivity(activities.PollAIData)
@@ -457,6 +472,9 @@ func NewTemporalWorker(
 	// Spend rule evaluation workflows
 	temporalWorker.RegisterWorkflow(SpendRuleEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflow)
+	// Skill efficacy workflows
+	temporalWorker.RegisterWorkflow(SkillEfficacyCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -530,13 +548,17 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "failed to add skill observation reconciliation schedule", attr.SlogError(err))
 	}
 
+	if err := AddSkillEfficacySweepSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add skill efficacy sweep schedule", attr.SlogError(err))
+	}
+
 	if opts.PluginPublisher != nil {
 		if err := AddPluginGeneratorRolloutSchedule(context.Background(), env); err != nil {
 			logger.ErrorContext(context.Background(), "failed to add plugin generator rollout schedule", attr.SlogError(err))
 		}
 	}
 
-	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker}
+	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker, skillEfficacy: skillEfficacyWorker}
 }
 
 // Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
@@ -553,11 +575,21 @@ func AIUsagePollerTaskQueue(mainQueue tenv.TaskQueueName) string {
 	return string(mainQueue) + "-ai-integration-usage"
 }
 
+// Fleet-wide cap on in-flight skill efficacy publications per worker pod. One
+// publication judges a whole reserved batch sequentially, so this is the number
+// of concurrent judge conversations a pod can hold open.
+const perPodSkillEfficacyPublishConcurrency = 5
+
+func SkillEfficacyTaskQueue(mainQueue tenv.TaskQueueName) string {
+	return string(mainQueue) + "-skill-efficacy"
+}
+
 // Workers bundles the main and dedicated Temporal workers.
 type Workers struct {
-	main         worker.Worker
-	riskAnalysis worker.Worker
-	aiUsage      worker.Worker
+	main          worker.Worker
+	riskAnalysis  worker.Worker
+	aiUsage       worker.Worker
+	skillEfficacy worker.Worker
 }
 
 // Run starts dedicated workers, then blocks running the main worker until
@@ -572,6 +604,11 @@ func (w *Workers) Run(interruptCh <-chan any) error {
 		return fmt.Errorf("start ai integration usage worker: %w", err)
 	}
 	defer w.aiUsage.Stop()
+
+	if err := w.skillEfficacy.Start(); err != nil {
+		return fmt.Errorf("start skill efficacy worker: %w", err)
+	}
+	defer w.skillEfficacy.Stop()
 
 	if err := w.main.Run(interruptCh); err != nil {
 		return fmt.Errorf("run main worker: %w", err)
@@ -593,10 +630,17 @@ func (w *Workers) Start() error {
 		w.main.Stop()
 		return fmt.Errorf("start ai integration usage worker: %w", err)
 	}
+	if err := w.skillEfficacy.Start(); err != nil {
+		w.aiUsage.Stop()
+		w.riskAnalysis.Stop()
+		w.main.Stop()
+		return fmt.Errorf("start skill efficacy worker: %w", err)
+	}
 	return nil
 }
 
 func (w *Workers) Stop() {
+	w.skillEfficacy.Stop()
 	w.aiUsage.Stop()
 	w.riskAnalysis.Stop()
 	w.main.Stop()

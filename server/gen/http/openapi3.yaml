@@ -13775,6 +13775,959 @@ paths:
             x-speakeasy-name-override: updateGcpIam
             x-speakeasy-react-hook:
                 name: UpdateGcpIamCredential
+    /rpc/externalKeys.createAwsKms:
+        post:
+            description: Create an AWS KMS external key. Requires org:admin.
+            operationId: createAwsKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateAwsKmsKeyForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AwsKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createAwsKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: createAwsKms
+            x-speakeasy-react-hook:
+                name: CreateAwsKmsKey
+    /rpc/externalKeys.createGcpKms:
+        post:
+            description: Create a GCP KMS external key. Requires org:admin.
+            operationId: createGcpKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateGcpKmsKeyForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createGcpKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: createGcpKms
+            x-speakeasy-react-hook:
+                name: CreateGcpKmsKey
+    /rpc/externalKeys.deleteAwsKms:
+        delete:
+            description: Soft-delete an AWS KMS external key by ID. Requires org:admin.
+            operationId: deleteAwsKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to delete.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to delete.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteAwsKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: deleteAwsKms
+            x-speakeasy-react-hook:
+                name: DeleteAwsKmsKey
+    /rpc/externalKeys.deleteGcpKms:
+        delete:
+            description: Soft-delete a GCP KMS external key by ID. Requires org:admin.
+            operationId: deleteGcpKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to delete.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to delete.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteGcpKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: deleteGcpKms
+            x-speakeasy-react-hook:
+                name: DeleteGcpKmsKey
+    /rpc/externalKeys.getAwsKms:
+        get:
+            description: Get an AWS KMS external key by ID. Requires org:read.
+            operationId: getAwsKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to get.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to get.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AwsKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getAwsKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: getAwsKms
+            x-speakeasy-react-hook:
+                name: GetAwsKmsKey
+    /rpc/externalKeys.getGcpKms:
+        get:
+            description: Get a GCP KMS external key by ID. Requires org:read.
+            operationId: getGcpKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to get.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to get.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getGcpKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: getGcpKms
+            x-speakeasy-react-hook:
+                name: GetGcpKmsKey
+    /rpc/externalKeys.list:
+        get:
+            description: List the organization's external keys (provider-independent summary). Optionally filter by provider. Requires org:read.
+            operationId: listExternalKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: Only return keys for this provider.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Only return keys for this provider.
+                    enum:
+                        - aws_kms
+                        - gcp_kms
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExternalKeysResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listExternalKeys externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: ListExternalKeys
+    /rpc/externalKeys.listAwsKms:
+        get:
+            description: List the organization's AWS KMS external keys. Requires org:read.
+            operationId: listAwsKmsKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExternalKeysResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listAwsKmsKeys externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: listAwsKms
+            x-speakeasy-react-hook:
+                name: ListAwsKmsKeys
+    /rpc/externalKeys.listGcpKms:
+        get:
+            description: List the organization's GCP KMS external keys. Requires org:read.
+            operationId: listGcpKmsKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExternalKeysResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listGcpKmsKeys externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: listGcpKms
+            x-speakeasy-react-hook:
+                name: ListGcpKmsKeys
+    /rpc/externalKeys.updateAwsKms:
+        post:
+            description: Replace an AWS KMS external key's configuration. Requires org:admin.
+            operationId: updateAwsKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateAwsKmsKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AwsKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateAwsKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: updateAwsKms
+            x-speakeasy-react-hook:
+                name: UpdateAwsKmsKey
+    /rpc/externalKeys.updateGcpKms:
+        post:
+            description: Replace a GCP KMS external key's configuration. Requires org:admin.
+            operationId: updateGcpKmsKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateGcpKmsKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpKmsKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateGcpKmsKey externalKeys
+            tags:
+                - externalKeys
+            x-speakeasy-name-override: updateGcpKms
+            x-speakeasy-react-hook:
+                name: UpdateGcpKmsKey
     /rpc/hooks.claude:
         post:
             tags:
@@ -32469,6 +33422,319 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskSaveEvalReview
                 type: mutation
+    /rpc/skillEfficacy.getSettings:
+        get:
+            description: Get effective organization-wide skill efficacy sampling settings.
+            operationId: getSkillEfficacySettings
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillEfficacySettings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: getSettings skillEfficacy
+            tags:
+                - skillEfficacy
+            x-speakeasy-name-override: getSettings
+            x-speakeasy-react-hook:
+                name: SkillEfficacySettings
+    /rpc/skillEfficacy.queryInsights:
+        get:
+            description: Query activation-time skill efficacy, estimated savings, attributed session cost, and optional scored-session detail for the current project. Scores are sampled and costs fan out to every activated version.
+            operationId: querySkillEfficacyInsights
+            parameters:
+                - allowEmptyValue: true
+                  description: Active skill IDs to query (up to 200). Omit to query all active project skills.
+                  in: query
+                  name: skill_ids
+                  schema:
+                    description: Active skill IDs to query (up to 200). Omit to query all active project skills.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: RFC3339 window start; defaults to 30 days before to.
+                  in: query
+                  name: from
+                  schema:
+                    description: RFC3339 window start; defaults to 30 days before to.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: RFC3339 window end; defaults to now.
+                  in: query
+                  name: to
+                  schema:
+                    description: RFC3339 window end; defaults to now.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Include per-version daily trends.
+                  in: query
+                  name: include_versions
+                  schema:
+                    description: Include per-version daily trends.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+                  in: query
+                  name: include_scored_sessions
+                  schema:
+                    description: Include up to 100 recent scored sessions. Intended for one skill detail view.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillEfficacyInsightsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: queryInsights skillEfficacy
+            tags:
+                - skillEfficacy
+            x-speakeasy-name-override: queryInsights
+            x-speakeasy-react-hook:
+                name: SkillEfficacyInsights
+                type: query
+    /rpc/skillEfficacy.upsertSettings:
+        post:
+            description: Create or replace organization-wide skill efficacy sampling settings.
+            operationId: upsertSkillEfficacySettings
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertSettingsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SkillEfficacySettings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: upsertSettings skillEfficacy
+            tags:
+                - skillEfficacy
+            x-speakeasy-name-override: upsertSettings
+            x-speakeasy-react-hook:
+                name: UpsertSkillEfficacySettings
     /rpc/skills.addVersion:
         post:
             description: Record an uploaded SKILL.md as a version of an existing skill. The implementation requires the skills product feature and skill write scope, and returns the existing canonical version as a no-op when appropriate.
@@ -34668,6 +35934,741 @@ paths:
             x-speakeasy-name-override: getToolUsageSummary
             x-speakeasy-react-hook:
                 name: GetToolUsageSummary
+                type: query
+    /rpc/telemetry.getToolUsageTargetTimeSeries:
+        post:
+            description: Get time-series MCP and tool usage grouped by target
+            operationId: getToolUsageTargetTimeSeries
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetToolUsageTargetTimeSeriesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getToolUsageTargetTimeSeries telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getToolUsageTargetTimeSeries
+            x-speakeasy-react-hook:
+                name: GetToolUsageTargetTimeSeries
+                type: query
+    /rpc/telemetry.getToolUsageTargetToolBreakdown:
+        post:
+            description: Get per-tool MCP and tool usage grouped by target
+            operationId: getToolUsageTargetToolBreakdown
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetToolUsageTargetToolBreakdownResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getToolUsageTargetToolBreakdown telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getToolUsageTargetToolBreakdown
+            x-speakeasy-react-hook:
+                name: GetToolUsageTargetToolBreakdown
+                type: query
+    /rpc/telemetry.getToolUsageTargets:
+        post:
+            description: Get top MCP and tool usage targets
+            operationId: getToolUsageTargets
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetToolUsageTargetsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getToolUsageTargets telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getToolUsageTargets
+            x-speakeasy-react-hook:
+                name: GetToolUsageTargets
+                type: query
+    /rpc/telemetry.getToolUsageTotals:
+        post:
+            description: Get overall MCP and tool usage totals
+            operationId: getToolUsageTotals
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetToolUsageTotalsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getToolUsageTotals telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getToolUsageTotals
+            x-speakeasy-react-hook:
+                name: GetToolUsageTotals
+                type: query
+    /rpc/telemetry.getToolUsageUserTimeSeries:
+        post:
+            description: Get time-series MCP and tool usage grouped by user identity
+            operationId: getToolUsageUserTimeSeries
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetToolUsageUserTimeSeriesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getToolUsageUserTimeSeries telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getToolUsageUserTimeSeries
+            x-speakeasy-react-hook:
+                name: GetToolUsageUserTimeSeries
+                type: query
+    /rpc/telemetry.getToolUsageUsers:
+        post:
+            description: Get top MCP and tool usage user identities
+            operationId: getToolUsageUsers
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetToolUsageUsersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getToolUsageUsers telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getToolUsageUsers
+            x-speakeasy-react-hook:
+                name: GetToolUsageUsers
+                type: query
+    /rpc/telemetry.getToolUsageUsersByTarget:
+        post:
+            description: Get cross-dimensional MCP and tool usage grouped by target and user identity
+            operationId: getToolUsageUsersByTarget
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetToolUsageUsersByTargetResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getToolUsageUsersByTarget telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getToolUsageUsersByTarget
+            x-speakeasy-react-hook:
+                name: GetToolUsageUsersByTarget
                 type: query
     /rpc/telemetry.getUserMetricsSummary:
         post:
@@ -43921,6 +45922,60 @@ components:
                 - name
                 - created_at
                 - updated_at
+        AwsKmsKey:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                created_at:
+                    type: string
+                    description: When the key was created.
+                    format: date-time
+                customer_grant_reference:
+                    type: string
+                    description: The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key.
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the external key.
+                    format: uuid
+                key_arn:
+                    type: string
+                    description: The ARN of the AWS KMS key.
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                organization_id:
+                    type: string
+                    description: The organization that owns the key.
+                provider:
+                    type: string
+                    description: The cloud KMS provider of the key.
+                    enum:
+                        - aws_kms
+                        - gcp_kms
+                updated_at:
+                    type: string
+                    description: When the key was last updated.
+                    format: date-time
+            description: An AWS KMS external key.
+            required:
+                - key_arn
+                - id
+                - organization_id
+                - external_credential_id
+                - provider
+                - algorithm
+                - name
+                - created_at
+                - updated_at
         BaseResourceAttributes:
             type: object
             properties:
@@ -45031,6 +47086,33 @@ components:
                     description: Optional STS region override.
             required:
                 - name
+        CreateAwsKmsKeyForm:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    format: uuid
+                key_arn:
+                    type: string
+                    description: The ARN of the AWS KMS key.
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+            required:
+                - key_arn
+                - external_credential_id
+                - algorithm
+                - name
         CreateCimdForm:
             type: object
             properties:
@@ -45246,6 +47328,29 @@ components:
                 - organization_id
                 - name
                 - entries
+        CreateExternalKeyFields:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+            required:
+                - external_credential_id
+                - algorithm
+                - name
         CreateGcpIamCredentialForm:
             type: object
             properties:
@@ -45265,6 +47370,33 @@ components:
                     type: string
                     description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
             required:
+                - name
+        CreateGcpKmsKeyForm:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                resource_name:
+                    type: string
+                    description: The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
+            required:
+                - resource_name
+                - external_credential_id
+                - algorithm
                 - name
         CreateGlobalRemoteSessionClientForm:
             type: object
@@ -45985,6 +48117,11 @@ components:
                     format: double
                     minimum: 0.1
                     maximum: 10
+                shadow_mcp_allowed_urls:
+                    type: array
+                    items:
+                        type: string
+                    description: Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.
                 sources:
                     type: array
                     items:
@@ -47251,6 +49388,56 @@ components:
                 - name
                 - created_at
                 - updated_at
+        ExternalKeySummary:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                created_at:
+                    type: string
+                    description: When the key was created.
+                    format: date-time
+                customer_grant_reference:
+                    type: string
+                    description: The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key.
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the external key.
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                organization_id:
+                    type: string
+                    description: The organization that owns the key.
+                provider:
+                    type: string
+                    description: The cloud KMS provider of the key.
+                    enum:
+                        - aws_kms
+                        - gcp_kms
+                updated_at:
+                    type: string
+                    description: When the key was last updated.
+                    format: date-time
+            description: Provider-independent summary of an external key.
+            required:
+                - id
+                - organization_id
+                - external_credential_id
+                - provider
+                - algorithm
+                - name
+                - created_at
+                - updated_at
         ExternalMCPHeaderDefinition:
             type: object
             properties:
@@ -47890,6 +50077,60 @@ components:
                 - id
                 - organization_id
                 - provider
+                - name
+                - created_at
+                - updated_at
+        GcpKmsKey:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                created_at:
+                    type: string
+                    description: When the key was created.
+                    format: date-time
+                customer_grant_reference:
+                    type: string
+                    description: The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key.
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the external key.
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                organization_id:
+                    type: string
+                    description: The organization that owns the key.
+                provider:
+                    type: string
+                    description: The cloud KMS provider of the key.
+                    enum:
+                        - aws_kms
+                        - gcp_kms
+                resource_name:
+                    type: string
+                    description: The resource name of the GCP KMS key.
+                updated_at:
+                    type: string
+                    description: When the key was last updated.
+                    format: date-time
+            description: A GCP KMS external key.
+            required:
+                - resource_name
+                - id
+                - organization_id
+                - external_credential_id
+                - provider
+                - algorithm
                 - name
                 - created_at
                 - updated_at
@@ -48803,6 +51044,80 @@ components:
                 - user_time_series
                 - users_by_target
                 - target_tool_breakdown
+        GetToolUsageTargetTimeSeriesResult:
+            type: object
+            properties:
+                target_time_series:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageTargetTimeSeriesPoint'
+                    description: Time-series usage buckets grouped by target
+            description: Time-series MCP and tool usage grouped by target
+            required:
+                - target_time_series
+        GetToolUsageTargetToolBreakdownResult:
+            type: object
+            properties:
+                target_tool_breakdown:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageTargetToolBreakdownRow'
+                    description: Per-tool usage rows grouped by target
+            description: Per-tool MCP and tool usage grouped by target
+            required:
+                - target_tool_breakdown
+        GetToolUsageTargetsResult:
+            type: object
+            properties:
+                targets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageTargetSummary'
+                    description: Top usage targets for the selected filters and time range
+            description: Top MCP and tool usage targets for the selected filters and time range
+            required:
+                - targets
+        GetToolUsageTotalsResult:
+            type: object
+            properties:
+                totals:
+                    $ref: '#/components/schemas/ToolUsageTotals'
+            description: Overall MCP and tool usage totals for the selected filters and time range
+            required:
+                - totals
+        GetToolUsageUserTimeSeriesResult:
+            type: object
+            properties:
+                user_time_series:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUserTimeSeriesPoint'
+                    description: Time-series usage buckets grouped by user identity
+            description: Time-series MCP and tool usage grouped by user identity
+            required:
+                - user_time_series
+        GetToolUsageUsersByTargetResult:
+            type: object
+            properties:
+                users_by_target:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUsersByTargetRow'
+                    description: Cross-dimensional usage rows grouped by target and user identity
+            description: Cross-dimensional MCP and tool usage grouped by target and user identity
+            required:
+                - users_by_target
+        GetToolUsageUsersResult:
+            type: object
+            properties:
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUserSummary'
+                    description: Top user identities for the selected filters and time range
+            description: Top MCP and tool usage user identities for the selected filters and time range
+            required:
+                - users
         GetUserMetricsSummaryPayload:
             type: object
             properties:
@@ -49931,6 +52246,16 @@ components:
                     description: The organization's external credentials.
             required:
                 - credentials
+        ListExternalKeysResult:
+            type: object
+            properties:
+                keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalKeySummary'
+                    description: The organization's external keys.
+            required:
+                - keys
         ListFilterOptionsPayload:
             type: object
             properties:
@@ -53479,6 +55804,7 @@ components:
                         - billing_mode
                         - query_source
                         - skill_name
+                        - skill_version
                         - agent_name
                         - mcp_server_name
                         - mcp_tool_name
@@ -53576,6 +55902,7 @@ components:
                         - billing_mode
                         - query_source
                         - skill_name
+                        - skill_version
                         - agent_name
                         - mcp_server_name
                         - mcp_tool_name
@@ -53606,7 +55933,7 @@ components:
                     default: 10
                     format: int64
                     minimum: 1
-            description: Payload for a generic org-scoped analytics query
+            description: Payload for a generic org-scoped analytics query. Queries involving skill_version use raw telemetry retained for 90 days and attribute each whole session to every activated version; timeseries place the whole session in its start-time bucket.
             required:
                 - from
                 - to
@@ -56964,6 +59291,9 @@ components:
                     type: string
                     description: When this skill was first activated.
                     format: date-time
+                has_valid_version:
+                    type: boolean
+                    description: Whether the skill has at least one valid version available to distribute.
                 id:
                     type: string
                     description: The skill ID.
@@ -57010,6 +59340,7 @@ components:
                 - source_kind
                 - classification
                 - version_count
+                - has_valid_version
                 - seen_count
                 - created_at
                 - updated_at
@@ -57178,6 +59509,244 @@ components:
                 - on_target_machines
                 - drifted_machines
                 - indeterminate_machines
+        SkillEfficacyInsight:
+            type: object
+            properties:
+                metrics:
+                    $ref: '#/components/schemas/SkillInsightMetrics'
+                skill_id:
+                    type: string
+                    format: uuid
+                versions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillVersionInsight'
+            required:
+                - skill_id
+                - metrics
+                - versions
+        SkillEfficacyInsightsResult:
+            type: object
+            properties:
+                from:
+                    type: string
+                    format: date-time
+                insights:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillEfficacyInsight'
+                interval_seconds:
+                    type: integer
+                    format: int64
+                scored_sessions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillEfficacyScoredSession'
+                scores_available:
+                    type: boolean
+                to:
+                    type: string
+                    format: date-time
+            required:
+                - from
+                - to
+                - interval_seconds
+                - scores_available
+                - insights
+                - scored_sessions
+        SkillEfficacyMetrics:
+            type: object
+            properties:
+                average_score:
+                    type: number
+                    format: double
+                estimated_minutes_saved_average:
+                    type: number
+                    format: double
+                estimated_minutes_saved_samples:
+                    type: integer
+                    format: int64
+                estimated_minutes_saved_total:
+                    type: number
+                    format: double
+                estimated_turns_saved_average:
+                    type: number
+                    format: double
+                estimated_turns_saved_samples:
+                    type: integer
+                    format: int64
+                estimated_turns_saved_total:
+                    type: number
+                    format: double
+                flag_counts:
+                    type: object
+                    additionalProperties:
+                        type: integer
+                        format: int64
+                roi_confidence_counts:
+                    type: object
+                    additionalProperties:
+                        type: integer
+                        format: int64
+                scored_sessions:
+                    type: integer
+                    format: int64
+            required:
+                - scored_sessions
+                - average_score
+                - estimated_turns_saved_total
+                - estimated_turns_saved_samples
+                - estimated_minutes_saved_total
+                - estimated_minutes_saved_samples
+                - roi_confidence_counts
+                - flag_counts
+        SkillEfficacyScoredSession:
+            type: object
+            properties:
+                activated_at:
+                    type: string
+                    format: date-time
+                estimated_minutes_saved:
+                    type: number
+                    format: double
+                estimated_turns_saved:
+                    type: number
+                    format: double
+                flags:
+                    type: array
+                    items:
+                        type: string
+                gram_chat_id:
+                    type: string
+                    format: uuid
+                id:
+                    type: string
+                    format: uuid
+                rationale:
+                    type: string
+                roi_confidence:
+                    type: string
+                    enum:
+                        - low
+                        - med
+                        - high
+                score:
+                    type: number
+                    format: double
+                scored_at:
+                    type: string
+                    format: date-time
+                skill_id:
+                    type: string
+                    format: uuid
+                skill_version_id:
+                    type: string
+                    format: uuid
+                surface:
+                    type: string
+                    enum:
+                        - dev
+                        - assistant
+            required:
+                - id
+                - skill_id
+                - skill_version_id
+                - surface
+                - activated_at
+                - scored_at
+                - score
+                - rationale
+                - flags
+        SkillEfficacySettings:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether skill efficacy scoring is enabled.
+                is_default:
+                    type: boolean
+                    description: Whether these values are platform defaults rather than stored organization settings.
+                new_version_burst:
+                    type: integer
+                    description: Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                org_daily_cap:
+                    type: integer
+                    description: Maximum evaluations reserved across the organization each UTC day.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                organization_id:
+                    type: string
+                    description: Organization these settings apply to.
+                per_skill_daily_cap:
+                    type: integer
+                    description: Maximum evaluations reserved per skill each UTC day.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+            description: Per-organization sampling settings for skill efficacy scoring.
+            required:
+                - organization_id
+                - enabled
+                - per_skill_daily_cap
+                - org_daily_cap
+                - new_version_burst
+                - is_default
+        SkillInsightMetrics:
+            type: object
+            properties:
+                activated_sessions:
+                    type: integer
+                    format: int64
+                activations:
+                    type: integer
+                    format: int64
+                average_session_cost_usd:
+                    type: number
+                    format: double
+                efficacy:
+                    $ref: '#/components/schemas/SkillEfficacyMetrics'
+                session_cost_usd:
+                    type: number
+                    format: double
+            required:
+                - activations
+                - activated_sessions
+                - session_cost_usd
+        SkillInsightPoint:
+            type: object
+            properties:
+                activated_sessions:
+                    type: integer
+                    format: int64
+                activations:
+                    type: integer
+                    format: int64
+                average_score:
+                    type: number
+                    format: double
+                bucket_start:
+                    type: string
+                    format: date-time
+                estimated_minutes_saved:
+                    type: number
+                    format: double
+                scored_sessions:
+                    type: integer
+                    format: int64
+                session_cost_usd:
+                    type: number
+                    format: double
+            required:
+                - bucket_start
+                - activations
+                - activated_sessions
+                - session_cost_usd
+                - scored_sessions
+                - estimated_minutes_saved
         SkillSightingTimelinePoint:
             type: object
             properties:
@@ -57323,6 +59892,22 @@ components:
                 - created_at
                 - created_by_user_id
                 - seen_count
+        SkillVersionInsight:
+            type: object
+            properties:
+                metrics:
+                    $ref: '#/components/schemas/SkillInsightMetrics'
+                skill_version_id:
+                    type: string
+                    format: uuid
+                trend:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillInsightPoint'
+            required:
+                - skill_version_id
+                - metrics
+                - trend
         SourceEnvironmentLink:
             type: object
             properties:
@@ -59574,6 +62159,38 @@ components:
             required:
                 - id
                 - name
+        UpdateAwsKmsKeyRequestBody:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the key to update.
+                    format: uuid
+                key_arn:
+                    type: string
+                    description: The ARN of the AWS KMS key.
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+            required:
+                - id
+                - key_arn
+                - external_credential_id
+                - algorithm
+                - name
         UpdateCustomDetectionRuleRequestBody:
             type: object
             properties:
@@ -59691,6 +62308,38 @@ components:
                     description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
             required:
                 - id
+                - name
+        UpdateGcpKmsKeyRequestBody:
+            type: object
+            properties:
+                algorithm:
+                    type: string
+                    description: The signing algorithm of the key.
+                    enum:
+                        - RS256
+                        - ES256
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the key to update.
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                resource_name:
+                    type: string
+                    description: The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
+            required:
+                - id
+                - resource_name
+                - external_credential_id
+                - algorithm
                 - name
         UpdateInviteRoleRequestBody:
             type: object
@@ -60235,6 +62884,11 @@ components:
                     format: double
                     minimum: 0.1
                     maximum: 10
+                shadow_mcp_allowed_urls:
+                    type: array
+                    items:
+                        type: string
+                    description: Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
                 sources:
                     type: array
                     items:
@@ -60881,6 +63535,35 @@ components:
             required:
                 - raw_server_name
                 - display_name
+        UpsertSettingsRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether skill efficacy scoring is enabled.
+                new_version_burst:
+                    type: integer
+                    description: Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                org_daily_cap:
+                    type: integer
+                    description: Maximum evaluations reserved across the organization each UTC day.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                per_skill_daily_cap:
+                    type: integer
+                    description: Maximum evaluations reserved per skill each UTC day.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+            required:
+                - enabled
+                - per_skill_daily_cap
+                - org_daily_cap
+                - new_version_burst
         UsageTiers:
             type: object
             properties:
@@ -61403,6 +64086,8 @@ tags:
       description: Managing toolset environments.
     - name: externalCredentials
       description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
+    - name: externalKeys
+      description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.
     - name: mcpRegistries
       description: External MCP registry operations
     - name: collections
@@ -61459,6 +64144,8 @@ tags:
       description: Dashboard API for interacting with resources.
     - name: risk
       description: Manage risk analysis policies and view scan results.
+    - name: skillEfficacy
+      description: Manage organization-wide skill efficacy sampling settings.
     - name: skills
       description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
     - name: telemetry

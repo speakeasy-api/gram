@@ -128,6 +128,8 @@ type UpdateResponseBody struct {
 	LatestVersionID *string `form:"latest_version_id,omitempty" json:"latest_version_id,omitempty" xml:"latest_version_id,omitempty"`
 	// The number of immutable versions recorded for the skill.
 	VersionCount *int64 `form:"version_count,omitempty" json:"version_count,omitempty" xml:"version_count,omitempty"`
+	// Whether the skill has at least one valid version available to distribute.
+	HasValidVersion *bool `form:"has_valid_version,omitempty" json:"has_valid_version,omitempty" xml:"has_valid_version,omitempty"`
 	// When this skill was first activated.
 	FirstSeenAt *string `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
 	// When this skill was most recently activated.
@@ -2245,6 +2247,8 @@ type SkillResponseBody struct {
 	LatestVersionID *string `form:"latest_version_id,omitempty" json:"latest_version_id,omitempty" xml:"latest_version_id,omitempty"`
 	// The number of immutable versions recorded for the skill.
 	VersionCount *int64 `form:"version_count,omitempty" json:"version_count,omitempty" xml:"version_count,omitempty"`
+	// Whether the skill has at least one valid version available to distribute.
+	HasValidVersion *bool `form:"has_valid_version,omitempty" json:"has_valid_version,omitempty" xml:"has_valid_version,omitempty"`
 	// When this skill was first activated.
 	FirstSeenAt *string `form:"first_seen_at,omitempty" json:"first_seen_at,omitempty" xml:"first_seen_at,omitempty"`
 	// When this skill was most recently activated.
@@ -2795,6 +2799,7 @@ func NewUpdateSkillOK(body *UpdateResponseBody) *types.Skill {
 		Classification:  *body.Classification,
 		LatestVersionID: body.LatestVersionID,
 		VersionCount:    *body.VersionCount,
+		HasValidVersion: *body.HasValidVersion,
 		FirstSeenAt:     body.FirstSeenAt,
 		LastSeenAt:      body.LastSeenAt,
 		SeenCount:       *body.SeenCount,
@@ -4329,6 +4334,9 @@ func ValidateUpdateResponseBody(body *UpdateResponseBody) (err error) {
 	}
 	if body.VersionCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version_count", "body"))
+	}
+	if body.HasValidVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_valid_version", "body"))
 	}
 	if body.SeenCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("seen_count", "body"))
@@ -7204,6 +7212,9 @@ func ValidateSkillResponseBody(body *SkillResponseBody) (err error) {
 	}
 	if body.VersionCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version_count", "body"))
+	}
+	if body.HasValidVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_valid_version", "body"))
 	}
 	if body.SeenCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("seen_count", "body"))

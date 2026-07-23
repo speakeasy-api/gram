@@ -92,6 +92,41 @@ func GetToolUsageSummaryTelemetryPath() string {
 	return "/rpc/telemetry.getToolUsageSummary"
 }
 
+// GetToolUsageTotalsTelemetryPath returns the URL path to the telemetry service getToolUsageTotals HTTP endpoint.
+func GetToolUsageTotalsTelemetryPath() string {
+	return "/rpc/telemetry.getToolUsageTotals"
+}
+
+// GetToolUsageTargetsTelemetryPath returns the URL path to the telemetry service getToolUsageTargets HTTP endpoint.
+func GetToolUsageTargetsTelemetryPath() string {
+	return "/rpc/telemetry.getToolUsageTargets"
+}
+
+// GetToolUsageUsersTelemetryPath returns the URL path to the telemetry service getToolUsageUsers HTTP endpoint.
+func GetToolUsageUsersTelemetryPath() string {
+	return "/rpc/telemetry.getToolUsageUsers"
+}
+
+// GetToolUsageTargetTimeSeriesTelemetryPath returns the URL path to the telemetry service getToolUsageTargetTimeSeries HTTP endpoint.
+func GetToolUsageTargetTimeSeriesTelemetryPath() string {
+	return "/rpc/telemetry.getToolUsageTargetTimeSeries"
+}
+
+// GetToolUsageUserTimeSeriesTelemetryPath returns the URL path to the telemetry service getToolUsageUserTimeSeries HTTP endpoint.
+func GetToolUsageUserTimeSeriesTelemetryPath() string {
+	return "/rpc/telemetry.getToolUsageUserTimeSeries"
+}
+
+// GetToolUsageUsersByTargetTelemetryPath returns the URL path to the telemetry service getToolUsageUsersByTarget HTTP endpoint.
+func GetToolUsageUsersByTargetTelemetryPath() string {
+	return "/rpc/telemetry.getToolUsageUsersByTarget"
+}
+
+// GetToolUsageTargetToolBreakdownTelemetryPath returns the URL path to the telemetry service getToolUsageTargetToolBreakdown HTTP endpoint.
+func GetToolUsageTargetToolBreakdownTelemetryPath() string {
+	return "/rpc/telemetry.getToolUsageTargetToolBreakdown"
+}
+
 // ListToolUsageTracesTelemetryPath returns the URL path to the telemetry service listToolUsageTraces HTTP endpoint.
 func ListToolUsageTracesTelemetryPath() string {
 	return "/rpc/telemetry.listToolUsageTraces"

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 )
@@ -33,6 +34,14 @@ func TestReconcileSkillObservationsWorkflowDrainsFullBatches(t *testing.T) {
 		},
 		activity.RegisterOptions{Name: "ReconcileSkillObservations"},
 	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, params activities.SyncSkillSessionVersionsParams) (*activities.SyncSkillSessionVersionsResult, error) {
+			require.Equal(t, projectID, params.ProjectID)
+			require.Equal(t, skillObservationBatchSize, params.BatchSize)
+			return &activities.SyncSkillSessionVersionsResult{}, nil
+		},
+		activity.RegisterOptions{Name: "SyncSkillSessionVersions"},
+	)
 
 	env.ExecuteWorkflow(ReconcileSkillObservationsWorkflow, ReconcileSkillObservationsParams{ProjectID: projectID})
 	require.True(t, env.IsWorkflowCompleted())
@@ -55,6 +64,35 @@ func TestReconcileSkillObservationsWorkflowBoundsBacklogDrain(t *testing.T) {
 
 	env.ExecuteWorkflow(ReconcileSkillObservationsWorkflow, ReconcileSkillObservationsParams{ProjectID: uuid.New()})
 	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError())
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &continueAsNewErr)
 	require.Equal(t, skillObservationMaxBatches, calls)
+}
+
+func TestReconcileSkillObservationsWorkflowDrainsSessionVersionMappingsAfterReconciliation(t *testing.T) {
+	t.Parallel()
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	projectID := uuid.New()
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.ReconcileSkillObservationsParams) (*activities.ReconcileSkillObservationsResult, error) {
+			return &activities.ReconcileSkillObservationsResult{}, nil
+		},
+		activity.RegisterOptions{Name: "ReconcileSkillObservations"},
+	)
+	syncCalls := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, params activities.SyncSkillSessionVersionsParams) (*activities.SyncSkillSessionVersionsResult, error) {
+			syncCalls++
+			require.Equal(t, projectID, params.ProjectID)
+			require.Equal(t, skillObservationBatchSize, params.BatchSize)
+			return &activities.SyncSkillSessionVersionsResult{Processed: int(params.BatchSize), HasMore: syncCalls == 1}, nil
+		},
+		activity.RegisterOptions{Name: "SyncSkillSessionVersions"},
+	)
+
+	env.ExecuteWorkflow(ReconcileSkillObservationsWorkflow, ReconcileSkillObservationsParams{ProjectID: projectID})
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 2, syncCalls)
 }

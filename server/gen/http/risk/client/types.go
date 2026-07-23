@@ -63,6 +63,9 @@ type CreateRiskPolicyRequestBody struct {
 	// Principal URNs this policy applies to. For audience_type=everyone, the
 	// server stores user:all.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Complete desired canonical URL allow set for this policy. Omit or send empty
+	// to create no URL-specific allow decisions.
+	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Optional message shown to end users when this policy blocks an action or
@@ -127,6 +130,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// Principal URNs this policy applies to. Omit to preserve the current target
 	// principals.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Complete desired canonical URL allow set for this policy. Omit to preserve;
+	// send empty to clear.
+	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Optional message shown to end users when this policy blocks an action or
@@ -9890,6 +9896,12 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.AudiencePrincipalUrns[i] = val
 		}
 	}
+	if p.ShadowMcpAllowedUrls != nil {
+		body.ShadowMcpAllowedUrls = make([]string, len(p.ShadowMcpAllowedUrls))
+		for i, val := range p.ShadowMcpAllowedUrls {
+			body.ShadowMcpAllowedUrls[i] = val
+		}
+	}
 	if p.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
 	}
@@ -9975,6 +9987,12 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		body.AudiencePrincipalUrns = make([]string, len(p.AudiencePrincipalUrns))
 		for i, val := range p.AudiencePrincipalUrns {
 			body.AudiencePrincipalUrns[i] = val
+		}
+	}
+	if p.ShadowMcpAllowedUrls != nil {
+		body.ShadowMcpAllowedUrls = make([]string, len(p.ShadowMcpAllowedUrls))
+		for i, val := range p.ShadowMcpAllowedUrls {
+			body.ShadowMcpAllowedUrls[i] = val
 		}
 	}
 	if p.ModelConfig != nil {

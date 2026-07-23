@@ -31,6 +31,10 @@ import {
 import { EditSkillDetailsDialog } from "./EditSkillDetailsDialog";
 import { SkillDistributionsSection } from "./SkillDistributionsSection";
 import {
+  SKILL_INSIGHTS_SECTION_ID,
+  SkillInsightsSection,
+} from "./SkillInsightsSection";
+import {
   SKILL_ADOPTION_SECTION_ID,
   SKILL_TIMELINE_SECTION_ID,
   SkillActivitySections,
@@ -51,6 +55,7 @@ const SKILL_DANGER_SECTION_ID = "danger";
 
 const SKILL_SECTION_IDS: readonly string[] = [
   SKILL_ADOPTION_SECTION_ID,
+  SKILL_INSIGHTS_SECTION_ID,
   SKILL_MANIFEST_SECTION_ID,
   SKILL_FRONTMATTER_SECTION_ID,
   SKILL_DISTRIBUTIONS_SECTION_ID,
@@ -170,7 +175,7 @@ function SkillDetailSections({
 
   return (
     <>
-      {latestVersion && <SkillPluginBanner skillId={skillId} />}
+      <SkillPluginBanner skill={skill} />
 
       <SettingsSection>
         <SettingsSection.Header>
@@ -218,6 +223,8 @@ function SkillDetailSections({
       </SettingsSection>
 
       <SkillActivitySections data={skillQueryData} />
+
+      <SkillInsightsSection data={skillQueryData} />
 
       <SettingsSection id={SKILL_MANIFEST_SECTION_ID}>
         <SettingsSection.Header>
@@ -550,9 +557,9 @@ function versionColumns({
     {
       key: "hash",
       header: "Version",
-      width: "160px",
+      width: "280px",
       render: (version) => (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm">
             {version.canonicalSha256.slice(0, 8)}
           </span>

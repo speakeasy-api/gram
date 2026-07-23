@@ -21,6 +21,7 @@ import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
 import { External } from "./external.js";
 import { ExternalCredentials } from "./externalcredentials.js";
+import { ExternalKeys } from "./externalkeys.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
@@ -46,6 +47,7 @@ import { RemoteSessionIssuers } from "./remotesessionissuers.js";
 import { RemoteSessions } from "./remotesessions.js";
 import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
+import { SkillEfficacy } from "./skillefficacy.js";
 import { Skills } from "./skills.js";
 import { SpendRules } from "./spendrules.js";
 import { Telemetry } from "./telemetry.js";
@@ -155,6 +157,11 @@ export class Gram extends ClientSDK {
     return (this._externalCredentials ??= new ExternalCredentials(
       this._options,
     ));
+  }
+
+  private _externalKeys?: ExternalKeys;
+  get externalKeys(): ExternalKeys {
+    return (this._externalKeys ??= new ExternalKeys(this._options));
   }
 
   private _hooks?: Hooks;
@@ -288,6 +295,11 @@ export class Gram extends ClientSDK {
   private _risk?: Risk;
   get risk(): Risk {
     return (this._risk ??= new Risk(this._options));
+  }
+
+  private _skillEfficacy?: SkillEfficacy;
+  get skillEfficacy(): SkillEfficacy {
+    return (this._skillEfficacy ??= new SkillEfficacy(this._options));
   }
 
   private _skills?: Skills;

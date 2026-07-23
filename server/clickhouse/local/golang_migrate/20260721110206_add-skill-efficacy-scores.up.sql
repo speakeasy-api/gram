@@ -1,0 +1,31 @@
+-- create "skill_efficacy_scores" table
+CREATE TABLE `skill_efficacy_scores` (
+  `id` UUID COMMENT 'Producer-supplied score identifier.',
+  `created_at` DateTime64(9) COMMENT 'Time the score was completed.' CODEC(DoubleDelta, ZSTD(1)),
+  `inserted_at` DateTime64(9) DEFAULT now64(9) COMMENT 'Time the score was inserted.' CODEC(DoubleDelta, ZSTD(1)),
+  `organization_id` String COMMENT 'Organization the score belongs to.' CODEC(ZSTD(1)),
+  `project_id` String DEFAULT '' COMMENT 'Project the score belongs to when known.' CODEC(ZSTD(1)),
+  `session_id` String COMMENT 'Scoring session identifier, using the hook session ID for dev and chat ID for assistant.' CODEC(ZSTD(1)),
+  `skill_id` UUID COMMENT 'Evaluated skill identifier.',
+  `skill_version_id` UUID COMMENT 'Evaluated skill version identifier.',
+  `canonical_sha256` String COMMENT 'Canonical SHA-256 digest of the evaluated skill.' CODEC(ZSTD(1)),
+  `surface` LowCardinality(String) COMMENT 'Evaluation surface: dev | assistant.',
+  `trace_id` Nullable(FixedString(32)) COMMENT 'W3C trace ID for the evaluated session when available.',
+  `gram_chat_id` String DEFAULT '' COMMENT 'Gram chat identifier when available.' CODEC(ZSTD(1)),
+  `score` Float64 COMMENT 'Skill efficacy score in the range 0.0 to 1.0.',
+  `rationale` String COMMENT 'Judge rationale for the score, capped at 200 characters.' CODEC(ZSTD(1)),
+  `est_turns_saved` Nullable(Float64) COMMENT 'Estimated conversation turns saved.',
+  `est_minutes_saved` Nullable(Float64) COMMENT 'Estimated minutes saved.',
+  `roi_confidence` LowCardinality(Nullable(String)) COMMENT 'ROI estimate confidence when estimated: low | med | high.',
+  `flags` Array(LowCardinality(String)) COMMENT 'Assessment flags: ignored | misapplied | partially_followed | harmful.',
+  `judge_model` LowCardinality(String) COMMENT 'Model used to judge efficacy.',
+  `judge_prompt_version` LowCardinality(String) COMMENT 'Judge prompt version.',
+  CONSTRAINT `score_valid` CHECK isFinite(score) AND score >= 0 AND score <= 1,
+  CONSTRAINT `rationale_valid` CHECK lengthUTF8(rationale) <= 200,
+  CONSTRAINT `est_turns_saved_valid` CHECK isNull(est_turns_saved) OR (isFinite(est_turns_saved) AND est_turns_saved >= 0),
+  CONSTRAINT `est_minutes_saved_valid` CHECK isNull(est_minutes_saved) OR (isFinite(est_minutes_saved) AND est_minutes_saved >= 0),
+  CONSTRAINT `surface_valid` CHECK surface IN ('dev', 'assistant'),
+  CONSTRAINT `roi_confidence_valid` CHECK isNull(roi_confidence) OR roi_confidence IN ('low', 'med', 'high'),
+  CONSTRAINT `flags_valid` CHECK arrayAll(flag -> flag IN ('ignored', 'misapplied', 'partially_followed', 'harmful'), flags)
+) ENGINE = MergeTree
+PRIMARY KEY (`organization_id`, `project_id`, `skill_id`, `skill_version_id`, `created_at`, `id`) ORDER BY (`organization_id`, `project_id`, `skill_id`, `skill_version_id`, `created_at`, `id`) PARTITION BY (toYYYYMM(created_at)) TTL toDateTime(created_at) + toIntervalDay(730) SETTINGS index_granularity = 8192 COMMENT 'Skill efficacy scores produced after scoring sessions complete.';

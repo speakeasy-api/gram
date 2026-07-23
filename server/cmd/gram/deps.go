@@ -216,7 +216,11 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		}
 		return nil
 	}
-	return conn, shutdown, nil
+	// Every consumer of this connection — all repos, current and future —
+	// forwards the caller's span context to ClickHouse by default, so
+	// server-side spans (system.opentelemetry_span_log) can be joined against
+	// APM traces by trace id; no per-call-site wiring exists or is needed.
+	return o11y.TraceClickhouseConn(conn), shutdown, nil
 }
 
 type dbClientOptions struct {

@@ -28,6 +28,8 @@ type Skill struct {
 	LatestVersionID *string
 	// The number of immutable versions recorded for the skill.
 	VersionCount int64
+	// Whether the skill has at least one valid version available to distribute.
+	HasValidVersion bool
 	// When this skill was first activated.
 	FirstSeenAt *string
 	// When this skill was most recently activated.

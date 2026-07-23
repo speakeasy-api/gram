@@ -26,6 +26,7 @@ func TestSearchMessagesAndFilesTool_RequiresUserToken(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"roadmap"}`), io.Discard)
 	require.Error(t, err)
 	require.ErrorContains(t, err, slackUserTokenEnvVar)
@@ -62,6 +63,7 @@ func TestSearchMessagesAndFilesTool_CallsSearchAllWithUserToken(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"query":"launch plan","limit":25,"sort":"timestamp"}`), io.Discard)
 	require.NoError(t, err)
 	require.Equal(t, "/search.all", requestPath)

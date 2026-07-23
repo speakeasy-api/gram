@@ -55,8 +55,6 @@ func WithOTELMetadata(params LogParams, observedTimestamp time.Time, resourceAtt
 type Logger struct {
 	shutdownCtx       func() context.Context
 	logger            *slog.Logger
-	tracer            trace.Tracer
-	metrics           *chWriteMetrics
 	chConn            clickhouse.Conn
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
@@ -66,8 +64,11 @@ type Logger struct {
 func NewLogger(
 	shutdownCtx context.Context,
 	logger *slog.Logger,
-	tracerProvider trace.TracerProvider,
-	meterProvider metric.MeterProvider,
+	// Both providers are unused and kept only for signature stability:
+	// ClickHouse client calls are not individually instrumented (DNO-602
+	// simplified o11y.TraceClickhouseConn to span-context forwarding only).
+	_ trace.TracerProvider,
+	_ metric.MeterProvider,
 	chConn clickhouse.Conn,
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
@@ -77,8 +78,6 @@ func NewLogger(
 	return &Logger{
 		shutdownCtx:       func() context.Context { return shutdownCtx },
 		logger:            logger,
-		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry"),
-		metrics:           newCHWriteMetrics(meterProvider, logger),
 		chConn:            chConn,
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
@@ -93,8 +92,6 @@ func NewStub(logger *slog.Logger) *Logger {
 	return &Logger{
 		shutdownCtx:       context.Background,
 		logger:            logger.With(attr.SlogComponent("telemetry_logger_stub")),
-		tracer:            nil,
-		metrics:           nil,
 		chConn:            nil,
 		logsEnabled:       disabled,
 		toolIOLogsEnabled: disabled,
@@ -157,9 +154,7 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 	if len(logParams) == 0 {
 		return nil
 	}
-	err := l.observeCHWrite(ctx, "telemetry.insertLogs", chWriteOperationInsertLogs, len(logParams), func(writeCtx context.Context) error {
-		return repo.New(l.chConn).InsertTelemetryLogs(writeCtx, logParams)
-	})
+	err := repo.New(l.chConn).InsertTelemetryLogs(l.detachedWriteContext(ctx), logParams)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
 	}
@@ -176,13 +171,19 @@ func (l *Logger) LogBulkStaging(ctx context.Context, params []LogParams) error {
 	if len(logParams) == 0 {
 		return nil
 	}
-	err := l.observeCHWrite(ctx, "telemetry.insertLogsStaging", chWriteOperationInsertLogsStaging, len(logParams), func(writeCtx context.Context) error {
-		return repo.New(l.chConn).InsertTelemetryLogsStaging(writeCtx, logParams)
-	})
+	err := repo.New(l.chConn).InsertTelemetryLogsStaging(l.detachedWriteContext(ctx), logParams)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "insert staged telemetry logs")
 	}
 	return nil
+}
+
+// detachedWriteContext returns the shutdown-scoped context synchronous
+// ClickHouse writes run on (they must survive request cancellation), carrying
+// the caller's span so the connection layer (o11y.TraceClickhouseConn) can
+// forward the request's trace context to ClickHouse's server-side span log.
+func (l *Logger) detachedWriteContext(ctx context.Context) context.Context {
+	return trace.ContextWithSpan(l.shutdownCtx(), trace.SpanFromContext(ctx))
 }
 
 func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo.InsertTelemetryLogParams {

@@ -350,7 +350,7 @@ func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShad
 	return err
 }
 
-const insertSkillObservation = `-- name: InsertSkillObservation :exec
+const insertSkillObservation = `-- name: InsertSkillObservation :execrows
 INSERT INTO skill_observations (
     project_id
   , idempotency_key
@@ -400,8 +400,8 @@ type InsertSkillObservationParams struct {
 	SeenAt         pgtype.Timestamptz
 }
 
-func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObservationParams) error {
-	_, err := q.db.Exec(ctx, insertSkillObservation,
+func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertSkillObservation,
 		arg.ProjectID,
 		arg.IdempotencyKey,
 		arg.Provider,
@@ -416,7 +416,10 @@ func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObs
 		arg.RawSha256,
 		arg.SeenAt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertToolCallBlock = `-- name: InsertToolCallBlock :exec
@@ -555,7 +558,7 @@ func (q *Queries) ListHooksServerNameOverrides(ctx context.Context, projectID uu
 }
 
 const listSkillObservations = `-- name: ListSkillObservations :many
-SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, reconcile_error_code, created_at
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at, reconcile_error_code, created_at
 FROM skill_observations
 WHERE project_id = $1
 ORDER BY seen_at ASC, id ASC
@@ -588,6 +591,8 @@ func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID
 			&i.SkillID,
 			&i.SkillVersionID,
 			&i.ReconciledAt,
+			&i.MetricsSyncedAt,
+			&i.EfficacyEnqueuedAt,
 			&i.ReconcileErrorCode,
 			&i.CreatedAt,
 		); err != nil {

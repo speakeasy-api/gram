@@ -51,6 +51,9 @@ var _ = Service("risk", func() {
 				Default("everyone")
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.")
+			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.", func() {
+				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
+			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.")
@@ -192,6 +195,9 @@ var _ = Service("risk", func() {
 				shared.RiskPolicyAudienceTypeEnum()
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. Omit to preserve the current target principals.")
+			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.", func() {
+				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
+			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.")

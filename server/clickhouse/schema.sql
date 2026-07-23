@@ -229,6 +229,20 @@ TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated trace summaries for fast trace-level queries without needing to scan all logs';
 
+-- The sort key is (gram_project_id, trace_id), so time-windowed reads cannot
+-- prune by the primary key and would otherwise scan a project's full 90-day
+-- history. This index prunes at PART granularity, not granule granularity:
+-- within a merged part, rows sort by (project, trace_id) — trace ids are
+-- random, so every granule mixes the part's whole time range and its minmax
+-- bounds prune nothing. But merges only combine block-contiguous parts and
+-- rows arrive roughly chronologically, so any part — however deeply merged —
+-- covers a bounded insertion-time interval and parts outside the queried
+-- window skip entirely (measured ~89% of granules skipped for a 1-week
+-- window over 90 days of chronologically inserted data merged to 9 parts;
+-- an OPTIMIZE FINAL single-part table prunes 0% — do not fully compact this
+-- table). Readers opt in via a WHERE start_time_unix_nano pre-filter.
+CREATE INDEX IF NOT EXISTS idx_trace_summaries_start_time ON trace_summaries (start_time_unix_nano) TYPE minmax GRANULARITY 1;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS trace_summaries_mv TO trace_summaries AS
 SELECT
     trace_id,
@@ -549,10 +563,11 @@ COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity an
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribute_metrics_summaries AS
 -- Provenance-first ingestion: only rows from the observed agent surfaces are
--- admitted. Claude Code data comes exclusively from the Claude OTEL log
--- stream (api_request rows for usage, tool_result rows for tool calls);
--- Codex and Cursor come from their usage-metrics rows plus completed
--- tool-call hook rows; Claude Chat (web/desktop) usage and cost arrive as
+-- admitted. Claude Code and Codex data comes exclusively from their raw OTEL
+-- log streams (Claude api_request / Codex response.completed rows for usage,
+-- Claude tool_result rows for tool calls); Cursor comes from its
+-- usage-metrics rows; Codex/Cursor tool calls arrive as completed tool-call
+-- hook rows; Claude Chat (web/desktop) usage and cost arrive as
 -- claude_chat:usage / claude_chat:cost rows polled from the Admin Analytics
 -- API. Everything else —
 -- Gram-hosted chat completions, claude-code:usage metric rows (which
@@ -560,7 +575,8 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribu
 -- excluded so cost attribution never mixes sources.
 -- Keep the predicates in sync with the session* constants in
 -- server/internal/telemetry/repo/sessions.go, which apply the same
--- classification to raw telemetry_logs.
+-- classification to raw telemetry_logs, and with chat_session_summaries_mv
+-- below.
 WITH
     -- Cutoff separates live MV ingestion from one-time historical backfill.
     -- Rows with event time >= cutoff are the MV's; everything before it is
@@ -587,17 +603,41 @@ WITH
         is_claude_otel_row
         AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
     ) AS is_claude_tool_result,
+    -- Every persisted Codex OTEL log row carries this URN (stamped at ingest).
+    (gram_urn = 'codex:otel:logs') AS is_codex_otel_row,
+    -- Codex reports usage on the SSE event that closes a turn; only some
+    -- response.completed events carry token counts, signalled by an input or
+    -- output count being present. The sole Codex usage source — the derived
+    -- codex:usage:metrics rows are deprecated and no longer written.
+    (
+        is_codex_otel_row
+        AND toString(attributes.event.name) = 'codex.sse_event'
+        AND toString(attributes.event.kind) = 'response.completed'
+        AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')
+    ) AS is_codex_api_request,
+    -- Codex reports input_token_count INCLUSIVE of cached_token_count (OpenAI
+    -- usage semantics: cached tokens are a subset of input), while the
+    -- canonical shape is disjoint (input excludes cache reads). Normalize
+    -- here, clamping to 0 <= cached <= input so bad client data can never
+    -- INCREASE usage. Codex reports no cache writes and no cost.
+    least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
+    (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
     -- claude_chat:usage rows carry Claude Chat (web/desktop) per-user token
     -- usage and claude_chat:cost rows the matching spend, both polled from the
     -- Anthropic Admin Analytics API — sessionless usage, like Cursor's Admin
     -- API rows. Deliberately NOT claude-code:usage, which stays excluded as a
-    -- duplicate of the OTEL api_request stream.
+    -- duplicate of the OTEL api_request stream. The codex:usage prefix is
+    -- kept so in-flight rows from pods that predate the Codex raw-stream
+    -- cutover still land; no new rows carry it.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
-    -- Codex/Cursor have no OTEL log stream; their tool calls arrive as hook
-    -- rows, one PostToolUse/PostToolUseFailure row per completed call. The
-    -- hook.event guard is required: every call also emits a PreToolUse row
-    -- with the same gram.tool.name. Provider names (the usage-metrics rows'
-    -- tool.name) are excluded — they are not tool calls.
+    -- Rows that carry token usage: the sumIf guard for every token/cost sum.
+    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row) AS is_usage_row,
+    -- Codex/Cursor tool calls arrive as hook rows, one
+    -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
+    -- tool events are deliberately not counted — hook rows stay the sole
+    -- source). The hook.event guard is required: every call also emits a
+    -- PreToolUse row with the same gram.tool.name. Provider names (the
+    -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
     (
         toString(attributes.gram.hook.source) IN ('codex', 'cursor')
         AND toString(attributes.gram.tool.name) != ''
@@ -640,23 +680,26 @@ SELECT
     arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups,
 
     -- Cardinality
-    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND (is_claude_api_request OR is_agent_usage_row)) AS total_chats,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND is_usage_row) AS total_chats,
 
     -- Token sums. total_tokens is input + output + cache WRITES — cache reads
     -- are excluded, matching the tokens-under-management measure (a cache
     -- read re-observes prompt content already counted when it entered the
-    -- cache; see tumMeasureExpr in server/internal/telemetry/repo). Both
-    -- branches sum the disjoint components rather than trusting a reported
-    -- total: Codex's gen_ai.usage.total_tokens includes cache reads and
-    -- Cursor usage rows report no total at all.
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_input_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_output_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS total_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_read_input_tokens,
-    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_claude_api_request OR is_agent_usage_row) AS cache_creation_input_tokens,
+    -- cache; see tumMeasureExpr in server/internal/telemetry/repo). Every
+    -- branch sums the disjoint components rather than trusting a reported
+    -- total: Codex's input count includes cache reads (normalized above) and
+    -- Cursor usage rows report no total at all. Codex reports no cache
+    -- writes, so the gen_ai.usage.* fallback correctly yields 0 for its
+    -- cache_creation branch.
+    sumIfState(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), is_codex_api_request, codex_input_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
+    sumIfState(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), is_codex_api_request, toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
+    sumIfState(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), is_codex_api_request, codex_input_tokens + toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
+    sumIfState(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), is_codex_api_request, codex_cache_read_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
+    sumIfState(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS cache_creation_input_tokens,
 
-    -- Cost
-    sumIfState(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_claude_api_request OR is_agent_usage_row) AS total_cost,
+    -- Cost. Codex exports no cost field, so its rows fall into the
+    -- gen_ai.usage.cost branch, which is absent on raw Codex rows and sums 0.
+    sumIfState(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_usage_row) AS total_cost,
 
     -- Tool-call counts: Claude tool_result rows plus Codex/Cursor completed
     -- tool-call hook rows. unique_tool_calls dedups by call identity and is
@@ -694,11 +737,12 @@ SELECT
     toString(attributes.gram.hook.hostname) AS hook_hostname
 FROM telemetry_logs
 -- Admit only the observed agent surfaces: Claude OTEL api_request/tool_result
--- rows, Codex/Cursor/Claude-Chat usage and cost rows, and Codex/Cursor
--- completed tool-call hook rows. Tool rows carry no token/cost fields, so
--- they only contribute to the tool-call counts.
+-- rows, Codex OTEL response.completed usage rows, Cursor/Claude-Chat usage
+-- and cost rows, and Codex/Cursor completed tool-call hook rows. Tool rows
+-- carry no token/cost fields, so they only contribute to the tool-call
+-- counts.
 WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
-  AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_agent_tool_call)
 GROUP BY
     gram_project_id,
     time_bucket,
@@ -895,9 +939,10 @@ COMMENT 'Per-chat hourly session summaries powering the org-scoped sessions list
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS chat_session_summaries_mv TO chat_session_summaries AS
 -- Provenance-first ingestion, identical to attribute_metrics_summaries_mv:
--- Claude OTEL api_request rows for usage, tool_result rows for tool calls,
--- Codex/Cursor/Claude-Chat usage rows, and Codex/Cursor completed tool-call
--- hook rows. Keep the predicates in sync with the session* constants in
+-- Claude OTEL api_request rows and Codex OTEL response.completed rows for
+-- usage, Claude tool_result rows for tool calls, Cursor/Claude-Chat usage
+-- rows, and Codex/Cursor completed tool-call hook rows. Keep the predicates
+-- in sync with the session* constants in
 -- server/internal/telemetry/repo/sessions.go and with
 -- attribute_metrics_summaries_mv above.
 WITH
@@ -923,6 +968,19 @@ WITH
         is_claude_otel_row
         AND (toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')
     ) AS is_claude_tool_result,
+    (gram_urn = 'codex:otel:logs') AS is_codex_otel_row,
+    -- Codex usage rides on token-bearing response.completed rows of the raw
+    -- OTEL log stream; see attribute_metrics_summaries_mv above.
+    (
+        is_codex_otel_row
+        AND toString(attributes.event.name) = 'codex.sse_event'
+        AND toString(attributes.event.kind) = 'response.completed'
+        AND (toString(attributes.input_token_count) != '' OR toString(attributes.output_token_count) != '')
+    ) AS is_codex_api_request,
+    -- Cache-inclusive -> disjoint input normalization, clamped; identical to
+    -- attribute_metrics_summaries_mv above.
+    least(greatest(toInt64OrZero(toString(attributes.cached_token_count)), 0), greatest(toInt64OrZero(toString(attributes.input_token_count)), 0)) AS codex_cache_read_tokens,
+    (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
     (
         hook_source IN ('codex', 'cursor')
@@ -931,7 +989,7 @@ WITH
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
     ) AS is_agent_tool_call,
     (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-    (is_claude_api_request OR is_agent_usage_row) AS is_usage_row,
+    (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row) AS is_usage_row,
     -- A counted tool call that failed: Claude tool_result rows carry
     -- success="false", Codex/Cursor hook rows report PostToolUseFailure or an
     -- HTTP error status.
@@ -944,9 +1002,11 @@ WITH
         toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
         toString(id)
     ) AS tool_call_dedup_id,
-    -- One distinct message per Claude api_request turn (prompt.id); generic
-    -- rows key off gen_ai.response.id.
-    if(is_claude_api_request, toString(attributes.prompt.id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+    -- One distinct message per Claude api_request turn (prompt.id); Codex
+    -- response.completed rows are one turn each but carry no stable turn id,
+    -- so they fall back to the row id (count-per-row); generic rows key off
+    -- gen_ai.response.id.
+    multiIf(is_claude_api_request, toString(attributes.prompt.id), is_codex_api_request, toString(id), toString(attributes.gen_ai.response.id)) AS session_message_id,
     -- Per-row effective model: Claude api_request rows put it on
     -- attributes.model / gen_ai.request.model, everyone else on
     -- gen_ai.response.model.
@@ -972,13 +1032,14 @@ SELECT
     countIf(is_failed_tool_call) AS failed_tool_call_count,
 
     -- Token/cost measures mirror attribute_metrics_summaries_mv exactly:
-    -- Claude api_request rows carry usage on flat attributes, generic usage
-    -- rows under gen_ai.usage.*; total_tokens is input + output + cache
-    -- WRITES (no cache reads).
-    sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
-    sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
-    sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
-    sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
+    -- Claude api_request rows carry usage on flat attributes, Codex
+    -- response.completed rows on native *_token_count attributes (normalized
+    -- to the disjoint shape above), generic usage rows under gen_ai.usage.*;
+    -- total_tokens is input + output + cache WRITES (no cache reads).
+    sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)), is_codex_api_request, codex_input_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), is_usage_row) AS total_input_tokens,
+    sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.output_tokens)), is_codex_api_request, toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), is_usage_row) AS total_output_tokens,
+    sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + toInt64OrZero(toString(attributes.cache_creation_tokens)), is_codex_api_request, codex_input_tokens + toInt64OrZero(toString(attributes.output_token_count)), toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS total_tokens,
+    sumIf(multiIf(is_claude_api_request, toInt64OrZero(toString(attributes.cache_read_tokens)), is_codex_api_request, codex_cache_read_tokens, toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), is_usage_row) AS cache_read_input_tokens,
     sumIf(if(is_claude_api_request, toInt64OrZero(toString(attributes.cache_creation_tokens)), toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), is_usage_row) AS cache_creation_input_tokens,
     sumIf(if(is_claude_api_request, multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), is_usage_row) AS total_cost,
 
@@ -1005,7 +1066,7 @@ SELECT
 FROM telemetry_logs
 WHERE time_unix_nano >= chat_session_cutoff_unix_nano
   AND chat_id != ''
-  AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_agent_tool_call)
 GROUP BY gram_project_id, time_bucket, chat_id;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
@@ -1158,3 +1219,64 @@ COMMENT 'Risk findings event log: one row per detected secret or sensitive-data 
 CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_message_id ON risk_findings (chat_message_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (risk_policy_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;
+
+CREATE TABLE IF NOT EXISTS skill_efficacy_scores (
+    id UUID COMMENT 'Producer-supplied score identifier.',
+    created_at DateTime64(9) COMMENT 'Time the score was completed.' CODEC(DoubleDelta, ZSTD),
+    inserted_at DateTime64(9) DEFAULT now64(9) COMMENT 'Time the score was inserted.' CODEC(DoubleDelta, ZSTD),
+
+    organization_id String COMMENT 'Organization the score belongs to.' CODEC(ZSTD),
+    project_id String DEFAULT '' COMMENT 'Project the score belongs to when known.' CODEC(ZSTD),
+    session_id String COMMENT 'Scoring session identifier, using the hook session ID for dev and chat ID for assistant.' CODEC(ZSTD),
+
+    skill_id UUID COMMENT 'Evaluated skill identifier.',
+    skill_version_id UUID COMMENT 'Evaluated skill version identifier.',
+    canonical_sha256 String COMMENT 'Canonical SHA-256 digest of the evaluated skill.' CODEC(ZSTD),
+    surface LowCardinality(String) COMMENT 'Evaluation surface: dev | assistant.',
+
+    trace_id Nullable(FixedString(32)) COMMENT 'W3C trace ID for the evaluated session when available.',
+    gram_chat_id String DEFAULT '' COMMENT 'Gram chat identifier when available.' CODEC(ZSTD),
+
+    score Float64 COMMENT 'Skill efficacy score in the range 0.0 to 1.0.',
+    rationale String COMMENT 'Judge rationale for the score, capped at 200 characters.' CODEC(ZSTD),
+    est_turns_saved Nullable(Float64) COMMENT 'Estimated conversation turns saved.',
+    est_minutes_saved Nullable(Float64) COMMENT 'Estimated minutes saved.',
+    roi_confidence LowCardinality(Nullable(String)) COMMENT 'ROI estimate confidence when estimated: low | med | high.',
+    flags Array(LowCardinality(String)) COMMENT 'Assessment flags: ignored | misapplied | partially_followed | harmful.',
+    judge_model LowCardinality(String) COMMENT 'Model used to judge efficacy.',
+    judge_prompt_version LowCardinality(String) COMMENT 'Judge prompt version.',
+
+    CONSTRAINT score_valid CHECK isFinite(score) AND score >= 0 AND score <= 1,
+    CONSTRAINT rationale_valid CHECK lengthUTF8(rationale) <= 200,
+    CONSTRAINT est_turns_saved_valid CHECK isNull(est_turns_saved) OR (isFinite(est_turns_saved) AND est_turns_saved >= 0),
+    CONSTRAINT est_minutes_saved_valid CHECK isNull(est_minutes_saved) OR (isFinite(est_minutes_saved) AND est_minutes_saved >= 0),
+    CONSTRAINT surface_valid CHECK surface IN ('dev', 'assistant'),
+    CONSTRAINT roi_confidence_valid CHECK isNull(roi_confidence) OR roi_confidence IN ('low', 'med', 'high'),
+    CONSTRAINT flags_valid CHECK arrayAll(flag -> flag IN ('ignored', 'misapplied', 'partially_followed', 'harmful'), flags)
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (organization_id, project_id, skill_id, skill_version_id, created_at, id)
+TTL toDateTime(created_at) + INTERVAL 730 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Skill efficacy scores produced after scoring sessions complete.';
+
+CREATE TABLE IF NOT EXISTS skill_session_versions (
+    id UUID COMMENT 'Source observation identifier.',
+    created_at DateTime64(9) COMMENT 'Time the mapping was created.' CODEC(DoubleDelta, ZSTD),
+    inserted_at DateTime64(9) DEFAULT now64(9) COMMENT 'Time the mapping was inserted.' CODEC(DoubleDelta, ZSTD),
+    seen_at DateTime64(9) COMMENT 'Time the skill version became active in the session.' CODEC(DoubleDelta, ZSTD),
+
+    organization_id String COMMENT 'Organization the session belongs to.' CODEC(ZSTD),
+    project_id UUID COMMENT 'Project the session belongs to.',
+    session_id String COMMENT 'Session identifier.' CODEC(ZSTD),
+
+    skill_id UUID COMMENT 'Observed skill identifier.',
+    skill_version_id UUID COMMENT 'Observed skill version identifier.',
+    canonical_sha256 String COMMENT 'Canonical SHA-256 digest of the observed skill.' CODEC(ZSTD),
+    surface LowCardinality(String) COMMENT 'Observation surface: dev | assistant.'
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(seen_at)
+ORDER BY (project_id, session_id, skill_version_id, seen_at, id)
+TTL toDateTime(seen_at) + INTERVAL 730 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Resolved skill versions observed in sessions.';

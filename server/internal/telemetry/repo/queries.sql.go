@@ -14,6 +14,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -296,6 +297,10 @@ func (q *Queries) InsertTelemetryLog(ctx context.Context, arg InsertTelemetryLog
 // from CH's perspective: it acks once the rows are queued in CH's async insert
 // buffer, not once they are committed to disk.
 func (q *Queries) InsertTelemetryLogs(ctx context.Context, args []InsertTelemetryLogParams) error {
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert":          1,
+		"wait_for_async_insert": 0,
+	}))
 	return q.insertTelemetryLogsInto(ctx, "telemetry_logs", args)
 }
 
@@ -319,6 +324,11 @@ type ListShadowMCPInventoryURLsParams struct {
 type GetShadowMCPInventoryURLParams struct {
 	GramProjectID      string
 	CanonicalServerURL string
+}
+
+type ListExistingShadowMCPInventoryURLsParams struct {
+	GramProjectID       string
+	CanonicalServerURLs []string
 }
 
 type UpdateShadowMCPInventoryURLNameOverrideParams struct {
@@ -602,7 +612,9 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 	for _, upsert := range upserts {
 		rows = append(rows, upsert)
 	}
-	ctx = clickhouse.Context(ctx, clickhouse.WithAsync(false))
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert": 0,
+	}))
 	if err := q.insertShadowMCPInventoryURLRows(ctx, rows); err != nil {
 		return fmt.Errorf("upserting shadow mcp inventory urls: %w", err)
 	}
@@ -650,6 +662,46 @@ func (q *Queries) insertShadowMCPInventoryURLRows(ctx context.Context, rows []*s
 
 func (q *Queries) GetShadowMCPInventoryURL(ctx context.Context, arg GetShadowMCPInventoryURLParams) (*ShadowMCPInventoryURLRow, error) {
 	return q.getShadowMCPInventoryURL(ctx, arg.GramProjectID, arg.CanonicalServerURL)
+}
+
+func (q *Queries) ListExistingShadowMCPInventoryURLs(
+	ctx context.Context,
+	arg ListExistingShadowMCPInventoryURLsParams,
+) ([]string, error) {
+	if len(arg.CanonicalServerURLs) == 0 {
+		return []string{}, nil
+	}
+
+	sb := sq.Select("canonical_server_url").
+		From("shadow_mcp_inventory_urls").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"canonical_server_url": arg.CanonicalServerURLs}).
+		GroupBy("gram_project_id", "canonical_server_url")
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building shadow mcp inventory url batch lookup query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying shadow mcp inventory url batch lookup: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make([]string, 0, len(arg.CanonicalServerURLs))
+	for rows.Next() {
+		var canonicalURL string
+		if err := rows.Scan(&canonicalURL); err != nil {
+			return nil, fmt.Errorf("scanning shadow mcp inventory url batch lookup row: %w", err)
+		}
+		result = append(result, canonicalURL)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating shadow mcp inventory url batch lookup rows: %w", err)
+	}
+
+	return result, nil
 }
 
 func (q *Queries) UpdateShadowMCPInventoryURLNameOverride(
@@ -1378,6 +1430,33 @@ type ListToolTracesParams struct {
 	Limit            int
 }
 
+// traceWindowScanSlop pads the WHERE pre-filter trace-window reads apply to
+// trace_summaries before grouping by trace_id. The table's sort key is
+// (gram_project_id, trace_id), so without a WHERE on start_time_unix_nano a
+// windowed read scans the project's full 90-day history; with it, the minmax
+// skip index on the column prunes to roughly the window. The exact window
+// predicate stays in HAVING over min(start_time_unix_nano): unmerged parts
+// hold PARTIAL per-trace minimums (rows of one trace can carry values from
+// its true start up to its last event), so the WHERE must be a superset —
+// the slop keeps early rows of boundary-straddling traces (so HAVING sees
+// the true minimum) and late rows of in-window traces (so their aggregates
+// stay complete). Only traces longer than the slop can be misjudged at the
+// window edge; tool-call traces live for seconds, an hour is generous.
+const traceWindowScanSlop = int64(time.Hour)
+
+// withTraceWindowScanBounds adds the granule-pruning superset WHERE bounds
+// for a [timeStart, timeEnd] trace window. Callers keep their exact HAVING
+// window predicate; see traceWindowScanSlop for why both are needed.
+// colExpr names the start-time column; a caller whose SELECT aliases an
+// aggregate to start_time_unix_nano must pass a table-qualified expression,
+// or ClickHouse resolves the WHERE identifier to the alias and fails with
+// ILLEGAL_AGGREGATION.
+func withTraceWindowScanBounds(sb squirrel.SelectBuilder, colExpr string, timeStart, timeEnd int64) squirrel.SelectBuilder {
+	return sb.
+		Where(colExpr+" >= ?", timeStart-traceWindowScanSlop).
+		Where(colExpr+" <= ?", timeEnd+traceWindowScanSlop)
+}
+
 // ListToolTraces retrieves aggregated trace summaries for tool calls (filtered to only include traces with tool_name set).
 //
 // Original SQL reference:
@@ -1401,6 +1480,7 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Having("start_time_unix_nano >= ?", arg.TimeStart).
 		Having("start_time_unix_nano <= ?", arg.TimeEnd)
+	sb = withTraceWindowScanBounds(sb, "trace_summaries.start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	// Optional filters
 	if arg.GramDeploymentID != "" {
@@ -3242,50 +3322,51 @@ type ToolUsageTargetToolBreakdownRow struct {
 
 // GetToolUsageSummary retrieves target-aware MCP and tool usage aggregates.
 func (q *Queries) GetToolUsageSummary(ctx context.Context, arg GetToolUsageSummaryParams) (*ToolUsageSummary, error) {
-	totals, err := q.getToolUsageTotals(ctx, arg)
-	if err != nil {
-		return nil, err
+	// The seven aggregates are independent reads of the same window — run them
+	// concurrently so the endpoint costs the slowest query, not the sum.
+	// Each goroutine writes a distinct field of summary.
+	var summary ToolUsageSummary
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		var err error
+		summary.Totals, err = q.GetToolUsageTotals(egCtx, arg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		summary.Targets, err = q.GetToolUsageTargets(egCtx, arg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		summary.Users, err = q.GetToolUsageUsers(egCtx, arg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		summary.TargetTimeSeries, err = q.GetToolUsageTargetTimeSeries(egCtx, arg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		summary.UserTimeSeries, err = q.GetToolUsageUserTimeSeries(egCtx, arg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		summary.UsersByTarget, err = q.GetToolUsageUsersByTarget(egCtx, arg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		summary.TargetToolBreakdown, err = q.GetToolUsageTargetToolBreakdown(egCtx, arg)
+		return err
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, fmt.Errorf("tool usage summary queries: %w", err)
 	}
 
-	targets, err := q.getToolUsageTargets(ctx, arg)
-	if err != nil {
-		return nil, err
-	}
-
-	users, err := q.getToolUsageUsers(ctx, arg)
-	if err != nil {
-		return nil, err
-	}
-
-	targetTimeSeries, err := q.getToolUsageTargetTimeSeries(ctx, arg)
-	if err != nil {
-		return nil, err
-	}
-
-	userTimeSeries, err := q.getToolUsageUserTimeSeries(ctx, arg)
-	if err != nil {
-		return nil, err
-	}
-
-	usersByTarget, err := q.getToolUsageUsersByTarget(ctx, arg)
-	if err != nil {
-		return nil, err
-	}
-
-	targetToolBreakdown, err := q.getToolUsageTargetToolBreakdown(ctx, arg)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ToolUsageSummary{
-		Totals:              totals,
-		Targets:             targets,
-		Users:               users,
-		TargetTimeSeries:    targetTimeSeries,
-		UserTimeSeries:      userTimeSeries,
-		UsersByTarget:       usersByTarget,
-		TargetToolBreakdown: targetToolBreakdown,
-	}, nil
+	return &summary, nil
 }
 
 // GetToolUsageFilterOptions retrieves usage-derived tool usage filter options for a time window.
@@ -3311,26 +3392,30 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		UserSeriesRowLimit: 0,
 	}
 
-	hostedServers, err := q.getToolUsageHostedServerFilterOptions(ctx, summaryArg)
-	if err != nil {
-		return nil, err
+	// Independent reads of the same window — run concurrently; each goroutine
+	// writes a distinct field of options.
+	var options ToolUsageFilterOptions
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		var err error
+		options.HostedServers, err = q.getToolUsageHostedServerFilterOptions(egCtx, summaryArg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		options.ShadowServers, err = q.getToolUsageShadowServerFilterOptions(egCtx, summaryArg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		options.Users, err = q.getToolUsageUserFilterOptions(egCtx, summaryArg)
+		return err
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, fmt.Errorf("tool usage filter option queries: %w", err)
 	}
 
-	shadowServers, err := q.getToolUsageShadowServerFilterOptions(ctx, summaryArg)
-	if err != nil {
-		return nil, err
-	}
-
-	users, err := q.getToolUsageUserFilterOptions(ctx, summaryArg)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ToolUsageFilterOptions{
-		HostedServers: hostedServers,
-		ShadowServers: shadowServers,
-		Users:         users,
-	}, nil
+	return &options, nil
 }
 
 // ListToolUsageTraces retrieves target-aware trace rows for the unified Tool Logs page.
@@ -3468,7 +3553,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageTotals(ctx context.Context, arg GetToolUsageSummaryParams) (ToolUsageTotalsRow, error) {
+func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummaryParams) (ToolUsageTotalsRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"count() AS event_count",
 		"sum(success) AS success_count",
@@ -3517,7 +3602,7 @@ func (q *Queries) getToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageTargets(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetSummaryRow, error) {
+func (q *Queries) GetToolUsageTargets(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetSummaryRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",
@@ -3640,7 +3725,7 @@ func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActi
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageUsers(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserSummaryRow, error) {
+func (q *Queries) GetToolUsageUsers(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserSummaryRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"user_key",
 		"user_label",
@@ -3685,7 +3770,7 @@ func (q *Queries) getToolUsageUsers(ctx context.Context, arg GetToolUsageSummary
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageTargetTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetTimeSeriesPointRow, error) {
+func (q *Queries) GetToolUsageTargetTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetTimeSeriesPointRow, error) {
 	bucketExpr := fmt.Sprintf("intDiv(event_time_ns, %d) * %d AS bucket_start_ns", arg.BucketSizeNs, arg.BucketSizeNs)
 	sb, err := toolUsageFilteredSelect(arg,
 		bucketExpr,
@@ -3730,7 +3815,7 @@ func (q *Queries) getToolUsageTargetTimeSeries(ctx context.Context, arg GetToolU
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserTimeSeriesPointRow, error) {
+func (q *Queries) GetToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserTimeSeriesPointRow, error) {
 	bucketExpr := fmt.Sprintf("intDiv(event_time_ns, %d) * %d AS bucket_start_ns", arg.BucketSizeNs, arg.BucketSizeNs)
 	sb, err := toolUsageFilteredSelect(arg,
 		bucketExpr,
@@ -3774,7 +3859,7 @@ func (q *Queries) getToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsa
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageUsersByTarget(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUsersByTargetRow, error) {
+func (q *Queries) GetToolUsageUsersByTarget(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUsersByTargetRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",
@@ -3820,7 +3905,7 @@ func (q *Queries) getToolUsageUsersByTarget(ctx context.Context, arg GetToolUsag
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) getToolUsageTargetToolBreakdown(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetToolBreakdownRow, error) {
+func (q *Queries) GetToolUsageTargetToolBreakdown(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetToolBreakdownRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",
@@ -4133,6 +4218,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
 		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (g_tool_name != '' OR g_skill_name != '')))")
+	groupedSB = withTraceWindowScanBounds(groupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	groupedSQL, groupedArgs, err := groupedSB.ToSql()
 	if err != nil {
@@ -4647,6 +4733,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("any(event_source) != 'hook'").
 		Having("startsWith(g_gram_urn, 'tools:')").
 		Having("(g_toolset_slug != '' OR g_tool_source != '')")
+	directGroupedSB = withTraceWindowScanBounds(directGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	hookGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
@@ -4670,6 +4757,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
 		Having("any(event_source) = 'hook'").
 		Having("(g_tool_name != '' OR g_skill_name != '')")
+	hookGroupedSB = withTraceWindowScanBounds(hookGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	directGroupedSQL, directGroupedArgs, err := directGroupedSB.ToSql()
 	if err != nil {

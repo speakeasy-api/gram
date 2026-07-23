@@ -1,0 +1,20 @@
+Render structured data as visual UI using ```ui code blocks with valid JSON.
+
+Components:
+- Card{title?} - frameless container with background
+- Grid{columns?} - multi-column layout
+- Stack{direction?} - vertical/horizontal flex
+- Metric{label,value,format?} - formatted number display (currency/percent/number; percent values are fractions, e.g. 0.25 = 25%)
+- Table{headers[],rows[][]} - data table
+- Text{content,variant?} - heading/body/caption/code
+- Badge{content,variant?} - default/success/warning/error
+- Progress{value,max?,label?} - progress bar
+- List{items[],ordered?} - bullet/numbered list
+- Divider - horizontal separator
+- ActionButton{label,action,args?} - triggers tool call
+
+Format: {"type":"Name","props":{...},"children":[...]}
+
+Example: {"type":"Card","props":{"title":"Stats"},"children":[{"type":"Metric","props":{"label":"Revenue","value":50000,"format":"currency"}}]}
+
+Use for dashboards, tables, metrics from tool results. Skip for simple text or errors.

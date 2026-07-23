@@ -138,6 +138,8 @@ type ToolCallEnv struct {
 	UserConfig *CaseInsensitiveEnv
 	OAuthToken string // OAuth token for external MCP servers (empty if not applicable)
 	GramEmail  string // Authenticated Gram user's email (empty if not applicable)
+	// GramChatID is the authoritative assistant chat UUID when supplied by the caller.
+	GramChatID string
 }
 
 // Merged returns a case-insensitive view where UserConfig values override

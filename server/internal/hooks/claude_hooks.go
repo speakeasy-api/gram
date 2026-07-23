@@ -28,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	claudeevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/claude"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -207,33 +206,6 @@ func (d *formDecoder) Decode(v any) error {
 	if err := json.Unmarshal(jsonBytes, v); err != nil {
 		return fmt.Errorf("unmarshal json: %w", err)
 	}
-	return nil
-}
-
-// Metrics handles authenticated OTEL metrics data from Claude Code
-func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
-	logger := s.logger.With(
-		attr.SlogHookSource("claude"),
-		attr.SlogHookEvent("Metrics"),
-	)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, errors.New("rejected unauthorized claude OTEL metrics request"), "unauthorized").LogWarn(ctx, logger, attr.SlogEvent("claude_metrics_unauthorized"))
-	}
-
-	orgID := authCtx.ActiveOrganizationID
-	projectID := authCtx.ProjectID.String()
-
-	logger.InfoContext(ctx, "Received Claude token metrics",
-		attr.SlogEvent("claude_metrics"),
-		attr.SlogOrganizationID(orgID),
-		attr.SlogProjectID(projectID),
-	)
-
-	// Write metrics to ClickHouse
-	s.writeMetricsToClickHouse(ctx, payload, orgID, projectID)
-
 	return nil
 }
 

@@ -498,6 +498,214 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageSummary", "type": "query"}`)
 	})
 
+	// The seven getToolUsage* methods below expose the individual aggregates of
+	// getToolUsageSummary as standalone endpoints so the MCP & Tools dashboard can
+	// fetch and render each panel independently as its data arrives, rather than
+	// blocking on the slowest aggregate. They share GetToolUsageSummaryPayload.
+
+	Method("getToolUsageTotals", func() {
+		Description("Get overall MCP and tool usage totals")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageTotalsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageTotals")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageTotals")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageTotals")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageTotals", "type": "query"}`)
+	})
+
+	Method("getToolUsageTargets", func() {
+		Description("Get top MCP and tool usage targets")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageTargetsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageTargets")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageTargets")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageTargets")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageTargets", "type": "query"}`)
+	})
+
+	Method("getToolUsageUsers", func() {
+		Description("Get top MCP and tool usage user identities")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageUsersResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageUsers")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageUsers")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageUsers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageUsers", "type": "query"}`)
+	})
+
+	Method("getToolUsageTargetTimeSeries", func() {
+		Description("Get time-series MCP and tool usage grouped by target")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageTargetTimeSeriesResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageTargetTimeSeries")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageTargetTimeSeries")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageTargetTimeSeries")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageTargetTimeSeries", "type": "query"}`)
+	})
+
+	Method("getToolUsageUserTimeSeries", func() {
+		Description("Get time-series MCP and tool usage grouped by user identity")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageUserTimeSeriesResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageUserTimeSeries")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageUserTimeSeries")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageUserTimeSeries")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageUserTimeSeries", "type": "query"}`)
+	})
+
+	Method("getToolUsageUsersByTarget", func() {
+		Description("Get cross-dimensional MCP and tool usage grouped by target and user identity")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageUsersByTargetResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageUsersByTarget")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageUsersByTarget")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageUsersByTarget")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageUsersByTarget", "type": "query"}`)
+	})
+
+	Method("getToolUsageTargetToolBreakdown", func() {
+		Description("Get per-tool MCP and tool usage grouped by target")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageTargetToolBreakdownResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageTargetToolBreakdown")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageTargetToolBreakdown")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageTargetToolBreakdown")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageTargetToolBreakdown", "type": "query"}`)
+	})
+
 	Method("listToolUsageTraces", func() {
 		Description("List target-aware MCP and tool usage traces")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -1392,6 +1600,7 @@ var queryDimensions = []any{
 	"billing_mode", // metered (real cost) | flat_rate (estimate) | unknown
 	"query_source",
 	"skill_name",
+	"skill_version",
 	"agent_name",
 	"mcp_server_name",
 	"mcp_tool_name",
@@ -1414,7 +1623,7 @@ var queryMeasures = []any{
 }
 
 var QueryPayload = Type("QueryPayload", func() {
-	Description("Payload for a generic org-scoped analytics query")
+	Description("Payload for a generic org-scoped analytics query. Queries involving skill_version use raw telemetry retained for 90 days and attribute each whole session to every activated version; timeseries place the whole session in its start-time bucket.")
 
 	Attribute("from", String, "Start time in ISO 8601 format", func() {
 		Format(FormatDateTime)
@@ -2003,6 +2212,48 @@ var GetToolUsageSummaryResult = Type("GetToolUsageSummaryResult", func() {
 	Attribute("target_tool_breakdown", ArrayOf(ToolUsageTargetToolBreakdownRow), "Per-tool usage rows grouped by target")
 
 	Required("totals", "targets", "users", "target_time_series", "user_time_series", "users_by_target", "target_tool_breakdown")
+})
+
+var GetToolUsageTotalsResult = Type("GetToolUsageTotalsResult", func() {
+	Description("Overall MCP and tool usage totals for the selected filters and time range")
+	Attribute("totals", ToolUsageTotals, "Overall usage totals for the selected filters and time range")
+	Required("totals")
+})
+
+var GetToolUsageTargetsResult = Type("GetToolUsageTargetsResult", func() {
+	Description("Top MCP and tool usage targets for the selected filters and time range")
+	Attribute("targets", ArrayOf(ToolUsageTargetSummary), "Top usage targets for the selected filters and time range")
+	Required("targets")
+})
+
+var GetToolUsageUsersResult = Type("GetToolUsageUsersResult", func() {
+	Description("Top MCP and tool usage user identities for the selected filters and time range")
+	Attribute("users", ArrayOf(ToolUsageUserSummary), "Top user identities for the selected filters and time range")
+	Required("users")
+})
+
+var GetToolUsageTargetTimeSeriesResult = Type("GetToolUsageTargetTimeSeriesResult", func() {
+	Description("Time-series MCP and tool usage grouped by target")
+	Attribute("target_time_series", ArrayOf(ToolUsageTargetTimeSeriesPoint), "Time-series usage buckets grouped by target")
+	Required("target_time_series")
+})
+
+var GetToolUsageUserTimeSeriesResult = Type("GetToolUsageUserTimeSeriesResult", func() {
+	Description("Time-series MCP and tool usage grouped by user identity")
+	Attribute("user_time_series", ArrayOf(ToolUsageUserTimeSeriesPoint), "Time-series usage buckets grouped by user identity")
+	Required("user_time_series")
+})
+
+var GetToolUsageUsersByTargetResult = Type("GetToolUsageUsersByTargetResult", func() {
+	Description("Cross-dimensional MCP and tool usage grouped by target and user identity")
+	Attribute("users_by_target", ArrayOf(ToolUsageUsersByTargetRow), "Cross-dimensional usage rows grouped by target and user identity")
+	Required("users_by_target")
+})
+
+var GetToolUsageTargetToolBreakdownResult = Type("GetToolUsageTargetToolBreakdownResult", func() {
+	Description("Per-tool MCP and tool usage grouped by target")
+	Attribute("target_tool_breakdown", ArrayOf(ToolUsageTargetToolBreakdownRow), "Per-tool usage rows grouped by target")
+	Required("target_tool_breakdown")
 })
 
 var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
