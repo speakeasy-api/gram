@@ -103,13 +103,19 @@ func claudeServiceNameSpecificity(name string) int {
 
 // preferClaudeServiceName merges a freshly reported service name (or adapter
 // slug) with the session's previously cached one, keeping whichever identifies
-// the product surface more precisely. This is what lets the two signals
+// the Claude product surface more precisely. This is what lets the two signals
 // compose: the OTEL stream's "cowork" upgrades a cached desktop adapter slug,
 // while a cached "claude-code-desktop" survives OTEL batches that only report
-// the ambiguous "claude-code". Ties keep the fresh value.
+// the ambiguous "claude-code". Ties keep the fresh value. A non-empty incoming
+// value that identifies no Claude surface (Cursor, Codex, unknown adapters)
+// always wins: non-Claude senders keep their reported name instead of being
+// overwritten by a Claude value cached under the same session id.
 func preferClaudeServiceName(incoming, cached string) string {
 	if incoming == "" {
 		return cached
+	}
+	if claudeSurfaceFromServiceName(incoming) == "" {
+		return incoming
 	}
 	if claudeServiceNameSpecificity(cached) > claudeServiceNameSpecificity(incoming) {
 		return cached

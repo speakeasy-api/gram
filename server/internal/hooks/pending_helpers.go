@@ -372,11 +372,15 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			}
 		}
 		stampAccountAttribution(attrs, sessionMeta)
-		// Cost/token metric rows carry the session's resolved surface so cowork
-		// and Claude Code Desktop spend is not misfiled under claude-code. A
-		// cache miss (metrics beating the logs path) keeps the claude-code
-		// default and self-heals on the session's later batches.
-		if surface := claudeSurfaceFromServiceName(sessionMeta.ServiceName); surface != "" {
+		// Cost/token metric rows carry the session's resolved surface (OTEL
+		// service.name first, SessionStart agent variant fallback for older
+		// cowork builds whose OTEL reports "claude-code") so cowork and Claude
+		// Code Desktop spend is not misfiled under claude-code. A cache miss
+		// (metrics beating the logs path) keeps the claude-code default and
+		// self-heals on the session's later batches.
+		surfaceMeta := sessionMeta
+		surfaceMeta.SessionID = m.SessionID
+		if surface := claudeSurfaceFromServiceName(s.claudeSessionSurface(ctx, &surfaceMeta)); surface != "" {
 			attrs[attr.HookSourceKey] = surface
 		}
 

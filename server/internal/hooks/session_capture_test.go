@@ -143,7 +143,9 @@ func TestClaudeSurfaceFromServiceName(t *testing.T) {
 // Merging a fresh service name with the cached one keeps whichever pins the
 // surface more precisely: "cowork" beats the desktop adapter slug, the
 // desktop adapter slug beats the ambiguous "claude-code" the OTEL stream
-// reports for both desktop and CLI, and ties keep the fresh value.
+// reports for both desktop and CLI, and ties keep the fresh value. Non-Claude
+// incoming values pass through unchanged so non-Claude senders keep their
+// reported name.
 func TestPreferClaudeServiceName(t *testing.T) {
 	t.Parallel()
 
@@ -160,8 +162,12 @@ func TestPreferClaudeServiceName(t *testing.T) {
 	// Empty incoming keeps the cache; empty cache takes the incoming value.
 	assert.Equal(t, "cowork", preferClaudeServiceName("", "cowork"))
 	assert.Equal(t, "claude-code", preferClaudeServiceName("claude-code", ""))
-	// Non-Claude values tie at zero specificity: fresh wins.
+	// A non-Claude incoming value always keeps its reported name — even
+	// against a cached Claude value under the same session id.
 	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "Cursor"))
+	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "claude-code"))
+	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "claude-code-desktop"))
+	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "cowork"))
 }
 
 // A session whose OTEL stream reports service.name "cowork" must persist its
