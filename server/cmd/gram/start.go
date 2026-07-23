@@ -837,6 +837,7 @@ func newStartCommand() *cli.Command {
 				telemLogger,
 				billingRepo,
 				billingTracker,
+				toolDispositionCache,
 			)
 
 			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a

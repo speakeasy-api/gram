@@ -1,6 +1,7 @@
 package remotemcp_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -62,7 +63,7 @@ func newToolsCallRequest(toolName string) *proxy.ToolsCallRequest {
 func TestToolsCallAuthzInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(newAuthzEngineForTest(t), testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(newAuthzEngineForTest(t), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 	require.Equal(t, "tools-call-authz", interceptor.Name())
 }
 
@@ -70,7 +71,7 @@ func TestToolsCallAuthzInterceptor_NilEnginePassesThrough(t *testing.T) {
 	t.Parallel()
 
 	// Defensive: a nil engine must not panic and must not reject.
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(nil, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(nil, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), newToolsCallRequest("any_tool")))
 }
@@ -88,7 +89,7 @@ func TestToolsCallAuthzInterceptor_GrantsAllowMatchingTool(t *testing.T) {
 		}),
 	)
 
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("search_tickets")))
 }
@@ -106,7 +107,7 @@ func TestToolsCallAuthzInterceptor_GrantsRejectNonMatchingTool(t *testing.T) {
 		}),
 	)
 
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	err := interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("delete_ticket"))
 
@@ -123,11 +124,66 @@ func TestToolsCallAuthzInterceptor_NoGrantsRejects(t *testing.T) {
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	err := interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("any_tool"))
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestToolsCallAuthzInterceptor_DispositionScopedGrantMatches(t *testing.T) {
+	t.Parallel()
+
+	engine := newAuthzEngineForTest(t)
+	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+	// Grant applies to any read_only tool on the server (no tool key).
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   testServerID,
+			"disposition":   "read_only",
+		}),
+	)
+
+	resolver := fakeToolDispositionResolver{dispositions: map[string]string{
+		"list_items":  "read_only",
+		"delete_item": "destructive",
+	}}
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
+
+	// read_only tool matches the disposition-scoped grant.
+	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("list_items")))
+
+	// destructive tool carries a disposition the grant does not cover, and no
+	// tool-scoped grant exists, so it is denied.
+	err := interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("delete_item"))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestToolsCallAuthzInterceptor_ResolverErrorFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	engine := newAuthzEngineForTest(t)
+	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+	// A grant that would otherwise allow the call — the resolver error must
+	// deny anyway.
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   testServerID,
+			"tool":          "search_tickets",
+		}),
+	)
+
+	resolver := fakeToolDispositionResolver{err: errors.New("metadata store unavailable")}
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
+
+	// The call is rejected despite the allowing grant: a resolver failure
+	// aborts before the authz check rather than proceeding on empty disposition.
+	err := interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("search_tickets"))
+	require.Error(t, err)
 }
