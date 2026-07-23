@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -270,11 +271,16 @@ func hashToolCallIDToTraceID(toolCallID string) string {
 // different values makes every call permanently unjoinable. Returns "" when
 // either part is missing — there is no meaningful per-tool key to share then,
 // and callers keep their previous fallback.
+//
+// The session id is length-prefixed so the encoding is injective: session ids
+// are client-controlled and may themselves contain "|", and two distinct
+// (session, tool) pairs colliding onto one key would let the provenance
+// lookup resolve one call to another call's MCP server.
 func syntheticToolCallID(sessionID, toolName string) string {
 	if sessionID == "" || toolName == "" {
 		return ""
 	}
-	return sessionID + "|" + toolName
+	return strconv.Itoa(len(sessionID)) + "|" + sessionID + "|" + toolName
 }
 
 // generateSpanID generates a W3C-compliant span ID (16 hex characters)

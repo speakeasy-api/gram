@@ -599,7 +599,7 @@ func TestCodex_ToolCall_RecordedIDHashesToTelemetryTraceID(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(toolRequest.ToolCalls, &toolCalls))
 	require.Len(t, toolCalls, 1)
-	require.Equal(t, sessionID+"|"+toolName, toolCalls[0].ID)
+	require.Equal(t, syntheticToolCallID(sessionID, toolName), toolCalls[0].ID)
 	require.Equal(t, toolName, toolCalls[0].Function.Name)
 	require.Equal(t, toolCalls[0].ID, toolResult.ToolCallID.String, "result rows must pair on the same id")
 
