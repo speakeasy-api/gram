@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.17.1
+
+### Patch Changes
+
+- 93c0f71: Bump archiver to 8.0.0
+
 ## 0.17.0
 
 ### Minor Changes
