@@ -41,6 +41,24 @@ function ScopeGatedNavItem({
   );
 }
 
+function resolveActiveGroup({
+  settingsActive,
+  secureActive,
+  identityActive,
+  dataActive,
+}: {
+  settingsActive: boolean;
+  secureActive: boolean;
+  identityActive: boolean;
+  dataActive: boolean;
+}): string | undefined {
+  if (settingsActive) return "Settings";
+  if (secureActive) return "Secure";
+  if (identityActive) return "Identity";
+  if (dataActive) return "Data";
+  return undefined;
+}
+
 function ScopeGatedTopLevelItem({
   item,
   scope,
@@ -94,13 +112,16 @@ export function OrgSidebar({
     orgRoutes.remoteIdentityProviders,
   ].some((r) => r.active);
 
-  const activeGroup = settingsActive
-    ? "Settings"
-    : secureActive
-      ? "Secure"
-      : identityActive
-        ? "Identity"
-        : undefined;
+  const dataActive = [orgRoutes.data, orgRoutes.dataRedactions].some(
+    (r) => r.active,
+  );
+
+  const activeGroup = resolveActiveGroup({
+    settingsActive,
+    secureActive,
+    identityActive,
+    dataActive,
+  });
 
   const allOrgNavRoutes = [
     orgRoutes.home,
@@ -118,6 +139,8 @@ export function OrgSidebar({
     orgRoutes.userSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
+    orgRoutes.data,
+    orgRoutes.dataRedactions,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
   const activeItem = activeRoute?.title;
@@ -142,7 +165,7 @@ export function OrgSidebar({
         ) : (
           <NavGroupProvider
             activeGroup={activeGroup}
-            defaultOpenGroups={["Settings", "Secure", "Identity"]}
+            defaultOpenGroups={["Settings", "Secure", "Identity", "Data"]}
             activeItem={activeItem}
           >
             <SidebarMenu className="gap-1 px-2">
@@ -236,6 +259,22 @@ export function OrgSidebar({
                 <ScopeGatedNavItem
                   item={orgRoutes.remoteIdentityProviders}
                   scope={["org:read", "org:admin"]}
+                />
+              </CollapsibleNavGroup>
+
+              {/* Data group */}
+              <CollapsibleNavGroup
+                label="Data"
+                Icon={(p) => <Icon {...p} name="database" />}
+                defaultHref={orgRoutes.data.href()}
+              >
+                <ScopeGatedNavItem
+                  item={orgRoutes.data}
+                  scope={["org:read", "org:admin"]}
+                />
+                <ScopeGatedNavItem
+                  item={orgRoutes.dataRedactions}
+                  scope="org:admin"
                 />
               </CollapsibleNavGroup>
             </SidebarMenu>

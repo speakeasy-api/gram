@@ -16,6 +16,16 @@ const columns: Column<DataEvent>[] = [
     ),
   },
   {
+    key: "project",
+    header: "Project",
+    width: "130px",
+    render: (event) => (
+      <Type muted small className="font-mono">
+        {event.project}
+      </Type>
+    ),
+  },
+  {
     key: "kind",
     header: "Kind",
     width: "90px",

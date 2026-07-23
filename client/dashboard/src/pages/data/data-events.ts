@@ -25,6 +25,11 @@ export type DataEventKind = (typeof EVENT_KINDS)[number];
 export interface DataEvent {
   id: string;
   timestamp: Date;
+  /**
+   * Project the event landed in. The page is org-scoped: the feed spans
+   * every project in the organization.
+   */
+  project: string;
   origin: DataEventOrigin;
   kind: DataEventKind;
   /** URN type segment: the producer's event type, sanitized and lowercased. */
@@ -47,6 +52,9 @@ export const ORIGIN_LABELS: Record<DataEventOrigin, string> = {
   gram_service: "Gram Service",
   unknown: "Unknown",
 };
+
+/** Projects the mock feed spans; the real page queries every org project. */
+export const MOCK_PROJECTS = ["default", "internal-tools", "platform"] as const;
 
 // ---------------------------------------------------------------------------
 // Data quality
@@ -149,6 +157,7 @@ interface FixtureSpec extends Omit<DataEvent, "id" | "timestamp"> {
 const FIXTURES: FixtureSpec[] = [
   {
     minutesAgo: 1,
+    project: "default",
     origin: "gram_service",
     kind: "log",
     type: "tool_call",
@@ -165,6 +174,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 2,
+    project: "default",
     origin: "provider_otel",
     kind: "log",
     type: "api_request",
@@ -180,6 +190,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 2,
+    project: "default",
     origin: "provider_otel",
     kind: "metric",
     type: "usage",
@@ -197,6 +208,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 4,
+    project: "internal-tools",
     origin: "agent_hook",
     kind: "log",
     type: "pretooluse",
@@ -213,6 +225,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 6,
+    project: "internal-tools",
     origin: "agent_hook",
     kind: "metric",
     type: "usage",
@@ -229,6 +242,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 9,
+    project: "platform",
     origin: "unknown",
     kind: "log",
     type: "agent_heartbeat",
@@ -242,6 +256,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 11,
+    project: "platform",
     origin: "gram_service",
     kind: "log",
     type: "chat_completion",
@@ -259,6 +274,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 13,
+    project: "default",
     origin: "agent_hook",
     kind: "log",
     type: "pretooluse",
@@ -275,6 +291,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 16,
+    project: "internal-tools",
     origin: "provider_api",
     kind: "metric",
     type: "usage",
@@ -291,6 +308,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 21,
+    project: "default",
     origin: "provider_otel",
     kind: "log",
     type: "tool_result",
@@ -306,6 +324,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 26,
+    project: "default",
     origin: "provider_otel",
     kind: "log",
     type: "unknown",
@@ -319,6 +338,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 31,
+    project: "platform",
     origin: "gram_service",
     kind: "log",
     type: "chat_resolution",
@@ -336,6 +356,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 35,
+    project: "default",
     origin: "agent_hook",
     kind: "log",
     type: "skill.activated",
@@ -350,6 +371,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 42,
+    project: "internal-tools",
     origin: "provider_otel",
     kind: "metric",
     type: "usage",
@@ -367,6 +389,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 47,
+    project: "default",
     origin: "gram_service",
     kind: "log",
     type: "resource_read",
@@ -382,6 +405,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 53,
+    project: "default",
     origin: "provider_otel",
     kind: "log",
     type: "user_prompt",
@@ -396,6 +420,7 @@ const FIXTURES: FixtureSpec[] = [
   },
   {
     minutesAgo: 58,
+    project: "internal-tools",
     origin: "agent_hook",
     kind: "log",
     type: "afteragentresponse",

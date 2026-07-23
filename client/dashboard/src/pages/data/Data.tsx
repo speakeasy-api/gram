@@ -11,6 +11,7 @@ import {
   evaluateQuality,
   eventUrn,
   EVENT_ORIGINS,
+  MOCK_PROJECTS,
   ORIGIN_LABELS,
   type DataEvent,
 } from "./data-events";
@@ -18,6 +19,13 @@ import { DataEventSheet } from "./DataEventSheet";
 import { DataFeedTable } from "./DataFeedTable";
 
 const DATA_FILTERS = defineFilters([
+  {
+    id: "project",
+    label: "Project",
+    kind: "multiselect",
+    pinned: true,
+    allLabel: "All",
+  },
   { id: "kind", label: "Kind", kind: "select", pinned: true, allLabel: "All" },
   {
     id: "origin",
@@ -30,6 +38,10 @@ const DATA_FILTERS = defineFilters([
 ]);
 
 const FILTER_OPTIONS: OptionsById = {
+  project: MOCK_PROJECTS.map((project) => ({
+    value: project,
+    label: project,
+  })),
   kind: [
     { value: "log", label: "Log" },
     { value: "metric", label: "Metric" },
@@ -48,7 +60,7 @@ const FILTER_OPTIONS: OptionsById = {
 function matchesSearch(event: DataEvent, search: string): boolean {
   if (search === "") return true;
   const haystack =
-    `${event.type} ${event.producer} ${event.body} ${eventUrn(event)}`.toLowerCase();
+    `${event.type} ${event.producer} ${event.project} ${event.body} ${eventUrn(event)}`.toLowerCase();
   return haystack.includes(search);
 }
 
@@ -61,19 +73,20 @@ function DataFeed(): JSX.Element {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const filters = useFilterState(DATA_FILTERS);
-  const { kind, origin, quality } = filters.values;
+  const { project, kind, origin, quality } = filters.values;
 
   const visibleEvents = useMemo(() => {
     const normalizedSearch = deferredSearch.trim().toLowerCase();
 
     return events.filter((event) => {
       if (!matchesSearch(event, normalizedSearch)) return false;
+      if (project.length > 0 && !project.includes(event.project)) return false;
       if (kind && event.kind !== kind) return false;
       if (origin.length > 0 && !origin.includes(event.origin)) return false;
       if (quality && evaluateQuality(event).grade !== quality) return false;
       return true;
     });
-  }, [events, deferredSearch, kind, origin, quality]);
+  }, [events, deferredSearch, project, kind, origin, quality]);
 
   return (
     <div className="space-y-4">
@@ -114,11 +127,11 @@ export function DataRoot(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <Page.Section>
-          <Page.Section.Title stage="preview">Data</Page.Section.Title>
+          <Page.Section.Title stage="preview">Event Feed</Page.Section.Title>
           <Page.Section.Description>
-            Every event ingested into this project, newest first. Narrow by
-            physical layout — origin, kind, and type — to debug ingest and spot
-            data-quality gaps.
+            Every event ingested across all projects in your organization,
+            newest first. Narrow by physical layout — origin, kind, and type —
+            to debug ingest and spot data-quality gaps.
           </Page.Section.Description>
           <Page.Section.Body>
             <DataFeed />

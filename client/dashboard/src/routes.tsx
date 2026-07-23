@@ -32,6 +32,7 @@ import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import { LogsRoot } from "./pages/logs/Logs";
 import { DataRoot } from "./pages/data/Data";
+import { RedactionRules } from "./pages/data/RedactionRules";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
@@ -511,13 +512,6 @@ const ROUTE_STRUCTURE = {
     icon: "logs",
     component: LogsRoot,
   },
-  data: {
-    title: "Data",
-    url: "data",
-    icon: "database",
-    stage: "preview",
-    component: DataRoot,
-  },
   agentSessions: {
     title: "Agent Sessions",
     url: "agent-sessions",
@@ -913,6 +907,20 @@ const ORG_ROUTE_STRUCTURE = {
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,
+  },
+  data: {
+    title: "Event Feed",
+    url: "data",
+    icon: "database",
+    stage: "preview",
+    component: DataRoot,
+  },
+  dataRedactions: {
+    title: "Redaction Rules",
+    url: "data/redaction-rules",
+    icon: "eye-off",
+    stage: "preview",
+    component: RedactionRules,
   },
   remoteIdentityProviders: {
     title: "Remote Identity Providers",

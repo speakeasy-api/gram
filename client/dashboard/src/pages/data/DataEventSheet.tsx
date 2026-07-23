@@ -168,7 +168,7 @@ export function DataEventSheet({
                 <OriginBadge origin={event.origin} />
               </Stack>
               <SheetDescription>
-                Observed from {event.producer} —{" "}
+                Observed from {event.producer} in {event.project} —{" "}
                 {dateTimeFormatters.logTimestamp.format(event.timestamp)}
               </SheetDescription>
               <Stack direction="horizontal" align="center" gap={1}>
