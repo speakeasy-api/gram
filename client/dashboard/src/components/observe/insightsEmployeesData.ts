@@ -69,6 +69,59 @@ function mostRecentAccount(
   return latest;
 }
 
+// dedupeSummaries returns the distinct, present summaries among the candidates.
+// A member can match the same summary by both id and email, and can match two
+// different summaries when their telemetry splits across identity keys.
+function dedupeSummaries(
+  candidates: (UserSummary | undefined)[],
+): UserSummary[] {
+  const out: UserSummary[] = [];
+  for (const summary of candidates) {
+    if (summary && !out.includes(summary)) out.push(summary);
+  }
+  return out;
+}
+
+// mostRecentSummary picks the matched summary with the latest activity, used for
+// a member's displayed last-activity when their usage spans multiple summaries.
+function mostRecentSummary(summaries: UserSummary[]): UserSummary | undefined {
+  let latest: UserSummary | undefined;
+  for (const summary of summaries) {
+    if (
+      !latest ||
+      BigInt(summary.lastSeenUnixNano) > BigInt(latest.lastSeenUnixNano)
+    ) {
+      latest = summary;
+    }
+  }
+  return latest;
+}
+
+// mergeAccounts unions the linked accounts across a member's matched summaries,
+// deduping by (provider, email) and keeping the most-recently-active instance.
+function mergeAccounts(summaries: UserSummary[]): EmployeeAccount[] {
+  const byKey = new Map<string, EmployeeAccount>();
+  for (const summary of summaries) {
+    for (const account of accountsFromSummary(summary)) {
+      const key = JSON.stringify([
+        account.provider,
+        account.email.toLowerCase(),
+      ]);
+      const existing = byKey.get(key);
+      if (
+        !existing ||
+        (account.lastSeenUnixNano != null &&
+          (existing.lastSeenUnixNano == null ||
+            BigInt(account.lastSeenUnixNano) >
+              BigInt(existing.lastSeenUnixNano)))
+      ) {
+        byKey.set(key, account);
+      }
+    }
+  }
+  return [...byKey.values()];
+}
+
 // Unattributed identities are usage rows that matched no org member; they are
 // marked with a synthetic "usage:"-prefixed id by buildEmployees().
 export function isUnattributedEmployee(employee: Employee): boolean {
@@ -99,22 +152,36 @@ export function buildEmployees(
   const matchedSummaryIds = new Set<string>();
 
   const employees = members.map((member) => {
-    const summary =
-      summaryByUserId.get(member.id) ??
-      summaryByEmail.get(member.email.toLowerCase());
-    if (summary) {
+    // A member's telemetry can split across identity keys: their opaque user_id
+    // (e.g. Gram MCP tool calls that carry no email) and their email
+    // (Claude/Cursor usage). Match BOTH and merge — otherwise a token-less,
+    // email-less id summary shadows the member's token-bearing email summary,
+    // showing them enrolled with 0 tokens while their real usage is orphaned
+    // into the unattributed list (DNO-618; regression of the DNO-468 merge).
+    const matched = dedupeSummaries([
+      summaryByUserId.get(member.id),
+      summaryByEmail.get(member.email.toLowerCase()),
+    ]);
+    for (const summary of matched) {
       matchedSummaryIds.add(summary.userId);
     }
-    const tokenCount =
-      (summary?.totalInputTokens ?? 0) + (summary?.totalOutputTokens ?? 0);
     const status: EmployeeStatus =
-      summary != null ? "enrolled" : "not_enrolled";
+      matched.length > 0 ? "enrolled" : "not_enrolled";
+    const tokenCount = matched.reduce(
+      (sum, summary) =>
+        sum +
+        (summary.totalInputTokens ?? 0) +
+        (summary.totalOutputTokens ?? 0),
+      0,
+    );
+    // Display fields (last activity) come from the most-recent matched summary.
+    const primary = mostRecentSummary(matched);
     const role =
       member.roleIds
         .map((id) => roleNameById.get(id))
         .filter(Boolean)
         .join(", ") || "Unknown";
-    const accounts = accountsFromSummary(summary);
+    const accounts = mergeAccounts(matched);
 
     return {
       id: member.id,
@@ -124,11 +191,11 @@ export function buildEmployees(
       status,
       tokenCount,
       photoUrl: member.photoUrl,
-      lastActivityTimestamp: summary
-        ? Number(BigInt(summary.lastSeenUnixNano) / 1_000_000n)
+      lastActivityTimestamp: primary
+        ? Number(BigInt(primary.lastSeenUnixNano) / 1_000_000n)
         : null,
-      lastActivity: summary
-        ? formatUnixNano(summary.lastSeenUnixNano)
+      lastActivity: primary
+        ? formatUnixNano(primary.lastSeenUnixNano)
         : "No activity found",
       accounts,
       mostRecentAccount: mostRecentAccount(accounts),
