@@ -1,5 +1,4 @@
 import { CopyButton } from "@/components/ui/copy-button";
-import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetContent,
@@ -10,7 +9,13 @@ import {
 import { Type } from "@/components/ui/type";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { CheckIcon, XIcon } from "lucide-react";
+import {
+  CodeSnippet,
+  Grid,
+  Icon,
+  Separator,
+  Stack,
+} from "@speakeasy-api/moonshine";
 import {
   evaluateQuality,
   eventUrn,
@@ -50,11 +55,11 @@ function SectionTitle({ children }: { children: string }): JSX.Element {
 
 function QualitySection({ quality }: { quality: EventQuality }): JSX.Element {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
+    <Stack gap={2}>
+      <Stack direction="horizontal" justify="space-between" align="center">
         <SectionTitle>Data quality</SectionTitle>
         <QualityPill quality={quality} />
-      </div>
+      </Stack>
       {quality.grade === "unclassified" && (
         <Type muted small>
           No ingest rule recognized this event, so it cannot be attributed to a
@@ -64,11 +69,13 @@ function QualitySection({ quality }: { quality: EventQuality }): JSX.Element {
       <ul className="space-y-1">
         {quality.checks.map((check) => (
           <li key={check.key} className="flex items-center gap-2">
-            {check.present ? (
-              <CheckIcon className="text-success size-4 shrink-0" />
-            ) : (
-              <XIcon className="text-destructive size-4 shrink-0" />
-            )}
+            <Icon
+              name={check.present ? "check" : "x"}
+              className={cn(
+                "size-4 shrink-0",
+                check.present ? "text-success" : "text-destructive",
+              )}
+            />
             <Type small className={cn(!check.present && "text-destructive")}>
               {check.label}
             </Type>
@@ -78,7 +85,7 @@ function QualitySection({ quality }: { quality: EventQuality }): JSX.Element {
           </li>
         ))}
       </ul>
-    </div>
+    </Stack>
   );
 }
 
@@ -89,54 +96,51 @@ function MeasurementPanel({ event }: { event: DataEvent }): JSX.Element {
   );
 
   return (
-    <div className="space-y-2">
+    <Stack gap={2}>
       <SectionTitle>Measurement</SectionTitle>
       {measures.length === 0 && (
         <Type muted small>
           This metric event reported no recognized measures.
         </Type>
       )}
-      <div className="grid grid-cols-2 gap-2">
+      <Grid columns={2} gap={2}>
         {measures.map((measure) => (
-          <div key={measure.key} className="rounded-md border p-3">
-            <Type muted small className="block">
-              {measure.label}
-            </Type>
-            <Type className="font-mono font-medium">
-              {formatMeasure(event.attributes[measure.key]!)}
-            </Type>
-          </div>
+          <Grid.Item key={measure.key}>
+            <div className="border-border rounded-md border p-3">
+              <Type muted small className="block">
+                {measure.label}
+              </Type>
+              <Type className="font-mono font-medium">
+                {formatMeasure(event.attributes[measure.key]!)}
+              </Type>
+            </div>
+          </Grid.Item>
         ))}
-      </div>
-    </div>
+      </Grid>
+    </Stack>
   );
 }
 
 /** Log events render their body verbatim, the way the producer sent it. */
 function LogBodyPanel({ event }: { event: DataEvent }): JSX.Element {
   return (
-    <div className="space-y-2">
+    <Stack gap={2}>
       <SectionTitle>Body</SectionTitle>
-      <pre className="bg-muted overflow-x-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap">
-        {event.body}
-      </pre>
-    </div>
+      <CodeSnippet code={event.body} language="text" copyable={false} />
+    </Stack>
   );
 }
 
 function RawAttributes({ event }: { event: DataEvent }): JSX.Element {
-  const json = JSON.stringify(event.attributes, null, 2);
-
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <SectionTitle>Attributes</SectionTitle>
-        <CopyButton text={json} size="inline" tooltip="Copy attributes" />
-      </div>
-      <pre className="bg-muted max-h-80 overflow-auto rounded-md border p-3 font-mono text-xs">
-        {json}
-      </pre>
-    </div>
+    <Stack gap={2}>
+      <SectionTitle>Attributes</SectionTitle>
+      <CodeSnippet
+        code={JSON.stringify(event.attributes, null, 2)}
+        language="json"
+        copyable
+      />
+    </Stack>
   );
 }
 
@@ -158,16 +162,16 @@ export function DataEventSheet({
         {event && (
           <>
             <SheetHeader>
-              <div className="flex items-center gap-2">
+              <Stack direction="horizontal" align="center" gap={2}>
                 <SheetTitle className="font-mono">{event.type}</SheetTitle>
                 <KindBadge kind={event.kind} />
                 <OriginBadge origin={event.origin} />
-              </div>
+              </Stack>
               <SheetDescription>
                 Observed from {event.producer} —{" "}
                 {dateTimeFormatters.logTimestamp.format(event.timestamp)}
               </SheetDescription>
-              <div className="flex items-center gap-1">
+              <Stack direction="horizontal" align="center" gap={1}>
                 <Type muted small className="truncate font-mono">
                   {eventUrn(event)}
                 </Type>
@@ -176,9 +180,9 @@ export function DataEventSheet({
                   size="inline"
                   tooltip="Copy event URN"
                 />
-              </div>
+              </Stack>
             </SheetHeader>
-            <div className="space-y-6 px-4 pb-8">
+            <Stack gap={6} className="px-4 pb-8">
               <QualitySection quality={evaluateQuality(event)} />
               <Separator />
               {event.kind === "metric" ? (
@@ -187,7 +191,7 @@ export function DataEventSheet({
                 <LogBodyPanel event={event} />
               )}
               <RawAttributes event={event} />
-            </div>
+            </Stack>
           </>
         )}
       </SheetContent>

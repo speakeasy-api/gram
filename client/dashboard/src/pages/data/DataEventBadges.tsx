@@ -1,4 +1,5 @@
-import { Badge } from "@/components/ui/badge";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Badge } from "@speakeasy-api/moonshine";
 import {
   type DataEventKind,
   type DataEventOrigin,
@@ -8,12 +9,8 @@ import {
 
 export function KindBadge({ kind }: { kind: DataEventKind }): JSX.Element {
   return (
-    <Badge
-      variant={kind === "metric" ? "secondary" : "outline"}
-      size="sm"
-      className="font-mono uppercase"
-    >
-      {kind}
+    <Badge size="sm" variant={kind === "metric" ? "information" : "neutral"}>
+      <Badge.Text>{kind}</Badge.Text>
     </Badge>
   );
 }
@@ -24,13 +21,15 @@ export function OriginBadge({
   origin: DataEventOrigin;
 }): JSX.Element {
   return (
-    <Badge
-      variant={origin === "unknown" ? "destructive" : "outline"}
-      size="sm"
-      tooltip="Which channel observed this event"
-    >
-      {ORIGIN_LABELS[origin]}
-    </Badge>
+    <SimpleTooltip tooltip="Which channel observed this event">
+      <Badge
+        size="sm"
+        variant={origin === "unknown" ? "destructive" : "neutral"}
+        background={origin === "unknown"}
+      >
+        <Badge.Text>{ORIGIN_LABELS[origin]}</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
   );
 }
 
@@ -45,35 +44,42 @@ function qualityTooltip(quality: EventQuality): string {
   return `Missing: ${missing}`;
 }
 
+function qualityVariant(
+  quality: EventQuality,
+): "success" | "warning" | "destructive" {
+  switch (quality.grade) {
+    case "complete":
+      return "success";
+    case "partial":
+      return "warning";
+    case "unclassified":
+      return "destructive";
+  }
+}
+
+function qualityLabel(quality: EventQuality): string {
+  const presentCount = quality.checks.length - quality.missing.length;
+
+  switch (quality.grade) {
+    case "complete":
+      return "Complete";
+    case "partial":
+      return `${presentCount}/${quality.checks.length} attrs`;
+    case "unclassified":
+      return "Unclassified";
+  }
+}
+
 export function QualityPill({
   quality,
 }: {
   quality: EventQuality;
 }): JSX.Element {
-  const presentCount = quality.checks.length - quality.missing.length;
-
-  switch (quality.grade) {
-    case "complete":
-      return (
-        <Badge variant="outline" size="sm" tooltip={qualityTooltip(quality)}>
-          Complete
-        </Badge>
-      );
-    case "partial":
-      return (
-        <Badge variant="warning" size="sm" tooltip={qualityTooltip(quality)}>
-          {presentCount}/{quality.checks.length} attrs
-        </Badge>
-      );
-    case "unclassified":
-      return (
-        <Badge
-          variant="destructive"
-          size="sm"
-          tooltip={qualityTooltip(quality)}
-        >
-          Unclassified
-        </Badge>
-      );
-  }
+  return (
+    <SimpleTooltip tooltip={qualityTooltip(quality)}>
+      <Badge size="sm" variant={qualityVariant(quality)} background>
+        <Badge.Text>{qualityLabel(quality)}</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
+  );
 }
