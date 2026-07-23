@@ -51,7 +51,7 @@ type ActionFilter = "all" | RuleAction;
 type BudgetTab = "rules" | "events";
 
 /** The Budgets surface, rendered as a tab on the Costs page (see
- *  pages/costs/Costs.tsx, which owns the `gram-budgets-page` flag gate and the
+ *  pages/costs/Costs.tsx, which owns the `gram-budgets` flag gate and the
  *  org:admin scope guard around this content). */
 export function BudgetsContent(): JSX.Element {
   const queryClient = useQueryClient();

@@ -136,15 +136,16 @@ function TabbedCostsPage({
 //   • `gram-new-costs-page` toggles the new taxonomy explorer on; off (the
 //     default) keeps the existing agents/costs page so we can roll out and
 //     roll back per org/user.
-//   • `gram-budgets-page` adds the Budgets tab beside the cost view; off (the
-//     default) renders the cost view alone with no tab strip, so budgets can
-//     be released to select users only.
+//   • `gram-budgets` adds the Budgets tab beside the cost view; off (the
+//     default) renders the cost view alone with no tab strip. The same key
+//     gates spend-rule enforcement server-side (the background evaluator and
+//     hence the hooks spend gate), so an org sees the page and is subject to
+//     enforcement together, or neither.
 export default function Costs(): JSX.Element {
   const telemetry = useTelemetry();
   const newCostsEnabled =
     telemetry.isFeatureEnabled("gram-new-costs-page") ?? false;
-  const budgetsEnabled =
-    telemetry.isFeatureEnabled("gram-budgets-page") ?? false;
+  const budgetsEnabled = telemetry.isFeatureEnabled("gram-budgets") ?? false;
 
   if (budgetsEnabled) {
     return <TabbedCostsPage newCostsEnabled={newCostsEnabled} />;

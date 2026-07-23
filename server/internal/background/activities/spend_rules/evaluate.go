@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
@@ -57,6 +59,7 @@ type EvaluateOrg struct {
 	chQueries *chrepo.Queries
 	cacheImpl cache.Cache
 	celEng    *celenv.Engine
+	flags     feature.Provider
 }
 
 func NewEvaluateOrg(
@@ -65,6 +68,7 @@ func NewEvaluateOrg(
 	db *pgxpool.Pool,
 	chQueries *chrepo.Queries,
 	cacheImpl cache.Cache,
+	flags feature.Provider,
 ) *EvaluateOrg {
 	logger = logger.With(attr.SlogComponent("spend_rules_evaluate_org"))
 
@@ -83,6 +87,7 @@ func NewEvaluateOrg(
 		chQueries: chQueries,
 		cacheImpl: cacheImpl,
 		celEng:    celEng,
+		flags:     flags,
 	}
 }
 
@@ -101,6 +106,18 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 
 	logger := a.logger.With(attr.SlogOrganizationID(args.OrganizationID))
 	queries := spendrepo.New(a.db)
+
+	// The Budgets rollout flag (feature.FlagBudgets) gates enforcement org by
+	// org — the same key hides the dashboard surface. When the flag is off
+	// the org's rules stay dormant: no warning/breach events are recorded and
+	// the gate snapshot is cleared, so an already-open circuit lifts on this
+	// cycle instead of blocking users on a feature they cannot see.
+	if !a.budgetsEnabled(ctx, logger, args.OrganizationID) {
+		if err := spendrules.WriteGateState(ctx, a.cacheImpl, args.OrganizationID, spendrules.GateState{Rules: nil, Actors: nil}); err != nil {
+			return fmt.Errorf("clear spend gate snapshot: %w", err)
+		}
+		return nil
+	}
 
 	rules, err := queries.ListEnabledSpendRules(ctx, args.OrganizationID)
 	if err != nil {
@@ -152,6 +169,37 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 	}
 
 	return nil
+}
+
+// budgetsEnabled reports whether the Budgets rollout flag is on for the
+// organization. The flag is targeted by PostHog organization group (org
+// slug), the same way the dashboard evaluates it, so the org slug is
+// forwarded as the group key. A nil provider or a failed lookup degrades to
+// disabled — enforcement stays off rather than blocking users on an
+// unresolved flag. (The PostHog provider itself returns enabled when PostHog
+// is disabled outright, e.g. in local development.)
+func (a *EvaluateOrg) budgetsEnabled(ctx context.Context, logger *slog.Logger, organizationID string) bool {
+	if a.flags == nil {
+		return false
+	}
+
+	var groups map[string]string
+	org, err := orgRepo.New(a.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		// Group targeting degrades to distinct-id-only evaluation; a flag
+		// released purely by org group will read as off for this org until
+		// the metadata lookup recovers.
+		logger.WarnContext(ctx, "resolve organization slug for budgets flag", attr.SlogError(err))
+	} else {
+		groups = feature.OrgProjectGroups(org.Slug, "")
+	}
+
+	on, err := a.flags.IsFlagEnabled(ctx, feature.FlagBudgets, organizationID, groups)
+	if err != nil {
+		logger.WarnContext(ctx, "budgets flag check failed; treating as disabled", attr.SlogError(err))
+		return false
+	}
+	return on
 }
 
 func (a *EvaluateOrg) evaluateRule(
