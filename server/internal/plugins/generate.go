@@ -486,6 +486,7 @@ var ClaudeObservabilityHookEvents = []string{
 // separately.
 var CursorObservabilityHookEvents = []string{
 	"beforeSubmitPrompt",
+	"sessionEnd",
 	"stop",
 	"afterAgentResponse",
 	"afterAgentThought",
@@ -1282,6 +1283,8 @@ func codexEventSnakeCase(event string) string {
 	switch event {
 	case "SessionStart":
 		return "session_start"
+	case "SessionEnd":
+		return "session_end"
 	case "PreToolUse":
 		return "pre_tool_use"
 	case "PermissionRequest":
@@ -1300,7 +1303,7 @@ func codexEventSnakeCase(event string) string {
 // computeCodexHookHash returns the sha256:hex trusted_hash that Codex expects
 // for a single hook entry. Codex's canonical JSON varies by event:
 //
-//   - SessionStart, PreToolUse, PermissionRequest, PostToolUse:
+//   - SessionStart, SessionEnd, PreToolUse, PermissionRequest, PostToolUse:
 //     sha256(canonical_json({event_name, hooks:[{async, command, timeout, type}], matcher:""}))
 //   - UserPromptSubmit, Stop:
 //     sha256(canonical_json({event_name, hooks:[{async, command, timeout, type}]}))
@@ -1343,10 +1346,13 @@ func computeCodexHookHash(event, command string) (string, error) {
 // so the hooks.json generator and the precomputed approvals must derive them
 // from this single source.
 func codexHookParams(event string) (timeoutSeconds int, async bool) {
-	async = event == "PostToolUse" || event == "Stop"
+	async = event == "PostToolUse" || event == "SessionEnd" || event == "Stop"
 	timeoutSeconds = 60
-	if event == "SessionStart" {
+	switch event {
+	case "SessionStart":
 		timeoutSeconds = 330
+	case "SessionEnd":
+		timeoutSeconds = 3
 	}
 	return timeoutSeconds, async
 }
@@ -1910,6 +1916,7 @@ type codexHookCommand struct {
 // PascalCase names and has a PermissionRequest event that Claude/Cursor lack.
 var CodexObservabilityHookEvents = []string{
 	"SessionStart",
+	"SessionEnd",
 	"PreToolUse",
 	"PermissionRequest",
 	"PostToolUse",

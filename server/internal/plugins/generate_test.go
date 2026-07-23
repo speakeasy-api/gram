@@ -986,10 +986,13 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		require.Len(t, groups, 1)
 		require.Len(t, groups[0].Hooks, 1)
 
-		async := event == "PostToolUse" || event == "Stop"
+		async := event == "PostToolUse" || event == "SessionEnd" || event == "Stop"
 		timeoutSeconds := 60
-		if event == "SessionStart" {
+		switch event {
+		case "SessionStart":
 			timeoutSeconds = 330
+		case "SessionEnd":
+			timeoutSeconds = 3
 		}
 		expectedSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}/speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
 		expectedWindowsSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}\speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
@@ -1023,6 +1026,27 @@ func TestComputeCodexHookApprovalsIncludesSingleSessionStartCommand(t *testing.T
 	require.Len(t, sessionStartApprovals, 1, "SessionStart has one bootstrap command to approve")
 	require.Equal(t, sessionStartPrefix+"0", sessionStartApprovals[0].StateKey)
 	require.NotEmpty(t, sessionStartApprovals[0].TrustedHash)
+}
+
+func TestComputeCodexHookApprovalsIncludesSessionEndTrustState(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
+	plugin := CodexObservabilitySlug(cfg)
+
+	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	require.NoError(t, err)
+
+	prefix := plugin + "@" + marketplace + ":hooks/hooks.json:session_end:0:"
+	var sessionEndApprovals []codexHookApproval
+	for _, approval := range approvals {
+		if strings.HasPrefix(approval.StateKey, prefix) {
+			sessionEndApprovals = append(sessionEndApprovals, approval)
+		}
+	}
+	require.Len(t, sessionEndApprovals, 1)
+	require.Equal(t, prefix+"0", sessionEndApprovals[0].StateKey)
+	require.NotEmpty(t, sessionEndApprovals[0].TrustedHash)
 }
 
 // runCodexInstallScript executes the generated install script under an
