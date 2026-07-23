@@ -2357,7 +2357,7 @@ examples:
         application/json: {"content": "<value>", "id": "104f5927-f9aa-409a-86bf-44c0840df1ef"}
       responses:
         "200":
-          application/json: {"created_skill": true, "created_version": true, "skill": {"classification": "<value>", "created_at": "2024-08-08T21:51:24.554Z", "display_name": "Haven.Morar32", "id": "8efe7fe2-2883-4364-ac53-724a85f9e654", "name": "<value>", "project_id": "3905e984-9fa4-4329-b718-85f9ba073020", "seen_count": 115197, "source_kind": "<value>", "updated_at": "2025-12-03T10:35:10.200Z", "version_count": 945826}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2026-09-24T06:04:07.980Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "b0ac1a92-6523-4258-ae53-fed55482cfaf", "metadata": {"key": "<value>", "key1": "<value>"}, "raw_sha256": "<value>", "seen_count": 34366, "skill_id": "506b16a6-9645-4f91-923e-6eb8af1756c7", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
+          application/json: {"created_skill": true, "created_version": true, "skill": {"classification": "<value>", "created_at": "2024-08-08T21:51:24.554Z", "display_name": "Haven.Morar32", "has_valid_version": true, "id": "8efe7fe2-2883-4364-ac53-724a85f9e654", "name": "<value>", "project_id": "3905e984-9fa4-4329-b718-85f9ba073020", "seen_count": 115197, "source_kind": "<value>", "updated_at": "2025-12-03T10:35:10.200Z", "version_count": 945826}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2026-09-24T06:04:07.980Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "b0ac1a92-6523-4258-ae53-fed55482cfaf", "metadata": {"key": "<value>", "key1": "<value>"}, "raw_sha256": "<value>", "seen_count": 34366, "skill_id": "506b16a6-9645-4f91-923e-6eb8af1756c7", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -2978,7 +2978,7 @@ examples:
         application/json: {"content": "<value>"}
       responses:
         "200":
-          application/json: {"created_skill": true, "created_version": false, "skill": {"classification": "<value>", "created_at": "2024-01-13T21:05:53.029Z", "display_name": "Rogelio69", "id": "2e459553-2788-40d9-9e7f-cb880cd0af9b", "name": "<value>", "project_id": "ed4b5d13-e447-4362-b38c-56e022bbde92", "seen_count": 91660, "source_kind": "<value>", "updated_at": "2024-03-04T07:12:28.139Z", "version_count": 10884}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2024-02-08T17:49:00.730Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "6cc0e78a-6a20-4ed4-bfe0-3715423123bb", "metadata": {}, "raw_sha256": "<value>", "seen_count": 819902, "skill_id": "230cdb0e-343f-4b0b-b323-5520def4b85d", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
+          application/json: {"created_skill": true, "created_version": false, "skill": {"classification": "<value>", "created_at": "2024-01-13T21:05:53.029Z", "display_name": "Rogelio69", "has_valid_version": true, "id": "2e459553-2788-40d9-9e7f-cb880cd0af9b", "name": "<value>", "project_id": "ed4b5d13-e447-4362-b38c-56e022bbde92", "seen_count": 91660, "source_kind": "<value>", "updated_at": "2024-03-04T07:12:28.139Z", "version_count": 10884}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2024-02-08T17:49:00.730Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "6cc0e78a-6a20-4ed4-bfe0-3715423123bb", "metadata": {}, "raw_sha256": "<value>", "seen_count": 819902, "skill_id": "230cdb0e-343f-4b0b-b323-5520def4b85d", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -4339,7 +4339,7 @@ examples:
           id: "3600ba92-a629-4238-b118-2374ee531ccc"
       responses:
         "200":
-          application/json: {"adoption": {"activations_in_window": 193282, "distinct_hostnames": 385005, "window_end": "2024-02-17T23:16:40.002Z", "window_start": "2024-01-07T02:41:01.226Z"}, "assistant_count": 728301, "drift": {"active_machines": 675725, "drifted_machines": 591176, "indeterminate_machines": 139736, "on_target_machines": 674561, "target_state": "single", "target_version_ids": [], "window_end": "2025-09-18T07:28:40.508Z", "window_start": "2024-06-13T03:54:30.891Z"}, "sighting_timeline": [], "skill": {"classification": "<value>", "created_at": "2026-06-16T05:42:51.497Z", "display_name": "Adan_Parisian83", "id": "2f844f68-8ade-4021-927e-ce44754f24fc", "name": "<value>", "project_id": "cb362ec4-4029-48dd-8e7d-90248980a327", "seen_count": 500904, "source_kind": "<value>", "updated_at": "2024-08-06T14:28:41.275Z", "version_count": 278392}}
+          application/json: {"adoption": {"activations_in_window": 193282, "distinct_hostnames": 385005, "window_end": "2024-02-17T23:16:40.002Z", "window_start": "2024-01-07T02:41:01.226Z"}, "assistant_count": 728301, "drift": {"active_machines": 675725, "drifted_machines": 591176, "indeterminate_machines": 139736, "on_target_machines": 674561, "target_state": "single", "target_version_ids": [], "window_end": "2025-09-18T07:28:40.508Z", "window_start": "2024-06-13T03:54:30.891Z"}, "sighting_timeline": [], "skill": {"classification": "<value>", "created_at": "2026-06-16T05:42:51.497Z", "display_name": "Adan_Parisian83", "has_valid_version": true, "id": "2f844f68-8ade-4021-927e-ce44754f24fc", "name": "<value>", "project_id": "cb362ec4-4029-48dd-8e7d-90248980a327", "seen_count": 500904, "source_kind": "<value>", "updated_at": "2024-08-06T14:28:41.275Z", "version_count": 278392}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -5428,7 +5428,7 @@ examples:
           limit: 50
       responses:
         "200":
-          application/json: {"skills": [{"classification": "<value>", "created_at": "2025-12-01T14:04:14.090Z", "display_name": "Ted_Medhurst44", "id": "a629e09f-919e-4d88-8c05-cebb47ad66a9", "latest_version_id": "77214f80-c570-4870-b5c3-21f19e9fee9e", "name": "<value>", "project_id": "e35c924f-8388-4d55-a06c-1f5093920091", "seen_count": 708579, "source_kind": "<value>", "updated_at": "2025-12-29T20:39:39.995Z", "version_count": 665804}]}
+          application/json: {"skills": [{"classification": "<value>", "created_at": "2025-12-01T14:04:14.090Z", "display_name": "Ted_Medhurst44", "has_valid_version": false, "id": "a629e09f-919e-4d88-8c05-cebb47ad66a9", "latest_version_id": "77214f80-c570-4870-b5c3-21f19e9fee9e", "name": "<value>", "project_id": "e35c924f-8388-4d55-a06c-1f5093920091", "seen_count": 708579, "source_kind": "<value>", "updated_at": "2025-12-29T20:39:39.995Z", "version_count": 665804}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -6831,7 +6831,7 @@ examples:
         application/json: {"display_name": "Kennedy24", "id": "5ad39359-acba-4ff3-904b-3242f20370ba", "name": "<value>"}
       responses:
         "200":
-          application/json: {"classification": "<value>", "created_at": "2024-01-07T01:45:50.347Z", "display_name": "Norma83", "id": "773db674-64d7-4196-9645-07f32d236cfa", "name": "<value>", "project_id": "fbbefcde-8905-4f51-80f3-ee6b3bb662e6", "seen_count": 574354, "source_kind": "<value>", "updated_at": "2025-09-30T20:45:41.117Z", "version_count": 628989}
+          application/json: {"classification": "<value>", "created_at": "2024-01-07T01:45:50.347Z", "display_name": "Norma83", "has_valid_version": false, "id": "773db674-64d7-4196-9645-07f32d236cfa", "name": "<value>", "project_id": "fbbefcde-8905-4f51-80f3-ee6b3bb662e6", "seen_count": 574354, "source_kind": "<value>", "updated_at": "2025-09-30T20:45:41.117Z", "version_count": 628989}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

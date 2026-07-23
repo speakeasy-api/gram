@@ -115,6 +115,15 @@ func CaptureSkillContent(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 		}); err != nil {
 			return nil, fmt.Errorf("record captured skill version origin: %w", err)
 		}
+		// The captured version becomes the skill's current version, so the
+		// registry summary follows its manifest description — same step as the
+		// manual record-version flow.
+		skill, err = queries.SyncSkillSummary(ctx, repo.SyncSkillSummaryParams{
+			ProjectID: projectID, ID: skill.ID, Summary: conv.PtrToPGText(parsed.Description),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("sync captured skill summary: %w", err)
+		}
 	}
 
 	matches, err := queries.StoreSkillRawHashAlias(ctx, repo.StoreSkillRawHashAliasParams{

@@ -49,6 +49,7 @@ const skill = {
   sourceKind: "captured",
   classification: "custom",
   versionCount: 1,
+  hasValidVersion: true,
   seenCount: 2,
   createdAt: new Date("2026-01-01T00:00:00Z"),
   updatedAt: new Date("2026-01-01T00:00:00Z"),
