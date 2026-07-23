@@ -1,8 +1,10 @@
 package promptinjection_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"slices"
 	"testing"
 
@@ -199,6 +201,29 @@ func TestPromptInjectionScanner_BatchEngineFindings(t *testing.T) {
 	assert.Len(t, out[2], 1)
 	assert.Equal(t, userIDs, fc.lastReq.UserIDs)
 	assert.Equal(t, 1, fc.calls)
+}
+
+func TestPromptInjectionScanner_BatchWarnsOnNonparallelTrajectories(t *testing.T) {
+	t.Parallel()
+
+	fc := &fakeEngine{}
+	var logs bytes.Buffer
+	s := promptinjection.NewScanner(
+		slog.New(slog.NewTextHandler(&logs, nil)),
+		promptinjection.Classifier(fc.classify),
+	)
+	texts := []string{"one", "two"}
+	trajectories := []judgemessage.Trajectory{{
+		PriorUserRequest:       "first request",
+		RecentUntrustedContent: "",
+	}}
+
+	out, err := s.ScanBatch(t.Context(), texts, testOrgID, testProjectID, nil, mkMsgs(texts...), trajectories)
+	require.NoError(t, err)
+	require.Len(t, out, 2)
+	require.Len(t, fc.lastReq.Trajectories, 1)
+	require.Contains(t, logs.String(), "nonparallel trajectories")
+	require.Contains(t, logs.String(), "unmatched messages scan without trajectory context")
 }
 
 func TestPromptInjectionScanner_BatchEngineErrorEmitsNoFindings(t *testing.T) {

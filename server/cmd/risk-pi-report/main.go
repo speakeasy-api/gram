@@ -1149,7 +1149,7 @@ func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, r
 	}
 	temp := 0.0
 	messages := []or.ChatMessages{
-		or.CreateChatMessagesSystem(or.ChatSystemMessage{Role: or.ChatSystemMessageRoleSystem, Content: or.CreateChatSystemMessageContentStr(piopenrouter.SystemPrompt), Name: nil}),
+		piopenrouter.RedesignedSystemMessage(),
 		or.CreateChatMessagesUser(or.ChatUserMessage{Role: or.ChatUserMessageRoleUser, Content: or.CreateChatUserMessageContentStr(string(payload)), Name: nil}),
 	}
 
@@ -1187,7 +1187,7 @@ func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, r
 		return emptyTypedVerdict, observation
 	}
 	if !piopenrouter.ValidVerdict(verdict) {
-		observation.Err = fmt.Errorf("parse judge response: verdict vocabulary is invalid")
+		observation.Err = fmt.Errorf("parse judge response: typed verdict contract is invalid")
 		return emptyTypedVerdict, observation
 	}
 	return verdict, observation

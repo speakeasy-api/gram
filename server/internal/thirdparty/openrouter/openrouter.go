@@ -102,6 +102,7 @@ var allowList = map[string]bool{
 	"openai/gpt-5.3-codex":          true,
 	"openai/gpt-5.1":                true,
 	"openai/gpt-5":                  true,
+	"google/gemini-3.5-flash-lite":  true,
 	"google/gemini-3.5-flash":       true,
 	"google/gemini-3.1-pro-preview": true,
 	"google/gemini-3.1-flash-lite":  true,

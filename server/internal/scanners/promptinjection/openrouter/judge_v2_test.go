@@ -2,6 +2,7 @@ package openrouter
 
 import (
 	"context"
+	"encoding/json"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,6 +36,27 @@ func TestAggregateRequiresStrictMajorityAndCountsFailuresSafe(t *testing.T) {
 
 	oneOfOne := Aggregate([]Verdict{attack})
 	require.True(t, oneOfOne.IsInjection, "samples=1 is the rollback single-call predicate")
+}
+
+func TestValidVerdictRejectsCrossFieldContradictions(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, ValidVerdict(typedVerdict(DirectiveNone, TargetNone, false)))
+	require.True(t, ValidVerdict(typedVerdict(DirectiveInstructionOverride, TargetGuardedAgent, true)))
+	require.True(t, ValidVerdict(typedVerdict(DirectiveExternalExfiltration, TargetOtherContext, false)))
+
+	require.False(t, ValidVerdict(typedVerdict(DirectiveNone, TargetGuardedAgent, false)))
+	require.False(t, ValidVerdict(typedVerdict(DirectiveNone, TargetNone, true)))
+	require.False(t, ValidVerdict(typedVerdict(DirectiveInstructionOverride, TargetNone, true)))
+}
+
+func TestRedesignedSystemMessageUsesEphemeralCacheControl(t *testing.T) {
+	t.Parallel()
+
+	encoded, err := json.Marshal(RedesignedSystemMessage())
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"cache_control"`)
+	require.Contains(t, string(encoded), `"ephemeral"`)
 }
 
 func TestDetectionPredicateAndTargetDrivenSeverity(t *testing.T) {

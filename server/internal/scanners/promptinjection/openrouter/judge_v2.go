@@ -33,8 +33,8 @@ func IsInjection(verdict Verdict) bool {
 }
 
 // ValidVerdict rejects syntactically valid JSON that violates the typed
-// vocabulary. Production and the evaluator both treat it as a malformed safe
-// vote.
+// vocabulary or its cross-field invariants. Production and the evaluator both
+// treat it as a malformed safe vote.
 func ValidVerdict(verdict Verdict) bool {
 	switch verdict.DirectiveKind {
 	case DirectiveNone, DirectiveInstructionOverride, DirectiveGuardedSecretExtraction, DirectiveExternalExfiltration:
@@ -46,7 +46,10 @@ func ValidVerdict(verdict Verdict) bool {
 	default:
 		return false
 	}
-	return true
+	if verdict.DirectiveKind == DirectiveNone {
+		return verdict.Target == TargetNone && !verdict.Operational
+	}
+	return verdict.Target != TargetNone
 }
 
 // VerdictSchema is the strict evidence contract shared by production and the

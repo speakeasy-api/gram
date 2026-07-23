@@ -107,6 +107,12 @@ func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectI
 	if len(trajectorySets) > 0 {
 		trajectories = trajectorySets[0]
 	}
+	if len(trajectories) != 0 && len(trajectories) != len(texts) {
+		s.logger.WarnContext(ctx, "pi judge batch scan has nonparallel trajectories; unmatched messages scan without trajectory context",
+			attr.SlogError(errors.New("len(trajectories) != len(texts)")),
+			attr.SlogOrganizationID(orgID),
+		)
+	}
 	results, err := s.classifier(ctx, Request{Messages: msgs, Trajectories: trajectories, OrgID: orgID, ProjectID: projectID, UserIDs: userIDs})
 	if err != nil {
 		s.logger.WarnContext(ctx, "pi judge batch scan failed; dropping prompt injection findings",
