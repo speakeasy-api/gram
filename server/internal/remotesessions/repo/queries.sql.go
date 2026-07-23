@@ -72,8 +72,33 @@ FROM remote_session_clients
 WHERE remote_session_issuer_id = $1 AND deleted IS FALSE
 `
 
+// Every non-deleted client on an issuer, across every tenancy tier. Delete
+// guards use this as the fail-safe: a count that ignored rows the caller cannot
+// see would let a delete strand live clients.
 func (q *Queries) CountRemoteSessionClientsByIssuerID(ctx context.Context, remoteSessionIssuerID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countRemoteSessionClientsByIssuerID, remoteSessionIssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTenantRemoteSessionClientsByIssuerID = `-- name: CountTenantRemoteSessionClientsByIssuerID :one
+SELECT COUNT(*)
+FROM remote_session_clients
+WHERE remote_session_issuer_id = $1
+  AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
+  AND deleted IS FALSE
+`
+
+// Non-deleted clients on an issuer that belong to a tenant (a project or an
+// organization) rather than to the global partition. Subtracting this from
+// CountRemoteSessionClientsByIssuerID gives the global client count, which lets
+// the global issuer delete preflight tell a platform admin which of the
+// blocking clients they can actually see and remove. Without the split, delete
+// reports "delete the clients first" about tenant-owned clients that never
+// appear in ListGlobalRemoteSessionClientsByIssuerID.
+func (q *Queries) CountTenantRemoteSessionClientsByIssuerID(ctx context.Context, remoteSessionIssuerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countTenantRemoteSessionClientsByIssuerID, remoteSessionIssuerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -453,7 +478,7 @@ SET deleted_at = clock_timestamp()
 FROM remote_session_issuers AS i
 WHERE c.id = $1
   AND c.remote_session_issuer_id = i.id
-  AND i.organization_id = $2
+  AND (i.organization_id = $2 OR c.organization_id = $2)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
 RETURNING c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted
@@ -464,8 +489,10 @@ type DeleteOrganizationRemoteSessionClientParams struct {
 	OrganizationID pgtype.Text
 }
 
-// Soft-delete a client, scoped through its issuer's organization_id. The
-// handler cascades the client's remote_sessions via SoftDeleteRemoteSessionsByClientID.
+// Soft-delete a client; the handler cascades the client's remote_sessions via
+// SoftDeleteRemoteSessionsByClientID. See the ORG REACHABILITY note on
+// ListOrganizationRemoteSessionClientsByIssuerID. Note this deletes the CLIENT,
+// which the tenant owns, never the platform issuer it points at.
 func (q *Queries) DeleteOrganizationRemoteSessionClient(ctx context.Context, arg DeleteOrganizationRemoteSessionClientParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, deleteOrganizationRemoteSessionClient, arg.ID, arg.OrganizationID)
 	var i RemoteSessionClient
@@ -874,7 +901,7 @@ JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 WHERE s.id = $1
-  AND i.organization_id = $2
+  AND (i.organization_id = $2 OR c.organization_id = $2)
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
@@ -892,11 +919,12 @@ type GetOrganizationRemoteSessionByIDRow struct {
 	SubjectEmail       pgtype.Text
 }
 
-// Load a single active session by id, scoped through the client's issuer's
-// organization_id. Returns the full embedded session row (including the
-// encrypted refresh token, which the org-admin refresh handler needs but the
-// API view never exposes), the owning client's project_id for audit
-// attribution, and the resolved subject identity for the returned view.
+// Load a single active session by id. Returns the full embedded session row
+// (including the encrypted refresh token, which the org-admin refresh handler
+// needs but the API view never exposes), the owning client's project_id for
+// audit attribution, and the resolved subject identity for the returned view.
+// See the ORG REACHABILITY note on
+// ListOrganizationRemoteSessionClientsByIssuerID.
 func (q *Queries) GetOrganizationRemoteSessionByID(ctx context.Context, arg GetOrganizationRemoteSessionByIDParams) (GetOrganizationRemoteSessionByIDRow, error) {
 	row := q.db.QueryRow(ctx, getOrganizationRemoteSessionByID, arg.ID, arg.OrganizationID)
 	var i GetOrganizationRemoteSessionByIDRow
@@ -932,7 +960,7 @@ SELECT
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = $1
-  AND i.organization_id = $2
+  AND (i.organization_id = $2 OR c.organization_id = $2)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
 `
@@ -947,7 +975,9 @@ type GetOrganizationRemoteSessionClientByIDRow struct {
 	UserSessionIssuerIds []uuid.UUID
 }
 
-// A client in the org by id, scoped through its issuer's organization_id.
+// A client in the org by id. See the ORG REACHABILITY note on
+// ListOrganizationRemoteSessionClientsByIssuerID for why the org is reached
+// through either the issuer or the client.
 func (q *Queries) GetOrganizationRemoteSessionClientByID(ctx context.Context, arg GetOrganizationRemoteSessionClientByIDParams) (GetOrganizationRemoteSessionClientByIDRow, error) {
 	row := q.db.QueryRow(ctx, getOrganizationRemoteSessionClientByID, arg.ID, arg.OrganizationID)
 	var i GetOrganizationRemoteSessionClientByIDRow
@@ -978,18 +1008,31 @@ const getOrganizationRemoteSessionIssuerByID = `-- name: GetOrganizationRemoteSe
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
 WHERE id = $1
-  AND organization_id = $2
+  AND (
+    organization_id = $2
+    OR ($3::boolean AND project_id IS NULL AND organization_id IS NULL)
+  )
   AND deleted IS FALSE
 `
 
 type GetOrganizationRemoteSessionIssuerByIDParams struct {
 	ID             uuid.UUID
 	OrganizationID pgtype.Text
+	IncludeGlobal  bool
 }
 
-// Any issuer in the org by id — organizational or project-specific.
+// Any issuer in the org by id — organizational or project-specific — and, when
+// the caller opts in with include_global, any platform issuer.
+//
+// Callers that go on to MUTATE the issuer must pass include_global = false. A
+// tenant must never edit, move, delete or migrate a platform row. The write
+// queries are independently scoped and would refuse anyway, but opting the
+// pre-read out keeps the refusal a clean 404 instead of a confusing partial
+// success. Callers that report an issuer's blast radius must also pass false
+// unless their counting queries are org-scoped: the delete-preflight helpers
+// count clients and name MCP servers across all tenants.
 func (q *Queries) GetOrganizationRemoteSessionIssuerByID(ctx context.Context, arg GetOrganizationRemoteSessionIssuerByIDParams) (RemoteSessionIssuer, error) {
-	row := q.db.QueryRow(ctx, getOrganizationRemoteSessionIssuerByID, arg.ID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, getOrganizationRemoteSessionIssuerByID, arg.ID, arg.OrganizationID, arg.IncludeGlobal)
 	var i RemoteSessionIssuer
 	err := row.Scan(
 		&i.ID,
@@ -1272,20 +1315,37 @@ const getRemoteSessionIssuerByID = `-- name: GetRemoteSessionIssuerByID :one
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
 WHERE id = $1
-  AND (project_id = $2 OR (project_id IS NULL AND organization_id = $3))
+  AND (
+    project_id = $2
+    OR ($3::boolean AND project_id IS NULL AND organization_id = $4)
+    OR ($5::boolean AND project_id IS NULL AND organization_id IS NULL)
+  )
   AND deleted IS FALSE
 `
 
 type GetRemoteSessionIssuerByIDParams struct {
-	ID             uuid.UUID
-	ProjectID      uuid.NullUUID
-	OrganizationID pgtype.Text
+	ID                    uuid.UUID
+	ProjectID             uuid.NullUUID
+	IncludeOrganizational bool
+	OrganizationID        pgtype.Text
+	IncludeGlobal         bool
 }
 
-// Project-scoped read that also resolves organization-level issuers belonging
-// to the project's org, so projects inherit cross-project issuers.
+// Project-scoped read of the project's own issuers, plus each inherited tier the
+// caller opts in to. Each inherited arm is gated by its own boolean:
+// include_organizational resolves organization-level issuers belonging to the
+// project's org (so projects inherit cross-project issuers), and include_global
+// resolves platform issuers from the shared catalog. Both default off, so a
+// caller widens only by explicitly asking; organization_id is always passed
+// (the arm is off when include_organizational is false regardless of its value).
 func (q *Queries) GetRemoteSessionIssuerByID(ctx context.Context, arg GetRemoteSessionIssuerByIDParams) (RemoteSessionIssuer, error) {
-	row := q.db.QueryRow(ctx, getRemoteSessionIssuerByID, arg.ID, arg.ProjectID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, getRemoteSessionIssuerByID,
+		arg.ID,
+		arg.ProjectID,
+		arg.IncludeOrganizational,
+		arg.OrganizationID,
+		arg.IncludeGlobal,
+	)
 	var i RemoteSessionIssuer
 	err := row.Scan(
 		&i.ID,
@@ -1760,7 +1820,7 @@ SELECT
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.remote_session_issuer_id = $1
-  AND i.organization_id = $2
+  AND (i.organization_id = $2 OR c.organization_id = $2)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   AND ($3::uuid IS NULL OR c.id < $3::uuid)
@@ -1789,6 +1849,25 @@ type ListOrganizationRemoteSessionClientsByIssuerIDRow struct {
 // attachments. The active_session_count counts non-deleted remote_sessions
 // minted against the client, matching CountActiveRemoteSessionsByClientID and
 // the delete preflight.
+//
+// ORG REACHABILITY (this predicate is repeated across every org-admin client
+// and session query; change them together):
+//
+//	(i.organization_id = @organization_id OR c.organization_id = @organization_id)
+//
+// Reaching the org through the ISSUER alone was sufficient while every issuer a
+// tenant could attach to carried an organization_id. Platform issuers do not —
+// their organization_id is NULL by definition — so an issuer-only predicate
+// makes every tenant client on a platform issuer unreachable: not listable,
+// fetchable, patchable, deletable, and its sessions neither viewable nor
+// revocable. That is write-only state, so the client's own organization_id is
+// accepted as an alternative path to the same org.
+//
+// The arm is additive on purpose. Every row reachable before is still reachable
+// on the issuer arm regardless of whether organization_id was ever backfilled
+// on older client rows, so this cannot silently narrow a result or undercount.
+// Global clients (project_id and organization_id both NULL) match neither arm
+// and stay correctly invisible to tenants; they are platform-admin owned.
 func (q *Queries) ListOrganizationRemoteSessionClientsByIssuerID(ctx context.Context, arg ListOrganizationRemoteSessionClientsByIssuerIDParams) ([]ListOrganizationRemoteSessionClientsByIssuerIDRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationRemoteSessionClientsByIssuerID,
 		arg.RemoteSessionIssuerID,
@@ -1843,19 +1922,25 @@ SELECT
     (
         SELECT COUNT(*)
         FROM remote_session_clients AS c
-        WHERE c.remote_session_issuer_id = i.id AND c.deleted IS FALSE
+        WHERE c.remote_session_issuer_id = i.id
+          AND (i.organization_id = $1 OR c.organization_id = $1)
+          AND c.deleted IS FALSE
     )::bigint AS client_count
 FROM remote_session_issuers AS i
 LEFT JOIN projects AS p ON p.id = i.project_id
-WHERE i.organization_id = $1
+WHERE (
+    i.organization_id = $1
+    OR ($2::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
+  )
   AND i.deleted IS FALSE
-  AND ($2::uuid IS NULL OR i.id < $2::uuid)
+  AND ($3::uuid IS NULL OR i.id < $3::uuid)
 ORDER BY i.id DESC
-LIMIT $3
+LIMIT $4
 `
 
 type ListOrganizationRemoteSessionIssuersParams struct {
 	OrganizationID pgtype.Text
+	IncludeGlobal  bool
 	Cursor         uuid.NullUUID
 	LimitValue     int32
 }
@@ -1872,11 +1957,30 @@ type ListOrganizationRemoteSessionIssuersRow struct {
 // project-specific rows); client/session queries reach the org through their
 // issuer, the sole cross-tenant guard since these endpoints carry no project
 // header.
-// All issuers in the org (organizational and project-specific), each with its
-// associated non-deleted client count and, for project-specific issuers, the
-// owning project name.
+// All issuers in the org (organizational and project-specific) and — when the
+// caller opts in with include_global — platform issuers from the shared
+// catalog, each with its associated non-deleted client count and, for
+// project-specific issuers, the owning project name.
+//
+// client_count mirrors the ORG REACHABILITY predicate used by the client
+// queries: (i.organization_id = @org OR c.organization_id = @org). For an
+// org-owned issuer the issuer arm is true, so every client on it counts
+// regardless of whether the client row's organization_id was backfilled (an
+// unscoped count for org rows, which is correct — they can only carry that org's
+// clients). For a platform issuer the issuer arm is false, so the client arm
+// restricts the count to the caller's own clients; other tenants' clients and
+// global clients on the shared issuer are excluded. It used to scope on the
+// client arm alone, which undercounts an org issuer's pre-backfill clients.
+//
+// See ListRemoteSessionIssuersByProjectID for the slug-precedence caveat that
+// applies to any listing spanning more than one tier.
 func (q *Queries) ListOrganizationRemoteSessionIssuers(ctx context.Context, arg ListOrganizationRemoteSessionIssuersParams) ([]ListOrganizationRemoteSessionIssuersRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationRemoteSessionIssuers, arg.OrganizationID, arg.Cursor, arg.LimitValue)
+	rows, err := q.db.Query(ctx, listOrganizationRemoteSessionIssuers,
+		arg.OrganizationID,
+		arg.IncludeGlobal,
+		arg.Cursor,
+		arg.LimitValue,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1933,7 +2037,7 @@ JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 WHERE s.remote_session_client_id = $1
-  AND i.organization_id = $2
+  AND (i.organization_id = $2 OR c.organization_id = $2)
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
@@ -1955,8 +2059,8 @@ type ListOrganizationRemoteSessionsByClientIDRow struct {
 	SubjectEmail       pgtype.Text
 }
 
-// Sessions minted against a client, scoped through the client's issuer's
-// organization_id.
+// Sessions minted against a client. See the ORG REACHABILITY note on
+// ListOrganizationRemoteSessionClientsByIssuerID.
 func (q *Queries) ListOrganizationRemoteSessionsByClientID(ctx context.Context, arg ListOrganizationRemoteSessionsByClientIDParams) ([]ListOrganizationRemoteSessionsByClientIDRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationRemoteSessionsByClientID,
 		arg.RemoteSessionClientID,
@@ -2263,26 +2367,45 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 const listRemoteSessionIssuersByProjectID = `-- name: ListRemoteSessionIssuersByProjectID :many
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
-WHERE (project_id = $1 OR (project_id IS NULL AND organization_id = $2))
+WHERE (
+    project_id = $1
+    OR ($2::boolean AND project_id IS NULL AND organization_id = $3)
+    OR ($4::boolean AND project_id IS NULL AND organization_id IS NULL)
+  )
   AND deleted IS FALSE
-  AND ($3::uuid IS NULL OR id < $3::uuid)
+  AND ($5::uuid IS NULL OR id < $5::uuid)
 ORDER BY id DESC
-LIMIT $4
+LIMIT $6
 `
 
 type ListRemoteSessionIssuersByProjectIDParams struct {
-	ProjectID      uuid.NullUUID
-	OrganizationID pgtype.Text
-	Cursor         uuid.NullUUID
-	LimitValue     int32
+	ProjectID             uuid.NullUUID
+	IncludeOrganizational bool
+	OrganizationID        pgtype.Text
+	IncludeGlobal         bool
+	Cursor                uuid.NullUUID
+	LimitValue            int32
 }
 
-// Lists the project's own issuers plus organization-level issuers inherited
-// from the project's org.
+// Lists the project's own issuers plus each inherited tier the caller opts in
+// to, gated by its own boolean: include_organizational for organization-level
+// issuers inherited from the project's org, include_global for platform issuers
+// from the shared catalog. Both default off; organization_id is always passed
+// (the arm is off when include_organizational is false regardless of its value).
+//
+// Slugs are unique per (project_id, slug) and, separately, across the global
+// partition; the organization tier has no slug uniqueness constraint at all. So
+// this listing can legitimately return several rows sharing a slug. Resolution
+// precedence is project > organization > platform; consumers that pick a single
+// issuer by slug must apply it explicitly rather than relying on row order,
+// which is by descending uuidv7 (creation time) and therefore says nothing
+// about tier.
 func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg ListRemoteSessionIssuersByProjectIDParams) ([]RemoteSessionIssuer, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionIssuersByProjectID,
 		arg.ProjectID,
+		arg.IncludeOrganizational,
 		arg.OrganizationID,
+		arg.IncludeGlobal,
 		arg.Cursor,
 		arg.LimitValue,
 	)
@@ -2595,7 +2718,7 @@ FROM remote_session_clients AS c, remote_session_issuers AS i
 WHERE s.id = $1
   AND s.remote_session_client_id = c.id
   AND c.remote_session_issuer_id = i.id
-  AND i.organization_id = $2
+  AND (i.organization_id = $2 OR c.organization_id = $2)
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
@@ -2624,9 +2747,10 @@ type RevokeOrganizationRemoteSessionRow struct {
 	ClientProjectID       uuid.NullUUID
 }
 
-// Soft-delete a single session, scoped through the client's issuer's
-// organization_id. Returns the owning client's project_id so the handler can
-// attribute the audit event to the right project (NULL for org-level issuers).
+// Soft-delete a single session. Returns the owning client's project_id so the
+// handler can attribute the audit event to the right project (NULL for
+// organization-level clients). See the ORG REACHABILITY note on
+// ListOrganizationRemoteSessionClientsByIssuerID.
 func (q *Queries) RevokeOrganizationRemoteSession(ctx context.Context, arg RevokeOrganizationRemoteSessionParams) (RevokeOrganizationRemoteSessionRow, error) {
 	row := q.db.QueryRow(ctx, revokeOrganizationRemoteSession, arg.ID, arg.OrganizationID)
 	var i RevokeOrganizationRemoteSessionRow
@@ -2989,7 +3113,7 @@ SET
 FROM remote_session_issuers AS i
 WHERE c.id = $5
   AND c.remote_session_issuer_id = i.id
-  AND i.organization_id = $6
+  AND (i.organization_id = $6 OR c.organization_id = $6)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
 RETURNING c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted
@@ -3004,9 +3128,11 @@ type UpdateOrganizationRemoteSessionClientParams struct {
 	OrganizationID          pgtype.Text
 }
 
-// Patch a client's fields, scoped through its issuer's organization_id. The
-// handler encrypts a rotated client_secret before passing it as
-// client_secret_encrypted; an omitted narg keeps the existing secret.
+// Patch a client's fields. The handler encrypts a rotated client_secret before
+// passing it as client_secret_encrypted; an omitted narg keeps the existing
+// secret. See the ORG REACHABILITY note on
+// ListOrganizationRemoteSessionClientsByIssuerID. Note this mutates the CLIENT,
+// which the tenant owns, never the platform issuer it points at.
 func (q *Queries) UpdateOrganizationRemoteSessionClient(ctx context.Context, arg UpdateOrganizationRemoteSessionClientParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, updateOrganizationRemoteSessionClient,
 		arg.ClientSecretEncrypted,

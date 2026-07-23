@@ -334,10 +334,23 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 
 	txRepo := repo.New(dbtx)
 
+	// Take the advisory lock BEFORE the FOR UPDATE row lock below. Tenant client
+	// creation acquires the advisory lock first and then locks the issuer row via
+	// its client insert's FK KEY SHARE. Acquiring the row lock first here would
+	// invert that order and deadlock: this delete would hold the issuer row and
+	// wait for the advisory lock while a concurrent create holds the advisory lock
+	// and waits for the row. Same order on both paths (advisory, then row) avoids
+	// the cycle. The advisory lock also serializes the count-then-delete against
+	// every client writer, tenant and global alike, so a client cannot be inserted
+	// between the count and the delete.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
 	// Establish the issuer is global before counting clients or deleting, so a
 	// non-global id returns NotFound rather than probing client counts. FOR
-	// UPDATE locks the issuer row so a concurrent CreateGlobalClient can't
-	// insert a client between the count and the delete.
+	// UPDATE also serializes this delete against a concurrent CreateGlobalClient,
+	// which takes the same row lock.
 	if _, err := txRepo.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
@@ -345,12 +358,24 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
+	// Count all clients as the fail-safe (a delete must never strand a live
+	// client), then split out the tenant-held ones. Tenant clients on a platform
+	// issuer are owned by projects and organizations; they never appear in
+	// ListGlobalRemoteSessionClientsByIssuerID, so a bare "delete the clients
+	// first" would point a platform admin at clients they cannot see or remove.
+	// Reporting the two counts distinctly tells them which blockers are theirs
+	// (the global clients) and which belong to tenants.
 	clientCount, err := txRepo.CountRemoteSessionClientsByIssuerID(ctx, issuerID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "count remote session clients").LogError(ctx, logger)
 	}
 	if clientCount > 0 {
-		return oops.E(oops.CodeConflict, nil, "global remote session issuer has active clients; delete the clients first").LogError(ctx, logger)
+		tenantCount, err := txRepo.CountTenantRemoteSessionClientsByIssuerID(ctx, issuerID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "count tenant remote session clients").LogError(ctx, logger)
+		}
+		globalCount := clientCount - tenantCount
+		return oops.E(oops.CodeConflict, nil, "global remote session issuer has active clients: %d global, %d tenant-owned; delete the %d global client(s) here, tenant-owned clients must be removed by their owning organizations", globalCount, tenantCount, globalCount).LogError(ctx, logger)
 	}
 
 	deleted, err := txRepo.DeleteGlobalRemoteSessionIssuer(ctx, issuerID)

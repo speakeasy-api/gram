@@ -2,7 +2,11 @@ import { AssetImage } from "@/components/asset-image";
 import { RequireScope } from "@/components/require-scope";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Type } from "@/components/ui/type";
-import { formatRemoteSessionIssuerDisplay } from "@/lib/sources";
+import {
+  formatRemoteSessionIssuerDisplay,
+  remoteSessionScopeTier,
+} from "@/lib/sources";
+import { ScopeBadge } from "@/pages/remote-identity-providers/ScopeBadge";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { Plus, Trash2 } from "lucide-react";
@@ -82,6 +86,13 @@ function RemoteIdentityProviderRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  // Editing rewrites the issuer's own metadata, which only the owning tenant can
+  // do. Organization-level and platform issuers are managed on their own admin
+  // surfaces (and the project-scoped update endpoint rejects them), so offer Edit
+  // only for a project-owned issuer. Delete stays available for every tier: it
+  // detaches the tenant's own client, never the shared issuer.
+  const canEdit = remoteSessionScopeTier(issuer) === "project";
+
   return (
     <div className="rounded-md border p-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -92,18 +103,26 @@ function RemoteIdentityProviderRow({
           />
         ) : null}
         <div className="min-w-0 flex-1">
-          <Type small className="truncate font-medium">
-            {formatRemoteSessionIssuerDisplay(issuer)}
-          </Type>
+          <div className="flex items-center gap-2">
+            <Type small className="truncate font-medium">
+              {formatRemoteSessionIssuerDisplay(issuer)}
+            </Type>
+            <ScopeBadge
+              projectId={issuer.projectId}
+              organizationId={issuer.organizationId}
+            />
+          </div>
           <Type muted mono variant="small" className="break-all">
             {issuer.issuer}
           </Type>
         </div>
         <RequireScope scope="mcp:write" level="component">
           <div className="flex shrink-0 items-center gap-2">
-            <Button size="md" variant="secondary" onClick={onEdit}>
-              <Button.Text>Edit</Button.Text>
-            </Button>
+            {canEdit && (
+              <Button size="md" variant="secondary" onClick={onEdit}>
+                <Button.Text>Edit</Button.Text>
+              </Button>
+            )}
             <Button
               size="md"
               variant="destructive-secondary"

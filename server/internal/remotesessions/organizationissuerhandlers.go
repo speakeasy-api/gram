@@ -186,6 +186,7 @@ func (s *Service) ListIssuers(ctx context.Context, payload *orgissuersgen.ListIs
 
 	rows, err := repo.New(s.db).ListOrganizationRemoteSessionIssuers(ctx, repo.ListOrganizationRemoteSessionIssuersParams{
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  true,
 		Cursor:         cursor,
 		LimitValue:     limit,
 	})
@@ -233,9 +234,12 @@ func (s *Service) GetIssuer(ctx context.Context, payload *orgissuersgen.GetIssue
 		return nil, err
 	}
 
+	// Read-only, so platform issuers resolve here: the org listing surfaces them
+	// and the detail view has to be able to open one.
 	issuer, err := repo.New(s.db).GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  true,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -268,9 +272,15 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orgissu
 
 	r := repo.New(s.db)
 
+	// Platform issuers are deliberately excluded. A tenant cannot delete one, so
+	// the preflight is unreachable for them by design — and both queries below
+	// are unscoped by organization, so resolving a platform issuer here would
+	// report other tenants' client counts and MCP server names to this caller.
+	// Keep IncludeGlobal false unless those queries are org-scoped first.
 	if _, err := r.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
@@ -358,9 +368,14 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 
 	txRepo := repo.New(dbtx)
 
+	// A tenant must never edit a platform issuer: it is shared across every
+	// organization and curated by platform admins.
+	// UpdateOrganizationRemoteSessionIssuer below is org-scoped and would refuse
+	// anyway; opting the pre-read out keeps the refusal a clean 404.
 	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -455,10 +470,13 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orgissuersgen.Delet
 
 	// Establish org ownership of the issuer before counting clients or deleting,
 	// so a cross-org id returns NotFound rather than probing client counts or
-	// silently succeeding against the org-scoped delete below.
+	// silently succeeding against the org-scoped delete below. Platform issuers
+	// are excluded for the same reason: a tenant must never delete one, and
+	// CountRemoteSessionClientsByIssuerID below is unscoped by organization.
 	if _, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
@@ -554,9 +572,13 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 
 	txRepo := repo.New(dbtx)
 
+	// A platform issuer has no owning organization to re-scope within, and a
+	// tenant must never move one. SetOrganizationRemoteSessionIssuerProject is
+	// org-scoped and would refuse anyway; opting out keeps it a clean 404.
 	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -632,6 +654,12 @@ func loadMigrationPair(ctx context.Context, r *repo.Queries, logger *slog.Logger
 		return source, target, oops.E(oops.CodeBadRequest, nil, "source and target issuer must differ").LogError(ctx, logger)
 	}
 
+	// Both arms stay org-scoped: migrating onto a platform issuer is AIS-335, and
+	// it needs more than a widened read here. There is deliberately no
+	// global-inclusive ForUpdate variant — a lock-consistent read across the org
+	// and global partitions is what that work has to design, and quietly widening
+	// the non-locking arm alone would let a migration validate against a scope it
+	// never locked.
 	loadIssuer := func(id uuid.UUID) (repo.RemoteSessionIssuer, error) {
 		if forUpdate {
 			return r.GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx, repo.GetOrganizationRemoteSessionIssuerByIDForUpdateParams{
@@ -642,6 +670,7 @@ func loadMigrationPair(ctx context.Context, r *repo.Queries, logger *slog.Logger
 		return r.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 			ID:             id,
 			OrganizationID: conv.ToPGText(organizationID),
+			IncludeGlobal:  false,
 		})
 	}
 

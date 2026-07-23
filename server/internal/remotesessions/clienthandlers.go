@@ -279,12 +279,16 @@ func (s *Service) validateNewClientIssuers(
 		return repo.RemoteSessionIssuer{}, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
 	}
 
-	// The lookup accepts both the project's own issuers and organization-level
-	// issuers, so a client can't be attached to another tenant's issuer.
+	// The lookup accepts the project's own issuers, organization-level issuers,
+	// and platform issuers from the shared catalog, so a client can't be attached
+	// to another tenant's issuer. The client row created against a platform
+	// issuer is still owned by this project; only the issuer is shared.
 	issuer, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:             issuerID,
-		ProjectID:      conv.ToNullUUID(projectID),
-		OrganizationID: conv.ToPGTextEmpty(organizationID),
+		ID:                    issuerID,
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(organizationID),
+		IncludeOrganizational: true,
+		IncludeGlobal:         true,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -444,15 +448,18 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 	}
 
 	// Confirm the issuer the caller named is reachable from the caller's
-	// project — either an issuer the project owns or an organization-level
-	// issuer inherited from the project's org — so a clone cannot graft a
-	// client onto an unrelated tenant's issuer. The cloned client row is still
-	// owned by the caller's project regardless of the issuer's scope; this
-	// mirrors the reachability gate in CreateRemoteSessionClient.
+	// project — an issuer the project owns, an organization-level issuer
+	// inherited from the project's org, or a platform issuer from the shared
+	// catalog — so a clone cannot graft a client onto an unrelated tenant's
+	// issuer. The cloned client row is still owned by the caller's project
+	// regardless of the issuer's scope; this mirrors the reachability gate in
+	// validateNewClientIssuers, and the two must stay in step.
 	if _, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:             issuerID,
-		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		OrganizationID: conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
+		ID:                    issuerID,
+		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
+		IncludeOrganizational: true,
+		IncludeGlobal:         true,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)

@@ -14,7 +14,10 @@ import {
   type AuthedFetch,
   proxyRegisterUpstreamClient,
 } from "@/lib/proxyRegisterUpstreamClient";
-import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
+import {
+  deriveRemoteSessionIssuerNameFromUrl,
+  resolveRemoteSessionIssuerByTierPrecedence,
+} from "@/lib/sources";
 import {
   narrowTokenEndpointAuthMethod,
   pickPreferredAuthMethod,
@@ -115,12 +118,7 @@ export async function autoConfigureRemoteMcpAuth({
 
   let existingIssuer: RemoteSessionIssuer | null;
   try {
-    existingIssuer = await findMatchingIssuer(
-      client,
-      mcpServer.projectId,
-      draft.issuer,
-      options,
-    );
+    existingIssuer = await findMatchingIssuer(client, draft.issuer, options);
   } catch (error) {
     console.info("Remote MCP matching issuer lookup failed.", {
       remoteMcpServerId: remoteMcpServer.id,
@@ -297,14 +295,19 @@ async function setMcpServerVisibility(
   );
 }
 
+// findMatchingIssuer resolves the issuer a discovered authorization-server URL
+// should reuse. The listing is project-scoped, so any project-tier match belongs
+// to this project; resolution is by tier precedence — project > organization >
+// platform — never by list order, which is by creation time and would otherwise
+// pick an organization or platform issuer over an equally-valid project one
+// depending on when each was created.
 async function findMatchingIssuer(
   client: Gram,
-  projectId: string,
   discoveredIssuer: string,
   options?: RequestOptions,
 ): Promise<RemoteSessionIssuer | null> {
   const normalized = normalizeIssuerURL(discoveredIssuer);
-  let organizationMatch: RemoteSessionIssuer | null = null;
+  const matches: RemoteSessionIssuer[] = [];
   const pages = await client.remoteSessionIssuers.list(
     { limit: 100 },
     undefined,
@@ -313,15 +316,13 @@ async function findMatchingIssuer(
 
   for await (const page of pages) {
     for (const issuer of page.result.items) {
-      if (normalizeIssuerURL(issuer.issuer) !== normalized) continue;
-      if (issuer.projectId === projectId) return issuer;
-      if (!issuer.projectId && !organizationMatch) {
-        organizationMatch = issuer;
+      if (normalizeIssuerURL(issuer.issuer) === normalized) {
+        matches.push(issuer);
       }
     }
   }
 
-  return organizationMatch;
+  return resolveRemoteSessionIssuerByTierPrecedence(matches) ?? null;
 }
 
 function preferredScopes(

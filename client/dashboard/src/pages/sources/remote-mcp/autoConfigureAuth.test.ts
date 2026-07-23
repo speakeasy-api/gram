@@ -139,6 +139,77 @@ describe("autoConfigureRemoteMcpAuth", () => {
     );
   });
 
+  it("reuses an org issuer over a platform issuer for the same URL", async () => {
+    // Both match the discovered URL and neither is project-scoped; tier
+    // precedence must prefer the organization issuer over the shared platform
+    // one regardless of list order.
+    const platformIssuer = remoteSessionIssuer({
+      id: "platform-issuer",
+      projectId: "",
+      organizationId: "",
+      issuer: "https://idp.example.com/",
+    });
+    const orgIssuer = remoteSessionIssuer({
+      id: "org-issuer",
+      projectId: "",
+      organizationId: "org-1",
+      issuer: "https://idp.example.com",
+    });
+    const client = mockClient({
+      issuers: [platformIssuer, orgIssuer],
+    });
+
+    const result = await autoConfigureRemoteMcpAuth({
+      client: client as unknown as Gram,
+      authedFetch: vi.fn(),
+      remoteMcpServer: remoteMcpServer(),
+      mcpServer: mcpServer(),
+    });
+
+    expect(result.status).toBe("configured");
+    expect(client.remoteSessionIssuers.create).not.toHaveBeenCalled();
+    expect(client.remoteSessionClients.create).toHaveBeenCalledWith(
+      {
+        createRemoteSessionClientForm: expect.objectContaining({
+          remoteSessionIssuerId: "org-issuer",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+  });
+
+  it("reuses a platform issuer when no tenant issuer matches", async () => {
+    const platformIssuer = remoteSessionIssuer({
+      id: "platform-issuer",
+      projectId: "",
+      organizationId: "",
+      issuer: "https://idp.example.com",
+    });
+    const client = mockClient({
+      issuers: [platformIssuer],
+    });
+
+    const result = await autoConfigureRemoteMcpAuth({
+      client: client as unknown as Gram,
+      authedFetch: vi.fn(),
+      remoteMcpServer: remoteMcpServer(),
+      mcpServer: mcpServer(),
+    });
+
+    expect(result.status).toBe("configured");
+    expect(client.remoteSessionIssuers.create).not.toHaveBeenCalled();
+    expect(client.remoteSessionClients.create).toHaveBeenCalledWith(
+      {
+        createRemoteSessionClientForm: expect.objectContaining({
+          remoteSessionIssuerId: "platform-issuer",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+  });
+
   it("does not normalize issuer matches beyond trailing slashes", async () => {
     const client = mockClient({
       issuers: [
@@ -394,7 +465,7 @@ function remoteSessionIssuer(
   return {
     id: overrides.id ?? "issuer-1",
     projectId: overrides.projectId ?? "project-1",
-    organizationId: "org-1",
+    organizationId: overrides.organizationId ?? "org-1",
     slug: "issuer",
     issuer: overrides.issuer ?? "https://idp.example.com",
     authorizationEndpoint:
