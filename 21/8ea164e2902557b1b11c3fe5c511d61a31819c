@@ -1,0 +1,24 @@
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_e5952da15582a2::t_cc92e097f92473 517
+  s_e5952da15582a2::t_31c8eb559d5aaa 502-503,508-509,515,518-521,524-526
+  s_e5952da15582a2::t_6740efdfd43819 516,522-523
+  s_e5952da15582a2::t_0dcda946c83297 527-528
+server/internal/scanners/promptinjection/openrouter/judge_v2_test.go
+  s_e5952da15582a2::t_4825261c9670f5 217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "218ea164e2902557b1b11c3fe5c511d61a31819c",
+  "prompts": {},
+  "sessions": {
+    "s_e5952da15582a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8b4a-b218-76f0-becc-8d70e94d8075",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
