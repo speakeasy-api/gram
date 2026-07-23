@@ -4,7 +4,9 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"slices"
@@ -34,7 +36,7 @@ const (
 	workUnitsModel = "google/gemini-3.1-flash-lite"
 	// workUnitsPromptVersion is stored on every score row so a prompt change is
 	// visible as a break in the series rather than as a silent shift.
-	workUnitsPromptVersion = "v1"
+	workUnitsPromptVersion = "v2"
 	// workUnitsTimeout matches the efficacy judge's bound: this judge also reads
 	// a whole session transcript.
 	workUnitsTimeout = 60 * time.Second
@@ -56,6 +58,9 @@ var workUnitsSystemPrompt string
 
 // workUnitsFlags is the closed set of flags the prompt allows.
 var workUnitsFlags = []string{"harm", "unverified_claims", "digest_insufficient"}
+
+// workUnitsBands is the closed set of scoring bands the prompt defines.
+var workUnitsBands = []string{"A", "B", "C", "D", "E", "F"}
 
 // WorkUnitsTask is one user-requested task the judge identified and scored.
 type WorkUnitsTask struct {
@@ -182,30 +187,46 @@ func ParseWorkUnitsVerdict(raw string) (WorkUnitsVerdict, error) {
 	if err := decoder.Decode(&v); err != nil {
 		return WorkUnitsVerdict{}, fmt.Errorf("parse work units verdict: %w: %w", ErrModelFailure, err)
 	}
+	// One JSON value and nothing after it: a valid prefix followed by prose or a
+	// second value is outside the contract, not a verdict with an appendix.
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return WorkUnitsVerdict{}, fmt.Errorf("parse work units verdict: trailing content after JSON: %w", ErrModelFailure)
+	}
 
 	return v.Normalize()
 }
 
-// Normalize forces the verdict inside the prompt's own contract: per-task units
-// clamped to [-30, 100] and rounded, the session total recomputed as their sum
-// so the headline score always agrees with the tasks it summarises, flags
-// restricted to the allowed set, and free text capped. A non-finite number is
-// the one unfixable case — clamping NaN would invent a score the judge never
-// gave — so it is reported as a model failure.
+// Normalize forces the verdict inside the prompt's own contract: per-task
+// units recomputed from the factors the judge reported — round(base_units ×
+// modifier × completion), clamped to [-30, 100] — so the stored score can
+// never disagree with the arithmetic behind it, the session total recomputed
+// as the tasks' sum, flags restricted to the allowed set, and free text
+// capped. The structured-output schema already requires every field, so the
+// shape checks here are defense in depth against a model that returned empty
+// or null anyway. A non-finite number is the one unfixable case — clamping
+// NaN would invent a score the judge never gave — so it is reported as a
+// model failure.
 func (v WorkUnitsVerdict) Normalize() (WorkUnitsVerdict, error) {
+	if v.Tasks == nil {
+		return WorkUnitsVerdict{}, fmt.Errorf("work units verdict is missing its tasks: %w", ErrModelFailure)
+	}
+
 	tasks := make([]WorkUnitsTask, 0, len(v.Tasks))
 	total := 0.0
 	for _, task := range v.Tasks {
+		if !slices.Contains(workUnitsBands, task.Band) {
+			return WorkUnitsVerdict{}, fmt.Errorf("work units verdict band %q is not a scoring band: %w", task.Band, ErrModelFailure)
+		}
 		for _, value := range []float64{task.BaseUnits, task.Modifier, task.Completion, task.Units} {
 			if math.IsNaN(value) || math.IsInf(value, 0) {
 				return WorkUnitsVerdict{}, fmt.Errorf("work units verdict number is not finite: %w", ErrModelFailure)
 			}
 		}
 
-		task.Units = math.Round(max(minTaskUnits, min(maxTaskUnits, task.Units)))
+		task.Units = math.Round(max(minTaskUnits, min(maxTaskUnits, task.BaseUnits*task.Modifier*task.Completion)))
 		task.Request = truncateText(task.Request)
 		task.Rationale = truncateText(task.Rationale)
-		task.Band = truncateText(task.Band)
 		task.NearestExemplar = truncateText(task.NearestExemplar)
 		tasks = append(tasks, task)
 		total += task.Units
@@ -250,7 +271,7 @@ func workUnitsSchema() map[string]any {
 					"properties": map[string]any{
 						"id":               map[string]any{"type": "number"},
 						"request":          map[string]any{"type": "string"},
-						"band":             map[string]any{"type": "string", "enum": []string{"A", "B", "C", "D", "E", "F"}},
+						"band":             map[string]any{"type": "string", "enum": workUnitsBands},
 						"base_units":       map[string]any{"type": "number"},
 						"modifier":         map[string]any{"type": "number"},
 						"completion":       map[string]any{"type": "number"},

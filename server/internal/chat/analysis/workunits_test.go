@@ -30,12 +30,13 @@ func TestParseWorkUnitsVerdict_Valid(t *testing.T) {
 func TestParseWorkUnitsVerdict_ClampsAndRecomputesTotal(t *testing.T) {
 	t.Parallel()
 
-	// Per-task units exceed the prompt's [-30, 100] clamp and the reported
-	// session total disagrees with the tasks; both must be normalized.
+	// Per-task factors multiply out past the prompt's [-30, 100] clamp and the
+	// reported session total disagrees with the tasks; both must be normalized.
+	// The second task is a harm entry: a negated base carries the incident.
 	raw := `{
 		"tasks": [
 			{"id": 1, "request": "build everything", "band": "F", "base_units": 90, "modifier": 1.5, "completion": 1.0, "units": 135, "nearest_exemplar": "E36", "rationale": "capped"},
-			{"id": 2, "request": "harmful incident", "band": "B", "base_units": 5, "modifier": 1.0, "completion": 0.0, "units": -50, "nearest_exemplar": "E37", "rationale": "harm"}
+			{"id": 2, "request": "harmful incident", "band": "E", "base_units": -50, "modifier": 1.0, "completion": 1.0, "units": -50, "nearest_exemplar": "E37", "rationale": "harm"}
 		],
 		"session_units": 999,
 		"flags": ["harm", "harm", "made-up-flag"]
@@ -47,6 +48,62 @@ func TestParseWorkUnitsVerdict_ClampsAndRecomputesTotal(t *testing.T) {
 	require.InDelta(t, -30, verdict.Tasks[1].Units, 0.0001)
 	require.InDelta(t, 70, verdict.SessionUnits, 0.0001)
 	require.Equal(t, []string{"harm"}, verdict.Flags)
+}
+
+func TestParseWorkUnitsVerdict_RecomputesUnitsFromFactors(t *testing.T) {
+	t.Parallel()
+
+	// The claimed units disagree with base × modifier × completion; the stored
+	// score must follow the factors, not the claim.
+	raw := `{
+		"tasks": [
+			{"id": 1, "request": "fix the bug", "band": "D", "base_units": 20, "modifier": 1.0, "completion": 0.5, "units": 90, "nearest_exemplar": "E20", "rationale": "half done"}
+		],
+		"session_units": 90,
+		"flags": []
+	}`
+
+	verdict, err := ParseWorkUnitsVerdict(raw)
+	require.NoError(t, err)
+	require.InDelta(t, 10, verdict.Tasks[0].Units, 0.0001)
+	require.InDelta(t, 10, verdict.SessionUnits, 0.0001)
+}
+
+func TestParseWorkUnitsVerdict_EmptyObjectIsModelFailure(t *testing.T) {
+	t.Parallel()
+
+	// {} and null decode to zero values without error; a verdict with no tasks
+	// array must not publish as a zero-work score.
+	_, err := ParseWorkUnitsVerdict(`{}`)
+	require.ErrorIs(t, err, ErrModelFailure)
+
+	_, err = ParseWorkUnitsVerdict(`null`)
+	require.ErrorIs(t, err, ErrModelFailure)
+}
+
+func TestParseWorkUnitsVerdict_UnknownBandIsModelFailure(t *testing.T) {
+	t.Parallel()
+
+	raw := `{
+		"tasks": [
+			{"id": 1, "request": "fix the bug", "band": "Z", "base_units": 20, "modifier": 1.0, "completion": 1.0, "units": 20, "nearest_exemplar": "E20", "rationale": "ok"}
+		],
+		"session_units": 20,
+		"flags": []
+	}`
+
+	_, err := ParseWorkUnitsVerdict(raw)
+	require.ErrorIs(t, err, ErrModelFailure)
+}
+
+func TestParseWorkUnitsVerdict_TrailingContentIsModelFailure(t *testing.T) {
+	t.Parallel()
+
+	_, err := ParseWorkUnitsVerdict(`{"tasks": [], "session_units": 0, "flags": []} and that is my verdict`)
+	require.ErrorIs(t, err, ErrModelFailure)
+
+	_, err = ParseWorkUnitsVerdict(`{"tasks": [], "session_units": 0, "flags": []}{"tasks": []}`)
+	require.ErrorIs(t, err, ErrModelFailure)
 }
 
 func TestParseWorkUnitsVerdict_UnknownFieldIsModelFailure(t *testing.T) {
@@ -96,6 +153,9 @@ func TestNewJudges_RejectsDuplicateAndInvalidNames(t *testing.T) {
 	a := stubNamedJudge{name: "work_units"}
 	_, err := NewJudges(a, a)
 	require.ErrorContains(t, err, "registered twice")
+
+	_, err = NewJudges(a, nil)
+	require.ErrorContains(t, err, "nil judge")
 
 	_, err = NewJudges(stubNamedJudge{name: "Not Valid!"})
 	require.ErrorContains(t, err, "must match")
