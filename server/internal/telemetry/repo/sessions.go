@@ -60,11 +60,12 @@ const (
 	// rows are deliberately excluded: the summaries cover agent surfaces only,
 	// and claude-code:usage duplicates the OTEL api_request stream.
 	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost'))"
-	// sessionAgentToolCallPredicate matches Codex/Cursor completed tool-call hook
-	// rows (they have no OTEL stream). The hook.event guard excludes the
-	// PreToolUse companion row; provider names are not tool calls.
+	// sessionAgentToolCallPredicate matches completed tool-call hook rows from
+	// any hook source except claude-code, whose counted tool source is the
+	// OTEL tool_result stream. The hook.event guard excludes the PreToolUse
+	// companion row; provider names are not tool calls.
 	sessionAgentToolCallPredicate = "(" +
-		"hook_source IN ('codex', 'cursor') AND " +
+		"hook_source NOT IN ('', 'claude-code') AND " +
 		"toString(attributes.gram.tool.name) != '' AND " +
 		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND " +
 		"toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')" +
