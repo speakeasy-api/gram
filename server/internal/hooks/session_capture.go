@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -30,8 +31,7 @@ var ErrChatNotFound = errors.New("chat not found")
 func isForeignKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		// 23503 is PostgreSQL's foreign_key_violation error code
-		return pgErr.Code == "23503"
+		return pgErr.Code == pgerrcode.ForeignKeyViolation
 	}
 	return false
 }
