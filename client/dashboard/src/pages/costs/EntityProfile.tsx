@@ -27,6 +27,7 @@ import {
   type Crumb,
   displayName,
   entityBadgeVariant,
+  formatWorkUnits,
   friendlyName,
   isAttributionDim,
   LABELS,
@@ -70,6 +71,44 @@ function buildCostCsv(
         ? (r.measures.cacheCreationInputTokens ?? 0)
         : (r.measures.totalToolCalls ?? 0),
       r.measures.totalTokens ?? 0,
+    ];
+  });
+  return toCsv(header, body);
+}
+
+// The efficiency lens's CSV — mirrors that table's columns. Per-unit cells are
+// empty (not 0) where a row has no scored work, matching the table's "—".
+function buildEfficiencyCsv(
+  rows: QueryRow[],
+  groupLabel: string,
+  groupBy: Dimension,
+): string {
+  const totalUnits = rows.reduce(
+    (sum, r) => sum + (r.measures.totalWorkUnits ?? 0),
+    0,
+  );
+  const header = [
+    groupLabel,
+    "Work Delivered",
+    "% Share",
+    "Cost Efficiency",
+    "Token Efficiency",
+    "Sessions",
+    "Total Cost",
+  ];
+  const body = rows.map((r) => {
+    const units = r.measures.totalWorkUnits ?? 0;
+    const scored = units > 0;
+    return [
+      displayName(groupBy, r.groupValue),
+      units.toFixed(1),
+      totalUnits > 0 && scored
+        ? ((units / totalUnits) * 100).toFixed(1)
+        : "0.0",
+      scored ? ((r.measures.scoredCost ?? 0) / units).toFixed(2) : "",
+      scored ? Math.round((r.measures.scoredTokens ?? 0) / units) : "",
+      r.measures.totalChats ?? 0,
+      (r.measures.totalCost ?? 0).toFixed(2),
     ];
   });
   return toCsv(header, body);
@@ -171,6 +210,9 @@ export type EntityProfileProps = {
   // Whether this is an attribution lens: swaps the "Tool calls" hero stat for
   // "Tokens added" (cache-creation tokens), the meaningful measure for these cuts.
   cacheMetric: boolean;
+  // The efficiency lens: the hero and table read the work-units measures (work
+  // units delivered, cost per unit) instead of the activity measures.
+  efficiency: boolean;
   // Navigate up one ancestor. No-op at the root.
   onBack: () => void;
   // Jump straight back to the org root.
@@ -252,6 +294,7 @@ export function EntityProfile({
   entity,
   collection,
   cacheMetric,
+  efficiency,
   onBack,
   onHome,
   projectName,
@@ -331,13 +374,56 @@ export function EntityProfile({
     return () => observer.disconnect();
   }, []);
 
+  // The efficiency lens quotes the slice's work units where the cost lenses
+  // quote spend — the caption's grammar fits either ("… — 1,204.5 work units
+  // across 4 Models.").
   const caption = breakdownCaption({
     axisValue,
     groupBy,
     path,
-    costLabel: formatCost(stats.cost),
+    costLabel: efficiency
+      ? `${formatWorkUnits(stats.workUnits)} work delivered`
+      : formatCost(stats.cost),
     groupCount: isError ? 0 : rows.length,
   });
+
+  // The hero's third and fourth stats, by lens (the first two — cost and
+  // sessions — are universal).
+  function heroTrailingStats(): JSX.Element {
+    if (efficiency) {
+      const unitCost =
+        stats.workUnits > 0 ? stats.scoredCost / stats.workUnits : null;
+      return (
+        <>
+          <HeaderStat
+            label="Work delivered"
+            value={formatWorkUnits(stats.workUnits)}
+          />
+          <HeaderStat
+            label="Cost efficiency"
+            value={unitCost !== null ? formatCost(unitCost) : "—"}
+          />
+        </>
+      );
+    }
+    if (cacheMetric) {
+      return (
+        <>
+          <HeaderStat
+            label="Tokens added"
+            value={stats.cacheCreation.toLocaleString()}
+          />
+          <HeaderStat label="Tokens" value={stats.tokens.toLocaleString()} />
+        </>
+      );
+    }
+    return (
+      <>
+        <HeaderStat label="Tool calls" value={stats.tools.toLocaleString()} />
+        <HeaderStat label="Tokens" value={stats.tokens.toLocaleString()} />
+      </>
+    );
+  }
 
   // The "Back to …" label names the immediate parent with its own dimension's
   // labeling (the parent crumb is second-to-last on the path; the last crumb is
@@ -366,7 +452,9 @@ export function EntityProfile({
         run: () =>
           downloadCsv(
             `${slugify(title)}-by-${slugify(groupLabel)}-${slugify(rangeLabel)}.csv`,
-            buildCostCsv(rows, groupLabel, groupBy),
+            efficiency
+              ? buildEfficiencyCsv(rows, groupLabel, groupBy)
+              : buildCostCsv(rows, groupLabel, groupBy),
           ),
       };
 
@@ -383,6 +471,9 @@ export function EntityProfile({
     <Type className="text-muted-foreground">Failed to load cost data.</Type>
   ) : (
     <CostTable
+      // Remount on a lens switch so the default sort (work units vs cost)
+      // re-applies instead of carrying the other lens's sort state over.
+      key={efficiency ? "efficiency" : "cost"}
       rows={rows}
       groupLabel={groupLabel}
       groupBy={groupBy}
@@ -391,6 +482,7 @@ export function EntityProfile({
       seriesByGroup={seriesByGroup}
       isLoading={isLoading}
       billingMode={billingMode}
+      efficiency={efficiency}
       emptyMessage={searchActive ? "No matches for your search." : undefined}
     />
   );
@@ -511,21 +603,7 @@ export function EntityProfile({
                 value={stats.sessions.toLocaleString()}
                 onClick={onViewSessions}
               />
-              {cacheMetric ? (
-                <HeaderStat
-                  label="Tokens added"
-                  value={stats.cacheCreation.toLocaleString()}
-                />
-              ) : (
-                <HeaderStat
-                  label="Tool calls"
-                  value={stats.tools.toLocaleString()}
-                />
-              )}
-              <HeaderStat
-                label="Tokens"
-                value={stats.tokens.toLocaleString()}
-              />
+              {heroTrailingStats()}
             </div>
           </div>
         </div>
@@ -594,7 +672,7 @@ export function EntityProfile({
         <div className="border-border flex flex-col gap-3 border-t pt-6">
           <div className="flex flex-col gap-0.5">
             <h2 className="flex items-center gap-1.5 text-sm font-semibold">
-              {breakdownTitle(axisValue, groupBy)}
+              {breakdownTitle(axisValue, groupBy, efficiency)}
               {/* No general "what is a breakdown" note — defining it in the
                   abstract read as jargon, and the caption below says it
                   against the slice actually on screen. The icon is left for

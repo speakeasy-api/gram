@@ -299,6 +299,252 @@ func DecodeListChatsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildGetWorkUnitsTrendRequest instantiates a HTTP request object with method
+// and path set to call the "chat" service "getWorkUnitsTrend" endpoint
+func (c *Client) BuildGetWorkUnitsTrendRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetWorkUnitsTrendChatPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("chat", "getWorkUnitsTrend", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetWorkUnitsTrendRequest returns an encoder for requests sent to the
+// chat getWorkUnitsTrend server.
+func EncodeGetWorkUnitsTrendRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*chat.GetWorkUnitsTrendPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("chat", "getWorkUnitsTrend", "*chat.GetWorkUnitsTrendPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.ChatSessionsToken != nil {
+			head := *p.ChatSessionsToken
+			req.Header.Set("Gram-Chat-Session", head)
+		}
+		values := req.URL.Query()
+		if p.From != nil {
+			values.Add("from", *p.From)
+		}
+		if p.To != nil {
+			values.Add("to", *p.To)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetWorkUnitsTrendResponse returns a decoder for responses returned by
+// the chat getWorkUnitsTrend endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetWorkUnitsTrendResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetWorkUnitsTrendResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetWorkUnitsTrendResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getWorkUnitsTrend", err)
+			}
+			err = ValidateGetWorkUnitsTrendResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getWorkUnitsTrend", err)
+			}
+			res := NewGetWorkUnitsTrendWorkUnitsTrendResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetWorkUnitsTrendUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getWorkUnitsTrend", err)
+			}
+			err = ValidateGetWorkUnitsTrendUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getWorkUnitsTrend", err)
+			}
+			return nil, NewGetWorkUnitsTrendUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetWorkUnitsTrendForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getWorkUnitsTrend", err)
+			}
+			err = ValidateGetWorkUnitsTrendForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getWorkUnitsTrend", err)
+			}
+			return nil, NewGetWorkUnitsTrendForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetWorkUnitsTrendBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getWorkUnitsTrend", err)
+			}
+			err = ValidateGetWorkUnitsTrendBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getWorkUnitsTrend", err)
+			}
+			return nil, NewGetWorkUnitsTrendBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetWorkUnitsTrendNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getWorkUnitsTrend", err)
+			}
+			err = ValidateGetWorkUnitsTrendNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getWorkUnitsTrend", err)
+			}
+			return nil, NewGetWorkUnitsTrendNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetWorkUnitsTrendConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getWorkUnitsTrend", err)
+			}
+			err = ValidateGetWorkUnitsTrendConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getWorkUnitsTrend", err)
+			}
+			return nil, NewGetWorkUnitsTrendConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetWorkUnitsTrendUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getWorkUnitsTrend", err)
+			}
+			err = ValidateGetWorkUnitsTrendUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getWorkUnitsTrend", err)
+			}
+			return nil, NewGetWorkUnitsTrendUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetWorkUnitsTrendInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getWorkUnitsTrend", err)
+			}
+			err = ValidateGetWorkUnitsTrendInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getWorkUnitsTrend", err)
+			}
+			return nil, NewGetWorkUnitsTrendInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetWorkUnitsTrendInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "getWorkUnitsTrend", err)
+				}
+				err = ValidateGetWorkUnitsTrendInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "getWorkUnitsTrend", err)
+				}
+				return nil, NewGetWorkUnitsTrendInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetWorkUnitsTrendUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "getWorkUnitsTrend", err)
+				}
+				err = ValidateGetWorkUnitsTrendUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "getWorkUnitsTrend", err)
+				}
+				return nil, NewGetWorkUnitsTrendUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "getWorkUnitsTrend", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetWorkUnitsTrendGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getWorkUnitsTrend", err)
+			}
+			err = ValidateGetWorkUnitsTrendGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getWorkUnitsTrend", err)
+			}
+			return nil, NewGetWorkUnitsTrendGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("chat", "getWorkUnitsTrend", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildLoadChatRequest instantiates a HTTP request object with method and path
 // set to call the "chat" service "loadChat" endpoint
 func (c *Client) BuildLoadChatRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1976,8 +2222,26 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		TotalCost:            v.TotalCost,
 		LastMessageTimestamp: *v.LastMessageTimestamp,
 		RiskFindingsCount:    v.RiskFindingsCount,
+		WorkUnits:            v.WorkUnits,
 		AccountType:          v.AccountType,
 		AccountEmail:         v.AccountEmail,
+	}
+
+	return res
+}
+
+// unmarshalWorkUnitsTrendBucketResponseBodyToChatWorkUnitsTrendBucket builds a
+// value of type *chat.WorkUnitsTrendBucket from a value of type
+// *WorkUnitsTrendBucketResponseBody.
+func unmarshalWorkUnitsTrendBucketResponseBodyToChatWorkUnitsTrendBucket(v *WorkUnitsTrendBucketResponseBody) *chat.WorkUnitsTrendBucket {
+	res := &chat.WorkUnitsTrendBucket{
+		Timestamp:      *v.Timestamp,
+		ScoredSessions: *v.ScoredSessions,
+		WorkUnits:      *v.WorkUnits,
+		TotalCost:      *v.TotalCost,
+		TotalTokens:    *v.TotalTokens,
+		CostPerUnit:    v.CostPerUnit,
+		TokensPerUnit:  v.TokensPerUnit,
 	}
 
 	return res

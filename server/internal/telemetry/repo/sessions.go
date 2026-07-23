@@ -631,3 +631,90 @@ func scanSessionSummaries(rows driver.Rows) ([]SessionSummary, error) {
 	}
 	return sessions, nil
 }
+
+// ChatSessionFacts are the per-chat display and usage facts the chat analysis
+// publisher stamps onto work-units score events: the session's user identity,
+// effective model, source, account type, end time and usage totals, all read
+// from chat_session_summaries.
+type ChatSessionFacts struct {
+	ChatID          string   `ch:"gram_chat_id"`
+	UserEmail       string   `ch:"session_user_email"`
+	HookSource      string   `ch:"session_hook_source"`
+	Model           string   `ch:"session_model"`
+	AccountTypes    []string `ch:"account_types"`
+	EndTimeUnixNano int64    `ch:"end_time_unix_nano"`
+	TotalTokens     int64    `ch:"total_tokens"`
+	TotalCost       float64  `ch:"total_cost"`
+}
+
+// AccountType returns the session's account type: the first non-empty value
+// observed across the session's rows, or "" when unclassified.
+func (f ChatSessionFacts) AccountType() string {
+	for _, accountType := range f.AccountTypes {
+		if accountType != "" {
+			return accountType
+		}
+	}
+	return ""
+}
+
+// GetChatSessionFactsByChatIDsParams' window bounds the summary-bucket scan;
+// chats whose activity falls entirely outside it are simply absent from the
+// result.
+type GetChatSessionFactsByChatIDsParams struct {
+	ProjectID string
+	ChatIDs   []string
+	From      time.Time
+	To        time.Time
+}
+
+// GetChatSessionFactsByChatIDs returns per-chat session facts keyed by chat
+// id. Chats without summary rows in the window are absent from the map.
+func (q *Queries) GetChatSessionFactsByChatIDs(ctx context.Context, arg GetChatSessionFactsByChatIDsParams) (map[string]ChatSessionFacts, error) {
+	if len(arg.ChatIDs) == 0 {
+		return map[string]ChatSessionFacts{}, nil
+	}
+
+	sb := sq.Select(
+		"s.chat_id as gram_chat_id",
+		// max() so '' loses to a non-empty value, matching the summary
+		// columns' merge semantics.
+		"max(s.session_user_email) as session_user_email",
+		"max(s.session_hook_source) as session_hook_source",
+		"argMaxIfMerge(s.session_model) as session_model",
+		"groupUniqArrayArray(s.account_types) as account_types",
+		"max(s.end_time_unix_nano) as end_time_unix_nano",
+		"sum(s.total_tokens) as total_tokens",
+		"sum(s.total_cost) as total_cost",
+	).
+		From("chat_session_summaries s").
+		Where(squirrel.Eq{"s.gram_project_id": arg.ProjectID}).
+		Where("s.time_bucket >= toStartOfHour(?)", arg.From).
+		Where("s.time_bucket <= ?", arg.To).
+		Where(squirrel.Eq{"s.chat_id": arg.ChatIDs}).
+		GroupBy("s.chat_id")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building chat session facts query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying chat session facts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string]ChatSessionFacts, len(arg.ChatIDs))
+	for rows.Next() {
+		var row ChatSessionFacts
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning chat session facts row: %w", err)
+		}
+		result[row.ChatID] = row
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating chat session facts: %w", err)
+	}
+	return result, nil
+}

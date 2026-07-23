@@ -1168,7 +1168,10 @@ func insertRetainedGramAggregateRow(t *testing.T, ctx context.Context, projectID
 			'' AS query_source, '' AS skill_name, '' AS agent_name,
 			'' AS mcp_server_name, '' AS mcp_tool_name,
 			toUInt8(0) AS generation, toUInt8(1) AS is_active,
-			'' AS hook_hostname
+			'' AS hook_hostname,
+			sumIfState(toFloat64(0), toUInt8(0)) AS total_work_units,
+			sumIfState(toFloat64(0), toUInt8(0)) AS scored_cost,
+			sumIfState(toInt64(0), toUInt8(0)) AS scored_tokens
 	`, projectID, timestamp.UnixNano(), hookSource, tokens, tokens)
 	require.NoError(t, err)
 }

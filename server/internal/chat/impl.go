@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -50,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -371,14 +373,156 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			TotalOutputTokens:    nil,
 			TotalTokens:          nil,
 			TotalCost:            nil,
+			WorkUnits:            nil,
 		})
 	}
 
 	if err := s.enrichChatsWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
 		s.logger.WarnContext(ctx, "failed to enrich chats with metrics", attr.SlogError(err))
 	}
+	if err := s.enrichChatsWithWorkUnits(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), result); err != nil {
+		s.logger.WarnContext(ctx, "failed to enrich chats with work units", attr.SlogError(err))
+	}
 
 	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
+}
+
+const (
+	workUnitsTrendDefaultWindow = 30 * 24 * time.Hour
+	workUnitsTrendMaxWindow     = 92 * 24 * time.Hour
+	// workUnitsTrendMaxVerdicts bounds the ClickHouse read; daily analysis caps
+	// keep real orgs far below it.
+	workUnitsTrendMaxVerdicts = 10000
+	// workUnitsTrendMetricsBatch chunks the per-chat metrics lookup so a large
+	// window never issues one query with thousands of chat ids in its IN list.
+	workUnitsTrendMetricsBatch = 1000
+)
+
+func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUnitsTrendPayload) (*gen.WorkUnitsTrendResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	projectID := authCtx.ProjectID.String()
+
+	// Unlike chat listing, which degrades to own-session visibility, this is an
+	// org-wide aggregate: when RBAC is enforced, callers without chat:read get
+	// nothing rather than a narrowed view.
+	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
+	} else if enforce {
+		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(projectID))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
+		}
+		if !allowed {
+			return nil, oops.C(oops.CodeForbidden)
+		}
+	}
+
+	to := time.Now().UTC()
+	if payload.To != nil {
+		parsed, err := time.Parse(time.RFC3339, *payload.To)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid 'to' timestamp").LogError(ctx, s.logger)
+		}
+		to = parsed.UTC()
+	}
+	from := to.Add(-workUnitsTrendDefaultWindow)
+	if payload.From != nil {
+		parsed, err := time.Parse(time.RFC3339, *payload.From)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid 'from' timestamp").LogError(ctx, s.logger)
+		}
+		from = parsed.UTC()
+	}
+	if !from.Before(to) {
+		return nil, oops.E(oops.CodeInvalid, nil, "'from' must be before 'to'")
+	}
+	if to.Sub(from) > workUnitsTrendMaxWindow {
+		return nil, oops.E(oops.CodeInvalid, nil, "window must not exceed 92 days")
+	}
+
+	// One zero-filled bucket per UTC day so the chart's x-axis is continuous.
+	startDay := from.Truncate(24 * time.Hour)
+	buckets := make([]*gen.WorkUnitsTrendBucket, 0, int(to.Sub(startDay)/(24*time.Hour))+1)
+	bucketsByDay := make(map[time.Time]*gen.WorkUnitsTrendBucket)
+	for day := startDay; !day.After(to); day = day.Add(24 * time.Hour) {
+		bucket := &gen.WorkUnitsTrendBucket{
+			Timestamp:      day.Format(time.RFC3339),
+			ScoredSessions: 0,
+			WorkUnits:      0,
+			TotalCost:      0,
+			TotalTokens:    0,
+			CostPerUnit:    nil,
+			TokensPerUnit:  nil,
+		}
+		buckets = append(buckets, bucket)
+		bucketsByDay[day] = bucket
+	}
+
+	result := &gen.WorkUnitsTrendResult{ScoresAvailable: false, Buckets: buckets}
+	if s.telemetryService == nil {
+		return result, nil
+	}
+
+	verdicts, err := s.telemetryService.ListChatAnalysisVerdicts(ctx, telemetryrepo.ListChatAnalysisVerdictsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Judge:          telemetryrepo.ChatAnalysisJudgeWorkUnits,
+		From:           from,
+		To:             to,
+		Limit:          workUnitsTrendMaxVerdicts,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load work units trend").LogError(ctx, s.logger)
+	}
+	if len(verdicts) == 0 {
+		return result, nil
+	}
+	result.ScoresAvailable = true
+
+	// Cost/token telemetry is best-effort, like the per-chat enrichment: a
+	// metrics miss leaves efficiency empty but never hides the work done.
+	metricsByChatID := make(map[string]telemetryrepo.ChatMetricsRow, len(verdicts))
+	chatIDs := make([]string, len(verdicts))
+	for i, verdict := range verdicts {
+		chatIDs[i] = verdict.ChatID
+	}
+	for batch := range slices.Chunk(chatIDs, workUnitsTrendMetricsBatch) {
+		metrics, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, batch)
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to load chat metrics for work units trend", attr.SlogError(err))
+			break
+		}
+		maps.Copy(metricsByChatID, metrics)
+	}
+
+	for _, verdict := range verdicts {
+		bucket, found := bucketsByDay[verdict.ScoredAt.UTC().Truncate(24*time.Hour)]
+		if !found {
+			continue
+		}
+		bucket.ScoredSessions++
+		bucket.WorkUnits += verdict.Score
+		if metrics, found := metricsByChatID[verdict.ChatID]; found {
+			bucket.TotalCost += metrics.TotalCost
+			bucket.TotalTokens += metrics.TotalTokens
+		}
+	}
+	for _, bucket := range buckets {
+		if bucket.WorkUnits <= 0 {
+			continue
+		}
+		if bucket.TotalCost > 0 {
+			bucket.CostPerUnit = conv.PtrEmpty(bucket.TotalCost / bucket.WorkUnits)
+		}
+		if bucket.TotalTokens > 0 {
+			bucket.TokensPerUnit = conv.PtrEmpty(float64(bucket.TotalTokens) / bucket.WorkUnits)
+		}
+	}
+
+	return result, nil
 }
 
 // logChatAccess records an audit entry that a dashboard user opened a chat
@@ -873,6 +1017,8 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		TotalTokens:       nil,
 		TotalCost:         nil,
 		AgentUsage:        nil,
+		WorkUnits:         nil,
+		WorkUnitsReport:   nil,
 	}
 
 	if isInitialLatest {
@@ -881,6 +1027,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 		if err := s.enrichChatWithClaudeTurnUsage(ctx, authCtx.ProjectID.String(), result); err != nil {
 			s.logger.WarnContext(ctx, "failed to enrich chat with Claude turn usage", attr.SlogError(err))
+		}
+		if err := s.enrichChatWithWorkUnits(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), result); err != nil {
+			s.logger.WarnContext(ctx, "failed to enrich chat with work units", attr.SlogError(err))
 		}
 	}
 
@@ -2130,6 +2279,55 @@ func (s *Service) enrichChatWithMetrics(ctx context.Context, projectID string, c
 		chat.TotalOutputTokens = &metrics.TotalOutputTokens
 		chat.TotalTokens = &metrics.TotalTokens
 		chat.TotalCost = &metrics.TotalCost
+	}
+
+	return nil
+}
+
+// enrichChatsWithWorkUnits attaches published work-units verdicts from
+// ClickHouse to chat overviews. Best-effort like the metric enrichment — and
+// most organizations have no work-units analysis at all, in which case every
+// chat is simply left without a score.
+func (s *Service) enrichChatsWithWorkUnits(ctx context.Context, organizationID string, projectID string, chats []*gen.ChatOverview) error {
+	if len(chats) == 0 || s.telemetryService == nil {
+		return nil
+	}
+
+	chatIDs := make([]string, len(chats))
+	for i, chat := range chats {
+		chatIDs[i] = chat.ID
+	}
+
+	verdicts, err := s.telemetryService.GetChatAnalysisVerdictsByChatIDs(ctx, organizationID, projectID, telemetryrepo.ChatAnalysisJudgeWorkUnits, chatIDs)
+	if err != nil {
+		return fmt.Errorf("get work units verdicts from ClickHouse: %w", err)
+	}
+
+	for _, chat := range chats {
+		if verdict, found := verdicts[chat.ID]; found {
+			chat.WorkUnits = &verdict.Score
+		}
+	}
+
+	return nil
+}
+
+// enrichChatWithWorkUnits attaches the published work-units verdict — score
+// and full report JSON — from ClickHouse to a single loaded chat. Best-effort
+// like the metric enrichment.
+func (s *Service) enrichChatWithWorkUnits(ctx context.Context, organizationID string, projectID string, chat *gen.Chat) error {
+	if s.telemetryService == nil {
+		return nil
+	}
+
+	verdicts, err := s.telemetryService.GetChatAnalysisVerdictsByChatIDs(ctx, organizationID, projectID, telemetryrepo.ChatAnalysisJudgeWorkUnits, []string{chat.ID})
+	if err != nil {
+		return fmt.Errorf("get work units verdict from ClickHouse: %w", err)
+	}
+
+	if verdict, found := verdicts[chat.ID]; found {
+		chat.WorkUnits = &verdict.Score
+		chat.WorkUnitsReport = &verdict.Detail
 	}
 
 	return nil

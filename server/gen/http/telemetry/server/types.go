@@ -6497,6 +6497,15 @@ type QueryMeasuresResponseBody struct {
 	TotalToolCalls int64 `form:"total_tool_calls" json:"total_tool_calls" xml:"total_tool_calls"`
 	// Number of distinct chat sessions
 	TotalChats int64 `form:"total_chats" json:"total_chats" xml:"total_chats"`
+	// Total work units delivered by scored sessions (work-units analysis)
+	TotalWorkUnits float64 `form:"total_work_units" json:"total_work_units" xml:"total_work_units"`
+	// Total cost in USD of the sessions that carry a work-units score. Divide by
+	// total_work_units for cost per unit; using total_cost would overstate it
+	// whenever analysis coverage is partial.
+	ScoredCost float64 `form:"scored_cost" json:"scored_cost" xml:"scored_cost"`
+	// Total tokens of the sessions that carry a work-units score. Divide by
+	// total_work_units for tokens per unit.
+	ScoredTokens int64 `form:"scored_tokens" json:"scored_tokens" xml:"scored_tokens"`
 }
 
 // QuerySeriesResponseBody is used to define fields on response body types.
@@ -13190,8 +13199,8 @@ func ValidateQueryRequestBody(body *QueryRequestBody) (err error) {
 		}
 	}
 	if body.SortBy != nil {
-		if !(*body.SortBy == "total_cost" || *body.SortBy == "total_tokens" || *body.SortBy == "total_input_tokens" || *body.SortBy == "total_output_tokens" || *body.SortBy == "cache_read_input_tokens" || *body.SortBy == "cache_creation_input_tokens" || *body.SortBy == "total_tool_calls" || *body.SortBy == "total_chats") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", *body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "total_tool_calls", "total_chats"}))
+		if !(*body.SortBy == "total_cost" || *body.SortBy == "total_tokens" || *body.SortBy == "total_input_tokens" || *body.SortBy == "total_output_tokens" || *body.SortBy == "cache_read_input_tokens" || *body.SortBy == "cache_creation_input_tokens" || *body.SortBy == "total_tool_calls" || *body.SortBy == "total_chats" || *body.SortBy == "total_work_units" || *body.SortBy == "scored_cost" || *body.SortBy == "scored_tokens") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", *body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "total_tool_calls", "total_chats", "total_work_units", "scored_cost", "scored_tokens"}))
 		}
 	}
 	return

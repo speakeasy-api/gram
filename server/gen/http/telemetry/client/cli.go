@@ -645,8 +645,8 @@ func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken str
 		if body.TopN < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.top_n", body.TopN, 1, true))
 		}
-		if !(body.SortBy == "total_cost" || body.SortBy == "total_tokens" || body.SortBy == "total_input_tokens" || body.SortBy == "total_output_tokens" || body.SortBy == "cache_read_input_tokens" || body.SortBy == "cache_creation_input_tokens" || body.SortBy == "total_tool_calls" || body.SortBy == "total_chats") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "total_tool_calls", "total_chats"}))
+		if !(body.SortBy == "total_cost" || body.SortBy == "total_tokens" || body.SortBy == "total_input_tokens" || body.SortBy == "total_output_tokens" || body.SortBy == "cache_read_input_tokens" || body.SortBy == "cache_creation_input_tokens" || body.SortBy == "total_tool_calls" || body.SortBy == "total_chats" || body.SortBy == "total_work_units" || body.SortBy == "scored_cost" || body.SortBy == "scored_tokens") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "total_tool_calls", "total_chats", "total_work_units", "scored_cost", "scored_tokens"}))
 		}
 		if err != nil {
 			return nil, err

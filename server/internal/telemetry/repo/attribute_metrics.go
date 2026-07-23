@@ -44,6 +44,9 @@ var attributeMeasureSelects = []string{
 	// unique states) — accepted as transitional, resolved by the backfill.
 	"if(uniqExactIfMerge(unique_tool_calls) = 0, countIfMerge(total_tool_calls), uniqExactIfMerge(unique_tool_calls)) AS m_total_tool_calls",
 	"uniqExactIfMerge(total_chats) AS m_total_chats",
+	"sumIfMerge(total_work_units) AS m_total_work_units",
+	"sumIfMerge(scored_cost) AS m_scored_cost",
+	"sumIfMerge(scored_tokens) AS m_scored_tokens",
 }
 
 // attributeMeasureSet is the allowlist of measures available for ranking
@@ -57,6 +60,9 @@ var attributeMeasureSet = map[string]bool{
 	"cache_creation_input_tokens": true,
 	"total_tool_calls":            true,
 	"total_chats":                 true,
+	"total_work_units":            true,
+	"scored_cost":                 true,
+	"scored_tokens":               true,
 }
 
 // AttributeMetricsMeasures holds the aggregated measure values for a group or a
@@ -72,6 +78,9 @@ type AttributeMetricsMeasures struct {
 	CacheCreationInputTokens int64
 	TotalToolCalls           uint64
 	TotalChats               uint64
+	TotalWorkUnits           float64
+	ScoredCost               float64
+	ScoredTokens             int64
 }
 
 // Add accumulates another set of measures into the receiver (for "Other"
@@ -85,6 +94,9 @@ func (m *AttributeMetricsMeasures) Add(o AttributeMetricsMeasures) {
 	m.CacheCreationInputTokens += o.CacheCreationInputTokens
 	m.TotalToolCalls += o.TotalToolCalls
 	m.TotalChats += o.TotalChats
+	m.TotalWorkUnits += o.TotalWorkUnits
+	m.ScoredCost += o.ScoredCost
+	m.ScoredTokens += o.ScoredTokens
 }
 
 // AttributeMetricsRow is one grouped table row: measures aggregated over the
@@ -99,6 +111,9 @@ type AttributeMetricsRow struct {
 	CacheCreationInputTokens int64   `ch:"m_cache_creation_input_tokens"`
 	TotalToolCalls           uint64  `ch:"m_total_tool_calls"`
 	TotalChats               uint64  `ch:"m_total_chats"`
+	TotalWorkUnits           float64 `ch:"m_total_work_units"`
+	ScoredCost               float64 `ch:"m_scored_cost"`
+	ScoredTokens             int64   `ch:"m_scored_tokens"`
 
 	// DimensionValues holds, for every allowlisted dimension other than the
 	// grouped one, the distinct values observed within this group, keyed by the
@@ -117,6 +132,9 @@ func (r AttributeMetricsRow) Measures() AttributeMetricsMeasures {
 		CacheCreationInputTokens: r.CacheCreationInputTokens,
 		TotalToolCalls:           r.TotalToolCalls,
 		TotalChats:               r.TotalChats,
+		TotalWorkUnits:           r.TotalWorkUnits,
+		ScoredCost:               r.ScoredCost,
+		ScoredTokens:             r.ScoredTokens,
 	}
 }
 
@@ -135,6 +153,9 @@ type AttributeMetricsTimePoint struct {
 	CacheCreationInputTokens int64   `ch:"m_cache_creation_input_tokens"`
 	TotalToolCalls           uint64  `ch:"m_total_tool_calls"`
 	TotalChats               uint64  `ch:"m_total_chats"`
+	TotalWorkUnits           float64 `ch:"m_total_work_units"`
+	ScoredCost               float64 `ch:"m_scored_cost"`
+	ScoredTokens             int64   `ch:"m_scored_tokens"`
 }
 
 // Measures returns the point's measure values as an accumulation struct.
@@ -148,6 +169,9 @@ func (p AttributeMetricsTimePoint) Measures() AttributeMetricsMeasures {
 		CacheCreationInputTokens: p.CacheCreationInputTokens,
 		TotalToolCalls:           p.TotalToolCalls,
 		TotalChats:               p.TotalChats,
+		TotalWorkUnits:           p.TotalWorkUnits,
+		ScoredCost:               p.ScoredCost,
+		ScoredTokens:             p.ScoredTokens,
 	}
 }
 

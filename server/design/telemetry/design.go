@@ -1624,6 +1624,9 @@ var queryMeasures = []any{
 	"cache_creation_input_tokens",
 	"total_tool_calls",
 	"total_chats",
+	"total_work_units",
+	"scored_cost",
+	"scored_tokens",
 }
 
 var QueryPayload = Type("QueryPayload", func() {
@@ -1757,6 +1760,9 @@ var QueryMeasures = Type("QueryMeasures", func() {
 	Attribute("cache_creation_input_tokens", Int64, "Sum of cache creation input tokens")
 	Attribute("total_tool_calls", Int64, "Total number of tool calls")
 	Attribute("total_chats", Int64, "Number of distinct chat sessions")
+	Attribute("total_work_units", Float64, "Total work units delivered by scored sessions (work-units analysis)")
+	Attribute("scored_cost", Float64, "Total cost in USD of the sessions that carry a work-units score. Divide by total_work_units for cost per unit; using total_cost would overstate it whenever analysis coverage is partial.")
+	Attribute("scored_tokens", Int64, "Total tokens of the sessions that carry a work-units score. Divide by total_work_units for tokens per unit.")
 
 	Required(
 		"total_cost",
@@ -1767,6 +1773,9 @@ var QueryMeasures = Type("QueryMeasures", func() {
 		"cache_creation_input_tokens",
 		"total_tool_calls",
 		"total_chats",
+		"total_work_units",
+		"scored_cost",
+		"scored_tokens",
 	)
 })
 

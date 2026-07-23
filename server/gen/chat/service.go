@@ -19,6 +19,9 @@ import (
 type Service interface {
 	// List all chats for a project
 	ListChats(context.Context, *ListChatsPayload) (res *ListChatsResult, err error)
+	// Aggregate work-units analysis results over time for the project: work done
+	// and cost/token efficiency per UTC day.
+	GetWorkUnitsTrend(context.Context, *GetWorkUnitsTrendPayload) (res *WorkUnitsTrendResult, err error)
 	// Load a chat by its ID. Messages within a generation are paginated by `seq`
 	// keyset: omit cursors to receive the newest page, pass `before_seq` to load
 	// older messages (scroll up) or `after_seq` to load newer ones (scroll down).
@@ -71,7 +74,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback", "listSources"}
+var MethodNames = [9]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback", "listSources"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -113,6 +116,9 @@ type Chat struct {
 	// messages are paginated, callers must use these (not the length of
 	// `messages`) to render filter-bar counts.
 	Totals *ChatTotals
+	// Full work-units analysis verdict as JSON (per-task breakdown, rationales,
+	// and flags). Present only when `work_units` is present.
+	WorkUnitsReport *string
 	// The ID of the chat
 	ID string
 	// The title of the chat
@@ -148,6 +154,10 @@ type Chat struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int
+	// Work units of value delivered in this chat as judged by the work-units
+	// analysis. Absent unless the organization has work-units analysis enabled and
+	// this chat has been scored.
+	WorkUnits *float64
 	// Account type that produced the chat ('team', 'personal', or empty), resolved
 	// from the linked AI account.
 	AccountType *string
@@ -229,6 +239,10 @@ type ChatOverview struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int
+	// Work units of value delivered in this chat as judged by the work-units
+	// analysis. Absent unless the organization has work-units analysis enabled and
+	// this chat has been scored.
+	WorkUnits *float64
 	// Account type that produced the chat ('team', 'personal', or empty), resolved
 	// from the linked AI account.
 	AccountType *string
@@ -346,6 +360,18 @@ type GenerateTitlePayload struct {
 type GenerateTitleResult struct {
 	// The current title after the operation (empty when reset to auto-generated)
 	Title string
+}
+
+// GetWorkUnitsTrendPayload is the payload type of the chat service
+// getWorkUnitsTrend method.
+type GetWorkUnitsTrendPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// Start of the window (ISO 8601). Defaults to 30 days before `to`.
+	From *string
+	// End of the window (ISO 8601). Defaults to now.
+	To *string
 }
 
 // ListChatsPayload is the payload type of the chat service listChats method.
@@ -516,6 +542,36 @@ type SubmitFeedbackPayload struct {
 type SubmitFeedbackResult struct {
 	// Whether the feedback was submitted successfully
 	Success bool
+}
+
+type WorkUnitsTrendBucket struct {
+	// Start of the UTC day this bucket covers.
+	Timestamp string
+	// Number of chat sessions scored by the work-units analysis in this bucket.
+	ScoredSessions int
+	// Total work units delivered across the bucket's scored sessions.
+	WorkUnits float64
+	// Total cost in USD across the bucket's scored sessions.
+	TotalCost float64
+	// Total tokens across the bucket's scored sessions.
+	TotalTokens int64
+	// Cost per unit of work. Absent when the bucket has no positive work or no
+	// cost telemetry.
+	CostPerUnit *float64
+	// Tokens per unit of work. Absent when the bucket has no positive work or no
+	// token telemetry.
+	TokensPerUnit *float64
+}
+
+// WorkUnitsTrendResult is the result type of the chat service
+// getWorkUnitsTrend method.
+type WorkUnitsTrendResult struct {
+	// Whether any work-units scores exist in the window. False for organizations
+	// without work-units analysis.
+	ScoresAvailable bool
+	// One bucket per UTC day in the window, oldest first, zero-filled for days
+	// without scores.
+	Buckets []*WorkUnitsTrendBucket
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

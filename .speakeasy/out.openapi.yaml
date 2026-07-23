@@ -8084,6 +8084,121 @@ paths:
       tags:
         - chat
       x-speakeasy-name-override: generateTitle
+  /rpc/chat.getWorkUnitsTrend:
+    get:
+      description: 'Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.'
+      operationId: getWorkUnitsTrend
+      parameters:
+        - allowEmptyValue: true
+          description: Start of the window (ISO 8601). Defaults to 30 days before `to`.
+          in: query
+          name: from
+          schema:
+            description: Start of the window (ISO 8601). Defaults to 30 days before `to`.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: End of the window (ISO 8601). Defaults to now.
+          in: query
+          name: to
+          schema:
+            description: End of the window (ISO 8601). Defaults to now.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          description: Chat Sessions token header
+          in: header
+          name: Gram-Chat-Session
+          schema:
+            description: Chat Sessions token header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkUnitsTrendResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - chat_sessions_token_header_Gram-Chat-Session: []
+        - {}
+      summary: getWorkUnitsTrend chat
+      tags:
+        - chat
+      x-speakeasy-name-override: getWorkUnitsTrend
+      x-speakeasy-react-hook:
+        name: WorkUnitsTrend
+        type: query
   /rpc/chat.list:
     get:
       description: List all chats for a project
@@ -46420,6 +46535,13 @@ components:
         user_id:
           type: string
           description: The ID of the user who created the chat
+        work_units:
+          type: number
+          description: Work units of value delivered in this chat as judged by the work-units analysis. Absent unless the organization has work-units analysis enabled and this chat has been scored.
+          format: double
+        work_units_report:
+          type: string
+          description: Full work-units analysis verdict as JSON (per-task breakdown, rationales, and flags). Present only when `work_units` is present.
       required:
         - messages
         - generation
@@ -46552,6 +46674,10 @@ components:
         user_id:
           type: string
           description: The ID of the user who created the chat
+        work_units:
+          type: number
+          description: Work units of value delivered in this chat as judged by the work-units analysis. Absent unless the organization has work-units analysis enabled and this chat has been scored.
+          format: double
       required:
         - id
         - title
@@ -55808,6 +55934,14 @@ components:
           type: integer
           description: Sum of cache read input tokens
           format: int64
+        scored_cost:
+          type: number
+          description: Total cost in USD of the sessions that carry a work-units score. Divide by total_work_units for cost per unit; using total_cost would overstate it whenever analysis coverage is partial.
+          format: double
+        scored_tokens:
+          type: integer
+          description: Total tokens of the sessions that carry a work-units score. Divide by total_work_units for tokens per unit.
+          format: int64
         total_chats:
           type: integer
           description: Number of distinct chat sessions
@@ -55832,6 +55966,10 @@ components:
           type: integer
           description: Total number of tool calls
           format: int64
+        total_work_units:
+          type: number
+          description: Total work units delivered by scored sessions (work-units analysis)
+          format: double
       description: Aggregated measure values for a group or time bucket
       required:
         - total_cost
@@ -55842,6 +55980,9 @@ components:
         - cache_creation_input_tokens
         - total_tool_calls
         - total_chats
+        - total_work_units
+        - scored_cost
+        - scored_tokens
     QueryPayload:
       type: object
       properties:
@@ -55898,6 +56039,9 @@ components:
             - cache_creation_input_tokens
             - total_tool_calls
             - total_chats
+            - total_work_units
+            - scored_cost
+            - scored_tokens
         to:
           type: string
           description: End time in ISO 8601 format
@@ -59711,40 +59855,26 @@ components:
     SkillEfficacySettings:
       type: object
       properties:
+        daily_cap:
+          type: integer
+          description: Maximum session evaluations reserved across the organization each UTC day.
+          format: int64
+          minimum: 0
+          maximum: 10000
         enabled:
           type: boolean
           description: Whether skill efficacy scoring is enabled.
         is_default:
           type: boolean
           description: Whether these values are platform defaults rather than stored organization settings.
-        new_version_burst:
-          type: integer
-          description: Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.
-          format: int64
-          minimum: 0
-          maximum: 10000
-        org_daily_cap:
-          type: integer
-          description: Maximum evaluations reserved across the organization each UTC day.
-          format: int64
-          minimum: 0
-          maximum: 10000
         organization_id:
           type: string
           description: Organization these settings apply to.
-        per_skill_daily_cap:
-          type: integer
-          description: Maximum evaluations reserved per skill each UTC day.
-          format: int64
-          minimum: 0
-          maximum: 10000
-      description: Per-organization sampling settings for skill efficacy scoring.
+      description: 'Per-organization settings for skill efficacy scoring. Scoring is session-grained: one evaluation covers every skill a session activated, so the cap counts sessions per day.'
       required:
         - organization_id
         - enabled
-        - per_skill_daily_cap
-        - org_daily_cap
-        - new_version_burst
+        - daily_cap
         - is_default
     SkillInsightMetrics:
       type: object
@@ -63612,32 +63742,18 @@ components:
     UpsertSettingsRequestBody:
       type: object
       properties:
+        daily_cap:
+          type: integer
+          description: Maximum session evaluations reserved across the organization each UTC day.
+          format: int64
+          minimum: 0
+          maximum: 10000
         enabled:
           type: boolean
           description: Whether skill efficacy scoring is enabled.
-        new_version_burst:
-          type: integer
-          description: Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.
-          format: int64
-          minimum: 0
-          maximum: 10000
-        org_daily_cap:
-          type: integer
-          description: Maximum evaluations reserved across the organization each UTC day.
-          format: int64
-          minimum: 0
-          maximum: 10000
-        per_skill_daily_cap:
-          type: integer
-          description: Maximum evaluations reserved per skill each UTC day.
-          format: int64
-          minimum: 0
-          maximum: 10000
       required:
         - enabled
-        - per_skill_daily_cap
-        - org_daily_cap
-        - new_version_burst
+        - daily_cap
     UsageTiers:
       type: object
       properties:
@@ -64093,6 +64209,57 @@ components:
         provider_type:
           type: string
           description: SSO provider type to shortcut into a specific setup flow (e.g. OktaSAML, GoogleSAML).
+    WorkUnitsTrendBucket:
+      type: object
+      properties:
+        cost_per_unit:
+          type: number
+          description: Cost per unit of work. Absent when the bucket has no positive work or no cost telemetry.
+          format: double
+        scored_sessions:
+          type: integer
+          description: Number of chat sessions scored by the work-units analysis in this bucket.
+          format: int64
+        timestamp:
+          type: string
+          description: Start of the UTC day this bucket covers.
+          format: date-time
+        tokens_per_unit:
+          type: number
+          description: Tokens per unit of work. Absent when the bucket has no positive work or no token telemetry.
+          format: double
+        total_cost:
+          type: number
+          description: Total cost in USD across the bucket's scored sessions.
+          format: double
+        total_tokens:
+          type: integer
+          description: Total tokens across the bucket's scored sessions.
+          format: int64
+        work_units:
+          type: number
+          description: Total work units delivered across the bucket's scored sessions.
+          format: double
+      required:
+        - timestamp
+        - scored_sessions
+        - work_units
+        - total_cost
+        - total_tokens
+    WorkUnitsTrendResult:
+      type: object
+      properties:
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkUnitsTrendBucket'
+          description: One bucket per UTC day in the window, oldest first, zero-filled for days without scores.
+        scores_available:
+          type: boolean
+          description: Whether any work-units scores exist in the window. False for organizations without work-units analysis.
+      required:
+        - scores_available
+        - buckets
   securitySchemes:
     admin_auth_header_Authorization:
       type: apiKey

@@ -16,6 +16,7 @@ import (
 	aboutc "github.com/speakeasy-api/gram/server/gen/http/about/client"
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
+	adminchatanalysisc "github.com/speakeasy-api/gram/server/gen/http/admin_chat_analysis/client"
 	adminremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/admin_remote_sessions/client"
 	agentc "github.com/speakeasy-api/gram/server/gen/http/agent/client"
 	aiintegrationsc "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/client"
@@ -95,7 +96,7 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
-		"chat (list-chats|load-chat|generate-title|credit-usage|delete-chat|set-pinned|submit-feedback|list-sources)",
+		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|submit-feedback|list-sources)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
@@ -118,6 +119,7 @@ func UsageCommands() []string {
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
+		"admin-chat-analysis (get-settings|upsert-work-units-settings|trigger-analysis)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
@@ -619,6 +621,13 @@ func ParseEndpoint(
 		chatListChatsSessionTokenFlag      = chatListChatsFlags.String("session-token", "", "")
 		chatListChatsProjectSlugInputFlag  = chatListChatsFlags.String("project-slug-input", "", "")
 		chatListChatsChatSessionsTokenFlag = chatListChatsFlags.String("chat-sessions-token", "", "")
+
+		chatGetWorkUnitsTrendFlags                 = flag.NewFlagSet("get-work-units-trend", flag.ExitOnError)
+		chatGetWorkUnitsTrendFromFlag              = chatGetWorkUnitsTrendFlags.String("from", "", "")
+		chatGetWorkUnitsTrendToFlag                = chatGetWorkUnitsTrendFlags.String("to", "", "")
+		chatGetWorkUnitsTrendSessionTokenFlag      = chatGetWorkUnitsTrendFlags.String("session-token", "", "")
+		chatGetWorkUnitsTrendProjectSlugInputFlag  = chatGetWorkUnitsTrendFlags.String("project-slug-input", "", "")
+		chatGetWorkUnitsTrendChatSessionsTokenFlag = chatGetWorkUnitsTrendFlags.String("chat-sessions-token", "", "")
 
 		chatLoadChatFlags                 = flag.NewFlagSet("load-chat", flag.ExitOnError)
 		chatLoadChatIDFlag                = chatLoadChatFlags.String("id", "REQUIRED", "")
@@ -1303,6 +1312,18 @@ func ParseEndpoint(
 		packagesPublishApikeyTokenFlag      = packagesPublishFlags.String("apikey-token", "", "")
 		packagesPublishSessionTokenFlag     = packagesPublishFlags.String("session-token", "", "")
 		packagesPublishProjectSlugInputFlag = packagesPublishFlags.String("project-slug-input", "", "")
+
+		adminChatAnalysisFlags = flag.NewFlagSet("admin-chat-analysis", flag.ContinueOnError)
+
+		adminChatAnalysisGetSettingsFlags            = flag.NewFlagSet("get-settings", flag.ExitOnError)
+		adminChatAnalysisGetSettingsSessionTokenFlag = adminChatAnalysisGetSettingsFlags.String("session-token", "", "")
+
+		adminChatAnalysisUpsertWorkUnitsSettingsFlags            = flag.NewFlagSet("upsert-work-units-settings", flag.ExitOnError)
+		adminChatAnalysisUpsertWorkUnitsSettingsBodyFlag         = adminChatAnalysisUpsertWorkUnitsSettingsFlags.String("body", "REQUIRED", "")
+		adminChatAnalysisUpsertWorkUnitsSettingsSessionTokenFlag = adminChatAnalysisUpsertWorkUnitsSettingsFlags.String("session-token", "", "")
+
+		adminChatAnalysisTriggerAnalysisFlags            = flag.NewFlagSet("trigger-analysis", flag.ExitOnError)
+		adminChatAnalysisTriggerAnalysisSessionTokenFlag = adminChatAnalysisTriggerAnalysisFlags.String("session-token", "", "")
 
 		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
 
@@ -2857,6 +2878,7 @@ func ParseEndpoint(
 
 	chatFlags.Usage = chatUsage
 	chatListChatsFlags.Usage = chatListChatsUsage
+	chatGetWorkUnitsTrendFlags.Usage = chatGetWorkUnitsTrendUsage
 	chatLoadChatFlags.Usage = chatLoadChatUsage
 	chatGenerateTitleFlags.Usage = chatGenerateTitleUsage
 	chatCreditUsageFlags.Usage = chatCreditUsageUsage
@@ -3029,6 +3051,11 @@ func ParseEndpoint(
 	packagesListPackagesFlags.Usage = packagesListPackagesUsage
 	packagesListVersionsFlags.Usage = packagesListVersionsUsage
 	packagesPublishFlags.Usage = packagesPublishUsage
+
+	adminChatAnalysisFlags.Usage = adminChatAnalysisUsage
+	adminChatAnalysisGetSettingsFlags.Usage = adminChatAnalysisGetSettingsUsage
+	adminChatAnalysisUpsertWorkUnitsSettingsFlags.Usage = adminChatAnalysisUpsertWorkUnitsSettingsUsage
+	adminChatAnalysisTriggerAnalysisFlags.Usage = adminChatAnalysisTriggerAnalysisUsage
 
 	pluginsFlags.Usage = pluginsUsage
 	pluginsListPluginsFlags.Usage = pluginsListPluginsUsage
@@ -3411,6 +3438,8 @@ func ParseEndpoint(
 			svcf = otelForwardingFlags
 		case "packages":
 			svcf = packagesFlags
+		case "admin-chat-analysis":
+			svcf = adminChatAnalysisFlags
 		case "plugins":
 			svcf = pluginsFlags
 		case "features":
@@ -3770,6 +3799,9 @@ func ParseEndpoint(
 			switch epn {
 			case "list-chats":
 				epf = chatListChatsFlags
+
+			case "get-work-units-trend":
+				epf = chatGetWorkUnitsTrendFlags
 
 			case "load-chat":
 				epf = chatLoadChatFlags
@@ -4242,6 +4274,19 @@ func ParseEndpoint(
 
 			case "publish":
 				epf = packagesPublishFlags
+
+			}
+
+		case "admin-chat-analysis":
+			switch epn {
+			case "get-settings":
+				epf = adminChatAnalysisGetSettingsFlags
+
+			case "upsert-work-units-settings":
+				epf = adminChatAnalysisUpsertWorkUnitsSettingsFlags
+
+			case "trigger-analysis":
+				epf = adminChatAnalysisTriggerAnalysisFlags
 
 			}
 
@@ -5407,6 +5452,9 @@ func ParseEndpoint(
 			case "list-chats":
 				endpoint = c.ListChats()
 				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsSourceFlag, *chatListChatsAssistantIDFlag, *chatListChatsSourceKindFlag, *chatListChatsExcludeSourceKindFlag, *chatListChatsHasRiskFlag, *chatListChatsAccountTypeFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
+			case "get-work-units-trend":
+				endpoint = c.GetWorkUnitsTrend()
+				data, err = chatc.BuildGetWorkUnitsTrendPayload(*chatGetWorkUnitsTrendFromFlag, *chatGetWorkUnitsTrendToFlag, *chatGetWorkUnitsTrendSessionTokenFlag, *chatGetWorkUnitsTrendProjectSlugInputFlag, *chatGetWorkUnitsTrendChatSessionsTokenFlag)
 			case "load-chat":
 				endpoint = c.LoadChat()
 				data, err = chatc.BuildLoadChatPayload(*chatLoadChatIDFlag, *chatLoadChatGenerationFlag, *chatLoadChatLimitFlag, *chatLoadChatBeforeSeqFlag, *chatLoadChatAfterSeqFlag, *chatLoadChatFromStartFlag, *chatLoadChatRiskOnlyFlag, *chatLoadChatQueryFlag, *chatLoadChatSessionTokenFlag, *chatLoadChatProjectSlugInputFlag, *chatLoadChatChatSessionsTokenFlag)
@@ -5879,6 +5927,19 @@ func ParseEndpoint(
 			case "publish":
 				endpoint = c.Publish()
 				data, err = packagesc.BuildPublishPayload(*packagesPublishBodyFlag, *packagesPublishApikeyTokenFlag, *packagesPublishSessionTokenFlag, *packagesPublishProjectSlugInputFlag)
+			}
+		case "admin-chat-analysis":
+			c := adminchatanalysisc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-settings":
+				endpoint = c.GetSettings()
+				data, err = adminchatanalysisc.BuildGetSettingsPayload(*adminChatAnalysisGetSettingsSessionTokenFlag)
+			case "upsert-work-units-settings":
+				endpoint = c.UpsertWorkUnitsSettings()
+				data, err = adminchatanalysisc.BuildUpsertWorkUnitsSettingsPayload(*adminChatAnalysisUpsertWorkUnitsSettingsBodyFlag, *adminChatAnalysisUpsertWorkUnitsSettingsSessionTokenFlag)
+			case "trigger-analysis":
+				endpoint = c.TriggerAnalysis()
+				data, err = adminchatanalysisc.BuildTriggerAnalysisPayload(*adminChatAnalysisTriggerAnalysisSessionTokenFlag)
 			}
 		case "plugins":
 			c := pluginsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -8687,6 +8748,7 @@ func chatUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] chat COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-chats: List all chats for a project`)
+	fmt.Fprintln(os.Stderr, `    get-work-units-trend: Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.`)
 	fmt.Fprintln(os.Stderr, `    load-chat: Load a chat by its ID. Messages within a generation are paginated by `+"`"+`seq`+"`"+` keyset: omit cursors to receive the newest page, pass `+"`"+`before_seq`+"`"+` to load older messages (scroll up) or `+"`"+`after_seq`+"`"+` to load newer ones (scroll down). Set `+"`"+`from_start`+"`"+` to receive the oldest page (the start of the thread) instead of the newest. Omit `+"`"+`generation`+"`"+` to receive the latest generation. Set `+"`"+`risk_only`+"`"+` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `+"`"+`query`+"`"+` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `+"`"+`risk_only`+"`"+`).`)
 	fmt.Fprintln(os.Stderr, `    generate-title: Read or set a chat's title. Omit `+"`"+`title`+"`"+` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `+"`"+`title`+"`"+` to set a manual title that auto-generation will never overwrite; provide an empty `+"`"+`title`+"`"+` to clear the manual title and re-enable auto-generation.`)
 	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
@@ -8750,6 +8812,32 @@ func chatListChatsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --source \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --source-kind \"abc123\" --exclude-source-kind \"abc123\" --has-risk \"true\" --account-type \"team\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+}
+
+func chatGetWorkUnitsTrendUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat get-work-units-trend", os.Args[0])
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat get-work-units-trend --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 func chatLoadChatUsage() {
@@ -11902,6 +11990,75 @@ func packagesPublishUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "packages publish --body '{\n      \"deployment_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"version\": \"abc123\",\n      \"visibility\": \"private\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// adminChatAnalysisUsage displays the usage of the admin-chat-analysis command
+// and its subcommands.
+func adminChatAnalysisUsage() {
+	fmt.Fprintln(os.Stderr, `Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-chat-analysis COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-settings: Get the active organization's chat analysis settings. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    upsert-work-units-settings: Create or replace the active organization's chat analysis settings. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    trigger-analysis: Wake the chat analysis coordinator for every project in the active organization, instead of waiting for the periodic sweep. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s admin-chat-analysis COMMAND --help\n", os.Args[0])
+}
+func adminChatAnalysisGetSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-chat-analysis get-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the active organization's chat analysis settings. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-chat-analysis get-settings --session-token \"abc123\"")
+}
+
+func adminChatAnalysisUpsertWorkUnitsSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-chat-analysis upsert-work-units-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or replace the active organization's chat analysis settings. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-chat-analysis upsert-work-units-settings --body '{\n      \"work_units_daily_cap\": 1,\n      \"work_units_enabled\": false\n   }' --session-token \"abc123\"")
+}
+
+func adminChatAnalysisTriggerAnalysisUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-chat-analysis trigger-analysis", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Wake the chat analysis coordinator for every project in the active organization, instead of waiting for the periodic sweep. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-chat-analysis trigger-analysis --session-token \"abc123\"")
 }
 
 // pluginsUsage displays the usage of the plugins command and its subcommands.

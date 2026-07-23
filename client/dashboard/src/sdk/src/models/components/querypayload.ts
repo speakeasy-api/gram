@@ -54,6 +54,9 @@ export const QueryPayloadSortBy = {
   CacheCreationInputTokens: "cache_creation_input_tokens",
   TotalToolCalls: "total_tool_calls",
   TotalChats: "total_chats",
+  TotalWorkUnits: "total_work_units",
+  ScoredCost: "scored_cost",
+  ScoredTokens: "scored_tokens",
 } as const;
 /**
  * Measure used to rank groups for top_n. Defaults to total_cost.
