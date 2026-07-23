@@ -1184,6 +1184,478 @@ func DecodeDeleteGlobalIssuerResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildFetchGlobalIssuerMetadataRequest instantiates a HTTP request object
+// with method and path set to call the "adminRemoteSessions" service
+// "fetchGlobalIssuerMetadata" endpoint
+func (c *Client) BuildFetchGlobalIssuerMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FetchGlobalIssuerMetadataAdminRemoteSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("adminRemoteSessions", "fetchGlobalIssuerMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeFetchGlobalIssuerMetadataRequest returns an encoder for requests sent
+// to the adminRemoteSessions fetchGlobalIssuerMetadata server.
+func EncodeFetchGlobalIssuerMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*adminremotesessions.FetchGlobalIssuerMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("adminRemoteSessions", "fetchGlobalIssuerMetadata", "*adminremotesessions.FetchGlobalIssuerMetadataPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewFetchGlobalIssuerMetadataRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+		}
+		return nil
+	}
+}
+
+// DecodeFetchGlobalIssuerMetadataResponse returns a decoder for responses
+// returned by the adminRemoteSessions fetchGlobalIssuerMetadata endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeFetchGlobalIssuerMetadataResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeFetchGlobalIssuerMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body FetchGlobalIssuerMetadataResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			res := NewFetchGlobalIssuerMetadataRemoteSessionIssuerDraftOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body FetchGlobalIssuerMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body FetchGlobalIssuerMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body FetchGlobalIssuerMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body FetchGlobalIssuerMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body FetchGlobalIssuerMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body FetchGlobalIssuerMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body FetchGlobalIssuerMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body FetchGlobalIssuerMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+				}
+				err = ValidateFetchGlobalIssuerMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+				}
+				return nil, NewFetchGlobalIssuerMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body FetchGlobalIssuerMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+				}
+				err = ValidateFetchGlobalIssuerMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+				}
+				return nil, NewFetchGlobalIssuerMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "fetchGlobalIssuerMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body FetchGlobalIssuerMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "fetchGlobalIssuerMetadata", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRefreshGlobalIssuerMetadataRequest instantiates a HTTP request object
+// with method and path set to call the "adminRemoteSessions" service
+// "refreshGlobalIssuerMetadata" endpoint
+func (c *Client) BuildRefreshGlobalIssuerMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RefreshGlobalIssuerMetadataAdminRemoteSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("adminRemoteSessions", "refreshGlobalIssuerMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRefreshGlobalIssuerMetadataRequest returns an encoder for requests
+// sent to the adminRemoteSessions refreshGlobalIssuerMetadata server.
+func EncodeRefreshGlobalIssuerMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*adminremotesessions.RefreshGlobalIssuerMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("adminRemoteSessions", "refreshGlobalIssuerMetadata", "*adminremotesessions.RefreshGlobalIssuerMetadataPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRefreshGlobalIssuerMetadataRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRefreshGlobalIssuerMetadataResponse returns a decoder for responses
+// returned by the adminRemoteSessions refreshGlobalIssuerMetadata endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeRefreshGlobalIssuerMetadataResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRefreshGlobalIssuerMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RefreshGlobalIssuerMetadataResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			res := NewRefreshGlobalIssuerMetadataRemoteSessionIssuerRefreshOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RefreshGlobalIssuerMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RefreshGlobalIssuerMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RefreshGlobalIssuerMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RefreshGlobalIssuerMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RefreshGlobalIssuerMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RefreshGlobalIssuerMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RefreshGlobalIssuerMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RefreshGlobalIssuerMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+				}
+				err = ValidateRefreshGlobalIssuerMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+				}
+				return nil, NewRefreshGlobalIssuerMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RefreshGlobalIssuerMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+				}
+				err = ValidateRefreshGlobalIssuerMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+				}
+				return nil, NewRefreshGlobalIssuerMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "refreshGlobalIssuerMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RefreshGlobalIssuerMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "refreshGlobalIssuerMetadata", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateGlobalClientRequest instantiates a HTTP request object with
 // method and path set to call the "adminRemoteSessions" service
 // "createGlobalClient" endpoint

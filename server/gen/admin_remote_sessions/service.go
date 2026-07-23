@@ -32,6 +32,17 @@ type Service interface {
 	// Soft-delete a global remote_session_issuer. Blocked when any global
 	// remote_session_clients still reference it. Requires platform admin.
 	DeleteGlobalIssuer(context.Context, *DeleteGlobalIssuerPayload) (err error)
+	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
+	// document and return a draft suitable for createGlobalIssuer. Keyed by issuer
+	// URL; no record need exist and nothing is persisted. Requires platform admin.
+	FetchGlobalIssuerMetadata(context.Context, *FetchGlobalIssuerMetadataPayload) (res *types.RemoteSessionIssuerDraft, err error)
+	// Re-fetch an existing global remote_session_issuer's RFC 8414 metadata
+	// document and persist the discovered values. Keyed by issuer id. Only RFC
+	// 8414-derived columns are written — endpoints, the *_supported arrays,
+	// client_id_metadata_document_supported, and the documentation URLs. Gram
+	// behavior and display fields (oidc, passthrough, name, slug, logo, client
+	// setup documentation) are left alone. Requires platform admin.
+	RefreshGlobalIssuerMetadata(context.Context, *RefreshGlobalIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
 	// Register a global remote_session_client under an existing global
 	// remote_session_issuer. Caller supplies client_id and optional client_secret
 	// obtained out-of-band from the upstream issuer. Requires platform admin.
@@ -69,7 +80,7 @@ const ServiceName = "adminRemoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createGlobalIssuer", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "createGlobalClient", "listGlobalClients", "getGlobalClient", "updateGlobalClient", "deleteGlobalClient"}
+var MethodNames = [12]string{"createGlobalIssuer", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "createGlobalClient", "listGlobalClients", "getGlobalClient", "updateGlobalClient", "deleteGlobalClient"}
 
 // CreateGlobalClientPayload is the payload type of the adminRemoteSessions
 // service createGlobalClient method.
@@ -161,6 +172,14 @@ type DeleteGlobalIssuerPayload struct {
 	SessionToken *string
 }
 
+// FetchGlobalIssuerMetadataPayload is the payload type of the
+// adminRemoteSessions service fetchGlobalIssuerMetadata method.
+type FetchGlobalIssuerMetadataPayload struct {
+	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
+	Issuer       string
+	SessionToken *string
+}
+
 // GetGlobalClientPayload is the payload type of the adminRemoteSessions
 // service getGlobalClient method.
 type GetGlobalClientPayload struct {
@@ -213,6 +232,14 @@ type ListRemoteSessionIssuersResult struct {
 	Items []*types.RemoteSessionIssuer
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// RefreshGlobalIssuerMetadataPayload is the payload type of the
+// adminRemoteSessions service refreshGlobalIssuerMetadata method.
+type RefreshGlobalIssuerMetadataPayload struct {
+	// The remote_session_issuer id.
+	ID           string
+	SessionToken *string
 }
 
 // UpdateGlobalClientPayload is the payload type of the adminRemoteSessions

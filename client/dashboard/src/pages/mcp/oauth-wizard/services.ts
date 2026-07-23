@@ -180,9 +180,9 @@ export function createWizardServices(
       let authMethod = input.tokenAuthMethod;
       if (input.issuer) {
         try {
-          const draft = await client.remoteSessionIssuers.discover(
+          const draft = await client.remoteSessionIssuers.fetchMetadata(
             {
-              discoverRemoteSessionIssuerRequestBody: { issuer: input.issuer },
+              fetchIssuerMetadataRequestBody: { issuer: input.issuer },
             },
             undefined,
             { fetchOptions: { signal } },

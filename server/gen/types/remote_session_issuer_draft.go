@@ -7,8 +7,8 @@
 
 package types
 
-// RemoteSessionIssuerDraft is the result type of the remoteSessionIssuers
-// service discoverRemoteSessionIssuer method.
+// RemoteSessionIssuerDraft is the result type of the
+// organizationRemoteSessionIssuers service fetchIssuerMetadata method.
 type RemoteSessionIssuerDraft struct {
 	// Issuer URL; matches the iss claim.
 	Issuer string

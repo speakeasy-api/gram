@@ -65,10 +65,12 @@ trackedFiles:
   src/funcs/adminRemoteSessionsCreateGlobalIssuer.ts: {}
   src/funcs/adminRemoteSessionsDeleteGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsDeleteGlobalIssuer.ts: {}
+  src/funcs/adminRemoteSessionsFetchGlobalIssuerMetadata.ts: {}
   src/funcs/adminRemoteSessionsGetGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsGetGlobalIssuer.ts: {}
   src/funcs/adminRemoteSessionsListGlobalClients.ts: {}
   src/funcs/adminRemoteSessionsListGlobalIssuers.ts: {}
+  src/funcs/adminRemoteSessionsRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsUpdateGlobalIssuer.ts: {}
   src/funcs/agentGetPlugins.ts: {}
@@ -230,12 +232,14 @@ trackedFiles:
   src/funcs/organizationRemoteSessionClientsUpdate.ts: {}
   src/funcs/organizationRemoteSessionIssuersCreate.ts: {}
   src/funcs/organizationRemoteSessionIssuersDelete.ts: {}
+  src/funcs/organizationRemoteSessionIssuersFetchMetadata.ts: {}
   src/funcs/organizationRemoteSessionIssuersGet.ts: {}
   src/funcs/organizationRemoteSessionIssuersGetDeletePreflight.ts: {}
   src/funcs/organizationRemoteSessionIssuersGetMigratePreflight.ts: {}
   src/funcs/organizationRemoteSessionIssuersList.ts: {}
   src/funcs/organizationRemoteSessionIssuersMigrate.ts: {}
   src/funcs/organizationRemoteSessionIssuersMove.ts: {}
+  src/funcs/organizationRemoteSessionIssuersRefreshMetadata.ts: {}
   src/funcs/organizationRemoteSessionIssuersUpdate.ts: {}
   src/funcs/organizationRemoteSessionsList.ts: {}
   src/funcs/organizationRemoteSessionsRefresh.ts: {}
@@ -310,9 +314,10 @@ trackedFiles:
   src/funcs/remoteSessionClientsUpdate.ts: {}
   src/funcs/remoteSessionIssuersCreate.ts: {}
   src/funcs/remoteSessionIssuersDelete.ts: {}
-  src/funcs/remoteSessionIssuersDiscover.ts: {}
+  src/funcs/remoteSessionIssuersFetchMetadata.ts: {}
   src/funcs/remoteSessionIssuersGet.ts: {}
   src/funcs/remoteSessionIssuersList.ts: {}
+  src/funcs/remoteSessionIssuersRefreshMetadata.ts: {}
   src/funcs/remoteSessionIssuersUpdate.ts: {}
   src/funcs/remoteSessionsList.ts: {}
   src/funcs/remoteSessionsRevoke.ts: {}
@@ -609,7 +614,6 @@ trackedFiles:
   src/models/components/deploymentsummary.ts:
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
-  src/models/components/discoverremotesessionissuerrequestbody.ts: {}
   src/models/components/distributeskillrequestbody.ts: {}
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
@@ -634,6 +638,7 @@ trackedFiles:
   src/models/components/externalmcptooldefinition.ts: {}
   src/models/components/externaloauthserver.ts: {}
   src/models/components/externaloauthserverform.ts: {}
+  src/models/components/fetchissuermetadatarequestbody.ts: {}
   src/models/components/fetchopenapiv3fromurlform2.ts: {}
   src/models/components/filteroption.ts: {}
   src/models/components/functionenvironmentvariable.ts: {}
@@ -906,6 +911,7 @@ trackedFiles:
   src/models/components/remotesessionclient.ts: {}
   src/models/components/remotesessionissuer.ts: {}
   src/models/components/remotesessionissuerdraft.ts: {}
+  src/models/components/remotesessionissuerrefresh.ts: {}
   src/models/components/removeclientfrommcpserverrequestbody.ts: {}
   src/models/components/rendertemplatebyidrequestbody.ts: {}
   src/models/components/rendertemplaterequestbody.ts: {}
@@ -1271,7 +1277,6 @@ trackedFiles:
   src/models/operations/disablerbac.ts: {}
   src/models/operations/disablewebhooks.ts: {}
   src/models/operations/discoverremotemcpprotectedresourcemetadata.ts: {}
-  src/models/operations/discoverremotesessionissuer.ts: {}
   src/models/operations/distributeskill.ts: {}
   src/models/operations/downloadcodexinstallscript.ts: {}
   src/models/operations/downloadobservabilityplugin.ts: {}
@@ -1282,7 +1287,10 @@ trackedFiles:
   src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
+  src/models/operations/fetchglobalremotesessionissuermetadata.ts: {}
   src/models/operations/fetchopenapiv3fromurl.ts: {}
+  src/models/operations/fetchorganizationremotesessionissuermetadata.ts: {}
+  src/models/operations/fetchremotesessionissuermetadata.ts: {}
   src/models/operations/generatetitle.ts: {}
   src/models/operations/generateworkosadminportallink.ts: {}
   src/models/operations/getactivedeployment.ts: {}
@@ -1478,7 +1486,10 @@ trackedFiles:
   src/models/operations/querytumdetails.ts: {}
   src/models/operations/receiveworkoswebhook.ts: {}
   src/models/operations/redeploydeployment.ts: {}
+  src/models/operations/refreshglobalremotesessionissuermetadata.ts: {}
   src/models/operations/refreshorganizationremotesession.ts: {}
+  src/models/operations/refreshorganizationremotesessionissuermetadata.ts: {}
+  src/models/operations/refreshremotesessionissuermetadata.ts: {}
   src/models/operations/register.ts: {}
   src/models/operations/registerdomain.ts: {}
   src/models/operations/removeoauthserver.ts: {}
@@ -1733,7 +1744,6 @@ trackedFiles:
   src/react-query/disableRBAC.ts: {}
   src/react-query/disableWebhooks.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
-  src/react-query/discoverRemoteSessionIssuer.ts: {}
   src/react-query/distributeSkill.ts: {}
   src/react-query/enableRBAC.ts: {}
   src/react-query/enableWebhooks.ts: {}
@@ -1741,7 +1751,10 @@ trackedFiles:
   src/react-query/evolveDeployment.ts: {}
   src/react-query/exportMcpMetadata.ts: {}
   src/react-query/featuresSet.ts: {}
+  src/react-query/fetchGlobalRemoteSessionIssuerMetadata.ts: {}
   src/react-query/fetchOpenAPIv3FromURL.ts: {}
+  src/react-query/fetchOrganizationRemoteSessionIssuerMetadata.ts: {}
+  src/react-query/fetchRemoteSessionIssuerMetadata.ts: {}
   src/react-query/generateWorkOSAdminPortalLink.ts: {}
   src/react-query/getAssistantMemory.core.ts: {}
   src/react-query/getAssistantMemory.ts: {}
@@ -1985,7 +1998,10 @@ trackedFiles:
   src/react-query/rbacStatus.core.ts: {}
   src/react-query/rbacStatus.ts: {}
   src/react-query/redeployDeployment.ts: {}
+  src/react-query/refreshGlobalRemoteSessionIssuerMetadata.ts: {}
   src/react-query/refreshOrganizationRemoteSession.ts: {}
+  src/react-query/refreshOrganizationRemoteSessionIssuerMetadata.ts: {}
+  src/react-query/refreshRemoteSessionIssuerMetadata.ts: {}
   src/react-query/register.ts: {}
   src/react-query/registerDomain.ts: {}
   src/react-query/remoteMcpServerHeaders.core.ts: {}
@@ -3686,6 +3702,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  fetchGlobalRemoteSessionIssuerMetadata:
+    speakeasy-default-fetch-global-remote-session-issuer-metadata:
+      requestBody:
+        application/json: {"issuer": "discover"}
+      responses:
+        "200":
+          application/json: {"client_id_metadata_document_supported": false, "discovery_warnings": ["<value 1>"], "issuer": "jcb", "oidc": true, "passthrough": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   fetchOpenAPIv3FromURL:
     speakeasy-default-fetch-open-AP-iv3-from-URL:
       requestBody:
@@ -3697,6 +3724,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  fetchOrganizationRemoteSessionIssuerMetadata:
+    speakeasy-default-fetch-organization-remote-session-issuer-metadata:
+      requestBody:
+        application/json: {"issuer": "american_express"}
+      responses:
+        "200":
+          application/json: {"client_id_metadata_document_supported": true, "discovery_warnings": ["<value 1>", "<value 2>"], "issuer": "american_express", "oidc": true, "passthrough": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  fetchRemoteSessionIssuerMetadata:
+    speakeasy-default-fetch-remote-session-issuer-metadata:
+      requestBody:
+        application/json: {"issuer": "jcb"}
+      responses:
+        "200":
+          application/json: {"client_id_metadata_document_supported": false, "discovery_warnings": ["<value 1>"], "issuer": "discover", "oidc": true, "passthrough": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   generateTitle:
     speakeasy-default-generate-title:
       requestBody:
@@ -5823,6 +5872,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  refreshGlobalRemoteSessionIssuerMetadata:
+    speakeasy-default-refresh-global-remote-session-issuer-metadata:
+      requestBody:
+        application/json: {"id": "74e6b38e-3dc9-4dbb-a031-92944696292e"}
+      responses:
+        "200":
+          application/json: {"discovery_warnings": [], "issuer": {"client_id_metadata_document_supported": false, "created_at": "2024-12-18T06:31:01.309Z", "id": "2d7b1aeb-1e86-4a6b-9caa-12c9efb1feaf", "issuer": "visa", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2025-03-27T08:01:13.481Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   refreshOrganizationRemoteSession:
     speakeasy-default-refresh-organization-remote-session:
       parameters:
@@ -5837,6 +5897,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  refreshOrganizationRemoteSessionIssuerMetadata:
+    speakeasy-default-refresh-organization-remote-session-issuer-metadata:
+      requestBody:
+        application/json: {"id": "7c89edef-7d0b-4b0b-ac8f-ba56d47f082d"}
+      responses:
+        "200":
+          application/json: {"discovery_warnings": ["<value 1>", "<value 2>", "<value 3>"], "issuer": {"client_id_metadata_document_supported": false, "created_at": "2026-07-12T12:50:52.784Z", "id": "c3b5b359-5ae6-443f-8c55-7729bdb8df0e", "issuer": "mastercard", "oidc": false, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-01-24T07:01:39.550Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  refreshRemoteSessionIssuerMetadata:
+    speakeasy-default-refresh-remote-session-issuer-metadata:
+      requestBody:
+        application/json: {"id": "4a85b48f-df1e-4a45-91bd-dc5acda3ccaa"}
+      responses:
+        "200":
+          application/json: {"discovery_warnings": [], "issuer": {"client_id_metadata_document_supported": false, "created_at": "2026-08-07T16:10:32.546Z", "id": "5fb2a7e9-6b25-4f51-871f-d5f33cb2ea3e", "issuer": "jcb", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-19T07:16:08.425Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   register:
     speakeasy-default-register:
       requestBody:

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { remoteSessionIssuersDiscover } from "../funcs/remoteSessionIssuersDiscover.js";
+import { remoteSessionIssuersFetchMetadata } from "../funcs/remoteSessionIssuersFetchMetadata.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
@@ -24,22 +24,23 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  DiscoverRemoteSessionIssuerRequest,
-  DiscoverRemoteSessionIssuerSecurity,
-} from "../models/operations/discoverremotesessionissuer.js";
+  FetchRemoteSessionIssuerMetadataRequest,
+  FetchRemoteSessionIssuerMetadataSecurity,
+} from "../models/operations/fetchremotesessionissuermetadata.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type DiscoverRemoteSessionIssuerMutationVariables = {
-  request: DiscoverRemoteSessionIssuerRequest;
-  security?: DiscoverRemoteSessionIssuerSecurity | undefined;
+export type FetchRemoteSessionIssuerMetadataMutationVariables = {
+  request: FetchRemoteSessionIssuerMetadataRequest;
+  security?: FetchRemoteSessionIssuerMetadataSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type DiscoverRemoteSessionIssuerMutationData = RemoteSessionIssuerDraft;
+export type FetchRemoteSessionIssuerMetadataMutationData =
+  RemoteSessionIssuerDraft;
 
-export type DiscoverRemoteSessionIssuerMutationError =
+export type FetchRemoteSessionIssuerMetadataMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +52,49 @@ export type DiscoverRemoteSessionIssuerMutationError =
   | SDKValidationError;
 
 /**
- * discoverRemoteSessionIssuer remoteSessionIssuers
+ * fetchRemoteSessionIssuerMetadata remoteSessionIssuers
  *
  * @remarks
- * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.
+ * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Use refreshMetadata to re-discover and persist against an existing issuer.
  */
-export function useDiscoverRemoteSessionIssuerMutation(
+export function useFetchRemoteSessionIssuerMetadataMutation(
   options?: MutationHookOptions<
-    DiscoverRemoteSessionIssuerMutationData,
-    DiscoverRemoteSessionIssuerMutationError,
-    DiscoverRemoteSessionIssuerMutationVariables
+    FetchRemoteSessionIssuerMetadataMutationData,
+    FetchRemoteSessionIssuerMetadataMutationError,
+    FetchRemoteSessionIssuerMetadataMutationVariables
   >,
 ): UseMutationResult<
-  DiscoverRemoteSessionIssuerMutationData,
-  DiscoverRemoteSessionIssuerMutationError,
-  DiscoverRemoteSessionIssuerMutationVariables
+  FetchRemoteSessionIssuerMetadataMutationData,
+  FetchRemoteSessionIssuerMetadataMutationError,
+  FetchRemoteSessionIssuerMetadataMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildDiscoverRemoteSessionIssuerMutation(client, options),
+    ...buildFetchRemoteSessionIssuerMetadataMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyDiscoverRemoteSessionIssuer(): MutationKey {
-  return ["@gram/client", "remoteSessionIssuers", "discover"];
+export function mutationKeyFetchRemoteSessionIssuerMetadata(): MutationKey {
+  return ["@gram/client", "remoteSessionIssuers", "fetchMetadata"];
 }
 
-export function buildDiscoverRemoteSessionIssuerMutation(
+export function buildFetchRemoteSessionIssuerMetadataMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: DiscoverRemoteSessionIssuerMutationVariables,
-  ) => Promise<DiscoverRemoteSessionIssuerMutationData>;
+    variables: FetchRemoteSessionIssuerMetadataMutationVariables,
+  ) => Promise<FetchRemoteSessionIssuerMetadataMutationData>;
 } {
   return {
-    mutationKey: mutationKeyDiscoverRemoteSessionIssuer(),
-    mutationFn: function discoverRemoteSessionIssuerMutationFn({
+    mutationKey: mutationKeyFetchRemoteSessionIssuerMetadata(),
+    mutationFn: function fetchRemoteSessionIssuerMetadataMutationFn({
       request,
       security,
       options,
-    }): Promise<DiscoverRemoteSessionIssuerMutationData> {
+    }): Promise<FetchRemoteSessionIssuerMetadataMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +107,7 @@ export function buildDiscoverRemoteSessionIssuerMutation(
           ),
         },
       };
-      return unwrapAsync(remoteSessionIssuersDiscover(
+      return unwrapAsync(remoteSessionIssuersFetchMetadata(
         client$,
         request,
         security,

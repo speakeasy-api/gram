@@ -29,6 +29,8 @@ type Server struct {
 	MoveIssuer                http.Handler
 	GetIssuerMigratePreflight http.Handler
 	MigrateIssuer             http.Handler
+	FetchIssuerMetadata       http.Handler
+	RefreshIssuerMetadata     http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -67,6 +69,8 @@ func New(
 			{"MoveIssuer", "POST", "/rpc/organizationRemoteSessionIssuers.move"},
 			{"GetIssuerMigratePreflight", "GET", "/rpc/organizationRemoteSessionIssuers.getMigratePreflight"},
 			{"MigrateIssuer", "POST", "/rpc/organizationRemoteSessionIssuers.migrate"},
+			{"FetchIssuerMetadata", "POST", "/rpc/organizationRemoteSessionIssuers.fetchMetadata"},
+			{"RefreshIssuerMetadata", "POST", "/rpc/organizationRemoteSessionIssuers.refreshMetadata"},
 		},
 		CreateIssuer:              NewCreateIssuerHandler(e.CreateIssuer, mux, decoder, encoder, errhandler, formatter),
 		ListIssuers:               NewListIssuersHandler(e.ListIssuers, mux, decoder, encoder, errhandler, formatter),
@@ -77,6 +81,8 @@ func New(
 		MoveIssuer:                NewMoveIssuerHandler(e.MoveIssuer, mux, decoder, encoder, errhandler, formatter),
 		GetIssuerMigratePreflight: NewGetIssuerMigratePreflightHandler(e.GetIssuerMigratePreflight, mux, decoder, encoder, errhandler, formatter),
 		MigrateIssuer:             NewMigrateIssuerHandler(e.MigrateIssuer, mux, decoder, encoder, errhandler, formatter),
+		FetchIssuerMetadata:       NewFetchIssuerMetadataHandler(e.FetchIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		RefreshIssuerMetadata:     NewRefreshIssuerMetadataHandler(e.RefreshIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -94,6 +100,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.MoveIssuer = m(s.MoveIssuer)
 	s.GetIssuerMigratePreflight = m(s.GetIssuerMigratePreflight)
 	s.MigrateIssuer = m(s.MigrateIssuer)
+	s.FetchIssuerMetadata = m(s.FetchIssuerMetadata)
+	s.RefreshIssuerMetadata = m(s.RefreshIssuerMetadata)
 }
 
 // MethodNames returns the methods served.
@@ -111,6 +119,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountMoveIssuerHandler(mux, h.MoveIssuer)
 	MountGetIssuerMigratePreflightHandler(mux, h.GetIssuerMigratePreflight)
 	MountMigrateIssuerHandler(mux, h.MigrateIssuer)
+	MountFetchIssuerMetadataHandler(mux, h.FetchIssuerMetadata)
+	MountRefreshIssuerMetadataHandler(mux, h.RefreshIssuerMetadata)
 }
 
 // Mount configures the mux to serve the organizationRemoteSessionIssuers
@@ -582,6 +592,114 @@ func NewMigrateIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "migrateIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountFetchIssuerMetadataHandler configures the mux to serve the
+// "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint.
+func MountFetchIssuerMetadataHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizationRemoteSessionIssuers.fetchMetadata", f)
+}
+
+// NewFetchIssuerMetadataHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizationRemoteSessionIssuers" service
+// "fetchIssuerMetadata" endpoint.
+func NewFetchIssuerMetadataHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeFetchIssuerMetadataRequest(mux, decoder)
+		encodeResponse = EncodeFetchIssuerMetadataResponse(encoder)
+		encodeError    = EncodeFetchIssuerMetadataError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "fetchIssuerMetadata")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRefreshIssuerMetadataHandler configures the mux to serve the
+// "organizationRemoteSessionIssuers" service "refreshIssuerMetadata" endpoint.
+func MountRefreshIssuerMetadataHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizationRemoteSessionIssuers.refreshMetadata", f)
+}
+
+// NewRefreshIssuerMetadataHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizationRemoteSessionIssuers" service
+// "refreshIssuerMetadata" endpoint.
+func NewRefreshIssuerMetadataHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRefreshIssuerMetadataRequest(mux, decoder)
+		encodeResponse = EncodeRefreshIssuerMetadataResponse(encoder)
+		encodeError    = EncodeRefreshIssuerMetadataError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "refreshIssuerMetadata")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

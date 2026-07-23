@@ -281,7 +281,7 @@ describe("autoConfigureRemoteMcpAuth", () => {
       message: "No OAuth protected-resource metadata was discovered.",
       warn: false,
     });
-    expect(client.remoteSessionIssuers.discover).not.toHaveBeenCalled();
+    expect(client.remoteSessionIssuers.fetchMetadata).not.toHaveBeenCalled();
   });
 
   it("cleans up a newly-created issuer but keeps the USI when client registration fails", async () => {
@@ -350,7 +350,7 @@ function mockClient({
         .mockResolvedValue(protectedResource),
     },
     remoteSessionIssuers: {
-      discover: vi.fn().mockResolvedValue(issuerDraft),
+      fetchMetadata: vi.fn().mockResolvedValue(issuerDraft),
       list: vi.fn().mockResolvedValue(pageIterator(issuers)),
       create: vi.fn().mockResolvedValue(
         remoteSessionIssuer({

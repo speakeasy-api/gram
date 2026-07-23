@@ -95,7 +95,10 @@ export function CreateRemoteIdentityProviderSheet({
     showDiscoverControls,
     showResetControls,
     endpointWarnings,
-  } = useIssuerDiscovery(null);
+    // This sheet can create an organization-level issuer, which has no project
+    // to authorize against, so it fetches metadata through the org-scoped
+    // endpoint rather than borrowing the active project's scope.
+  } = useIssuerDiscovery(null, { scope: "organization" });
 
   const createMutation = useCreateOrganizationRemoteSessionIssuerMutation({
     onSuccess: async (created) => {

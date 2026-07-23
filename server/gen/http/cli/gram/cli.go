@@ -124,9 +124,9 @@ func UsageCommands() []string {
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|clone-client-fromoauth-proxy-provider|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
-		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer)",
-		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
-		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client)",
+		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
+		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
+		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
@@ -1667,13 +1667,29 @@ func ParseEndpoint(
 		organizationRemoteSessionIssuersMigrateIssuerSessionTokenFlag = organizationRemoteSessionIssuersMigrateIssuerFlags.String("session-token", "", "")
 		organizationRemoteSessionIssuersMigrateIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersMigrateIssuerFlags.String("apikey-token", "", "")
 
+		organizationRemoteSessionIssuersFetchIssuerMetadataFlags            = flag.NewFlagSet("fetch-issuer-metadata", flag.ExitOnError)
+		organizationRemoteSessionIssuersFetchIssuerMetadataBodyFlag         = organizationRemoteSessionIssuersFetchIssuerMetadataFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionIssuersFetchIssuerMetadataSessionTokenFlag = organizationRemoteSessionIssuersFetchIssuerMetadataFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersFetchIssuerMetadataApikeyTokenFlag  = organizationRemoteSessionIssuersFetchIssuerMetadataFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersRefreshIssuerMetadataFlags            = flag.NewFlagSet("refresh-issuer-metadata", flag.ExitOnError)
+		organizationRemoteSessionIssuersRefreshIssuerMetadataBodyFlag         = organizationRemoteSessionIssuersRefreshIssuerMetadataFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionIssuersRefreshIssuerMetadataSessionTokenFlag = organizationRemoteSessionIssuersRefreshIssuerMetadataFlags.String("session-token", "", "")
+		organizationRemoteSessionIssuersRefreshIssuerMetadataApikeyTokenFlag  = organizationRemoteSessionIssuersRefreshIssuerMetadataFlags.String("apikey-token", "", "")
+
 		remoteSessionIssuersFlags = flag.NewFlagSet("remote-session-issuers", flag.ContinueOnError)
 
-		remoteSessionIssuersDiscoverRemoteSessionIssuerFlags                = flag.NewFlagSet("discover-remote-session-issuer", flag.ExitOnError)
-		remoteSessionIssuersDiscoverRemoteSessionIssuerBodyFlag             = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
-		remoteSessionIssuersDiscoverRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("session-token", "", "")
-		remoteSessionIssuersDiscoverRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("apikey-token", "", "")
-		remoteSessionIssuersDiscoverRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("project-slug-input", "", "")
+		remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags                = flag.NewFlagSet("fetch-remote-session-issuer-metadata", flag.ExitOnError)
+		remoteSessionIssuersFetchRemoteSessionIssuerMetadataBodyFlag             = remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags.String("body", "REQUIRED", "")
+		remoteSessionIssuersFetchRemoteSessionIssuerMetadataSessionTokenFlag     = remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags.String("session-token", "", "")
+		remoteSessionIssuersFetchRemoteSessionIssuerMetadataApikeyTokenFlag      = remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags.String("apikey-token", "", "")
+		remoteSessionIssuersFetchRemoteSessionIssuerMetadataProjectSlugInputFlag = remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags.String("project-slug-input", "", "")
+
+		remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags                = flag.NewFlagSet("refresh-remote-session-issuer-metadata", flag.ExitOnError)
+		remoteSessionIssuersRefreshRemoteSessionIssuerMetadataBodyFlag             = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags.String("body", "REQUIRED", "")
+		remoteSessionIssuersRefreshRemoteSessionIssuerMetadataSessionTokenFlag     = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags.String("session-token", "", "")
+		remoteSessionIssuersRefreshRemoteSessionIssuerMetadataApikeyTokenFlag      = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags.String("apikey-token", "", "")
+		remoteSessionIssuersRefreshRemoteSessionIssuerMetadataProjectSlugInputFlag = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags.String("project-slug-input", "", "")
 
 		remoteSessionIssuersCreateRemoteSessionIssuerFlags                = flag.NewFlagSet("create-remote-session-issuer", flag.ExitOnError)
 		remoteSessionIssuersCreateRemoteSessionIssuerBodyFlag             = remoteSessionIssuersCreateRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
@@ -1729,6 +1745,14 @@ func ParseEndpoint(
 		adminRemoteSessionsDeleteGlobalIssuerFlags            = flag.NewFlagSet("delete-global-issuer", flag.ExitOnError)
 		adminRemoteSessionsDeleteGlobalIssuerIDFlag           = adminRemoteSessionsDeleteGlobalIssuerFlags.String("id", "REQUIRED", "")
 		adminRemoteSessionsDeleteGlobalIssuerSessionTokenFlag = adminRemoteSessionsDeleteGlobalIssuerFlags.String("session-token", "", "")
+
+		adminRemoteSessionsFetchGlobalIssuerMetadataFlags            = flag.NewFlagSet("fetch-global-issuer-metadata", flag.ExitOnError)
+		adminRemoteSessionsFetchGlobalIssuerMetadataBodyFlag         = adminRemoteSessionsFetchGlobalIssuerMetadataFlags.String("body", "REQUIRED", "")
+		adminRemoteSessionsFetchGlobalIssuerMetadataSessionTokenFlag = adminRemoteSessionsFetchGlobalIssuerMetadataFlags.String("session-token", "", "")
+
+		adminRemoteSessionsRefreshGlobalIssuerMetadataFlags            = flag.NewFlagSet("refresh-global-issuer-metadata", flag.ExitOnError)
+		adminRemoteSessionsRefreshGlobalIssuerMetadataBodyFlag         = adminRemoteSessionsRefreshGlobalIssuerMetadataFlags.String("body", "REQUIRED", "")
+		adminRemoteSessionsRefreshGlobalIssuerMetadataSessionTokenFlag = adminRemoteSessionsRefreshGlobalIssuerMetadataFlags.String("session-token", "", "")
 
 		adminRemoteSessionsCreateGlobalClientFlags            = flag.NewFlagSet("create-global-client", flag.ExitOnError)
 		adminRemoteSessionsCreateGlobalClientBodyFlag         = adminRemoteSessionsCreateGlobalClientFlags.String("body", "REQUIRED", "")
@@ -3108,9 +3132,12 @@ func ParseEndpoint(
 	organizationRemoteSessionIssuersMoveIssuerFlags.Usage = organizationRemoteSessionIssuersMoveIssuerUsage
 	organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.Usage = organizationRemoteSessionIssuersGetIssuerMigratePreflightUsage
 	organizationRemoteSessionIssuersMigrateIssuerFlags.Usage = organizationRemoteSessionIssuersMigrateIssuerUsage
+	organizationRemoteSessionIssuersFetchIssuerMetadataFlags.Usage = organizationRemoteSessionIssuersFetchIssuerMetadataUsage
+	organizationRemoteSessionIssuersRefreshIssuerMetadataFlags.Usage = organizationRemoteSessionIssuersRefreshIssuerMetadataUsage
 
 	remoteSessionIssuersFlags.Usage = remoteSessionIssuersUsage
-	remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.Usage = remoteSessionIssuersDiscoverRemoteSessionIssuerUsage
+	remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags.Usage = remoteSessionIssuersFetchRemoteSessionIssuerMetadataUsage
+	remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags.Usage = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataUsage
 	remoteSessionIssuersCreateRemoteSessionIssuerFlags.Usage = remoteSessionIssuersCreateRemoteSessionIssuerUsage
 	remoteSessionIssuersUpdateRemoteSessionIssuerFlags.Usage = remoteSessionIssuersUpdateRemoteSessionIssuerUsage
 	remoteSessionIssuersListRemoteSessionIssuersFlags.Usage = remoteSessionIssuersListRemoteSessionIssuersUsage
@@ -3123,6 +3150,8 @@ func ParseEndpoint(
 	adminRemoteSessionsGetGlobalIssuerFlags.Usage = adminRemoteSessionsGetGlobalIssuerUsage
 	adminRemoteSessionsUpdateGlobalIssuerFlags.Usage = adminRemoteSessionsUpdateGlobalIssuerUsage
 	adminRemoteSessionsDeleteGlobalIssuerFlags.Usage = adminRemoteSessionsDeleteGlobalIssuerUsage
+	adminRemoteSessionsFetchGlobalIssuerMetadataFlags.Usage = adminRemoteSessionsFetchGlobalIssuerMetadataUsage
+	adminRemoteSessionsRefreshGlobalIssuerMetadataFlags.Usage = adminRemoteSessionsRefreshGlobalIssuerMetadataUsage
 	adminRemoteSessionsCreateGlobalClientFlags.Usage = adminRemoteSessionsCreateGlobalClientUsage
 	adminRemoteSessionsListGlobalClientsFlags.Usage = adminRemoteSessionsListGlobalClientsUsage
 	adminRemoteSessionsGetGlobalClientFlags.Usage = adminRemoteSessionsGetGlobalClientUsage
@@ -4466,12 +4495,21 @@ func ParseEndpoint(
 			case "migrate-issuer":
 				epf = organizationRemoteSessionIssuersMigrateIssuerFlags
 
+			case "fetch-issuer-metadata":
+				epf = organizationRemoteSessionIssuersFetchIssuerMetadataFlags
+
+			case "refresh-issuer-metadata":
+				epf = organizationRemoteSessionIssuersRefreshIssuerMetadataFlags
+
 			}
 
 		case "remote-session-issuers":
 			switch epn {
-			case "discover-remote-session-issuer":
-				epf = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags
+			case "fetch-remote-session-issuer-metadata":
+				epf = remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags
+
+			case "refresh-remote-session-issuer-metadata":
+				epf = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags
 
 			case "create-remote-session-issuer":
 				epf = remoteSessionIssuersCreateRemoteSessionIssuerFlags
@@ -4506,6 +4544,12 @@ func ParseEndpoint(
 
 			case "delete-global-issuer":
 				epf = adminRemoteSessionsDeleteGlobalIssuerFlags
+
+			case "fetch-global-issuer-metadata":
+				epf = adminRemoteSessionsFetchGlobalIssuerMetadataFlags
+
+			case "refresh-global-issuer-metadata":
+				epf = adminRemoteSessionsRefreshGlobalIssuerMetadataFlags
 
 			case "create-global-client":
 				epf = adminRemoteSessionsCreateGlobalClientFlags
@@ -6102,13 +6146,22 @@ func ParseEndpoint(
 			case "migrate-issuer":
 				endpoint = c.MigrateIssuer()
 				data, err = organizationremotesessionissuersc.BuildMigrateIssuerPayload(*organizationRemoteSessionIssuersMigrateIssuerBodyFlag, *organizationRemoteSessionIssuersMigrateIssuerSessionTokenFlag, *organizationRemoteSessionIssuersMigrateIssuerApikeyTokenFlag)
+			case "fetch-issuer-metadata":
+				endpoint = c.FetchIssuerMetadata()
+				data, err = organizationremotesessionissuersc.BuildFetchIssuerMetadataPayload(*organizationRemoteSessionIssuersFetchIssuerMetadataBodyFlag, *organizationRemoteSessionIssuersFetchIssuerMetadataSessionTokenFlag, *organizationRemoteSessionIssuersFetchIssuerMetadataApikeyTokenFlag)
+			case "refresh-issuer-metadata":
+				endpoint = c.RefreshIssuerMetadata()
+				data, err = organizationremotesessionissuersc.BuildRefreshIssuerMetadataPayload(*organizationRemoteSessionIssuersRefreshIssuerMetadataBodyFlag, *organizationRemoteSessionIssuersRefreshIssuerMetadataSessionTokenFlag, *organizationRemoteSessionIssuersRefreshIssuerMetadataApikeyTokenFlag)
 			}
 		case "remote-session-issuers":
 			c := remotesessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "discover-remote-session-issuer":
-				endpoint = c.DiscoverRemoteSessionIssuer()
-				data, err = remotesessionissuersc.BuildDiscoverRemoteSessionIssuerPayload(*remoteSessionIssuersDiscoverRemoteSessionIssuerBodyFlag, *remoteSessionIssuersDiscoverRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersDiscoverRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersDiscoverRemoteSessionIssuerProjectSlugInputFlag)
+			case "fetch-remote-session-issuer-metadata":
+				endpoint = c.FetchRemoteSessionIssuerMetadata()
+				data, err = remotesessionissuersc.BuildFetchRemoteSessionIssuerMetadataPayload(*remoteSessionIssuersFetchRemoteSessionIssuerMetadataBodyFlag, *remoteSessionIssuersFetchRemoteSessionIssuerMetadataSessionTokenFlag, *remoteSessionIssuersFetchRemoteSessionIssuerMetadataApikeyTokenFlag, *remoteSessionIssuersFetchRemoteSessionIssuerMetadataProjectSlugInputFlag)
+			case "refresh-remote-session-issuer-metadata":
+				endpoint = c.RefreshRemoteSessionIssuerMetadata()
+				data, err = remotesessionissuersc.BuildRefreshRemoteSessionIssuerMetadataPayload(*remoteSessionIssuersRefreshRemoteSessionIssuerMetadataBodyFlag, *remoteSessionIssuersRefreshRemoteSessionIssuerMetadataSessionTokenFlag, *remoteSessionIssuersRefreshRemoteSessionIssuerMetadataApikeyTokenFlag, *remoteSessionIssuersRefreshRemoteSessionIssuerMetadataProjectSlugInputFlag)
 			case "create-remote-session-issuer":
 				endpoint = c.CreateRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildCreateRemoteSessionIssuerPayload(*remoteSessionIssuersCreateRemoteSessionIssuerBodyFlag, *remoteSessionIssuersCreateRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersCreateRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersCreateRemoteSessionIssuerProjectSlugInputFlag)
@@ -6143,6 +6196,12 @@ func ParseEndpoint(
 			case "delete-global-issuer":
 				endpoint = c.DeleteGlobalIssuer()
 				data, err = adminremotesessionsc.BuildDeleteGlobalIssuerPayload(*adminRemoteSessionsDeleteGlobalIssuerIDFlag, *adminRemoteSessionsDeleteGlobalIssuerSessionTokenFlag)
+			case "fetch-global-issuer-metadata":
+				endpoint = c.FetchGlobalIssuerMetadata()
+				data, err = adminremotesessionsc.BuildFetchGlobalIssuerMetadataPayload(*adminRemoteSessionsFetchGlobalIssuerMetadataBodyFlag, *adminRemoteSessionsFetchGlobalIssuerMetadataSessionTokenFlag)
+			case "refresh-global-issuer-metadata":
+				endpoint = c.RefreshGlobalIssuerMetadata()
+				data, err = adminremotesessionsc.BuildRefreshGlobalIssuerMetadataPayload(*adminRemoteSessionsRefreshGlobalIssuerMetadataBodyFlag, *adminRemoteSessionsRefreshGlobalIssuerMetadataSessionTokenFlag)
 			case "create-global-client":
 				endpoint = c.CreateGlobalClient()
 				data, err = adminremotesessionsc.BuildCreateGlobalClientPayload(*adminRemoteSessionsCreateGlobalClientBodyFlag, *adminRemoteSessionsCreateGlobalClientSessionTokenFlag)
@@ -13308,6 +13367,8 @@ func organizationRemoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-migrate-preflight: Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    fetch-issuer-metadata: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    refresh-issuer-metadata: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s organization-remote-session-issuers COMMAND --help\n", os.Args[0])
@@ -13514,13 +13575,58 @@ func organizationRemoteSessionIssuersMigrateIssuerUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers migrate-issuer --body '{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
+func organizationRemoteSessionIssuersFetchIssuerMetadataUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers fetch-issuer-metadata", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers fetch-issuer-metadata --body '{\n      \"issuer\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersRefreshIssuerMetadataUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers refresh-issuer-metadata", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers refresh-issuer-metadata --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
 // remoteSessionIssuersUsage displays the usage of the remote-session-issuers
 // command and its subcommands.
 func remoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-session-issuers COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    discover-remote-session-issuer: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.`)
+	fmt.Fprintln(os.Stderr, `    fetch-remote-session-issuer-metadata: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Use refreshMetadata to re-discover and persist against an existing issuer.`)
+	fmt.Fprintln(os.Stderr, `    refresh-remote-session-issuer-metadata: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.`)
 	fmt.Fprintln(os.Stderr, `    create-remote-session-issuer: Create a new remote_session_issuer.`)
 	fmt.Fprintln(os.Stderr, `    update-remote-session-issuer: Update fields on an existing remote_session_issuer.`)
 	fmt.Fprintln(os.Stderr, `    list-remote-session-issuers: List remote_session_issuers in the caller's project.`)
@@ -13530,9 +13636,9 @@ func remoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s remote-session-issuers COMMAND --help\n", os.Args[0])
 }
-func remoteSessionIssuersDiscoverRemoteSessionIssuerUsage() {
+func remoteSessionIssuersFetchRemoteSessionIssuerMetadataUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers discover-remote-session-issuer", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers fetch-remote-session-issuer-metadata", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -13541,7 +13647,7 @@ func remoteSessionIssuersDiscoverRemoteSessionIssuerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.`)
+	fmt.Fprintln(os.Stderr, `Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Use refreshMetadata to re-discover and persist against an existing issuer.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -13551,7 +13657,31 @@ func remoteSessionIssuersDiscoverRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers discover-remote-session-issuer --body '{\n      \"issuer\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers fetch-remote-session-issuer-metadata --body '{\n      \"issuer\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionIssuersRefreshRemoteSessionIssuerMetadataUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers refresh-remote-session-issuer-metadata", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers refresh-remote-session-issuer-metadata --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersCreateRemoteSessionIssuerUsage() {
@@ -13689,6 +13819,8 @@ func adminRemoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-global-issuer: Get a global remote_session_issuer by id. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    update-global-issuer: Update a global remote_session_issuer. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-global-issuer: Soft-delete a global remote_session_issuer. Blocked when any global remote_session_clients still reference it. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    fetch-global-issuer-metadata: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    refresh-global-issuer-metadata: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    create-global-client: Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    list-global-clients: List the global remote_session_clients registered with a global remote_session_issuer. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    get-global-client: Get a global remote_session_client by id. Requires platform admin.`)
@@ -13798,6 +13930,46 @@ func adminRemoteSessionsDeleteGlobalIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions delete-global-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsFetchGlobalIssuerMetadataUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions fetch-global-issuer-metadata", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions fetch-global-issuer-metadata --body '{\n      \"issuer\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsRefreshGlobalIssuerMetadataUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions refresh-global-issuer-metadata", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions refresh-global-issuer-metadata --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func adminRemoteSessionsCreateGlobalClientUsage() {

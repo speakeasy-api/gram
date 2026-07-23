@@ -46,9 +46,11 @@ func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.Auth
 	return authCtx, logger, nil
 }
 
-// orEmptySlice coalesces a nil slice to empty: the remote_session_issuers
-// *_supported columns are NOT NULL, and an explicit NULL in the INSERT bypasses
-// their empty-array default.
+// orEmptySlice coalesces a nil slice to empty. The remote_session_issuers
+// *_supported columns are NOT NULL: on INSERT an explicit NULL bypasses their
+// empty-array default, and on UPDATE it violates the constraint outright. All
+// four arrays are OPTIONAL in RFC 8414, so an upstream that omits one decodes
+// to a nil slice and reaches the write path routinely.
 func orEmptySlice(s []string) []string {
 	if s == nil {
 		return []string{}
@@ -368,6 +370,97 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 	logGlobalMutation(ctx, logger, authCtx, "delete", "issuer", deleted.ID.String())
 
 	return nil
+}
+
+// FetchGlobalIssuerMetadata fetches an upstream issuer's RFC 8414 metadata
+// document and returns a draft suitable for CreateGlobalIssuer. Keyed by issuer
+// URL, so no record need exist and nothing is persisted.
+func (s *Service) FetchGlobalIssuerMetadata(ctx context.Context, payload *adminrsgen.FetchGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerDraft, error) {
+	_, logger, err := s.requirePlatformAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	issuerURL := strings.TrimSpace(payload.Issuer)
+	if issuerURL == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
+	}
+
+	if !urls.IsAbsoluteHTTP(issuerURL) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
+	}
+
+	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	if err != nil {
+		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
+	}
+
+	return buildIssuerDraft(doc, issuerURL, warnings), nil
+}
+
+// RefreshGlobalIssuerMetadata re-reads an existing global issuer's RFC 8414
+// metadata document and persists the discovered values, returning the updated
+// issuer alongside any warnings.
+//
+// Like every other global mutation this records a structured-log line rather
+// than an auditlogs row, since audit_log.organization_id is NOT NULL and a
+// global issuer belongs to no organization.
+func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *adminrsgen.RefreshGlobalIssuerMetadataPayload) (*types.RemoteSessionIssuerRefresh, error) {
+	authCtx, logger, err := s.requirePlatformAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	issuerID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
+	}
+
+	// Read outside the transaction: discovery below is an upstream HTTP call
+	// under a ten-second budget and must not hold a pooled connection. The
+	// update re-asserts this row's identity — for a global issuer, that both
+	// scope columns are still NULL — so a row that stopped being global aborts
+	// the write instead of being written through.
+	existing, err := repo.New(s.db).GetGlobalRemoteSessionIssuerByID(ctx, issuerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
+	}
+
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	if err != nil {
+		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	updated, err := repo.New(dbtx).UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session issuer discovered metadata").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	// Recorded as "update", matching the remote_session_issuer.update audit
+	// action the project and org tiers emit for the same operation. The
+	// before/after state a refresh produced is visible in the row itself.
+	logGlobalMutation(ctx, logger, authCtx, "update", "issuer", updated.ID.String())
+
+	return &types.RemoteSessionIssuerRefresh{
+		Issuer:            mv.BuildRemoteSessionIssuerView(updated),
+		DiscoveryWarnings: warnings,
+	}, nil
 }
 
 // --- Global clients ---
