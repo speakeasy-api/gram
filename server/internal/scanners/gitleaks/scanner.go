@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -70,6 +71,16 @@ func newDetector() (*detect.Detector, error) {
 		for _, k := range rule.Keywords {
 			cfg.Keywords[strings.ToLower(k)] = struct{}{}
 		}
+	}
+
+	// An AWS access key id (AKIA/ASIA...) is an identifier, not a secret — AWS
+	// logs it in CloudTrail — so we do not surface it as a leaked-secret finding.
+	// But the composite aws-secret-access-key rule needs it as a proximity anchor,
+	// so we keep the built-in rule evaluated and only suppress its own report via
+	// SkipReport (the finding still counts for RequiredRules matching).
+	if r, ok := cfg.Rules[awsAccessTokenRuleID]; ok {
+		r.SkipReport = true
+		cfg.Rules[awsAccessTokenRuleID] = r
 	}
 
 	return detect.NewDetector(cfg), nil
@@ -194,15 +205,27 @@ func (s *Scanner) ScanBatch(ctx context.Context, contents []string) ([][]scanner
 // are canonicalized to the shared snake_case-with-dots form and line/column
 // positions are mapped to byte offsets. Gitleaks ships human-readable
 // descriptions that never echo the matched secret, so they pass through.
+//
+// The reported Match (and its span) is narrowed to the rule's SecretGroup value
+// when the rule captures one — i.e. the secret itself, not the surrounding
+// context. Label-anchored rules (gitleaks' generic-api-key, our
+// aws-session-token, ...) match `Label: "value"` but set finding.Secret to the
+// value alone; reporting the full match would mask/redact the non-sensitive
+// label along with the secret. Narrowing keeps the invariant Match ==
+// content[StartPos:EndPos].
 func convertFindings(content string, raw []report.Finding) []scanners.Finding {
 	out := make([]scanners.Finding, 0, len(raw))
 	for _, f := range raw {
 		startPos := lineColToBytePos(content, f.StartLine, f.StartColumn)
 		endPos := min(lineColToBytePos(content, f.EndLine, f.EndColumn)+1, len(content))
+		match := f.Match
+		if narrowed, ns, ne, ok := narrowToSecret(content, startPos, endPos, f.Match, f.Secret); ok {
+			match, startPos, endPos = narrowed, ns, ne
+		}
 		out = append(out, scanners.Finding{
 			RuleID:      guardRuleID(CanonicalRuleID(f.RuleID)),
 			Description: f.Description,
-			Match:       f.Match,
+			Match:       match,
 			StartPos:    startPos,
 			EndPos:      endPos,
 			Tags:        parseTags(f.Tags),
@@ -216,7 +239,47 @@ func convertFindings(content string, raw []report.Finding) []scanners.Finding {
 			Path:                "",
 		})
 	}
+	// Order by position, ranking the generic catch-all rule after more specific
+	// ones at the same span. Both narrow to the same secret value, so downstream
+	// position-dedup keeps whichever comes first — this makes it deterministically
+	// the specific rule (e.g. aws_secret_access_key over generic_api_key) instead
+	// of whatever the detector's map iteration happened to emit first.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].StartPos != out[j].StartPos {
+			return out[i].StartPos < out[j].StartPos
+		}
+		return rulePriority(out[i].RuleID) < rulePriority(out[j].RuleID)
+	})
 	return out
+}
+
+// rulePriority ranks rules for dedup ordering: the generic catch-all loses to
+// any more specific rule that matched the same value.
+func rulePriority(ruleID string) int {
+	if ruleID == "secret.generic_api_key" {
+		return 1
+	}
+	return 0
+}
+
+// narrowToSecret locates a finding's SecretGroup value inside its full-match
+// span [start,end) and returns the value plus its byte span. It returns
+// ok=false — leaving the caller with the full match — when there is nothing to
+// narrow (no distinct secret group) or the value cannot be located inside the
+// span (a positioning edge case), so the fallback never drops a finding.
+func narrowToSecret(content string, start, end int, fullMatch, secret string) (string, int, int, bool) {
+	if secret == "" || secret == fullMatch {
+		return "", 0, 0, false
+	}
+	if start < 0 || end > len(content) || start > end {
+		return "", 0, 0, false
+	}
+	rel := strings.Index(content[start:end], secret)
+	if rel < 0 {
+		return "", 0, 0, false
+	}
+	ns := start + rel
+	return secret, ns, ns + len(secret), true
 }
 
 // guardRuleID panics in test builds when id is not canonical, catching rule-id
