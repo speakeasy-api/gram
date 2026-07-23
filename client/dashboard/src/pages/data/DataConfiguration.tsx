@@ -11,6 +11,7 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { Stack } from "@speakeasy-api/moonshine";
 import { Eye, FileText, Monitor } from "lucide-react";
 import { useState } from "react";
+import { AIIntegrationsSection } from "@/pages/org/OrgAIIntegrations";
 import { OtelForwardingSection } from "@/pages/org/OtelForwardingSection";
 import { RedactionRulesSection } from "./RedactionRules";
 
@@ -169,6 +170,10 @@ function DataConfigurationInner() {
             ariaLabel="Enable agent session capture"
           />
         </Stack>
+      </div>
+
+      <div className="mt-8">
+        <AIIntegrationsSection />
       </div>
 
       <div className="mt-8">
