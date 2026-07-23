@@ -2,7 +2,7 @@
 //MISE description="Run provider hook E2E checks against a local Gram server"
 //MISE dir="{{ config_root }}"
 //USAGE flag "--project <slug>" default="default" help="Project slug to test against."
-//USAGE flag "--providers <list>" default="claude,cursor,codex" help="Comma-separated providers to drive: claude,cursor,codex."
+//USAGE flag "--providers <list>" default="claude,cursor,codex,opencode" help="Comma-separated providers to drive: claude,cursor,codex,opencode."
 //USAGE flag "--suites <list>" default="capture,shadow-mcp,ratchet" help="Comma-separated feature suites to run: capture,shadow-mcp,ratchet."
 //USAGE flag "--timeout-seconds <seconds>" default="180" help="Timeout per provider scenario."
 //USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Gram telemetry and database evidence."
@@ -18,12 +18,13 @@ import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "#gram/client/core.js";
 import { authInfo } from "#gram/client/funcs/authInfo.js";
 import { keysCreate } from "#gram/client/funcs/keysCreate.js";
-const VALID_PROVIDERS = new Set(["claude", "cursor", "codex"]);
+const VALID_PROVIDERS = new Set(["claude", "cursor", "codex", "opencode"]);
 const VALID_SUITES = new Set(["capture", "shadow-mcp", "ratchet"]);
 const SOURCE_ALIASES = {
   claude: ["claude", "claude-code"],
   cursor: ["cursor"],
   codex: ["codex"],
+  opencode: ["opencode"],
 };
 function parseArgs(argv) {
   const args = {};
@@ -46,7 +47,7 @@ function parseArgs(argv) {
     args[key] = next;
     i++;
   }
-  const providers = String(args.providers ?? "claude,cursor,codex")
+  const providers = String(args.providers ?? "claude,cursor,codex,opencode")
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean);
@@ -56,7 +57,9 @@ function parseArgs(argv) {
     .filter(Boolean);
   for (const p of providers) {
     if (!VALID_PROVIDERS.has(p)) {
-      throw new Error(`Unsupported provider "${p}". Use claude,cursor,codex.`);
+      throw new Error(
+        `Unsupported provider "${p}". Use claude,cursor,codex,opencode.`,
+      );
     }
   }
   for (const s of suites) {
@@ -455,8 +458,8 @@ async function writeIsolatedCodexConfig(home) {
   await fs.writeFile(
     configPath,
     [
-      'model = "gpt-5.5"',
-      'model_reasoning_effort = "high"',
+      'model = "gpt-5.4-mini"',
+      'model_reasoning_effort = "low"',
       "",
       "[features]",
       "hooks = true",
@@ -466,6 +469,40 @@ async function writeIsolatedCodexConfig(home) {
       "",
     ].join("\n"),
   );
+}
+// prepareOpenCodeEnv isolates the OpenCode config surface: a fresh
+// XDG_CONFIG_HOME keeps global plugins out of the run, while model provider
+// auth (XDG_DATA_HOME) stays available.
+async function prepareOpenCodeEnv(rootDir, pluginDir) {
+  const configHome = path.join(rootDir, "opencode-config");
+  await fs.mkdir(configHome, { recursive: true });
+  const shim = path.join(pluginDir, ".opencode", "plugin", "agenthooks.ts");
+  const configPath = path.join(configHome, "opencode.json");
+  await fs.writeFile(
+    configPath,
+    JSON.stringify(
+      {
+        $schema: "https://opencode.ai/config.json",
+        model: "openai/gpt-5.4-mini",
+        plugin: [`file://${shim}`],
+        // Headless runs auto-reject permission prompts; the temp workspace
+        // counts as an external directory. The bypass-permissions analogue
+        // of the other providers' trust flags.
+        permission: {
+          edit: "allow",
+          bash: "allow",
+          webfetch: "allow",
+          external_directory: "allow",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  return {
+    XDG_CONFIG_HOME: configHome,
+    OPENCODE_CONFIG: configPath,
+  };
 }
 async function prepareShadowMCPFixture(rootDir, runId) {
   const fixtureDir = path.join(rootDir, "shadow-mcp");
@@ -551,7 +588,7 @@ function handle(message) {
       jsonrpc: "2.0",
       id: message.id,
       result: {
-        content: [{ type: "text", text: \`GRAM_HOOKS_E2E_MCP_TOOL_OK \${marker}\` }]
+        content: [{ type: "text", text: \`GRAM_HOOKS_E2E_MCP_TOOL_OK stdio \${marker}\` }]
       }
     });
     return;
@@ -651,7 +688,10 @@ async function startHostedMCPHTTPFixture(runId) {
           id: msg.id,
           result: {
             content: [
-              { type: "text", text: `GRAM_HOOKS_E2E_MCP_TOOL_OK ${marker}` },
+              {
+                type: "text",
+                text: `GRAM_HOOKS_E2E_MCP_TOOL_OK hosted ${marker}`,
+              },
             ],
             isError: false,
           },
@@ -715,6 +755,122 @@ async function rpcJSON(args) {
   }
   return await res.json();
 }
+// mintHostedMCPBearerToken performs the OAuth 2.1 dance every remote-backed
+// MCP endpoint requires: dynamic client registration, authorize (public
+// endpoints stamp an anonymous subject, no IDP hop), consent approval, and
+// the PKCE token exchange.
+async function mintHostedMCPBearerToken(serverURL, endpointSlug) {
+  const redirectURI = "http://127.0.0.1/gram-hooks-e2e-callback";
+  const registerRes = await fetchOrFail(
+    `${serverURL}/mcp/${endpointSlug}/register`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_name: "gram-hooks-e2e",
+        redirect_uris: [redirectURI],
+        grant_types: ["authorization_code"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+      }),
+    },
+    "register hosted MCP OAuth client",
+  );
+  if (registerRes.status !== 201) {
+    fail(
+      `hosted MCP client registration failed: ${registerRes.status} ${await registerRes.text()}`,
+    );
+  }
+  const clientID = (await registerRes.json()).client_id;
+  const verifier = crypto.randomBytes(32).toString("base64url");
+  const challenge = crypto
+    .createHash("sha256")
+    .update(verifier)
+    .digest("base64url");
+  const authorizeURL = new URL(`${serverURL}/mcp/${endpointSlug}/authorize`);
+  authorizeURL.searchParams.set("response_type", "code");
+  authorizeURL.searchParams.set("client_id", clientID);
+  authorizeURL.searchParams.set("redirect_uri", redirectURI);
+  authorizeURL.searchParams.set(
+    "state",
+    crypto.randomBytes(16).toString("hex"),
+  );
+  authorizeURL.searchParams.set("code_challenge", challenge);
+  authorizeURL.searchParams.set("code_challenge_method", "S256");
+  const authorizeRes = await fetchOrFail(
+    authorizeURL,
+    { redirect: "manual" },
+    "authorize hosted MCP OAuth client",
+  );
+  const consentLocation = authorizeRes.headers.get("location");
+  if (!consentLocation) {
+    fail(
+      `hosted MCP authorize did not redirect to consent: ${authorizeRes.status} ${await authorizeRes.text()}`,
+    );
+  }
+  const consentURL = new URL(consentLocation, serverURL);
+  const consentRes = await fetchOrFail(
+    consentURL,
+    {},
+    "load hosted MCP consent page",
+  );
+  const consentHTML = await consentRes.text();
+  const csrfToken = consentHTML.match(/name="csrf_token" value="([^"]+)"/)?.[1];
+  const challengeID = consentURL.searchParams.get("state");
+  if (!consentRes.ok || !csrfToken || !challengeID) {
+    fail(
+      `hosted MCP consent page did not yield a CSRF token (status=${consentRes.status})`,
+    );
+  }
+  const consentPost = await fetchOrFail(
+    `${serverURL}/mcp/${endpointSlug}/connect`,
+    {
+      method: "POST",
+      redirect: "manual",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        state: challengeID,
+        csrf_token: csrfToken,
+        action: "approve",
+      }),
+    },
+    "approve hosted MCP consent",
+  );
+  const callbackLocation = consentPost.headers.get("location");
+  const code =
+    callbackLocation &&
+    new URL(callbackLocation, serverURL).searchParams.get("code");
+  if (!code) {
+    fail(
+      `hosted MCP consent approval did not return an authorization code (status=${consentPost.status}, location=${callbackLocation ?? "(none)"})`,
+    );
+  }
+  const tokenRes = await fetchOrFail(
+    `${serverURL}/mcp/${endpointSlug}/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectURI,
+        client_id: clientID,
+        code_verifier: verifier,
+      }),
+    },
+    "exchange hosted MCP authorization code",
+  );
+  if (!tokenRes.ok) {
+    fail(
+      `hosted MCP token exchange failed: ${tokenRes.status} ${await tokenRes.text()}`,
+    );
+  }
+  const token = await tokenRes.json();
+  if (!token.access_token) {
+    fail("hosted MCP token response is missing access_token");
+  }
+  return token.access_token;
+}
 async function createHostedMCPFixture(args) {
   const endpointSuffix = `${Date.now().toString(36)}-${crypto.randomBytes(3).toString("hex")}`;
   const endpointSlug =
@@ -758,12 +914,17 @@ async function createHostedMCPFixture(args) {
     },
     label: "create hosted MCP endpoint",
   });
+  const bearerToken = await mintHostedMCPBearerToken(
+    args.serverURL,
+    endpoint.slug,
+  );
   return {
     remoteId: remote.id,
     mcpServerId: mcpServer.id,
     endpointId: endpoint.id,
     endpointSlug: endpoint.slug,
     url: `${args.serverURL}/mcp/${endpoint.slug}`,
+    bearerToken,
   };
 }
 async function deleteHostedMCPFixture(args) {
@@ -806,6 +967,7 @@ async function deleteHostedMCPFixture(args) {
   }
 }
 async function prepareShadowMCPProviderConfig(args) {
+  const gramAuthorization = `Bearer ${args.fixture.gramHostedBearer}`;
   const config = {
     mcpServers: {
       [args.fixture.shadowServerName]: {
@@ -815,6 +977,7 @@ async function prepareShadowMCPProviderConfig(args) {
       [args.fixture.gramServerName]: {
         type: "http",
         url: args.fixture.gramHostedURL,
+        headers: { Authorization: gramAuthorization },
       },
     },
   };
@@ -833,6 +996,36 @@ async function prepareShadowMCPProviderConfig(args) {
     await fs.writeFile(
       path.join(cursorDir, "mcp.json"),
       JSON.stringify(config, null, 2),
+    );
+    return {};
+  }
+  if (args.provider === "opencode") {
+    await fs.writeFile(
+      path.join(args.workdir, "opencode.json"),
+      JSON.stringify(
+        {
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            [args.fixture.shadowServerName]: {
+              type: "local",
+              command: [process.execPath, args.fixture.scriptPath],
+              enabled: true,
+            },
+            [args.fixture.gramServerName]: {
+              type: "remote",
+              url: args.fixture.gramHostedURL,
+              enabled: true,
+              headers: { Authorization: gramAuthorization },
+              // Without this, OpenCode auto-detects the endpoint's OAuth
+              // metadata and drives its own (stale, mcp-auth.json-cached)
+              // dance instead of sending the header.
+              oauth: false,
+            },
+          },
+        },
+        null,
+        2,
+      ),
     );
     return {};
   }
@@ -872,12 +1065,17 @@ async function prepareShadowMCPProviderConfig(args) {
       args.fixture.gramServerName,
       "--url",
       args.fixture.gramHostedURL,
+      "--bearer-token-env-var",
+      "GRAM_HOOKS_E2E_MCP_BEARER",
     ],
     {
       env: args.env,
       timeoutMs: 30_000,
     },
   );
+  // Scenario spawns reuse this same env object, so the token is present when
+  // codex launches the streamable HTTP client.
+  args.env.GRAM_HOOKS_E2E_MCP_BEARER = args.fixture.gramHostedBearer;
   return {};
 }
 function providerPrompt(runId, provider, scenario, workdir) {
@@ -919,6 +1117,8 @@ async function runProviderScenario(args) {
     const res = await runProcess(
       "claude",
       [
+        "--model",
+        "haiku",
         "--setting-sources",
         "project,local",
         "--plugin-dir",
@@ -947,6 +1147,8 @@ async function runProviderScenario(args) {
       "cursor",
       [
         "agent",
+        "--model",
+        "composer-2.5",
         "--print",
         "--output-format",
         "stream-json",
@@ -957,7 +1159,20 @@ async function runProviderScenario(args) {
         args.workdir,
         prompt,
       ],
-      { cwd: args.workdir, timeoutMs: args.timeoutMs },
+      { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
+    );
+    res.provider = args.provider;
+    return res;
+  }
+  if (args.provider === "opencode") {
+    const res = await runProcess(
+      "opencode",
+      ["run", "--dir", args.workdir, prompt],
+      {
+        cwd: args.workdir,
+        env: args.env,
+        timeoutMs: args.timeoutMs,
+      },
     );
     res.provider = args.provider;
     return res;
@@ -989,6 +1204,8 @@ async function runProviderShadowMCPScenario(args) {
   if (args.provider === "claude") {
     const sessionId = crypto.randomUUID();
     const claudeArgs = [
+      "--model",
+      "haiku",
       "--setting-sources",
       "project,local",
       "--plugin-dir",
@@ -1021,6 +1238,8 @@ async function runProviderShadowMCPScenario(args) {
       "cursor",
       [
         "agent",
+        "--model",
+        "composer-2.5",
         "--print",
         "--output-format",
         "stream-json",
@@ -1031,7 +1250,22 @@ async function runProviderShadowMCPScenario(args) {
         args.workdir,
         prompt,
       ],
-      { cwd: args.workdir, timeoutMs: args.timeoutMs },
+      { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
+    );
+    res.provider = args.provider;
+    return res;
+  }
+  if (args.provider === "opencode") {
+    // JSON event output: the plain format renders tool titles but not tool
+    // results, which the shadow-mcp output checks need.
+    const res = await runProcess(
+      "opencode",
+      ["run", "--dir", args.workdir, "--format", "json", prompt],
+      {
+        cwd: args.workdir,
+        env: args.env,
+        timeoutMs: args.timeoutMs,
+      },
     );
     res.provider = args.provider;
     return res;
@@ -1071,6 +1305,9 @@ async function prepareCursorProjectHooks(pluginDir, workdir) {
           "$CURSOR_PLUGIN_ROOT",
           escapedPluginDir,
         );
+        // Per-event relay diagnostics land in the workdir so failed runs
+        // show which events reached the relay and with what result.
+        entry.command += ` --debug-log=${path.join(workdir, "relay-debug.log")}`;
       }
     }
   }
@@ -1813,7 +2050,12 @@ function shadowMCPToolExpectation(provider, serverName) {
     provider,
     serverName,
     toolName: "shadow_lookup",
-    routedName: `mcp__${serverName}__shadow_lookup`,
+    // OpenCode registers MCP tools as <server>_<tool> with no reserved
+    // prefix; everything else uses the mcp__<server>__<tool> dialect.
+    routedName:
+      provider === "opencode"
+        ? `${serverName}_shadow_lookup`
+        : `mcp__${serverName}__shadow_lookup`,
   };
 }
 function outputHasShadowMCPAttempt(output, expected) {
@@ -1831,6 +2073,11 @@ function outputHasShadowMCPAttempt(output, expected) {
       output.includes(`"name":"${expected.routedName}"`) ||
       output.includes(`"tool_name":"${expected.routedName}"`)
     );
+  }
+  if (expected.provider === "opencode") {
+    // JSON event output carries raw tool names; the bare tool name would
+    // also match a same-named tool on a different server.
+    return output.includes(expected.routedName);
   }
   return (
     output.includes(`"name":"${expected.routedName}"`) ||
@@ -1858,7 +2105,10 @@ function telemetryRowMatchesShadowMCPTool(row, expected) {
     attrs.includes(`"mcp_server_name":"${expected.serverName}"`) ||
     // Unified-ingest rows identify stdio MCP servers by launch command; the
     // fixture's script path is unique to this harness.
-    attrs.includes("/shadow-mcp/server.mjs")
+    attrs.includes("/shadow-mcp/server.mjs") ||
+    // Cursor's remote-MCP hook payloads carry the server URL, never the
+    // configured name, so hosted-phase rows are identified by endpoint URL.
+    (expected.url && attrs.includes(expected.url))
   ) {
     return true;
   }
@@ -1918,10 +2168,18 @@ function shadowMCPChecks(provider, phase, res, evidence, blocks, extra = {}) {
     checks.push({
       provider,
       feature: "shadow_mcp.block_recorded",
-      status: blocks.some((b) => b.toolName === expectedTool.toolName)
+      status: blocks.some(
+        (b) =>
+          b.toolName === expectedTool.toolName ||
+          b.toolName === expectedTool.routedName,
+      )
         ? "PASS"
         : "FAIL",
-      detail: blocks.some((b) => b.toolName === expectedTool.toolName)
+      detail: blocks.some(
+        (b) =>
+          b.toolName === expectedTool.toolName ||
+          b.toolName === expectedTool.routedName,
+      )
         ? "tool_call_blocks row persisted"
         : `missing durable tool_call_blocks row for ${expectedTool.toolName}`,
     });
@@ -1936,16 +2194,21 @@ function shadowMCPChecks(provider, phase, res, evidence, blocks, extra = {}) {
     status: attemptedTool ? "PASS" : "FAIL",
     detail: `provider called ${expectedTool.routedName}`,
   });
+  // The two fixture servers stamp their origin into the reply so a call
+  // that landed on the wrong server cannot satisfy this check.
+  const toolOutputOrigin = phase === "gram-hosted" ? "hosted" : "stdio";
   checks.push({
     provider,
     feature:
       phase === "gram-hosted"
         ? "shadow_mcp.gram_hosted_tool_output"
         : "shadow_mcp.exemption_tool_output",
-    status: output.includes(`GRAM_HOOKS_E2E_MCP_TOOL_OK ${extra.marker}`)
+    status: output.includes(
+      `GRAM_HOOKS_E2E_MCP_TOOL_OK ${toolOutputOrigin} ${extra.marker}`,
+    )
       ? "PASS"
       : "FAIL",
-    detail: "fixture MCP server returned marker output",
+    detail: `${toolOutputOrigin} fixture MCP server returned marker output`,
   });
   checks.push({
     provider,
@@ -2167,6 +2430,8 @@ async function runSkillScenario(args) {
       "cursor",
       [
         "agent",
+        "--model",
+        "composer-2.5",
         "--print",
         "--output-format",
         "stream-json",
@@ -2177,7 +2442,7 @@ async function runSkillScenario(args) {
         args.workdir,
         prompt,
       ],
-      { cwd: args.workdir, timeoutMs: args.timeoutMs },
+      { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
     );
     res.provider = "cursor";
     return res;
@@ -2186,6 +2451,8 @@ async function runSkillScenario(args) {
   const res = await runProcess(
     "claude",
     [
+      "--model",
+      "haiku",
       "--setting-sources",
       "project,local",
       "--plugin-dir",
@@ -2429,6 +2696,18 @@ async function runSkillUploadControlSuite(args) {
   return { checks, commandResults };
 }
 
+function providerEnv(provider, args) {
+  if (provider === "codex") {
+    return args.codexEnv;
+  }
+  if (provider === "opencode") {
+    return args.opencodeEnv;
+  }
+  if (provider === "cursor") {
+    return args.cursorEnv;
+  }
+  return undefined;
+}
 async function runCaptureSuite(args) {
   const commandResults = [];
   const skillFixturesByProvider = new Map();
@@ -2441,7 +2720,7 @@ async function runCaptureSuite(args) {
         workdir: args.workdir,
         runId: args.runId,
         scenario,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
         timeoutMs: args.timeoutSeconds * 1000,
       });
       commandResults.push(res);
@@ -2508,7 +2787,7 @@ async function runCaptureSuite(args) {
         runId: args.runId,
         skillName: skill.skillName,
         skillDir: skill.skillDir,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
         timeoutMs: args.timeoutSeconds * 1000,
       });
       commandResults.push(skillRes);
@@ -2634,13 +2913,14 @@ async function runShadowMCPSuite(args) {
         shadowServerName: `${provider}shadowe2e`,
         gramServerName: `${provider}grame2e`,
         gramHostedURL: hostedMCP.url,
+        gramHostedBearer: hostedMCP.bearerToken,
       };
       const providerConfig = await prepareShadowMCPProviderConfig({
         provider,
         pluginDir: args.pluginDirs.get(provider),
         workdir: args.workdir,
         fixture: providerFixture,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
       });
       const blockedSince = BigInt(Date.now()) * 1000000n;
       log.info(`${provider}: running shadow-mcp blocked scenario`);
@@ -2651,7 +2931,7 @@ async function runShadowMCPSuite(args) {
         runId: args.runId,
         variant: "blocked",
         fixture: providerFixture,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
         timeoutMs: args.timeoutSeconds * 1000,
         ...providerConfig,
       });
@@ -2746,7 +3026,7 @@ async function runShadowMCPSuite(args) {
         runId: args.runId,
         variant: "approved",
         fixture: providerFixture,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
         timeoutMs: args.timeoutSeconds * 1000,
         ...providerConfig,
       });
@@ -2783,7 +3063,7 @@ async function runShadowMCPSuite(args) {
         runId: args.runId,
         variant: "gram-hosted",
         fixture: providerFixture,
-        env: provider === "codex" ? args.codexEnv : undefined,
+        env: providerEnv(provider, args),
         timeoutMs: args.timeoutSeconds * 1000,
         ...providerConfig,
       });
@@ -2811,10 +3091,13 @@ async function runShadowMCPSuite(args) {
           [],
           {
             marker: `${args.runId} ${provider} gram-hosted`,
-            expectedTool: shadowMCPToolExpectation(
-              provider,
-              providerFixture.gramServerName,
-            ),
+            expectedTool: {
+              ...shadowMCPToolExpectation(
+                provider,
+                providerFixture.gramServerName,
+              ),
+              url: providerFixture.gramHostedURL,
+            },
           },
         ),
       );
@@ -2967,6 +3250,28 @@ async function main() {
       pluginDirs.set(provider, pluginDir);
       log.info(`${provider}: using plugin ${pluginDir}`);
     }
+    let opencodeEnv = null;
+    if (args.providers.includes("opencode")) {
+      opencodeEnv = await prepareOpenCodeEnv(
+        rootDir,
+        pluginDirs.get("opencode"),
+      );
+      log.info(
+        `Prepared isolated OpenCode config at ${opencodeEnv.XDG_CONFIG_HOME}`,
+      );
+    }
+    let cursorEnv = null;
+    if (args.providers.includes("cursor")) {
+      // A per-run global-config dir keeps machine-level cursor state (MCP
+      // auth cache, approvals) out of the run. Cursor still loads the global
+      // ~/.cursor/hooks.json regardless; a developer's real speakeasy-hooks
+      // install firing alongside the run's is handled by the relay's
+      // per-install dedup scoping.
+      const cursorConfigDir = path.join(rootDir, "cursor-config");
+      await fs.mkdir(cursorConfigDir, { recursive: true });
+      cursorEnv = { CURSOR_CONFIG_DIR: cursorConfigDir };
+      log.info(`Prepared isolated Cursor config at ${cursorConfigDir}`);
+    }
     const allChecks = [];
     const commandResults = [];
     const suiteArgs = {
@@ -2977,6 +3282,8 @@ async function main() {
       workdir,
       runId,
       codexEnv,
+      opencodeEnv,
+      cursorEnv,
       timeoutSeconds: args.timeoutSeconds,
       pollSeconds: args.pollSeconds,
       serverURL,

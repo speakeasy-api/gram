@@ -1,14 +1,28 @@
 #!/usr/bin/env bash
 
-#MISE description="Test the Gram hooks Claude plugin locally"
+#MISE description="Test the Gram hooks plugin locally against a coding agent"
 #MISE dir="{{ config_root }}"
 
 #USAGE flag "--local" help="Always use local plugin directory instead of published plugin"
 #USAGE flag "--project <slug>" help="Project slug for OTEL session validation (enables blocking)" default="default"
+#USAGE flag "--agent <agent>" help="Agent to launch with the dev hooks installed: claude or opencode" default="claude"
 
 set -euo pipefail
 
+case "${usage_agent:-claude}" in
+  claude|opencode) ;;
+  *)
+    echo "hooks:test: --agent must be claude or opencode, got '${usage_agent}'" >&2
+    exit 2
+    ;;
+esac
+
 export GRAM_HOOKS_SERVER_URL=$GRAM_SERVER_URL
+# Local dev splits the API and dashboard across ports; the browser sign-in
+# must open the dashboard origin.
+export GRAM_HOOKS_SITE_URL=$GRAM_SITE_URL
+# Dev sign-ins go to a dev-scoped credential cache, never the real one.
+export GRAM_HOOKS_AUTH_FILE="${GRAM_HOOKS_AUTH_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/gram/hooks-auth.localdev.env}"
 
 # Provision a dev API key for the chosen project so Claude's OTEL exporter can
 # authenticate against /rpc/hooks.otel and the server can validate the
@@ -25,10 +39,15 @@ echo "Provisioning dev API key for project: ${project_slug}"
 # Pipes SQL via stdin so psql's :'name' variable substitution actually fires
 # (the -c flag bypasses the psql lexer that does the interpolation).
 db_query() {
-  docker exec -i gram-gram-db-1 psql -U gram -d gram -tA -v ON_ERROR_STOP=1 "$@"
+  # Worktrees run their own compose project (git:workinit sets
+  # COMPOSE_PROJECT_NAME), so the DB container name follows it.
+  docker exec -i "${COMPOSE_PROJECT_NAME:-gram}-gram-db-1" psql -U gram -d gram -tA -v ON_ERROR_STOP=1 "$@"
 }
 
-project_row=$(db_query -v slug="$project_slug" <<<"SELECT id, organization_id FROM projects WHERE slug = :'slug' AND deleted IS FALSE LIMIT 1" 2>/dev/null || true)
+# Seeded databases can hold several orgs with identically-slugged projects;
+# order the lookup so every run (and the dashboard the tester is looking at)
+# lands on the same org.
+project_row=$(db_query -v slug="$project_slug" <<<"SELECT id, organization_id FROM projects WHERE slug = :'slug' AND deleted IS FALSE ORDER BY created_at LIMIT 1" 2>/dev/null || true)
 
 if [ -z "$project_row" ]; then
   echo "Warning: project '${project_slug}' not found — blocking policies will be inert."
@@ -43,8 +62,11 @@ else
   # the partial unique index (organization_id, feature_name) WHERE deleted IS
   # FALSE, so a concurrent run can't trip a unique-constraint violation, while a
   # previously-disabled (soft-deleted) feature is still re-enabled.
-  db_query -v org_id="$org_id" >/dev/null <<<"INSERT INTO organization_features (organization_id, feature_name) VALUES (:'org_id', 'session_capture') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING"
-  echo "Enabled session_capture for org: ${org_id}"
+  # logs gates the ClickHouse telemetry rows that power the sessions and
+  # observe pages; without it ingest silently drops them while chat capture
+  # keeps working, which reads as "session not showing up".
+  db_query -v org_id="$org_id" >/dev/null <<<"INSERT INTO organization_features (organization_id, feature_name) VALUES (:'org_id', 'session_capture'), (:'org_id', 'logs') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING"
+  echo "Enabled session_capture + logs for org: ${org_id}"
 
   user_row=$(db_query -v org_id="$org_id" <<<"SELECT u.id, u.email FROM users u JOIN organization_user_relationships our ON our.user_id = u.id WHERE our.organization_id = :'org_id' AND our.deleted_at IS NULL AND u.deleted_at IS NULL ORDER BY u.created_at ASC LIMIT 1" 2>/dev/null || true)
   if [ -z "$user_row" ]; then
@@ -99,7 +121,56 @@ EOF
 fi
 echo ""
 
-if [ "${usage_local:-}" = "true" ]; then
+if [ "${usage_agent:-claude}" = "opencode" ]; then
+  # The rendered shim is handed to OpenCode through an OPENCODE_CONFIG overlay
+  # (an *additional* config file, merged on top of the user's own), so the
+  # repo and the user's global config stay untouched. --local drives a
+  # locally-built binary directly; otherwise the server-side plugin generator
+  # renders the production package (its bootstrap downloads the pinned
+  # binary).
+  #
+  # Auth comes from the hook's own browser sign-in at session start (the
+  # production flow) instead of the provisioned dev key: the tester is about
+  # to interact with the session anyway, and signing in binds events to the
+  # org they are actually looking at. That org is only known after sign-in,
+  # so enable the capture features for every local org up front.
+  db_query >/dev/null 2>&1 <<<"INSERT INTO organization_features (organization_id, feature_name) SELECT om.id, f.name FROM organization_metadata om CROSS JOIN (VALUES ('session_capture'), ('logs')) AS f(name) ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING" || true
+  unset GRAM_HOOKS_API_KEY GRAM_HOOKS_TEST_RESOLVED_USER_EMAIL GRAM_DEVICE_AGENT_COMMANDS
+
+  plugin_out="$(mktemp -d)"
+  if [ "${usage_local:-}" = "true" ]; then
+    hooks_binary="${plugin_out}/speakeasy-hooks"
+    echo "Building local hooks binary: ${hooks_binary}"
+    go build -o "$hooks_binary" ./hooks/cmd/speakeasy-hooks
+    "$hooks_binary" install \
+      --provider=opencode \
+      --dir="$plugin_out" \
+      --server-url="$GRAM_SERVER_URL" \
+      --site-url="$GRAM_SITE_URL" \
+      --project="$project_slug" \
+      --browser-login \
+      --binary="$hooks_binary"
+    shim="${plugin_out}/.opencode/plugin/agenthooks.ts"
+    # Sign in up front rather than relying on the mid-session nudge: a prior
+    # failed attempt leaves a cooldown marker that silently suppresses the
+    # browser prompt, which reads as "hooks broken, no popup". --force
+    # bypasses the cooldown and re-prompts even with a cached credential.
+    echo "Complete the Gram sign-in in your browser (pick the org to attribute sessions to)..."
+    "$hooks_binary" login --force --config="${plugin_out}/speakeasy.json"
+  else
+    echo "Rendering local plugin into: ${plugin_out}"
+    (cd server && go run ./cmd/export-hook-plugin -out "$plugin_out" >/dev/null)
+    shim="${plugin_out}/plugin-opencode/plugin/agenthooks.ts"
+  fi
+  cat >"${plugin_out}/opencode.json" <<EOF
+{
+  "\$schema": "https://opencode.ai/config.json",
+  "plugin": ["file://${shim}"]
+}
+EOF
+  echo ""
+  OPENCODE_CONFIG="${plugin_out}/opencode.json" exec opencode
+elif [ "${usage_local:-}" = "true" ]; then
   plugin_out="$(mktemp -d)"
   hooks_binary="${plugin_out}/speakeasy-hooks"
   echo "Building local hooks binary: ${hooks_binary}"
@@ -108,6 +179,7 @@ if [ "${usage_local:-}" = "true" ]; then
     --provider=claude \
     --dir="${plugin_out}/plugin-claude" \
     --server-url="$GRAM_SERVER_URL" \
+    --site-url="$GRAM_SITE_URL" \
     --project="$project_slug" \
     --browser-login \
     --binary="$hooks_binary"

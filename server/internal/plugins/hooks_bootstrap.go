@@ -40,6 +40,7 @@ var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, hooksBinarySHA2
 func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 	b, err := json.MarshalIndent(relay.FileConfig{
 		ServerURL:    cfg.ServerURL,
+		SiteURL:      "",
 		Project:      cfg.ProjectSlug,
 		Org:          cfg.OrgID,
 		HooksAPIKey:  cfg.HooksAPIKey,

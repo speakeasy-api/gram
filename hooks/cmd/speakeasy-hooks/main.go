@@ -36,7 +36,7 @@ func main() {
 			// login accepts the same deployment flags as the hook path
 			// (--config, --server-url, --project, --org) so the nudge can
 			// point it at the plugin's identity instead of the prod defaults.
-			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[2:])
+			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[2:])
 			os.Exit(runLogin(relay.LoadConfig(flagCfg), rest))
 		case "install":
 			os.Exit(runInstall(os.Args[2:]))
@@ -56,7 +56,7 @@ func main() {
 	// speakeasy.json via --config. Read the deployment flags without mutating
 	// argv: agenthooks tolerates unknown flags, and its --async re-exec
 	// forwards argv to the detached worker, which must keep --config.
-	flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[1:])
+	flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[1:])
 	cfg := relay.LoadConfig(flagCfg)
 
 	agenthooks.Main(relay.NewRunner(cfg))
@@ -66,9 +66,10 @@ func main() {
 // backs local end-to-end testing; production distribution is wired separately.
 func runInstall(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
-	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex")
+	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode")
 	dir := fs.String("dir", "", "output directory for the plugin package")
 	serverURL := fs.String("server-url", relay.DefaultServerURL, "Gram server URL to bake into the plugin")
+	siteURL := fs.String("site-url", "", "dashboard origin for browser sign-in when it differs from the server URL (local dev)")
 	project := fs.String("project", "default", "project slug")
 	org := fs.String("org", "", "organization id hint")
 	browserLogin := fs.Bool("browser-login", false, "enable per-user browser sign-in")
@@ -90,6 +91,7 @@ func runInstall(args []string) int {
 	}
 	if err := relay.WritePlugin(context.Background(), *provider, *dir, relay.PluginConfig{
 		ServerURL:    *serverURL,
+		SiteURL:      *siteURL,
 		ProjectSlug:  *project,
 		OrgID:        *org,
 		HooksAPIKey:  os.Getenv("GRAM_HOOKS_ORG_KEY"),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -68,13 +69,36 @@ func (r *Relay) Login(ctx context.Context, force bool) error {
 // unauthenticated case.
 func NewRunner(cfg Config) *agenthooks.Runner {
 	r := NewRelay(cfg)
-	runner := agenthooks.New(agenthooks.WithPolicy(agenthooks.Policy{
+	opts := []agenthooks.Option{agenthooks.WithPolicy(agenthooks.Policy{
 		Fail:            agenthooks.FailOpen,
 		Unsupported:     agenthooks.Degrade,
 		AskFallback:     agenthooks.FallbackNoDecision,
 		ContinuationCap: 0,
 		Timeout:         0,
-	}))
+	})}
+	// Duplicate suppression must stay scoped to this install: the marker dir
+	// defaults to a machine-shared temp dir, and two installs registered for
+	// the same session (e.g. a global and a project Cursor hooks file) would
+	// otherwise suppress each other's events — including gating decisions the
+	// other install never made.
+	if cfg.ConfigPath != "" {
+		h := fnv.New32a()
+		_, _ = h.Write([]byte(cfg.ConfigPath))
+		opts = append(opts, agenthooks.WithDedupDir(filepath.Join(os.TempDir(), fmt.Sprintf("speakeasy-hooks-%08x", h.Sum32()))))
+	}
+	// The debug log captures library-level drops (dedup suppression, decode
+	// misses) as well as the relay's own deliver lines, so a missing event can
+	// be attributed to the right layer.
+	if cfg.DebugLog != "" {
+		if f, err := os.OpenFile(cfg.DebugLog, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+			opts = append(opts, agenthooks.WithLogger(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{
+				Level:       slog.LevelDebug,
+				AddSource:   false,
+				ReplaceAttr: nil,
+			}))))
+		}
+	}
+	runner := agenthooks.New(opts...)
 
 	runner.OnPromptSubmitted(r.onPrompt)
 	runner.OnToolPre(r.onToolPre)
