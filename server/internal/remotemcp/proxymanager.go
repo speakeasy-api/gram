@@ -156,15 +156,9 @@ func (f *ProxyManager) BuildTarget(
 	// also skipped — otherwise an unauthenticated public caller would
 	// be unable to invoke any tool, and the tools/list filter would
 	// have no grants to consult.
-	//
-	// The x-gram-toolset-id strip is attached unconditionally — public AND
-	// private — because the property is Gram's own envelope rather than
-	// anything scoped to an identity or a risk policy. It is a no-op for
-	// the arguments that don't carry it.
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
 		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, identity, logger),
 		f.toolsCallUsageLimitsInterceptor,
-		NewToolsCallStripToolsetIDInterceptor(logger),
 		clickHouseLogInterceptor,
 	}
 	if visibility == mcpservers.VisibilityPrivate {
