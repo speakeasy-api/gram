@@ -92,6 +92,9 @@ func NewJudges(judges ...Judge) (*Judges, error) {
 	byName := make(map[string]Judge, len(judges))
 	ordered := make([]Judge, 0, len(judges))
 	for _, judge := range judges {
+		if judge == nil {
+			return nil, fmt.Errorf("chat analysis judge roster contains a nil judge")
+		}
 		name := judge.Name()
 		if !judgeNamePattern.MatchString(name) {
 			return nil, fmt.Errorf("chat analysis judge name %q must match %s", name, judgeNamePattern)

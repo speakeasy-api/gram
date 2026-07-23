@@ -204,6 +204,12 @@ func (p *Publisher) Publish(ctx context.Context, projectID uuid.UUID, ids []uuid
 // guard read pins organization_id, project_id and the batch's exact judges —
 // the sink's leading ORDER BY columns.
 func (p *Publisher) alreadyPublished(ctx context.Context, projectID uuid.UUID, inputs []repo.GetChatAnalysisJudgeInputsRow) (map[uuid.UUID]struct{}, error) {
+	// The guard is one sink read, but it runs before any per-evaluation bound
+	// exists: unbounded, a hung sink would burn the claim lease before the first
+	// judge call. One evaluation's timeout is generous for one query.
+	ctx, cancel := context.WithTimeout(ctx, p.evaluationTimeout)
+	defer cancel()
+
 	minCreatedAt, maxCreatedAt := guardWindow(inputs, time.Now().UTC())
 
 	organizationID := inputs[0].OrganizationID
