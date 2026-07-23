@@ -1232,3 +1232,28 @@ ORDER BY (project_id, session_id, skill_version_id, seen_at, id)
 TTL toDateTime(seen_at) + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Resolved skill versions observed in sessions.';
+
+CREATE TABLE IF NOT EXISTS chat_analysis_scores (
+    id UUID COMMENT 'Producer-supplied score identifier, the queue evaluation id.',
+    created_at DateTime64(9) COMMENT 'Time the score was completed.' CODEC(DoubleDelta, ZSTD),
+    inserted_at DateTime64(9) DEFAULT now64(9) COMMENT 'Time the score was inserted.' CODEC(DoubleDelta, ZSTD),
+
+    organization_id String COMMENT 'Organization the score belongs to.' CODEC(ZSTD),
+    project_id String DEFAULT '' COMMENT 'Project the score belongs to when known.' CODEC(ZSTD),
+    chat_id String COMMENT 'Gram chat identifier of the analyzed session.' CODEC(ZSTD),
+
+    judge LowCardinality(String) COMMENT 'Name of the analysis judge that produced the score.',
+    score Float64 COMMENT 'Headline metric of the verdict, meaning defined per judge.',
+    detail String COMMENT 'Full structured verdict as JSON, shape defined per judge.' CODEC(ZSTD),
+    judge_model LowCardinality(String) COMMENT 'Model used to judge the session.',
+    judge_prompt_version LowCardinality(String) COMMENT 'Judge prompt version.',
+
+    CONSTRAINT score_valid CHECK isFinite(score),
+    CONSTRAINT judge_valid CHECK judge != '',
+    CONSTRAINT detail_valid CHECK isValidJSON(detail)
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (organization_id, project_id, judge, created_at, id)
+TTL toDateTime(created_at) + INTERVAL 730 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Chat session analysis verdicts produced by the chat analysis judges.';
