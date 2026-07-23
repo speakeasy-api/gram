@@ -165,8 +165,6 @@ function EnvironmentPageInner() {
   const telemetry = useTelemetry();
   const { hasScope } = useRBAC();
   const canWrite = hasScope("environment:write");
-  // "Fill for MCP Server" links an environment to a toolset, which remains project:write.
-  const canLinkToolset = hasScope("project:write");
 
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
   const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
@@ -326,7 +324,9 @@ function EnvironmentPageInner() {
                 label: "Fill for MCP Server",
                 onClick: () => setToolsetDialogOpen(true),
                 icon: "copy-plus",
-                disabled: !canLinkToolset,
+                // Prefills placeholder variables via updateEnvironment, so this
+                // is an environment write like Add Variable / Delete below.
+                disabled: !canWrite,
               },
               {
                 label: "Delete Environment",
