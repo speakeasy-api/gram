@@ -358,7 +358,7 @@ const mcpGeneratorVersion = "9"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "19"
+const hooksGeneratorVersion = "20"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -486,6 +486,7 @@ var ClaudeObservabilityHookEvents = []string{
 // separately.
 var CursorObservabilityHookEvents = []string{
 	"beforeSubmitPrompt",
+	"sessionEnd",
 	"stop",
 	"afterAgentResponse",
 	"afterAgentThought",
@@ -1216,10 +1217,15 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		timeoutSeconds, async := codexHookParams(event)
+		hookTimeout := 0
+		if event == "SessionEnd" {
+			hookTimeout = timeoutSeconds
+		}
 		hooks := []codexHookCommand{{
 			Type:           "command",
 			Command:        codexHookCommandString(timeoutSeconds, async),
 			CommandWindows: codexHookCommandStringWindows(timeoutSeconds, async),
+			Timeout:        hookTimeout,
 		}}
 		hookEvents[event] = []codexMatcherGroup{{
 			Matcher: "",
@@ -1282,6 +1288,8 @@ func codexEventSnakeCase(event string) string {
 	switch event {
 	case "SessionStart":
 		return "session_start"
+	case "SessionEnd":
+		return "session_end"
 	case "PreToolUse":
 		return "pre_tool_use"
 	case "PermissionRequest":
@@ -1300,7 +1308,7 @@ func codexEventSnakeCase(event string) string {
 // computeCodexHookHash returns the sha256:hex trusted_hash that Codex expects
 // for a single hook entry. Codex's canonical JSON varies by event:
 //
-//   - SessionStart, PreToolUse, PermissionRequest, PostToolUse:
+//   - SessionStart, SessionEnd, PreToolUse, PermissionRequest, PostToolUse:
 //     sha256(canonical_json({event_name, hooks:[{async, command, timeout, type}], matcher:""}))
 //   - UserPromptSubmit, Stop:
 //     sha256(canonical_json({event_name, hooks:[{async, command, timeout, type}]}))
@@ -1310,10 +1318,14 @@ func codexEventSnakeCase(event string) string {
 // variables only after trust verification.
 func computeCodexHookHash(event, command string) (string, error) {
 	eventSnake := codexEventSnakeCase(event)
+	timeoutSeconds := 600
+	if event == "SessionEnd" {
+		timeoutSeconds = 3
+	}
 	hook := map[string]any{
 		"async":   false,
 		"command": command,
-		"timeout": 600,
+		"timeout": timeoutSeconds,
 		"type":    "command",
 	}
 	// json.Marshal on map[string]any sorts keys alphabetically, matching
@@ -1343,10 +1355,13 @@ func computeCodexHookHash(event, command string) (string, error) {
 // so the hooks.json generator and the precomputed approvals must derive them
 // from this single source.
 func codexHookParams(event string) (timeoutSeconds int, async bool) {
-	async = event == "PostToolUse" || event == "Stop"
+	async = event == "PostToolUse" || event == "SessionEnd" || event == "Stop"
 	timeoutSeconds = 60
-	if event == "SessionStart" {
+	switch event {
+	case "SessionStart":
 		timeoutSeconds = 330
+	case "SessionEnd":
+		timeoutSeconds = 3
 	}
 	return timeoutSeconds, async
 }
@@ -1904,12 +1919,14 @@ type codexHookCommand struct {
 	Type           string `json:"type"`
 	Command        string `json:"command"`
 	CommandWindows string `json:"commandWindows,omitempty"`
+	Timeout        int    `json:"timeout,omitempty"`
 }
 
 // CodexObservabilityHookEvents are Codex's hook event names. Codex uses
 // PascalCase names and has a PermissionRequest event that Claude/Cursor lack.
 var CodexObservabilityHookEvents = []string{
 	"SessionStart",
+	"SessionEnd",
 	"PreToolUse",
 	"PermissionRequest",
 	"PostToolUse",
