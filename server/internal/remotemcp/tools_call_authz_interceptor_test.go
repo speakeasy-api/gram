@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -112,6 +113,7 @@ func TestToolsCallAuthzInterceptor_GrantsRejectNonMatchingTool(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Equal(t, mcpaccess.ToolPermissionDeniedMessage, oopsErr.Error())
 }
 
 func TestToolsCallAuthzInterceptor_NoGrantsRejects(t *testing.T) {
