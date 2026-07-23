@@ -82,6 +82,56 @@ export function formatRemoteSessionIssuerDisplay(issuer: {
   return formatRemoteMcpDisplay({ name: issuer.name, url: issuer.issuer });
 }
 
+// A remote identity provider or session client belongs to one of three tenancy
+// tiers, derived from which owning ids it carries. The API serializes an absent
+// owner as an empty string, so a falsy check is the tier test.
+//
+// - project: owned by a single project (projectId set).
+// - organization: shared across the org's projects (projectId empty,
+//   organizationId set).
+// - platform: the shared catalog curated by platform admins (both empty). Tenants
+//   inherit these read-only and may attach their own clients, but cannot edit,
+//   move, or delete them.
+export type RemoteSessionScopeTier = "project" | "organization" | "platform";
+
+export function remoteSessionScopeTier(entity: {
+  projectId?: string | null;
+  organizationId?: string | null;
+}): RemoteSessionScopeTier {
+  if (entity.projectId) return "project";
+  if (entity.organizationId) return "organization";
+  return "platform";
+}
+
+const REMOTE_SESSION_TIER_RANK: Record<RemoteSessionScopeTier, number> = {
+  project: 0,
+  organization: 1,
+  platform: 2,
+};
+
+// resolveRemoteSessionIssuerByTierPrecedence picks the single entity a tenant
+// should resolve to when several tiers expose a matching candidate (same slug or
+// same upstream URL). Slugs are unique per project and, separately, across the
+// platform catalog, but the organization tier has no slug uniqueness constraint,
+// and any tier may point at the same URL, so callers must not rely on list order
+// (which is by creation time and says nothing about tier). Returns the
+// highest-priority candidate — project > organization > platform — or undefined
+// when the list is empty.
+export function resolveRemoteSessionIssuerByTierPrecedence<
+  T extends { projectId?: string | null; organizationId?: string | null },
+>(candidates: T[]): T | undefined {
+  let best: T | undefined;
+  let bestRank = Number.POSITIVE_INFINITY;
+  for (const candidate of candidates) {
+    const rank = REMOTE_SESSION_TIER_RANK[remoteSessionScopeTier(candidate)];
+    if (rank < bestRank) {
+      best = candidate;
+      bestRank = rank;
+    }
+  }
+  return best;
+}
+
 // Derive a default display name from an Issuer URL's hostname. Unlike the slug
 // transform this keeps the hostname human-readable: dots are preserved rather
 // than hyphenated. (URL parsing lowercases the host either way.) Returns null

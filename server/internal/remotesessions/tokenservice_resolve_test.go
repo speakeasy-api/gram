@@ -164,3 +164,38 @@ func TestResolveAccessTokens_MissingSessionReturnsErrNoValidToken(t *testing.T) 
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.Nil(t, tokens)
 }
+
+// TestResolveAccessTokens_TenantClientOnPlatformIssuer proves an existing remote
+// session on a tenant client that points at a platform issuer resolves its
+// upstream token through the unchanged runtime path.
+func TestResolveAccessTokens_TenantClientOnPlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	enc := testenv.NewEncryptionClient(t)
+	mgr := newResolveManager(t, ti.conn, enc)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "resolve-platform")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "resolve-platform-usi")
+	clientID := createRemoteClient(t, ctx, ti, platformID.String(), userIssuerID.String(), "resolve-platform-client")
+
+	subject := urn.NewUserSubject("resolve-platform-subject")
+	accessEnc, err := enc.Encrypt([]byte("platform-upstream-token"))
+	require.NoError(t, err)
+	_, err = repo.New(ti.conn).InsertRemoteSession(ctx, repo.InsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   userIssuerID,
+		RemoteSessionClientID: uuid.MustParse(clientID),
+		AccessTokenEncrypted:  accessEnc,
+		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]string{platformID: "platform-upstream-token"}, tokens)
+}

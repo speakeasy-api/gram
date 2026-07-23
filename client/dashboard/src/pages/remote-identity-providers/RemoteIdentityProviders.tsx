@@ -44,6 +44,7 @@ import { CreateRemoteIdentityProviderSheet } from "./CreateRemoteIdentityProvide
 import { issuerDisplayName } from "./issuerDisplay";
 import { MigrateIssuerDialog } from "./MigrateIssuerDialog";
 import { migrationCandidates } from "./migrationCandidates";
+import { remoteSessionScopeTier } from "@/lib/sources";
 
 export function RemoteIdentityProvidersRoot(): JSX.Element {
   return <Outlet />;
@@ -77,10 +78,20 @@ function RemoteIdentityProvidersOverview() {
 
   const allItems = useMemo(() => data?.result.items ?? [], [data]);
 
-  const { organizational, projectSpecific } = useMemo(
+  // Three tenancy tiers. Platform issuers are inherited from the shared catalog
+  // and are read-only to the tenant, so they render in their own section without
+  // the move/consolidate/delete actions that would 404 against a global row.
+  const { platform, organizational, projectSpecific } = useMemo(
     () => ({
-      organizational: allItems.filter((item) => !item.issuer.projectId),
-      projectSpecific: allItems.filter((item) => !!item.issuer.projectId),
+      platform: allItems.filter(
+        (item) => remoteSessionScopeTier(item.issuer) === "platform",
+      ),
+      organizational: allItems.filter(
+        (item) => remoteSessionScopeTier(item.issuer) === "organization",
+      ),
+      projectSpecific: allItems.filter(
+        (item) => remoteSessionScopeTier(item.issuer) === "project",
+      ),
     }),
     [allItems],
   );
@@ -164,6 +175,33 @@ function RemoteIdentityProvidersOverview() {
         </Page.Section.Body>
       </Page.Section>
 
+      {platform.length > 0 && (
+        <Page.Section>
+          <Page.Section.Title>
+            Platform Remote Identity Providers
+          </Page.Section.Title>
+          <Page.Section.Description className="max-w-2xl">
+            Well-known upstream identity providers curated by platform admins
+            and inherited by every organization. These are read-only here; you
+            can register your own clients against them, but only platform admins
+            can edit, move, or delete them.
+          </Page.Section.Description>
+          <Page.Section.Body>
+            <IssuerTable
+              items={platform}
+              isLoading={isLoading}
+              showProject={false}
+              readOnly
+              emptyMessage="No platform identity providers available."
+              onDelete={setDeleteTarget}
+              onMakeOrganizational={handleMakeOrganizational}
+              onMoveToProject={setMoveTarget}
+              onConsolidate={setMigrateSource}
+            />
+          </Page.Section.Body>
+        </Page.Section>
+      )}
+
       <CreateRemoteIdentityProviderSheet
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -200,6 +238,7 @@ function IssuerTable({
   items,
   isLoading,
   showProject,
+  readOnly = false,
   emptyMessage,
   onDelete,
   onMakeOrganizational,
@@ -209,6 +248,9 @@ function IssuerTable({
   items: OrganizationRemoteSessionIssuer[];
   isLoading: boolean;
   showProject: boolean;
+  // readOnly drops the actions column for tiers the tenant cannot mutate
+  // (platform issuers): the row still links to the read-only detail view.
+  readOnly?: boolean;
   emptyMessage: string;
   onDelete: (item: OrganizationRemoteSessionIssuer) => void;
   onMakeOrganizational: (item: OrganizationRemoteSessionIssuer) => void;
@@ -217,14 +259,15 @@ function IssuerTable({
 }) {
   const orgRoutes = useOrgRoutes();
 
+  const actionsHeader = readOnly ? [] : [{ label: "" }];
   const headers = showProject
     ? [
         { label: "Provider" },
         { label: "Project" },
         { label: "Clients" },
-        { label: "" },
+        ...actionsHeader,
       ]
-    : [{ label: "Provider" }, { label: "Clients" }, { label: "" }];
+    : [{ label: "Provider" }, { label: "Clients" }, ...actionsHeader];
 
   if (!isLoading && items.length === 0) {
     return (
@@ -274,15 +317,17 @@ function IssuerTable({
               {item.clientCount} {item.clientCount === 1 ? "client" : "clients"}
             </Type>
           </td>
-          <td className="px-3 py-3 text-right">
-            <RowActions
-              item={item}
-              onDelete={() => onDelete(item)}
-              onMakeOrganizational={() => onMakeOrganizational(item)}
-              onMoveToProject={() => onMoveToProject(item)}
-              onConsolidate={() => onConsolidate(item)}
-            />
-          </td>
+          {!readOnly && (
+            <td className="px-3 py-3 text-right">
+              <RowActions
+                item={item}
+                onDelete={() => onDelete(item)}
+                onMakeOrganizational={() => onMakeOrganizational(item)}
+                onMoveToProject={() => onMoveToProject(item)}
+                onConsolidate={() => onConsolidate(item)}
+              />
+            </td>
+          )}
         </DotRow>
       ))}
     </DotTable>

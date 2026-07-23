@@ -96,9 +96,10 @@ export function AuthenticationSectionBody({
   const authorizationServer =
     protectedResourceMetadata?.authorizationServers?.[0];
 
-  // listRemoteSessionIssuers returns both this project's issuers and inherited
-  // organization-level ones (project_id IS NULL, same org), so the selectable
-  // list spans organizational and project-scoped providers.
+  // listRemoteSessionIssuers returns this project's own issuers, inherited
+  // organization-level ones (same org), and inherited platform issuers from the
+  // shared catalog, so the selectable list spans all three tiers. A client can be
+  // attached to any of them; only project-owned issuer metadata is editable here.
   const { data: issuersResult, isLoading: isLoadingIssuers } =
     useRemoteSessionIssuers();
   const allIssuers = useMemo(

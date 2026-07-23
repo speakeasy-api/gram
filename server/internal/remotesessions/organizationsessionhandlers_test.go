@@ -118,3 +118,44 @@ func TestRevokeAllClientSessions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
 }
+
+// TestOrgAdmin_ManagesSessionsOnTenantClientOverPlatformIssuer proves an
+// org-admin can list and revoke the sessions of a tenant client that points at a
+// platform issuer. These session queries also scoped through the issuer's
+// organization_id before the rescope.
+func TestOrgAdmin_ManagesSessionsOnTenantClientOverPlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "manage-sessions-platform")
+
+	// An organization-level client on the platform issuer, attached to a project
+	// user_session_issuer so a session can be minted against it.
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "manage-sessions-usi")
+	clientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, platformID, "manage-sessions-client", userIssuerID)
+
+	seedUser(t, ctx, ti.conn, "manage-sessions-user", "user@example.com", "Session User")
+	subject := urn.NewUserSubject("manage-sessions-user")
+	session := insertRemoteSession(t, ctx, ti.conn, subject, userIssuerID.String(), clientID.String())
+
+	sessions, err := ti.service.ListClientSessions(ctx, &orgsessionsgen.ListClientSessionsPayload{
+		ClientID:     clientID.String(),
+		Cursor:       nil,
+		Limit:        nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, sessions.Items, 1)
+	require.Equal(t, session.ID.String(), sessions.Items[0].ID)
+
+	err = ti.service.RevokeSession(ctx, &orgsessionsgen.RevokeSessionPayload{
+		ID:           session.ID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+}

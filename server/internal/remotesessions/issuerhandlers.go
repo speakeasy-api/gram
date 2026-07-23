@@ -286,12 +286,16 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	txRepo := repo.New(dbtx)
 
 	// Keep the pre-update lookup strictly project-scoped: organization-level
-	// issuers are edited via the organizationRemoteSessionIssuers service, and
-	// the project-scoped UpdateRemoteSessionIssuer below cannot modify them.
+	// issuers are edited via the organizationRemoteSessionIssuers service,
+	// platform issuers only by platform admins, and the project-scoped
+	// UpdateRemoteSessionIssuer below cannot modify either. Both inherited arms
+	// stay off (IncludeOrganizational and IncludeGlobal false).
 	existing, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-		ID:             issuerID,
-		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		OrganizationID: conv.ToPGTextEmpty(""),
+		ID:                    issuerID,
+		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeOrganizational: false,
+		IncludeGlobal:         false,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -374,10 +378,12 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.Lis
 	}
 
 	rows, err := repo.New(s.db).ListRemoteSessionIssuersByProjectID(ctx, repo.ListRemoteSessionIssuersByProjectIDParams{
-		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
-		Cursor:         cursor,
-		LimitValue:     limit,
+		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeOrganizational: true,
+		IncludeGlobal:         true,
+		Cursor:                cursor,
+		LimitValue:            limit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote session issuers").LogError(ctx, s.logger)
@@ -427,9 +433,11 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 			return nil, err
 		}
 		issuer, err = repo.New(s.db).GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
-			ID:             issuerID,
-			ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-			OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+			ID:                    issuerID,
+			ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+			OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+			IncludeOrganizational: true,
+			IncludeGlobal:         true,
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -483,6 +491,26 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// Establish the issuer belongs to the caller's project before counting
+	// clients, so a foreign or platform issuer id returns NotFound. Without this
+	// pre-read the unscoped count below runs first: a platform issuer that some
+	// tenant has attached to would return a 409 (a cross-tenant existence oracle),
+	// and one with no clients would fall through to the project-scoped delete,
+	// match nothing, and return a silent success. Both inherited arms stay off: a
+	// tenant must never delete an organization-level or platform issuer here.
+	if _, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
+		ID:                    issuerID,
+		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeOrganizational: false,
+		IncludeGlobal:         false,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
+	}
 
 	clientCount, err := txRepo.CountRemoteSessionClientsByIssuerID(ctx, issuerID)
 	if err != nil {

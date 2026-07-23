@@ -12,6 +12,7 @@ import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import { remoteLoginCallbackURL } from "@/lib/externalMcpUserSessions";
+import { resolveRemoteSessionIssuerByTierPrecedence } from "@/lib/sources";
 import { Toolset } from "@/lib/toolTypes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import {
@@ -190,9 +191,15 @@ function WireUserSessionIssuerBody({
       (issuer) => issuer.slug === defaults.userSessionIssuerSlug,
     ) ?? null;
 
+  // A slug can now appear across more than one tier (a project issuer, an
+  // inherited org issuer, and a platform issuer may all share it), so resolve by
+  // tier precedence — project > organization > platform — rather than taking the
+  // first list match, which is ordered by creation time and tier-blind.
   const existingRemoteSessionIssuer =
-    remoteIssuers.data?.result.items?.find(
-      (issuer) => issuer.slug === defaults.remoteSessionIssuerSlug,
+    resolveRemoteSessionIssuerByTierPrecedence(
+      remoteIssuers.data?.result.items?.filter(
+        (issuer) => issuer.slug === defaults.remoteSessionIssuerSlug,
+      ) ?? [],
     ) ?? null;
 
   const existingRemoteSessionClient =
