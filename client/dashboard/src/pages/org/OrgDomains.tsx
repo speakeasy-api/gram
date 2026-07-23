@@ -111,6 +111,23 @@ function customDomainHealthMessage(issue?: string): string {
     : "The latest health check found a problem with this domain.";
 }
 
+// A single failed probe (check_failed) is usually a transient Gram-side issue,
+// not a customer-actionable problem; only surface it once it has persisted
+// across consecutive checks.
+function showCustomDomainUnhealthy(domain: {
+  healthStatus?: string;
+  healthIssue?: string;
+  consecutiveFailures?: number;
+}): boolean {
+  if (domain.healthStatus !== "unhealthy") {
+    return false;
+  }
+  return (
+    domain.healthIssue !== "check_failed" ||
+    (domain.consecutiveFailures ?? 0) >= 2
+  );
+}
+
 // Inline editor: each allowlist entry is its own editable field. Entries are
 // validated on blur (and on save, by the parent via `onValidityChange`) rather
 // than gated behind explicit add/remove actions.
@@ -394,7 +411,7 @@ function OrgDomainsInner() {
                   <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
                     <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                   </SimpleTooltip>
-                ) : domain.healthStatus === "unhealthy" ? (
+                ) : showCustomDomainUnhealthy(domain) ? (
                   <SimpleTooltip tooltip="The latest health check found a problem">
                     <AlertTriangle className="h-4 w-4 text-amber-500" />
                   </SimpleTooltip>
@@ -473,7 +490,7 @@ function OrgDomainsInner() {
               </Stack>
             </RequireScope>
           </Stack>
-          {domain.healthStatus === "unhealthy" && (
+          {showCustomDomainUnhealthy(domain) && (
             <Alert variant="warning" dismissible={false} className="mt-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1">

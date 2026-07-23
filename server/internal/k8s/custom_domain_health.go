@@ -37,8 +37,7 @@ type CustomDomainInfrastructureCheck struct {
 	ProvisionerKind ProvisionerKind
 }
 
-// ManagedCustomDomainResource identifies a Kubernetes resource carrying the
-// gram custom-domain management labels.
+// ManagedCustomDomainResource is the Kubernetes identity used for orphan reconciliation.
 type ManagedCustomDomainResource struct {
 	Kind   ProvisionerKind
 	Name   string
@@ -51,9 +50,6 @@ var certificateGVR = schema.GroupVersionResource{
 	Resource: "certificates",
 }
 
-// ListManagedCustomDomainResources returns every Ingress and HTTPRoute in the
-// namespace labeled as managed by the custom domain provisioners, so callers
-// can reconcile them against the custom_domains table and flag orphans.
 func (k *KubernetesClients) ListManagedCustomDomainResources(ctx context.Context) ([]ManagedCustomDomainResource, error) {
 	if !k.enabled {
 		return nil, nil

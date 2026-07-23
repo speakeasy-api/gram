@@ -46,10 +46,6 @@ func (s *Service) Send(ctx context.Context, recipient string, template Template)
 	return s.SendIdempotent(ctx, recipient, "", template)
 }
 
-// SendIdempotent is Send with a Loops idempotency key: retries of the same
-// logical send inside Loops's 24h dedup window are silently dropped. Keys are
-// capped at 100 characters by Loops — hash composite keys. An empty key
-// disables deduplication.
 func (s *Service) SendIdempotent(ctx context.Context, recipient string, idempotencyKey string, template Template) error {
 	if recipient == "" {
 		return ErrEmptyRecipient

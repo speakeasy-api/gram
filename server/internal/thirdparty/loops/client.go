@@ -40,9 +40,7 @@ type SendTransactionalInput struct {
 	// AddToAudience instructs Loops to upsert a contact in the audience as a
 	// side effect of sending the email.
 	AddToAudience bool
-	// IdempotencyKey, when non-empty, is sent as the Idempotency-Key header so
-	// Loops drops duplicate sends of the same logical email (24h window, max
-	// 100 characters).
+	// IdempotencyKey deduplicates sends for 24 hours and is limited to 100 characters.
 	IdempotencyKey string
 }
 
@@ -119,8 +117,7 @@ func (c *httpClient) SendTransactional(ctx context.Context, input SendTransactio
 		return fmt.Errorf("read transactional response: %w", err)
 	}
 
-	// Loops answers 409 when an idempotency key is reused inside its 24h
-	// window; the email was already sent, so treat it as success.
+	// A 409 for an idempotent send means Loops already accepted it.
 	if resp.StatusCode == http.StatusConflict && input.IdempotencyKey != "" {
 		c.logger.DebugContext(ctx, "loops suppressed duplicate transactional email", attr.SlogName(input.TransactionalID))
 		return nil

@@ -55,14 +55,18 @@ WHERE activated IS TRUE
 ORDER BY id
 LIMIT @page_limit;
 
--- name: ListActiveCustomDomainNames :many
-SELECT domain
+-- name: ListActivatedCustomDomainResources :many
+SELECT
+    domain,
+    provisioner_kind,
+    COALESCE(ingress_name, '')::text AS resource_name
 FROM custom_domains
-WHERE deleted IS FALSE;
+WHERE activated IS TRUE
+  AND ingress_name IS NOT NULL
+  AND deleted IS FALSE;
 
 -- name: ListOrganizationUsersForHealthNotification :many
--- Candidate recipients for domain health alerts; callers filter this down to
--- organization admins via authz grants.
+-- Authorization filtering is applied by the caller.
 SELECT users.id, users.email
 FROM organization_user_relationships AS our
 JOIN users

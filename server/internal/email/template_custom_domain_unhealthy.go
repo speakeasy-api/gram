@@ -1,19 +1,10 @@
 package email
 
-// CustomDomainUnhealthy is sent to an organization's admins when a health
-// check first observes the organization's custom domain as unhealthy. It is
-// not re-sent while the domain stays unhealthy; the next transition from
-// healthy to unhealthy arms it again.
 type CustomDomainUnhealthy struct {
-	// Email is the recipient's email address, rendered in the template body.
-	Email string
-	// Domain is the custom domain that failed its health check.
-	Domain string
-	// IssueMessage is a human-readable description of the detected problem.
+	Email        string
+	Domain       string
 	IssueMessage string
-	// DomainLink is the dashboard URL of the organization's custom domain
-	// settings page, where the check can be reviewed and re-run.
-	DomainLink string
+	DomainLink   string
 }
 
 func (t CustomDomainUnhealthy) TransactionalID() TransactionalID {
