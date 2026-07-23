@@ -24,7 +24,6 @@ type TransactionalID string
 const (
 	transactionalIDTeamInvite                TransactionalID = "cml3n1h2n27o50i2rakc30bwb"
 	transactionalIDEnterpriseAdminOnboarding TransactionalID = "cmpqyxnzl00hj0jwtkibhyjdz"
-	transactionalIDAccessRequestCreated      TransactionalID = "cmq12wqp901sl0j0ll8cpr0yj"
 	transactionalIDTumUsageThreshold         TransactionalID = "cmrdon75q00390jvq44l87erv"
 	transactionalIDTumUsageOverage           TransactionalID = "cmrdopjpd028m0jx0v8sl25wj"
 	// gosec's G101 name heuristic matches the "Cred" in "Credits"; these are
@@ -64,11 +63,6 @@ var RegisteredTemplates = []Template{
 	},
 	EnterpriseAdminOnboarding{
 		SetupLink: "",
-	},
-	AccessRequestCreated{
-		RequesterEmail: "",
-		DisplayName:    "",
-		ApprovalURL:    "",
 	},
 	TumUsageThreshold{
 		OrganizationName: "",
