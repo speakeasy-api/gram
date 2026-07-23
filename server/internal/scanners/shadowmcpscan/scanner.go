@@ -94,6 +94,13 @@ type CoverageRecorder interface {
 	RecordShadowMCPResolution(ctx context.Context, orgID string, hookSource string, resolution string)
 }
 
+// BypassChecker reports whether the user has a risk-policy bypass grant for
+// the resolved Shadow MCP server. The background composition root adapts the
+// risk package's concrete evaluator to this interface to avoid an import cycle.
+type BypassChecker interface {
+	CanBypassShadowMCP(ctx context.Context, organizationID string, userID string, policyID uuid.UUID, evidence shadowmcp.AccessEvidence, toolName string) bool
+}
+
 // ToolCall is one recorded tool invocation to scan. ID is the recorded
 // tool-call id used to key the provenance lookup; Arguments is the raw JSON
 // arguments string exactly as recorded. CreatedAt is the recording time of the
@@ -116,24 +123,33 @@ type Scanner struct {
 	hosted     HostedChecker
 	provenance ProvenanceLookup
 	coverage   CoverageRecorder
+	bypass     BypassChecker
 }
 
-// NewScanner returns a Scanner. logger, validator, hosted, and provenance must
-// all be non-nil; coverage may be nil to disable resolution metrics.
+// NewScanner returns a Scanner without policy-bypass evaluation. logger,
+// validator, hosted, and provenance must all be non-nil; coverage may be nil
+// to disable resolution metrics.
 func NewScanner(logger *slog.Logger, validator Validator, hosted HostedChecker, provenance ProvenanceLookup, coverage CoverageRecorder) *Scanner {
+	return NewScannerWithBypass(logger, validator, hosted, provenance, coverage, nil)
+}
+
+// NewScannerWithBypass returns a Scanner that suppresses findings covered by
+// attributed users' risk-policy bypass grants.
+func NewScannerWithBypass(logger *slog.Logger, validator Validator, hosted HostedChecker, provenance ProvenanceLookup, coverage CoverageRecorder, bypass BypassChecker) *Scanner {
 	return &Scanner{
 		logger:     logger,
 		validator:  validator,
 		hosted:     hosted,
 		provenance: provenance,
 		coverage:   coverage,
+		bypass:     bypass,
 	}
 }
 
 // Scan returns a Finding for each MCP tool call that did not reach a
 // Gram-hosted server, one findings slice per input message (positionally
 // aligned with messages).
-func (s *Scanner) Scan(ctx context.Context, orgID string, projectID uuid.UUID, messages [][]ToolCall) [][]scanners.Finding {
+func (s *Scanner) Scan(ctx context.Context, orgID string, projectID uuid.UUID, policyID uuid.UUID, messageUserIDs []string, messages [][]ToolCall) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
 
 	ids, oldest := mcpCallIDs(messages)
@@ -162,8 +178,12 @@ func (s *Scanner) Scan(ctx context.Context, orgID string, projectID uuid.UUID, m
 
 	for i, calls := range messages {
 		var findings []scanners.Finding
+		var userID string
+		if i < len(messageUserIDs) {
+			userID = messageUserIDs[i]
+		}
 		for _, call := range calls {
-			if finding := s.scanCall(ctx, orgID, call, provenance[call.ID], trustedHosts); finding != nil {
+			if finding := s.scanCall(ctx, orgID, userID, policyID, call, provenance[call.ID], trustedHosts); finding != nil {
 				findings = append(findings, *finding)
 			}
 		}
@@ -213,7 +233,7 @@ func (s *Scanner) lookupProvenance(ctx context.Context, projectID uuid.UUID, ids
 
 // scanCall decides a single tool call, returning nil when the call is clean or
 // is not an MCP call at all.
-func (s *Scanner) scanCall(ctx context.Context, orgID string, call ToolCall, prov telemetryrepo.MCPProvenance, trustedHosts []string) *scanners.Finding {
+func (s *Scanner) scanCall(ctx context.Context, orgID string, userID string, policyID uuid.UUID, call ToolCall, prov telemetryrepo.MCPProvenance, trustedHosts []string) *scanners.Finding {
 	if call.Name == "" || !toolref.IsMCPToolName(call.Name) {
 		return nil
 	}
@@ -230,6 +250,16 @@ func (s *Scanner) scanCall(ctx context.Context, orgID string, call ToolCall, pro
 		// Gram URL. Both are shadow MCP by the same rule the realtime guard
 		// applies.
 		s.recordResolution(ctx, orgID, senderOf(prov, call), ResolutionShadow)
+		if userID = strings.TrimSpace(userID); userID != "" && s.bypass != nil && s.bypass.CanBypassShadowMCP(
+			ctx,
+			orgID,
+			userID,
+			policyID,
+			resolvedAccessEvidence(match),
+			call.Name,
+		) {
+			return nil
+		}
 		finding := s.finding(call, match)
 		return &finding
 	}
@@ -252,6 +282,25 @@ func (s *Scanner) scanCall(ctx context.Context, orgID string, call ToolCall, pro
 	}
 	finding := s.finding(call, fallbackMatch)
 	return &finding
+}
+
+// resolvedAccessEvidence converts the provenance match into the same evidence
+// shape used by realtime enforcement. Absolute URLs are URL-scoped; stdio
+// launch commands are identity-scoped.
+func resolvedAccessEvidence(match string) shadowmcp.AccessEvidence {
+	urlEvidence := shadowmcp.AccessEvidence{
+		FullURL:        match,
+		URLHost:        "",
+		ServerIdentity: "",
+	}
+	if shadowmcp.NormalizeAccessEvidence(urlEvidence).FullURL != "" {
+		return urlEvidence
+	}
+	return shadowmcp.AccessEvidence{
+		FullURL:        "",
+		URLHost:        "",
+		ServerIdentity: match,
+	}
 }
 
 func (s *Scanner) finding(call ToolCall, match string) scanners.Finding {

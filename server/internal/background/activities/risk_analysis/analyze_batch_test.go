@@ -149,7 +149,7 @@ func newCustomRulesPub() *gcp.MockPublisher[*riskv1.CustomRulesAnalysis] {
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil)
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, ab)
 
@@ -211,6 +211,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -284,6 +285,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -351,6 +353,7 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -426,6 +429,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -536,6 +540,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -639,6 +644,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -797,6 +803,7 @@ func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -1279,6 +1286,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		newCustomRulesPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
+		nil,
 		nil,
 	)
 	require.NoError(t, err)

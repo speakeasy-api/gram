@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -21,9 +22,18 @@ type MCPProvenanceLookup interface {
 	LookupMCPProvenanceByToolCallID(ctx context.Context, projectID uuid.UUID, toolCallIDs []string, since time.Time) (map[string]telemetryrepo.MCPProvenance, error)
 }
 
-func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, projectID uuid.UUID, messages []batchMessage) [][]scanners.Finding {
+// ShadowMCPBypassChecker is the risk-analysis boundary for evaluating an
+// attributed user's bypass grants without importing internal/risk, which
+// already depends on this package.
+type ShadowMCPBypassChecker interface {
+	CanBypassShadowMCP(ctx context.Context, organizationID string, userID string, policyID uuid.UUID, evidence shadowmcp.AccessEvidence, toolName string) bool
+}
+
+func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, projectID uuid.UUID, policyID uuid.UUID, messages []batchMessage) [][]scanners.Finding {
 	calls := make([][]shadowmcpscan.ToolCall, len(messages))
+	messageUserIDs := make([]string, len(messages))
 	for i, msg := range messages {
+		messageUserIDs[i] = msg.UserID
 		msgCalls := make([]shadowmcpscan.ToolCall, 0, len(msg.ToolCalls))
 		for _, call := range msg.ToolCalls {
 			msgCalls = append(msgCalls, shadowmcpscan.ToolCall{
@@ -36,7 +46,7 @@ func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, projectI
 		}
 		calls[i] = msgCalls
 	}
-	return a.shadowMCPScanner.Scan(ctx, orgID, projectID, calls)
+	return a.shadowMCPScanner.Scan(ctx, orgID, projectID, policyID, messageUserIDs, calls)
 }
 
 func (a *AnalyzeBatch) scanDestructiveToolAnnotations(ctx context.Context, orgID string, messages []batchMessage) [][]scanners.Finding {
