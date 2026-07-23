@@ -859,6 +859,10 @@ WHERE id = ANY(@message_ids::uuid[])
 -- attribution rule as ListRiskOverviewTopUsers: the message's own user_id
 -- wins, the chat owner's is the fallback — and a soft-deleted chat's owner
 -- never is (LEFT JOIN so the message still gets scanned, just unattributed).
+-- The lateral probes capture bounded causal context at the same event read:
+-- the latest preceding user request and the latest tool result strictly after
+-- that request. chat_messages_chat_id_created_at_idx supports both reverse
+-- time probes; seq deterministically orders equal timestamps.
 --
 -- created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
 -- the batch's own time range, keeping that query on the telemetry table's
@@ -870,9 +874,32 @@ WHERE id = ANY(@message_ids::uuid[])
 -- to no telemetry row at all — precisely the population that metric exists to
 -- measure.
 SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
-  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id,
+  COALESCE(prior_user_request.content, '')::TEXT AS prior_user_request,
+  COALESCE(recent_tool.content, '')::TEXT AS recent_untrusted_content
 FROM chat_messages cm
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT LEFT(prev.content, 4000) AS content, prev.created_at, prev.seq
+  FROM chat_messages prev
+  WHERE prev.chat_id = cm.chat_id
+    AND prev.project_id = cm.project_id
+    AND prev.role = 'user'
+    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
+  ORDER BY prev.created_at DESC, prev.seq DESC
+  LIMIT 1
+) prior_user_request ON TRUE
+LEFT JOIN LATERAL (
+  SELECT LEFT(prev.content, 4000) AS content
+  FROM chat_messages prev
+  WHERE prev.chat_id = cm.chat_id
+    AND prev.project_id = cm.project_id
+    AND prev.role = 'tool'
+    AND (prev.created_at, prev.seq) < (cm.created_at, cm.seq)
+    AND (prev.created_at, prev.seq) > (prior_user_request.created_at, prior_user_request.seq)
+  ORDER BY prev.created_at DESC, prev.seq DESC
+  LIMIT 1
+) recent_tool ON TRUE
 WHERE cm.id = ANY(@ids::uuid[])
   AND cm.project_id = @project_id;
 

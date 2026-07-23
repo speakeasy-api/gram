@@ -2,6 +2,7 @@ package judgemessage_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -113,4 +114,20 @@ func TestRender(t *testing.T) {
 		judgemessage.NewToolCall("Bash", `{"command":"rm -rf /tmp"}`),
 	})
 	require.Contains(t, judgemessage.Render(toolMsg), "rm -rf /tmp")
+}
+
+func TestRenderTrajectoryBoundsEachFieldIndependently(t *testing.T) {
+	t.Parallel()
+
+	trajectory := judgemessage.RenderTrajectory(judgemessage.Trajectory{
+		PriorUserRequest:       strings.Repeat("u", 5000),
+		RecentUntrustedContent: strings.Repeat("t", 4500),
+	})
+
+	require.True(t, trajectory.PriorUserRequestTruncated)
+	require.True(t, trajectory.RecentUntrustedContentTruncated)
+	require.LessOrEqual(t, len([]rune(trajectory.PriorUserRequest)), 4000)
+	require.LessOrEqual(t, len([]rune(trajectory.RecentUntrustedContent)), 4000)
+	require.Contains(t, trajectory.PriorUserRequest, "characters truncated")
+	require.Contains(t, trajectory.RecentUntrustedContent, "characters truncated")
 }

@@ -8,7 +8,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class PromptInjectionAnalysis(_message.Message):
-    __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "content", "user_id", "l1_enabled", "message_type", "body", "tool_name", "tool_calls")
+    __slots__ = ("request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "content", "user_id", "l1_enabled", "message_type", "body", "tool_name", "tool_calls", "prior_user_request", "recent_untrusted_content")
     class ToolCall(_message.Message):
         __slots__ = ("name", "arguments")
         NAME_FIELD_NUMBER: _ClassVar[int]
@@ -30,6 +30,8 @@ class PromptInjectionAnalysis(_message.Message):
     BODY_FIELD_NUMBER: _ClassVar[int]
     TOOL_NAME_FIELD_NUMBER: _ClassVar[int]
     TOOL_CALLS_FIELD_NUMBER: _ClassVar[int]
+    PRIOR_USER_REQUEST_FIELD_NUMBER: _ClassVar[int]
+    RECENT_UNTRUSTED_CONTENT_FIELD_NUMBER: _ClassVar[int]
     request_id: str
     chat_message_id: str
     project_id: str
@@ -44,4 +46,6 @@ class PromptInjectionAnalysis(_message.Message):
     body: str
     tool_name: str
     tool_calls: _containers.RepeatedCompositeFieldContainer[PromptInjectionAnalysis.ToolCall]
-    def __init__(self, request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., content: _Optional[str] = ..., user_id: _Optional[str] = ..., l1_enabled: _Optional[bool] = ..., message_type: _Optional[str] = ..., body: _Optional[str] = ..., tool_name: _Optional[str] = ..., tool_calls: _Optional[_Iterable[_Union[PromptInjectionAnalysis.ToolCall, _Mapping]]] = ...) -> None: ...
+    prior_user_request: str
+    recent_untrusted_content: str
+    def __init__(self, request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., content: _Optional[str] = ..., user_id: _Optional[str] = ..., l1_enabled: _Optional[bool] = ..., message_type: _Optional[str] = ..., body: _Optional[str] = ..., tool_name: _Optional[str] = ..., tool_calls: _Optional[_Iterable[_Union[PromptInjectionAnalysis.ToolCall, _Mapping]]] = ..., prior_user_request: _Optional[str] = ..., recent_untrusted_content: _Optional[str] = ...) -> None: ...

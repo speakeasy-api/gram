@@ -17,14 +17,16 @@ import (
 func (a *AnalyzeBatch) scanPromptInjection(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, contents []string) [][]scanners.Finding {
 	out := make([][]scanners.Finding, len(messages))
 	judgeMessages := make([]judgemessage.Message, len(messages))
+	judgeTrajectories := make([]judgemessage.Trajectory, len(messages))
 	judgeUserIDs := make([]string, len(messages))
 	for i := range messages {
 		judgeMessages[i] = batchJudgeMessage(messages[i])
+		judgeTrajectories[i] = batchJudgeTrajectory(messages[i])
 		judgeUserIDs[i] = messages[i].UserID
 	}
 	a.publishPromptInjectionScanRequests(ctx, args, requestID, messages)
 
-	results, err := a.promptInjectionScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeUserIDs, judgeMessages)
+	results, err := a.promptInjectionScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), judgeUserIDs, judgeMessages, judgeTrajectories)
 	if err != nil {
 		a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
 		return out
@@ -71,13 +73,15 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 			RiskPolicyVersion: &args.PolicyVersion,
 			CreatedAt:         &createdAt,
 
-			Content:     new(msg.Content),
-			UserId:      &msg.UserID,
-			L1Enabled:   new(true),
-			MessageType: new(jm.Type),
-			Body:        &jm.Body,
-			ToolName:    &jm.ToolName,
-			ToolCalls:   toolCalls,
+			Content:                new(msg.Content),
+			UserId:                 &msg.UserID,
+			L1Enabled:              new(true),
+			MessageType:            new(jm.Type),
+			Body:                   &jm.Body,
+			ToolName:               &jm.ToolName,
+			ToolCalls:              toolCalls,
+			PriorUserRequest:       &msg.PriorUserRequest,
+			RecentUntrustedContent: &msg.RecentUntrustedContent,
 		}.Build()))
 	}
 	drainPublishAcks(ctx, a.logger, "failed to publish prompt injection scan request", publishResults)

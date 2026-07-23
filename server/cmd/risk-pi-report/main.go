@@ -3,13 +3,16 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -17,6 +20,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+	"github.com/google/uuid"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -38,6 +42,13 @@ const (
 	defaultOutFile   = "server/risk_accuracy_metrics.json"
 )
 
+var emptyTypedVerdict = piopenrouter.Verdict{
+	DirectiveKind: "",
+	Target:        "",
+	Operational:   false,
+	Rationale:     "",
+}
+
 type toolCallCase struct {
 	Name string `json:"name"`
 	Args string `json:"args"`
@@ -50,9 +61,21 @@ type labeledCase struct {
 	Source string `json:"source"`
 	// Optional agent-runtime framing: plain rows omit these (judged as end-user
 	// content); typed rows carry the message type + tool the judge and scope use.
-	Type      string         `json:"type,omitempty"`       // message.Type; default user_message
-	Tool      string         `json:"tool,omitempty"`       // tool name for a single-tool tool_request/tool_response
-	ToolCalls []toolCallCase `json:"tool_calls,omitempty"` // multi-call tool_request
+	Type                   string         `json:"type,omitempty"`       // message.Type; default user_message
+	Tool                   string         `json:"tool,omitempty"`       // tool name for a single-tool tool_request/tool_response
+	ToolCalls              []toolCallCase `json:"tool_calls,omitempty"` // multi-call tool_request
+	PriorUserRequest       string         `json:"prior_user_request,omitempty"`
+	RecentUntrustedContent string         `json:"recent_untrusted_content,omitempty"`
+	DirectivePresent       *bool          `json:"directive_present,omitempty"`
+	KnownGap               string         `json:"known_gap,omitempty"`
+	SeedID                 string         `json:"seed_id,omitempty"`
+}
+
+func (c labeledCase) trajectory() judgemessage.Trajectory {
+	return judgemessage.Trajectory{
+		PriorUserRequest:       c.PriorUserRequest,
+		RecentUntrustedContent: c.RecentUntrustedContent,
+	}
 }
 
 // caseType returns the message type for a case, defaulting to user_message.
@@ -93,11 +116,12 @@ func (c labeledCase) scopeView() ra.MessageView {
 }
 
 type floors struct {
-	FPRateMax     float64  `json:"fp_rate_max"`
-	RecallFloor   *float64 `json:"recall_floor"`
-	LastUpdated   string   `json:"last_updated"`
-	LastUpdatedBy string   `json:"last_updated_by"`
-	Notes         string   `json:"notes"`
+	FPRateMax         float64            `json:"fp_rate_max"`
+	RecallFloor       *float64           `json:"recall_floor"`
+	RecallBySourceMin map[string]float64 `json:"recall_by_source_min"`
+	LastUpdated       string             `json:"last_updated"`
+	LastUpdatedBy     string             `json:"last_updated_by"`
+	Notes             string             `json:"notes"`
 }
 
 type counts struct {
@@ -150,22 +174,101 @@ type modeSummary struct {
 	InScope                  int             `json:"in_scope,omitempty"`
 	LostTruePositives        []exampleCase   `json:"lost_true_positives,omitempty"`
 	SuppressedFalsePositives []exampleCase   `json:"suppressed_false_positives,omitempty"`
+	Evaluation               evaluationStats `json:"evaluation"`
+}
+
+type evaluationStats struct {
+	PhysicalCalls        int     `json:"physical_calls"`
+	Errors               int     `json:"errors"`
+	Timeouts             int     `json:"timeouts"`
+	Malformed            int     `json:"malformed"`
+	FailOpenEvents       int     `json:"fail_open_events"`
+	PromptTokens         int     `json:"prompt_tokens"`
+	CompletionTokens     int     `json:"completion_tokens"`
+	CostUSD              float64 `json:"cost_usd"`
+	CallsOver10Seconds   int     `json:"calls_over_10_seconds"`
+	CallLatencyP50MS     float64 `json:"call_latency_p50_ms"`
+	CallLatencyP95MS     float64 `json:"call_latency_p95_ms"`
+	CallLatencyP99MS     float64 `json:"call_latency_p99_ms"`
+	DecisionLatencyP50MS float64 `json:"decision_latency_p50_ms"`
+	DecisionLatencyP95MS float64 `json:"decision_latency_p95_ms"`
+	DecisionLatencyP99MS float64 `json:"decision_latency_p99_ms"`
 }
 
 type accuracySummary struct {
-	Total   int             `json:"total"`
-	Counts  counts          `json:"counts"`
-	Overall metricsBlock    `json:"overall"`
-	Sources []sourceSummary `json:"by_source"`
-	Rules   []ruleHist      `json:"by_rule"`
-	Modes   []modeSummary   `json:"modes,omitempty"`
+	Total          int                 `json:"total"`
+	Counts         counts              `json:"counts"`
+	Overall        metricsBlock        `json:"overall"`
+	Sources        []sourceSummary     `json:"by_source"`
+	Rules          []ruleHist          `json:"by_rule"`
+	Modes          []modeSummary       `json:"modes,omitempty"`
+	Stability      stabilitySummary    `json:"stability"`
+	Distributions  distributionSummary `json:"distributions"`
+	KnownGaps      []knownGapSummary   `json:"known_gaps,omitempty"`
+	RecallGate     recallGateSummary   `json:"recall_gate"`
+	RecallGateRuns []recallGateSummary `json:"recall_gate_runs"`
+}
+
+type recallGateSummary struct {
+	Scope    string          `json:"scope"`
+	Counts   counts          `json:"counts"`
+	Recall   float64         `json:"recall"`
+	BySource []sourceSummary `json:"by_source"`
+	Excluded int             `json:"known_gaps_excluded"`
+}
+
+type stabilitySummary struct {
+	Repeats                 int            `json:"repeats"`
+	StablePositive          int            `json:"stable_positive"`
+	StableNegative          int            `json:"stable_negative"`
+	Flipped                 int            `json:"flipped"`
+	FlipRate                float64        `json:"flip_rate"`
+	StableFalsePositives    int            `json:"stable_false_positives"`
+	FlippedBenign           int            `json:"flipped_benign"`
+	FlipsAndStableFalseCore []stabilityRow `json:"flips_and_stable_false_positive_core,omitempty"`
+}
+
+type stabilityRow struct {
+	ID           string `json:"id"`
+	Source       string `json:"source"`
+	Label        string `json:"label"`
+	PositiveRuns int    `json:"positive_runs"`
+	Outcome      string `json:"outcome"`
+}
+
+type distribution struct {
+	Min    float64 `json:"min"`
+	Median float64 `json:"median"`
+	Max    float64 `json:"max"`
+	Mean   float64 `json:"mean"`
+	StdDev float64 `json:"stddev"`
+}
+
+type distributionSummary struct {
+	FalsePositiveRate distribution `json:"false_positive_rate"`
+	Recall            distribution `json:"recall"`
+	CostUSD           distribution `json:"cost_usd"`
+}
+
+type knownGapSummary struct {
+	ID     string `json:"id"`
+	Issue  string `json:"issue"`
+	Reason string `json:"reason"`
 }
 
 type envelope struct {
-	GitSHA    string          `json:"git_sha"`
-	Ref       string          `json:"ref"`
-	Timestamp string          `json:"timestamp"`
-	Summary   accuracySummary `json:"summary"`
+	GitSHA          string          `json:"git_sha"`
+	Ref             string          `json:"ref"`
+	Timestamp       string          `json:"timestamp"`
+	Model           string          `json:"model"`
+	Reasoning       string          `json:"reasoning"`
+	ProviderRoute   string          `json:"provider_route"`
+	SamplesPerEvent int             `json:"samples_per_event"`
+	TimeoutMS       int64           `json:"timeout_ms"`
+	PromptSHA256    string          `json:"prompt_sha256"`
+	SchemaSHA256    string          `json:"schema_sha256"`
+	CorpusSHA256    string          `json:"corpus_sha256"`
+	Summary         accuracySummary `json:"summary"`
 }
 
 type options struct {
@@ -175,17 +278,18 @@ type options struct {
 	judgeModel       string
 	judgeConcurrency int
 	sources          string
+	reasoning        string
+	extraCorpus      string
+	repeats          int
+	samples          int
 }
 
 const (
 	// defaultJudgeModel is the report's judge model when none is provided.
-	defaultJudgeModel = "anthropic/claude-haiku-4.5"
-	// judgeConcurrency bounds concurrent judge calls. The corpus is a few hundred
-	// rows; 8 keeps it brisk without tripping provider rate limits.
-	defaultJudgeConcurrency = 8
-	// judgeTimeout bounds a single judge completion call in the bench. Generous
-	// vs prod's 10s — accuracy matters more than latency here.
-	judgeTimeout = 30 * time.Second
+	defaultJudgeModel = piopenrouter.DefaultModel
+	// judgeConcurrency bounds concurrent logical events without turning the
+	// benchmark into a provider load test.
+	defaultJudgeConcurrency = 4
 	// benchOrgID/benchProjectID label the judge calls. The judge needs an
 	// org/project for the request shape; these are inert identifiers (the
 	// dev-key provisioner ignores the org, projectID must parse as a UUID).
@@ -209,13 +313,21 @@ func parseFlags() options {
 		judgeModel:       "",
 		judgeConcurrency: 0,
 		sources:          "",
+		reasoning:        "",
+		extraCorpus:      "",
+		repeats:          0,
+		samples:          0,
 	}
 	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
 	flag.BoolVar(&opts.checkFloors, "check-floors", true, "fail if judge metrics violate floors.json")
 	flag.StringVar(&opts.judgeModel, "judge-model", defaultJudgeModel, "OpenRouter model id for the judge (must be allowlisted)")
-	flag.IntVar(&opts.judgeConcurrency, "judge-concurrency", defaultJudgeConcurrency, "max concurrent judge calls")
+	flag.IntVar(&opts.judgeConcurrency, "judge-concurrency", defaultJudgeConcurrency, "max concurrent logical events")
 	flag.StringVar(&opts.sources, "sources", "", "comma-separated source substrings to keep (empty = all); use to judge a cheap iteration slice")
+	flag.StringVar(&opts.reasoning, "reasoning", piopenrouter.DefaultReasoningEffort, "OpenRouter reasoning effort for the judge call")
+	flag.StringVar(&opts.extraCorpus, "extra-corpus", "", "absolute path to an additional local JSONL corpus; never loaded by default")
+	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
+	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
 	flag.Parse()
 	return opts
 }
@@ -247,7 +359,7 @@ func filterSources(corpus []labeledCase, spec string) []labeledCase {
 }
 
 func run(ctx context.Context, opts options) error {
-	corpus, err := loadCorpus(opts.corpusDir)
+	corpus, err := loadCorpus(opts.corpusDir, opts.extraCorpus)
 	if err != nil {
 		return err
 	}
@@ -260,12 +372,6 @@ func run(ctx context.Context, opts options) error {
 		return err
 	}
 
-	judgeMode, judgeFindings, err := scanJudgeMode(ctx, opts, corpus)
-	if err != nil {
-		return err
-	}
-	modes := []modeSummary{judgeMode}
-
 	// Scope-aware modes: apply the candidate policy scope (scopes.json) as a
 	// pre-filter, so the report shows the FP reduction from scoping AND flags any
 	// malicious case the scope would stop scanning (coverage regression).
@@ -273,38 +379,286 @@ func run(ctx context.Context, opts options) error {
 	if err != nil {
 		return err
 	}
+	var scope ra.CompiledScope
 	if hasScope {
-		scope, err := compileScope(scopeCfg)
+		scope, err = compileScope(scopeCfg)
 		if err != nil {
 			return err
 		}
-		if scope.Active() {
-			modes = append(modes, scopedMode("judge_scoped", corpus, judgeFindings, scope))
-		}
 	}
 
+	if opts.repeats < 1 {
+		return fmt.Errorf("--repeats must be at least 1")
+	}
+	if opts.samples < 1 {
+		return fmt.Errorf("--samples must be at least 1")
+	}
+	modes := make([]modeSummary, 0, opts.repeats*2)
+	allFindings := make([][][]scanners.Finding, 0, opts.repeats)
+	for repeat := 1; repeat <= opts.repeats; repeat++ {
+		fmt.Fprintf(os.Stderr, "trial %d/%d\n", repeat, opts.repeats)
+		judgeMode, judgeFindings, err := scanJudgeMode(ctx, opts, corpus)
+		if err != nil {
+			return err
+		}
+		judgeMode.Name = fmt.Sprintf("judge_run_%d", repeat)
+		modes = append(modes, judgeMode)
+		allFindings = append(allFindings, judgeFindings)
+		if hasScope && scope.Active() {
+			modes = append(modes, scopedMode(fmt.Sprintf("scoped_run_%d", repeat), corpus, judgeFindings, scope))
+		}
+	}
+	judgeMode := modes[0]
+	recallGateRuns := make([]recallGateSummary, len(allFindings))
+	for i, findings := range allFindings {
+		recallGateRuns[i] = summarizeRecallGate(corpus, findings)
+	}
+	worstRecallGate := worstRecallGate(recallGateRuns)
+
 	summary := accuracySummary{
-		Total:   judgeMode.Total,
-		Counts:  judgeMode.Counts,
-		Overall: judgeMode.Overall,
-		Sources: judgeMode.Sources,
-		Rules:   judgeMode.Rules,
-		Modes:   modes,
+		Total:          judgeMode.Total,
+		Counts:         judgeMode.Counts,
+		Overall:        judgeMode.Overall,
+		Sources:        judgeMode.Sources,
+		Rules:          judgeMode.Rules,
+		Modes:          modes,
+		Stability:      summarizeStability(corpus, allFindings),
+		Distributions:  summarizeDistributions(modes, recallGateRuns),
+		KnownGaps:      summarizeKnownGaps(corpus),
+		RecallGate:     worstRecallGate,
+		RecallGateRuns: recallGateRuns,
 	}
 
 	printSummary(os.Stderr, modes)
-
-	if opts.checkFloors && judgeMode.Overall.FPRate > fl.FPRateMax {
-		return fmt.Errorf(
-			"judge FP-rate %.4f exceeds floor %.4f (floors.json last updated %s by %s)",
-			judgeMode.Overall.FPRate,
-			fl.FPRateMax,
-			fl.LastUpdated,
-			fl.LastUpdatedBy,
-		)
+	fmt.Fprintf(os.Stderr, "stability: flips=%d/%d (%.2f%%) stable_fp=%d benign_flips=%d\n",
+		summary.Stability.Flipped, summary.Total, summary.Stability.FlipRate*100,
+		summary.Stability.StableFalsePositives, summary.Stability.FlippedBenign)
+	for i, gate := range summary.RecallGateRuns {
+		fmt.Fprintf(os.Stderr, "recall gate run %d: TP=%d FN=%d recall=%.3f known_gaps_excluded=%d\n",
+			i+1, gate.Counts.TP, gate.Counts.FN, gate.Recall, gate.Excluded)
+		for _, source := range gate.BySource {
+			fmt.Fprintf(os.Stderr, "  %-24s TP=%-4d FN=%-4d recall=%.3f\n",
+				source.Source, source.Counts.TP, source.Counts.FN, source.Metrics.Recall)
+		}
 	}
 
-	return writeMetrics(opts.outFile, summary)
+	if opts.checkFloors {
+		if err := checkRecallFloors(fl, summary.RecallGateRuns); err != nil {
+			return err
+		}
+	}
+
+	return writeMetrics(opts.outFile, opts, corpus, summary)
+}
+
+func checkRecallFloors(fl floors, runs []recallGateSummary) error {
+	for runIndex, gate := range runs {
+		presentSources := make(map[string]struct{}, len(gate.BySource))
+		for _, source := range gate.BySource {
+			presentSources[source.Source] = struct{}{}
+		}
+		fullGateSuite := len(fl.RecallBySourceMin) > 0
+		for source := range fl.RecallBySourceMin {
+			if _, ok := presentSources[source]; !ok {
+				fullGateSuite = false
+				break
+			}
+		}
+		if fl.RecallFloor != nil && fullGateSuite && gate.Counts.TP+gate.Counts.FN > 0 && gate.Recall < *fl.RecallFloor {
+			return fmt.Errorf(
+				"judge recall %.4f in run %d is below floor %.4f (floors.json last updated %s by %s)",
+				gate.Recall,
+				runIndex+1,
+				*fl.RecallFloor,
+				fl.LastUpdated,
+				fl.LastUpdatedBy,
+			)
+		}
+		for _, source := range gate.BySource {
+			floor, ok := fl.RecallBySourceMin[source.Source]
+			if !ok || source.Counts.TP+source.Counts.FN == 0 || source.Metrics.Recall >= floor {
+				continue
+			}
+			return fmt.Errorf(
+				"judge recall %.4f for source %s in run %d is below floor %.4f (floors.json last updated %s by %s)",
+				source.Metrics.Recall,
+				source.Source,
+				runIndex+1,
+				floor,
+				fl.LastUpdated,
+				fl.LastUpdatedBy,
+			)
+		}
+	}
+	return nil
+}
+
+func summarizeStability(corpus []labeledCase, runs [][][]scanners.Finding) stabilitySummary {
+	out := stabilitySummary{
+		Repeats: len(runs), StablePositive: 0, StableNegative: 0, Flipped: 0,
+		FlipRate: 0, StableFalsePositives: 0, FlippedBenign: 0, FlipsAndStableFalseCore: nil,
+	}
+	if len(runs) == 0 {
+		return out
+	}
+	for i := range runs[0] {
+		positives := 0
+		for _, run := range runs {
+			if len(run[i]) > 0 {
+				positives++
+			}
+		}
+		switch {
+		case positives == len(runs):
+			out.StablePositive++
+			if corpus[i].Label == "benign" {
+				out.StableFalsePositives++
+				out.FlipsAndStableFalseCore = append(out.FlipsAndStableFalseCore, stabilityRow{
+					ID: corpus[i].ID, Source: corpus[i].Source, Label: corpus[i].Label,
+					PositiveRuns: positives, Outcome: "stable_false_positive",
+				})
+			}
+		case positives == 0:
+			out.StableNegative++
+		default:
+			out.Flipped++
+			if corpus[i].Label == "benign" {
+				out.FlippedBenign++
+			}
+			out.FlipsAndStableFalseCore = append(out.FlipsAndStableFalseCore, stabilityRow{
+				ID: corpus[i].ID, Source: corpus[i].Source, Label: corpus[i].Label,
+				PositiveRuns: positives, Outcome: "flipped",
+			})
+		}
+	}
+	out.FlipRate = safeDiv(out.Flipped, len(corpus))
+	return out
+}
+
+func summarizeDistributions(modes []modeSummary, recallGates []recallGateSummary) distributionSummary {
+	var falsePositiveRates, recalls, costs []float64
+	for _, mode := range modes {
+		if strings.HasPrefix(mode.Name, "scoped_") {
+			continue
+		}
+		falsePositiveRates = append(falsePositiveRates, mode.Overall.FPRate)
+		costs = append(costs, mode.Evaluation.CostUSD)
+	}
+	for _, gate := range recallGates {
+		if gate.Counts.TP+gate.Counts.FN > 0 {
+			recalls = append(recalls, gate.Recall)
+		}
+	}
+	return distributionSummary{
+		FalsePositiveRate: describeDistribution(falsePositiveRates),
+		Recall:            describeDistribution(recalls),
+		CostUSD:           describeDistribution(costs),
+	}
+}
+
+func worstRecallGate(runs []recallGateSummary) recallGateSummary {
+	if len(runs) == 0 {
+		return recallGateSummary{
+			Scope:  "explicit directive-present, in-taxonomy malicious rows; AGE-3048 known gaps excluded",
+			Counts: counts{TP: 0, FP: 0, TN: 0, FN: 0}, Recall: 0, BySource: nil, Excluded: 0,
+		}
+	}
+	worst := runs[0]
+	for _, run := range runs[1:] {
+		if run.Recall < worst.Recall {
+			worst = run
+		}
+	}
+	return worst
+}
+
+func describeDistribution(values []float64) distribution {
+	if len(values) == 0 {
+		return distribution{Min: 0, Median: 0, Max: 0, Mean: 0, StdDev: 0}
+	}
+	sorted := slices.Clone(values)
+	slices.Sort(sorted)
+	var sum float64
+	for _, value := range sorted {
+		sum += value
+	}
+	mean := sum / float64(len(sorted))
+	var squaredDiffs float64
+	for _, value := range sorted {
+		diff := value - mean
+		squaredDiffs += diff * diff
+	}
+	median := sorted[len(sorted)/2]
+	if len(sorted)%2 == 0 {
+		median = (sorted[len(sorted)/2-1] + sorted[len(sorted)/2]) / 2
+	}
+	return distribution{
+		Min: sorted[0], Median: median, Max: sorted[len(sorted)-1],
+		Mean: mean, StdDev: math.Sqrt(squaredDiffs / float64(len(sorted))),
+	}
+}
+
+func summarizeKnownGaps(corpus []labeledCase) []knownGapSummary {
+	var gaps []knownGapSummary
+	for _, c := range corpus {
+		if c.KnownGap == "" {
+			continue
+		}
+		gaps = append(gaps, knownGapSummary{ID: c.ID, Issue: "AGE-3048", Reason: c.KnownGap})
+	}
+	return gaps
+}
+
+func summarizeRecallGate(corpus []labeledCase, findings [][]scanners.Finding) recallGateSummary {
+	out := recallGateSummary{
+		Scope:  "explicit directive-present, in-taxonomy malicious rows; AGE-3048 known gaps excluded",
+		Counts: counts{TP: 0, FP: 0, TN: 0, FN: 0},
+		Recall: 0, BySource: nil, Excluded: 0,
+	}
+	bySource := map[string]*counts{}
+	for i, c := range corpus {
+		if !directivePresentForGate(c) || c.Label != "malicious" {
+			continue
+		}
+		if c.KnownGap != "" {
+			out.Excluded++
+			continue
+		}
+		source := recallGateSource(c.Source)
+		bucket := bySource[source]
+		if bucket == nil {
+			bucket = &counts{TP: 0, FP: 0, TN: 0, FN: 0}
+			bySource[source] = bucket
+		}
+		if len(findings[i]) > 0 {
+			out.Counts.TP++
+			bucket.TP++
+		} else {
+			out.Counts.FN++
+			bucket.FN++
+		}
+	}
+	out.Recall = safeDiv(out.Counts.TP, out.Counts.TP+out.Counts.FN)
+	for source, c := range bySource {
+		out.BySource = append(out.BySource, sourceSummary{Source: source, Counts: *c, Metrics: deriveMetrics(*c)})
+	}
+	sort.Slice(out.BySource, func(i, j int) bool { return out.BySource[i].Source < out.BySource[j].Source })
+	return out
+}
+
+// directivePresentForGate limits recall to curated, in-taxonomy fixtures. The
+// external deepset labels intentionally remain outside this gate because that
+// corpus includes generic harmful or task-changing text that the typed PI
+// contract correctly classifies as non-PI.
+func directivePresentForGate(c labeledCase) bool {
+	return c.DirectivePresent != nil && *c.DirectivePresent
+}
+
+func recallGateSource(source string) string {
+	if strings.HasPrefix(source, "mutation:") {
+		return "mutations"
+	}
+	return source
 }
 
 // scopedMode summarizes findings after applying the policy scope and annotates
@@ -335,6 +689,13 @@ func printSummary(w *os.File, modes []modeSummary) {
 		c := m.Counts
 		p("%-12s TP=%-4d FP=%-4d TN=%-4d FN=%-4d | P=%.3f R=%.3f F1=%.3f FPr=%.4f\n",
 			m.Name, c.TP, c.FP, c.TN, c.FN, m.Overall.Precision, m.Overall.Recall, m.Overall.F1, m.Overall.FPRate)
+		if m.Evaluation.PhysicalCalls > 0 {
+			p("             calls=%d errors=%d fail_open=%d over_10s=%d latency_ms[p50=%.0f p95=%.0f p99=%.0f] tokens[prompt=%d completion=%d] cost=$%.6f\n",
+				m.Evaluation.PhysicalCalls, m.Evaluation.Errors, m.Evaluation.FailOpenEvents,
+				m.Evaluation.CallsOver10Seconds,
+				m.Evaluation.DecisionLatencyP50MS, m.Evaluation.DecisionLatencyP95MS, m.Evaluation.DecisionLatencyP99MS,
+				m.Evaluation.PromptTokens, m.Evaluation.CompletionTokens, m.Evaluation.CostUSD)
+		}
 		if m.InScope > 0 || len(m.LostTruePositives) > 0 || len(m.SuppressedFalsePositives) > 0 {
 			p("             scope: in_scope=%d suppressed_FPs=%d LOST_TPs=%d\n",
 				m.InScope, len(m.SuppressedFalsePositives), len(m.LostTruePositives))
@@ -362,14 +723,17 @@ var optionalCorpusFiles = []string{
 	"agent_fp_benigns.jsonl",
 	"adversarial_fable.jsonl",
 	"adversarial_codex.jsonl",
+	"agent_fp_ais324.jsonl",
+	"adversarial_ais324.jsonl",
+	"trajectory_twins.jsonl",
 }
 
-func loadCorpus(dir string) ([]labeledCase, error) {
+func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
 	seen := map[string]string{}
 	var out []labeledCase
 
-	load := func(name string, optional bool) error {
-		path := filepath.Join(dir, name)
+	load := func(path string, optional, dedupe bool) error {
+		name := filepath.Base(path)
 		f, err := os.Open(path) // #nosec G304 -- local developer/CI harness intentionally reads a configured corpus path.
 		if err != nil {
 			if optional && errors.Is(err, os.ErrNotExist) {
@@ -401,10 +765,12 @@ func loadCorpus(dir string) ([]labeledCase, error) {
 			if c.Type != "" && !message.IsTypeValid(c.Type) {
 				return fmt.Errorf("%s line %d invalid type %q", name, line, c.Type)
 			}
-			if _, dup := seen[c.Text]; dup {
-				continue
+			if dedupe {
+				if _, dup := seen[c.Text]; dup {
+					continue
+				}
+				seen[c.Text] = c.ID
 			}
-			seen[c.Text] = c.ID
 			out = append(out, c)
 		}
 		if err := scanner.Err(); err != nil {
@@ -413,20 +779,86 @@ func loadCorpus(dir string) ([]labeledCase, error) {
 		return nil
 	}
 
+	// A separately supplied corpus is an evaluation population. Preserve every
+	// occurrence and load it first so fixture dedupe cannot hide repeated events.
+	if extraCorpus != "" {
+		if !filepath.IsAbs(extraCorpus) {
+			return nil, fmt.Errorf("--extra-corpus must be an absolute path")
+		}
+		if err := load(extraCorpus, false, false); err != nil {
+			return nil, err
+		}
+	}
 	for _, name := range requiredCorpusFiles {
-		if err := load(name, false); err != nil {
+		if err := load(filepath.Join(dir, name), false, true); err != nil {
 			return nil, err
 		}
 	}
 	for _, name := range optionalCorpusFiles {
-		if err := load(name, true); err != nil {
+		// Paired trajectory rows intentionally share current-event text. Preserve
+		// those semantics; the committed merge is deduped across source corpora.
+		dedupe := name != "trajectory_twins.jsonl"
+		if err := load(filepath.Join(dir, name), true, dedupe); err != nil {
 			return nil, err
 		}
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("loaded corpus is empty")
 	}
+	if err := resolveDirectivePresence(out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+func resolveDirectivePresence(corpus []labeledCase) error {
+	byID := make(map[string][]int, len(corpus))
+	for i, c := range corpus {
+		byID[c.ID] = append(byID[c.ID], i)
+	}
+
+	const (
+		unvisited = iota
+		visiting
+		resolved
+	)
+	state := make([]int, len(corpus))
+	var resolve func(int) error
+	resolve = func(i int) error {
+		if state[i] == resolved {
+			return nil
+		}
+		if state[i] == visiting {
+			return fmt.Errorf("directive-present seed cycle at %q", corpus[i].ID)
+		}
+		state[i] = visiting
+		if corpus[i].SeedID != "" {
+			seedMatches := byID[corpus[i].SeedID]
+			if len(seedMatches) == 0 {
+				return fmt.Errorf("corpus row %q has unknown seed_id %q", corpus[i].ID, corpus[i].SeedID)
+			}
+			if len(seedMatches) > 1 {
+				return fmt.Errorf("corpus row %q has ambiguous seed_id %q", corpus[i].ID, corpus[i].SeedID)
+			}
+			seedIndex := seedMatches[0]
+			if err := resolve(seedIndex); err != nil {
+				return err
+			}
+			if corpus[seedIndex].DirectivePresent == nil {
+				return fmt.Errorf("corpus seed %q has no directive_present annotation", corpus[i].SeedID)
+			}
+			value := *corpus[seedIndex].DirectivePresent
+			corpus[i].DirectivePresent = &value
+		}
+		state[i] = resolved
+		return nil
+	}
+	for i := range corpus {
+		if err := resolve(i); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type scopeConfig struct {
@@ -532,12 +964,13 @@ func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (mod
 	}
 
 	fmt.Fprintf(os.Stderr, "judging %d cases with %s (concurrency=%d)\n", len(corpus), opts.judgeModel, opts.judgeConcurrency)
-	findings, err := scanJudge(ctx, opts, newOpenRouterClient(apiKey), corpus)
+	findings, eval, err := scanJudge(ctx, opts, newOpenRouterClient(apiKey), corpus)
 	if err != nil {
 		return modeSummary{}, nil, err
 	}
 
 	mode := summarizeFindings("judge", corpus, findings)
+	mode.Evaluation = eval
 	empty := make([][]scanners.Finding, len(corpus))
 	mode.NewFalsePositives = changedExamples(corpus, empty, findings, "benign", 500)
 	mode.RecoveredTruePositive = changedExamples(corpus, empty, findings, "malicious", 500)
@@ -546,7 +979,20 @@ func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (mod
 }
 
 // scanJudge runs the judge for every corpus row and records positive verdicts.
-func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase) ([][]scanners.Finding, error) {
+type callObservation struct {
+	Latency          time.Duration
+	PromptTokens     int
+	CompletionTokens int
+	CostUSD          float64
+	Err              error
+}
+
+type decisionObservation struct {
+	Calls   []callObservation
+	Latency time.Duration
+}
+
+func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase) ([][]scanners.Finding, evaluationStats, error) {
 	out := make([][]scanners.Finding, len(corpus))
 	ruleID, description := promptinjection.Describe()
 
@@ -554,7 +1000,7 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var done int
-	var errs []error
+	observations := make([]decisionObservation, len(corpus))
 
 	for i := range corpus {
 		wg.Add(1)
@@ -565,7 +1011,7 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 
 			text := corpus[i].Text
 			msg := corpus[i].judgeMessage()
-			isAttack, confidence, err := judgeOne(ctx, client, opts.judgeModel, msg)
+			result, observation := judgeOne(ctx, client, opts.judgeModel, opts.reasoning, opts.samples, msg, corpus[i].trajectory())
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -573,22 +1019,21 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 			if done%20 == 0 || done == len(corpus) {
 				fmt.Fprintf(os.Stderr, "\r  judge %d/%d", done, len(corpus))
 			}
-			if err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", corpus[i].ID, err))
-				return
-			}
-			if !isAttack {
+			observations[i] = observation
+			if !result.IsInjection {
 				return
 			}
 			out[i] = append(out[i], scanners.Finding{
-				RuleID:           ruleID,
-				Description:      description,
-				Match:            text,
-				StartPos:         0,
-				EndPos:           len(text),
-				Source:           promptinjection.Source,
-				Confidence:       confidence,
-				Tags:             []string{"llm-judge", "layer-1"},
+				RuleID:      ruleID,
+				Description: description,
+				Match:       text,
+				StartPos:    0,
+				EndPos:      len(text),
+				Source:      promptinjection.Source,
+				// Report-only score keeps optional multi-sample tuning sortable.
+				// Production typed findings leave legacy confidence untouched.
+				Confidence:       float64(result.PositiveVotes) / float64(result.Samples),
+				Tags:             []string{"llm-judge", "layer-1", "semantic-typed", "directive_kind:" + result.DirectiveKind, "target:" + result.Target, "operational:true"},
 				DeadLetterReason: "",
 
 				McpLookupToolCallID: "",
@@ -600,22 +1045,94 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 	}
 	wg.Wait()
 	fmt.Fprintln(os.Stderr)
-	if len(errs) > 0 {
-		return nil, fmt.Errorf("judge corpus: %w", errors.Join(errs...))
-	}
-	return out, nil
+	return out, summarizeEvaluation(observations), nil
 }
 
-// judgeOne issues one GetObjectCompletion shaped exactly like piopenrouter's call:
-// the structured message payload, piopenrouter's system prompt and verdict
-// schema, temperature 0. No copy of the prompt/schema to keep in sync - it
-// drives the production constants directly.
-func judgeOne(ctx context.Context, client openrouter.CompletionClient, model string, msg judgemessage.Message) (isAttack bool, confidence float64, err error) {
+func summarizeEvaluation(observations []decisionObservation) evaluationStats {
+	var stats evaluationStats
+	var callLatencies, decisionLatencies []time.Duration
+	for _, observation := range observations {
+		decisionLatencies = append(decisionLatencies, observation.Latency)
+		eventErrors := 0
+		for _, call := range observation.Calls {
+			stats.PhysicalCalls++
+			stats.PromptTokens += call.PromptTokens
+			stats.CompletionTokens += call.CompletionTokens
+			stats.CostUSD += call.CostUSD
+			callLatencies = append(callLatencies, call.Latency)
+			if call.Latency > 10*time.Second {
+				stats.CallsOver10Seconds++
+			}
+			if call.Err == nil {
+				continue
+			}
+			stats.Errors++
+			eventErrors++
+			if errors.Is(call.Err, context.DeadlineExceeded) {
+				stats.Timeouts++
+			}
+			if strings.Contains(call.Err.Error(), "parse judge response") {
+				stats.Malformed++
+			}
+		}
+		if eventErrors > 0 {
+			stats.FailOpenEvents++
+		}
+	}
+	stats.CallLatencyP50MS = durationQuantileMS(callLatencies, 0.50)
+	stats.CallLatencyP95MS = durationQuantileMS(callLatencies, 0.95)
+	stats.CallLatencyP99MS = durationQuantileMS(callLatencies, 0.99)
+	stats.DecisionLatencyP50MS = durationQuantileMS(decisionLatencies, 0.50)
+	stats.DecisionLatencyP95MS = durationQuantileMS(decisionLatencies, 0.95)
+	stats.DecisionLatencyP99MS = durationQuantileMS(decisionLatencies, 0.99)
+	return stats
+}
+
+func durationQuantileMS(values []time.Duration, q float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	slices.Sort(values)
+	index := int(float64(len(values)-1) * q)
+	return float64(values[index]) / float64(time.Millisecond)
+}
+
+// judgeOne uses the production typed prompt and schema. The production default
+// is a direct single call; optional multi-sample runs share one event deadline.
+func judgeOne(ctx context.Context, client openrouter.CompletionClient, model, reasoning string, samples int, msg judgemessage.Message, trajectory judgemessage.Trajectory) (piopenrouter.Stabilized, decisionObservation) {
+	decisionCtx, cancel := context.WithTimeout(ctx, piopenrouter.JudgeTimeout)
+	defer cancel()
+	start := time.Now()
+
+	verdicts := make([]piopenrouter.Verdict, samples)
+	observation := decisionObservation{Calls: make([]callObservation, samples), Latency: 0}
+	var wg sync.WaitGroup
+	for sample := range samples {
+		wg.Go(func() {
+			verdicts[sample], observation.Calls[sample] = judgeVote(decisionCtx, client, model, reasoning, msg, trajectory)
+		})
+	}
+	wg.Wait()
+	observation.Latency = time.Since(start)
+
+	if samples == 1 {
+		return piopenrouter.StabilizeSingle(verdicts[0]), observation
+	}
+	return piopenrouter.Aggregate(verdicts), observation
+}
+
+func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, reasoning string, msg judgemessage.Message, trajectory judgemessage.Trajectory) (piopenrouter.Verdict, callObservation) {
+	var trajectoryPayload *judgemessage.TrajectoryPayload
+	if trajectory.HasContent() {
+		rendered := judgemessage.RenderTrajectory(trajectory)
+		trajectoryPayload = &rendered
+	}
 	payload, err := json.Marshal(struct {
-		Message judgemessage.Payload `json:"message"`
-	}{Message: judgemessage.RenderPayload(msg)})
+		Message    judgemessage.Payload            `json:"message"`
+		Trajectory *judgemessage.TrajectoryPayload `json:"trajectory,omitempty"`
+	}{Message: judgemessage.RenderPayload(msg), Trajectory: trajectoryPayload})
 	if err != nil {
-		return false, 0, fmt.Errorf("marshal judge payload: %w", err)
+		return emptyTypedVerdict, callObservation{Latency: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Err: fmt.Errorf("marshal judge payload: %w", err)}
 	}
 
 	strict := true
@@ -626,44 +1143,49 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 		Strict:      optionalnullable.From(&strict),
 	}
 	temp := 0.0
+	messages := []or.ChatMessages{
+		piopenrouter.TypedSystemMessage(),
+		or.CreateChatMessagesUser(or.ChatUserMessage{Role: or.ChatUserMessageRoleUser, Content: or.CreateChatUserMessageContentStr(string(payload)), Name: nil}),
+	}
 
-	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
-	defer cancel()
-
-	resp, err := client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
-		OrgID:          benchOrgID,
-		ProjectID:      benchProjectID,
-		Model:          model,
-		SystemPrompt:   piopenrouter.SystemPrompt,
-		Prompt:         string(payload),
-		Temperature:    &temp,
-		UsageSource:    billing.ModelUsageSourceGram,
-		KeyType:        openrouter.KeyTypeInternal,
-		KeySlot:        "",
-		UserID:         "",
-		ExternalUserID: "",
-		UserEmail:      "",
-		HTTPMetadata:   nil,
-		JSONSchema:     &schema,
+	start := time.Now()
+	resp, err := client.GetCompletion(ctx, openrouter.CompletionRequest{
+		OrgID: benchOrgID, ProjectID: benchProjectID, Model: model, Messages: messages,
+		Temperature: &temp, UsageSource: billing.ModelUsageSourceGram, KeyType: openrouter.KeyTypeInternal,
+		KeySlot: "", ChatID: uuid.Nil, UserID: "", ExternalUserID: "", UserEmail: "",
+		HTTPMetadata: nil, APIKeyID: "", Tools: nil, Stream: false, JSONSchema: &schema,
+		Reasoning:    &openrouter.Reasoning{Effort: reasoning, MaxTokens: nil, Exclude: nil, Enabled: nil},
+		CacheControl: nil, NormalizeOutboundMessages: false,
 	})
+	observation := callObservation{Latency: time.Since(start), PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Err: nil}
 	if err != nil {
-		return false, 0, fmt.Errorf("openrouter object completion: %w", err)
+		observation.Err = fmt.Errorf("openrouter completion: %w", err)
+		return emptyTypedVerdict, observation
 	}
 	if resp == nil || resp.Message == nil {
-		return false, 0, fmt.Errorf("empty completion response")
+		observation.Err = fmt.Errorf("empty completion response")
+		return emptyTypedVerdict, observation
+	}
+	observation.PromptTokens = resp.Usage.PromptTokens
+	observation.CompletionTokens = resp.Usage.CompletionTokens
+	if resp.Usage.Cost != nil {
+		observation.CostUSD = *resp.Usage.Cost
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*resp.Message))
 	if raw == "" {
-		return false, 0, fmt.Errorf("empty completion content")
+		observation.Err = fmt.Errorf("empty completion content")
+		return emptyTypedVerdict, observation
 	}
-	var verdict struct {
-		IsAttack   bool    `json:"is_attack"`
-		Confidence float64 `json:"confidence"`
-	}
+	var verdict piopenrouter.Verdict
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
-		return false, 0, fmt.Errorf("parse judge response: %w", err)
+		observation.Err = fmt.Errorf("parse judge response: %w", err)
+		return emptyTypedVerdict, observation
 	}
-	return verdict.IsAttack, max(0, min(1, verdict.Confidence)), nil
+	if !piopenrouter.ValidVerdict(verdict) {
+		observation.Err = fmt.Errorf("parse judge response: typed verdict contract is invalid")
+		return emptyTypedVerdict, observation
+	}
+	return verdict, observation
 }
 
 // newOpenRouterClient builds the real production OpenRouter client with the
@@ -687,8 +1209,7 @@ func newOpenRouterClient(apiKey string) openrouter.CompletionClient {
 }
 
 // devProvisioner satisfies openrouter.Provisioner but skips the DB/billing path:
-// it hands back the dev key for every org. Only ProvisionAPIKey is exercised by
-// the GetObjectCompletion path; the rest are unreachable here.
+// it hands back the dev key for every org.
 type devProvisioner struct{ apiKey string }
 
 func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string, _ openrouter.KeyType) (string, error) {
@@ -772,6 +1293,7 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.
 		rules = append(rules, ruleHist{RuleID: r, TP: ruleTP[r], FP: ruleFP[r]})
 	}
 	sort.Slice(rules, func(i, j int) bool { return rules[i].RuleID < rules[j].RuleID })
+	var evaluation evaluationStats
 
 	return modeSummary{
 		Name:                     mode,
@@ -788,6 +1310,7 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.
 		InScope:                  0,
 		LostTruePositives:        nil,
 		SuppressedFalsePositives: nil,
+		Evaluation:               evaluation,
 	}
 }
 
@@ -855,12 +1378,31 @@ func firstEnv(keys ...string) string {
 	return ""
 }
 
-func writeMetrics(path string, summary accuracySummary) error {
+func writeMetrics(path string, opts options, corpus []labeledCase, summary accuracySummary) error {
+	schemaJSON, err := json.Marshal(piopenrouter.VerdictSchema())
+	if err != nil {
+		return fmt.Errorf("marshal verdict schema for hash: %w", err)
+	}
+	corpusJSON, err := json.Marshal(corpus)
+	if err != nil {
+		return fmt.Errorf("marshal corpus for hash: %w", err)
+	}
+	promptHash := sha256.Sum256([]byte(piopenrouter.SystemPrompt))
+	schemaHash := sha256.Sum256(schemaJSON)
+	corpusHash := sha256.Sum256(corpusJSON)
 	payload := envelope{
-		GitSHA:    envOr("GITHUB_SHA", "local"),
-		Ref:       envOr("GITHUB_REF_NAME", "local"),
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Summary:   summary,
+		GitSHA:          envOr("GITHUB_SHA", "local"),
+		Ref:             envOr("GITHUB_REF_NAME", "local"),
+		Timestamp:       time.Now().UTC().Format(time.RFC3339),
+		Model:           opts.judgeModel,
+		Reasoning:       opts.reasoning,
+		ProviderRoute:   "OpenRouter default routing",
+		SamplesPerEvent: opts.samples,
+		TimeoutMS:       piopenrouter.JudgeTimeout.Milliseconds(),
+		PromptSHA256:    fmt.Sprintf("%x", promptHash),
+		SchemaSHA256:    fmt.Sprintf("%x", schemaHash),
+		CorpusSHA256:    fmt.Sprintf("%x", corpusHash),
+		Summary:         summary,
 	}
 	body, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
