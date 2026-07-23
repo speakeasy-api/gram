@@ -549,13 +549,19 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 	// External-user and chat-session-token callers must match the chat owner.
 	// First-party project credentials read any session in their project: the
-	// dashboard session, the managed-assistant runtime, and project API keys,
+	// dashboard session, the managed-assistant runtime, and a direct API key,
 	// which the RBAC engine already treats as self-scoped (see
-	// authz.Engine.ShouldEnforce). An API key is authenticated the same way the
-	// dashboard is, so it is not an external end user to be owner-matched.
+	// authz.Engine.ShouldEnforce).
+	//
+	// A chat-session token minted via an API key restores that key's APIKeyID
+	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
+	// caller authenticated *as* the key — treating it as first-party would let
+	// an end user's chat-session token read every project chat. Only direct
+	// Gram-Key auth carries the key's scopes (auth.KeyBasedAuth); a chat-session
+	// token has none, so gate the exemption on the scopes being present.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	isAPIKeyCall := authCtx.APIKeyID != ""
-	if authCtx.SessionID == nil && !isAPIKeyCall {
+	isDirectAPIKeyCall := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) > 0
+	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
 		if !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
 				return nil, oops.C(oops.CodeUnauthorized)
