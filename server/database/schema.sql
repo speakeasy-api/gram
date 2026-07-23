@@ -4519,15 +4519,19 @@ CREATE TABLE IF NOT EXISTS spend_rules (
   -- internal/spendrules/celenv). A rule applies to an actor when this
   -- evaluates true.
   target_expr TEXT NOT NULL,
-  -- Per-person budget in USD for one window.
+  -- Per-person budget in USD for one window. Must be positive; validated in
+  -- application code.
   limit_usd DOUBLE PRECISION NOT NULL,
   -- CEL boolean expression over the actor plus current-window usage. The
   -- expression identifies budget breaches inside the target audience.
   rule_expr TEXT NOT NULL DEFAULT 'spend_usd >= limit_usd',
-  -- UTC calendar window the budget covers. 'window' is a reserved keyword.
+  -- UTC calendar window the budget covers ('daily', 'weekly' or 'monthly';
+  -- validated in application code). 'window' is a reserved keyword.
   window_kind TEXT NOT NULL,
-  -- Percentage of the limit at which a warning event is emitted.
+  -- Percentage of the limit at which a warning event is emitted (1-100;
+  -- validated in application code).
   warn_at_pct INT NOT NULL DEFAULT 80,
+  -- 'flag' or 'block'; validated in application code.
   action TEXT NOT NULL DEFAULT 'flag',
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   -- Position of this row in its slug lineage; bumps by one on every edit.
@@ -4544,11 +4548,6 @@ CREATE TABLE IF NOT EXISTS spend_rules (
   superseded_by uuid,
 
   CONSTRAINT spend_rules_pkey PRIMARY KEY (id),
-  CONSTRAINT spend_rules_slug_check CHECK (slug ~ '^[a-z0-9_-]{1,128}$'),
-  CONSTRAINT spend_rules_limit_usd_check CHECK (limit_usd > 0),
-  CONSTRAINT spend_rules_window_kind_check CHECK (window_kind IN ('daily', 'weekly', 'monthly')),
-  CONSTRAINT spend_rules_warn_at_pct_check CHECK (warn_at_pct BETWEEN 1 AND 100),
-  CONSTRAINT spend_rules_action_check CHECK (action IN ('flag', 'block')),
   CONSTRAINT spend_rules_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT spend_rules_superseded_by_fkey FOREIGN KEY (superseded_by) REFERENCES spend_rules (id) ON DELETE SET NULL
 );

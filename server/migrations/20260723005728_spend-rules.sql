@@ -20,12 +20,7 @@ CREATE TABLE "spend_rules" (
   "superseded_by" uuid NULL,
   PRIMARY KEY ("id"),
   CONSTRAINT "spend_rules_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "spend_rules_superseded_by_fkey" FOREIGN KEY ("superseded_by") REFERENCES "spend_rules" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "spend_rules_action_check" CHECK (action = ANY (ARRAY['flag'::text, 'block'::text])),
-  CONSTRAINT "spend_rules_limit_usd_check" CHECK (limit_usd > (0)::double precision),
-  CONSTRAINT "spend_rules_slug_check" CHECK (slug ~ '^[a-z0-9_-]{1,128}$'::text),
-  CONSTRAINT "spend_rules_warn_at_pct_check" CHECK ((warn_at_pct >= 1) AND (warn_at_pct <= 100)),
-  CONSTRAINT "spend_rules_window_kind_check" CHECK (window_kind = ANY (ARRAY['daily'::text, 'weekly'::text, 'monthly'::text]))
+  CONSTRAINT "spend_rules_superseded_by_fkey" FOREIGN KEY ("superseded_by") REFERENCES "spend_rules" ("id") ON UPDATE NO ACTION ON DELETE SET NULL
 );
 -- Create index "spend_rules_organization_id_id_key" to table: "spend_rules"
 CREATE UNIQUE INDEX "spend_rules_organization_id_id_key" ON "spend_rules" ("organization_id", "id");
