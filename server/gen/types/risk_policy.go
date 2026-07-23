@@ -87,8 +87,11 @@ type RiskPolicy struct {
 	CreatedAt string
 	// When the policy was last updated.
 	UpdatedAt string
-	// Number of messages not yet analyzed at the current policy version.
-	PendingMessages int64
-	// Total number of messages in the project.
-	TotalMessages int64
+	// Number of messages not yet analyzed at the current policy version. Populated
+	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
+	// for progress).
+	PendingMessages *int64
+	// Total number of messages in the project. Populated on single-policy reads;
+	// omitted from list responses.
+	TotalMessages *int64
 }

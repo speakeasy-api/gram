@@ -486,18 +486,6 @@ WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.risk_policy_version = @risk_policy_version;
 
--- name: CountAnalyzedMessagesByProject :many
--- Batched form of CountAnalyzedMessages: the analyzed-message count for every
--- (policy, version) in a project in one query, so ListRiskPolicies avoids a
--- per-policy round trip.
-SELECT
-    rr.risk_policy_id
-  , rr.risk_policy_version
-  , COUNT(DISTINCT rr.chat_message_id)::BIGINT AS analyzed_messages
-FROM risk_results rr
-WHERE rr.project_id = @project_id
-GROUP BY rr.risk_policy_id, rr.risk_policy_version;
-
 -- name: CountFindingsByPolicy :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results

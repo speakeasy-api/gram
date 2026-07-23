@@ -460,10 +460,13 @@ type CreateRiskPolicyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the policy was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// Number of messages not yet analyzed at the current policy version.
-	PendingMessages int64 `form:"pending_messages" json:"pending_messages" xml:"pending_messages"`
-	// Total number of messages in the project.
-	TotalMessages int64 `form:"total_messages" json:"total_messages" xml:"total_messages"`
+	// Number of messages not yet analyzed at the current policy version. Populated
+	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
+	// for progress).
+	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
+	// Total number of messages in the project. Populated on single-policy reads;
+	// omitted from list responses.
+	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
 // ListRiskPoliciesResponseBody is the type of the "risk" service
@@ -563,10 +566,13 @@ type GetRiskPolicyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the policy was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// Number of messages not yet analyzed at the current policy version.
-	PendingMessages int64 `form:"pending_messages" json:"pending_messages" xml:"pending_messages"`
-	// Total number of messages in the project.
-	TotalMessages int64 `form:"total_messages" json:"total_messages" xml:"total_messages"`
+	// Number of messages not yet analyzed at the current policy version. Populated
+	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
+	// for progress).
+	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
+	// Total number of messages in the project. Populated on single-policy reads;
+	// omitted from list responses.
+	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
 // UpdateRiskPolicyResponseBody is the type of the "risk" service
@@ -650,10 +656,13 @@ type UpdateRiskPolicyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the policy was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// Number of messages not yet analyzed at the current policy version.
-	PendingMessages int64 `form:"pending_messages" json:"pending_messages" xml:"pending_messages"`
-	// Total number of messages in the project.
-	TotalMessages int64 `form:"total_messages" json:"total_messages" xml:"total_messages"`
+	// Number of messages not yet analyzed at the current policy version. Populated
+	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
+	// for progress).
+	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
+	// Total number of messages in the project. Populated on single-policy reads;
+	// omitted from list responses.
+	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
 // ListRiskResultsResponseBody is the type of the "risk" service
@@ -9366,10 +9375,13 @@ type RiskPolicyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the policy was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// Number of messages not yet analyzed at the current policy version.
-	PendingMessages int64 `form:"pending_messages" json:"pending_messages" xml:"pending_messages"`
-	// Total number of messages in the project.
-	TotalMessages int64 `form:"total_messages" json:"total_messages" xml:"total_messages"`
+	// Number of messages not yet analyzed at the current policy version. Populated
+	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
+	// for progress).
+	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
+	// Total number of messages in the project. Populated on single-policy reads;
+	// omitted from list responses.
+	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
 // BuiltinExclusionCategoryResponseBody is used to define fields on response
