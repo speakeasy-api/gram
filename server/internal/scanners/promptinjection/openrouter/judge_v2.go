@@ -15,7 +15,7 @@ const (
 )
 
 // Verdict is the model's typed semantic evidence. It intentionally excludes
-// model confidence: consensus support is the only score used by the redesign.
+// model confidence and enforcement policy.
 type Verdict struct {
 	DirectiveKind string `json:"directive_kind"`
 	Target        string `json:"target"`
@@ -23,8 +23,8 @@ type Verdict struct {
 	Rationale     string `json:"rationale"`
 }
 
-// IsInjection is the only detection predicate. Severity and action never
-// suppress an otherwise eligible typed detection.
+// IsInjection is the only typed detection predicate. The existing risk-policy
+// layer independently decides whether a resulting finding blocks or surfaces.
 func IsInjection(verdict Verdict) bool {
 	if !verdict.Operational || verdict.DirectiveKind == DirectiveNone {
 		return false
@@ -53,7 +53,7 @@ func ValidVerdict(verdict Verdict) bool {
 }
 
 // VerdictSchema is the strict evidence contract shared by production and the
-// evaluator. Detection, severity, and action are deliberately absent.
+// evaluator. Enforcement is deliberately absent.
 func VerdictSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -74,21 +74,48 @@ func VerdictSchema() map[string]any {
 	}
 }
 
-// Stabilized is the code-owned consensus result. Samples always includes
-// failed and malformed calls because each is an explicit safe vote.
+// Stabilized is the code-owned typed result. Vote fields exist only for the
+// optional multi-sample override.
 type Stabilized struct {
 	IsInjection   bool
 	DirectiveKind string
 	Target        string
+	Operational   bool
 	PositiveVotes int
 	Samples       int
 	Unanimous     bool
 	Rationale     string
 }
 
+// StabilizeSingle applies the typed predicate directly without aggregation.
+func StabilizeSingle(verdict Verdict) Stabilized {
+	if !IsInjection(verdict) {
+		return Stabilized{
+			IsInjection:   false,
+			DirectiveKind: verdict.DirectiveKind,
+			Target:        verdict.Target,
+			Operational:   verdict.Operational,
+			PositiveVotes: 0,
+			Samples:       1,
+			Unanimous:     false,
+			Rationale:     "",
+		}
+	}
+	return Stabilized{
+		IsInjection:   true,
+		DirectiveKind: verdict.DirectiveKind,
+		Target:        verdict.Target,
+		Operational:   verdict.Operational,
+		PositiveVotes: 1,
+		Samples:       1,
+		Unanimous:     true,
+		Rationale:     verdict.Rationale,
+	}
+}
+
 // Aggregate applies a strict majority to the configured sample set. A zero
 // Verdict represents an errored, timed-out, rate-limited, or malformed sample
-// and therefore counts against consensus as a safe vote.
+// and therefore counts against the majority as a safe vote.
 func Aggregate(verdicts []Verdict) Stabilized {
 	positive := make([]Verdict, 0, len(verdicts))
 	for _, verdict := range verdicts {
@@ -98,12 +125,13 @@ func Aggregate(verdicts []Verdict) Stabilized {
 	}
 
 	positiveVotes := len(positive)
-	consensus := positiveVotes >= len(verdicts)/2+1
-	if len(verdicts) == 0 || !consensus {
+	majority := positiveVotes >= len(verdicts)/2+1
+	if len(verdicts) == 0 || !majority {
 		return Stabilized{
 			IsInjection:   false,
 			DirectiveKind: DirectiveNone,
 			Target:        TargetNone,
+			Operational:   false,
 			PositiveVotes: positiveVotes,
 			Samples:       len(verdicts),
 			Unanimous:     len(verdicts) > 0 && positiveVotes == len(verdicts),
@@ -126,6 +154,7 @@ func Aggregate(verdicts []Verdict) Stabilized {
 		IsInjection:   true,
 		DirectiveKind: modal(kinds, directiveRank),
 		Target:        modal(targets, targetRank),
+		Operational:   true,
 		PositiveVotes: positiveVotes,
 		Samples:       len(verdicts),
 		Unanimous:     positiveVotes == len(verdicts),
@@ -176,75 +205,4 @@ func targetRank(target string) int {
 	default:
 		return 0
 	}
-}
-
-type Severity string
-
-const (
-	SeverityNone   Severity = "none"
-	SeverityLow    Severity = "low"
-	SeverityMedium Severity = "medium"
-	SeverityHigh   Severity = "high"
-)
-
-// Provenance is derived from the current event, never supplied by the model.
-// Indirect tool output raises severity but never determines eligibility.
-type Provenance struct {
-	Indirect bool
-}
-
-// SeverityFor starts exclusively from target: guarded is high and unclear is
-// medium. Provenance raises and split consensus lowers that base. An eligible
-// detection is floored at low, so weighting can never gate it.
-func SeverityFor(stabilized Stabilized, provenance Provenance) Severity {
-	if !stabilized.IsInjection {
-		return SeverityNone
-	}
-
-	rank := 1
-	switch stabilized.Target {
-	case TargetGuardedAgent:
-		rank = 3
-	case TargetUnclear:
-		rank = 2
-	}
-	if provenance.Indirect {
-		rank++
-	}
-	if !stabilized.Unanimous {
-		rank--
-	}
-
-	switch {
-	case rank >= 3:
-		return SeverityHigh
-	case rank == 2:
-		return SeverityMedium
-	default:
-		return SeverityLow
-	}
-}
-
-type Action string
-
-const (
-	ActionAllow Action = "allow"
-	ActionLog   Action = "would_log"
-	ActionWarn  Action = "would_warn"
-	ActionBlock Action = "would_block"
-)
-
-// Decide computes shadow-only action telemetry. It never changes finding
-// publication and no caller in this change automatically enforces ActionBlock.
-func Decide(stabilized Stabilized, severity Severity) Action {
-	if !stabilized.IsInjection {
-		return ActionAllow
-	}
-	if severity == SeverityHigh && stabilized.Target == TargetGuardedAgent && stabilized.Unanimous {
-		return ActionBlock
-	}
-	if severity == SeverityHigh || severity == SeverityMedium {
-		return ActionWarn
-	}
-	return ActionLog
 }

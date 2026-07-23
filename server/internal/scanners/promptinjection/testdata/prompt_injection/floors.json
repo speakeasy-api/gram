@@ -1,14 +1,14 @@
 {
   "fp_rate_max": 0.006,
-  "recall_floor": 0.95,
+  "recall_floor": 0.87,
   "recall_by_source_min": {
-    "adversarial_codex": 0.95,
-    "adversarial_fable": 0.95,
-    "litellm_extended": 0.9,
-    "mutations": 0.98,
-    "trajectory_twins": 0.85
+    "adversarial_codex": 0.8,
+    "adversarial_fable": 0.87,
+    "litellm_extended": 0.89,
+    "mutations": 0.96,
+    "trajectory_twins": 0.6
   },
-  "last_updated": "2026-07-22",
+  "last_updated": "2026-07-23",
   "last_updated_by": "AIS-324",
-  "notes": "Recall-only gate over the explicit directive-present, in-taxonomy subset. Source floors are conservative bounds below the three-run shipped-profile measurements. fp_rate_max is historical reporting metadata and is not enforced for shadow detection."
+  "notes": "Recall-only gate over the explicit directive-present, in-taxonomy subset. Source floors are conservative bounds below three runs of the shipped single-call typed profile. fp_rate_max is historical reporting metadata and is not enforced."
 }

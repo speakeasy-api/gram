@@ -16,11 +16,12 @@ const (
 	meterClassifications       = "risk.prompt_injection.classifications"
 	meterJudgeDuration         = "risk.prompt_injection.judge_duration"
 	meterJudgeConfidence       = "risk.prompt_injection.judge_confidence"
-	meterConsensusSupport      = "risk.prompt_injection.consensus_support"
-	meterRedesignDetections    = "risk.prompt_injection.redesign_detections"
-	meterRedesignPhysicalCalls = "risk.prompt_injection.redesign_physical_calls"
-	meterRedesignCallDuration  = "risk.prompt_injection.redesign_call_duration"
-	meterRedesignFailOpen      = "risk.prompt_injection.redesign_fail_open_samples"
+	meterTypedEvents           = "risk.prompt_injection.typed_events"
+	meterTypedDetections       = "risk.prompt_injection.typed_detections"
+	meterTypedPhysicalCalls    = "risk.prompt_injection.typed_physical_calls"
+	meterTypedCallDuration     = "risk.prompt_injection.typed_call_duration"
+	meterTypedDecisionDuration = "risk.prompt_injection.typed_decision_duration"
+	meterTypedFailOpen         = "risk.prompt_injection.typed_fail_open_samples"
 	meterRateLimited           = "risk.prompt_injection.rate_limited"
 )
 
@@ -28,10 +29,11 @@ type metrics struct {
 	classifications  metric.Int64Counter
 	duration         metric.Float64Histogram
 	confidence       metric.Float64Histogram
-	consensus        metric.Float64Histogram
+	events           metric.Int64Counter
 	detections       metric.Int64Counter
 	physicalCalls    metric.Int64Counter
-	redesignDuration metric.Float64Histogram
+	callDuration     metric.Float64Histogram
+	decisionDuration metric.Float64Histogram
 	failOpen         metric.Int64Counter
 	rateLimited      metric.Int64Counter
 }
@@ -74,51 +76,60 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterJudgeConfidence), attr.SlogError(err))
 	}
 
-	consensus, err := meter.Float64Histogram(
-		meterConsensusSupport,
-		metric.WithDescription("Consensus support ratio for surfaced PI redesign detections"),
-		metric.WithUnit("{ratio}"),
-		metric.WithExplicitBucketBoundaries(0, 0.34, 0.67, 1),
+	events, err := meter.Int64Counter(
+		meterTypedEvents,
+		metric.WithDescription("Typed prompt-injection judge events by finding, fail-open, and session-context state"),
+		metric.WithUnit("{event}"),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterConsensusSupport), attr.SlogError(err))
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedEvents), attr.SlogError(err))
 	}
 
 	detections, err := meter.Int64Counter(
-		meterRedesignDetections,
-		metric.WithDescription("Surfaced PI redesign detections by typed evidence and shadow action"),
+		meterTypedDetections,
+		metric.WithDescription("Prompt-injection findings emitted to risk policy by typed evidence"),
 		metric.WithUnit("{detection}"),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRedesignDetections), attr.SlogError(err))
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedDetections), attr.SlogError(err))
 	}
 
 	physicalCalls, err := meter.Int64Counter(
-		meterRedesignPhysicalCalls,
-		metric.WithDescription("Physical model calls made by the PI redesign sampler"),
+		meterTypedPhysicalCalls,
+		metric.WithDescription("Physical model calls made by the typed prompt-injection judge"),
 		metric.WithUnit("{call}"),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRedesignPhysicalCalls), attr.SlogError(err))
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedPhysicalCalls), attr.SlogError(err))
 	}
 
-	redesignDuration, err := meter.Float64Histogram(
-		meterRedesignCallDuration,
-		metric.WithDescription("Physical PI redesign model-call duration in seconds"),
+	callDuration, err := meter.Float64Histogram(
+		meterTypedCallDuration,
+		metric.WithDescription("Physical typed prompt-injection model-call duration in seconds"),
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.5, 1, 2, 3, 5, 7.5, 9, 10, 15),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRedesignCallDuration), attr.SlogError(err))
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedCallDuration), attr.SlogError(err))
+	}
+
+	decisionDuration, err := meter.Float64Histogram(
+		meterTypedDecisionDuration,
+		metric.WithDescription("End-to-end typed prompt-injection decision duration in seconds"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(0.5, 1, 2, 3, 5, 7.5, 9, 10, 15),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedDecisionDuration), attr.SlogError(err))
 	}
 
 	failOpen, err := meter.Int64Counter(
-		meterRedesignFailOpen,
-		metric.WithDescription("PI redesign samples converted to safe votes, by bounded failure reason"),
+		meterTypedFailOpen,
+		metric.WithDescription("Typed prompt-injection judge samples that failed open, by bounded failure reason"),
 		metric.WithUnit("{sample}"),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRedesignFailOpen), attr.SlogError(err))
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterTypedFailOpen), attr.SlogError(err))
 	}
 
 	rateLimited, err := meter.Int64Counter(
@@ -134,66 +145,84 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		classifications:  classifications,
 		duration:         duration,
 		confidence:       confidence,
-		consensus:        consensus,
+		events:           events,
 		detections:       detections,
 		physicalCalls:    physicalCalls,
-		redesignDuration: redesignDuration,
+		callDuration:     callDuration,
+		decisionDuration: decisionDuration,
 		failOpen:         failOpen,
 		rateLimited:      rateLimited,
 	}
 }
 
-func (m *metrics) RecordPhysicalCall(ctx context.Context, orgID string, outcome o11y.Outcome, failureReason string, duration time.Duration) {
+func (m *metrics) RecordPhysicalCall(ctx context.Context, orgID, model, reasoning string, outcome o11y.Outcome, failureReason string, duration time.Duration) {
 	attrs := metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attr.Outcome(outcome),
 		attribute.String("failure_reason", failureReason),
+		attribute.String("model", model),
+		attribute.String("reasoning", reasoning),
 	)
 	if m.physicalCalls != nil {
 		m.physicalCalls.Add(ctx, 1, attrs)
 	}
-	if m.redesignDuration != nil {
-		m.redesignDuration.Record(ctx, duration.Seconds(), attrs)
+	if m.callDuration != nil {
+		m.callDuration.Record(ctx, duration.Seconds(), attrs)
 	}
 }
 
-func (m *metrics) RecordFailOpen(ctx context.Context, orgID, reason string) {
+func (m *metrics) RecordEvent(ctx context.Context, orgID, model, reasoning string, sessionContextPresent, findingSurfaced, failOpen bool, duration time.Duration) {
+	attrs := metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attribute.String("model", model),
+		attribute.String("reasoning", reasoning),
+		attribute.Bool("session_context_present", sessionContextPresent),
+		attribute.Bool("finding_surfaced", findingSurfaced),
+		attribute.Bool("fail_open", failOpen),
+	)
+	if m.events != nil {
+		m.events.Add(ctx, 1, attrs)
+	}
+	if m.decisionDuration != nil {
+		m.decisionDuration.Record(ctx, duration.Seconds(), attrs)
+	}
+}
+
+func (m *metrics) RecordFailOpen(ctx context.Context, orgID, model, reasoning, reason string) {
 	if m.failOpen == nil {
 		return
 	}
 	m.failOpen.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(orgID),
+		attribute.String("model", model),
+		attribute.String("reasoning", reasoning),
 		attribute.String("reason", reason),
 	))
 }
 
-func (m *metrics) RecordDetection(ctx context.Context, orgID, kind, target string, severity Severity, action Action) {
+func (m *metrics) RecordDetection(ctx context.Context, orgID, kind, target string, operational bool, model, reasoning string) {
 	attrs := metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("directive_kind", kind),
 		attribute.String("target", target),
-		attribute.String("severity", string(severity)),
-		attribute.String("action", string(action)),
+		attribute.Bool("operational", operational),
+		attribute.String("model", model),
+		attribute.String("reasoning", reasoning),
 	)
 	if m.detections != nil {
 		m.detections.Add(ctx, 1, attrs)
 	}
 }
 
-func (m *metrics) RecordConsensus(ctx context.Context, orgID string, support float64) {
-	if m.consensus == nil {
-		return
-	}
-	m.consensus.Record(ctx, support, metric.WithAttributes(attr.OrganizationID(orgID)))
-}
-
 // RecordClassification records one completed judge call: a count tagged by
 // verdict label + cascade stage + outcome, and the call latency.
-func (m *metrics) RecordClassification(ctx context.Context, orgID, label string, outcome o11y.Outcome, duration time.Duration) {
+func (m *metrics) RecordClassification(ctx context.Context, orgID, label, model, reasoning string, outcome o11y.Outcome, duration time.Duration) {
 	attrs := metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("label", label),
 		attribute.String("stage", stageJudge),
+		attribute.String("model", model),
+		attribute.String("reasoning", reasoning),
 		attr.Outcome(outcome),
 	)
 	if m.classifications != nil {
@@ -216,9 +245,13 @@ func (m *metrics) RecordConfidence(ctx context.Context, orgID string, confidence
 }
 
 // RecordRateLimited records a judge call rejected by the rate limiter.
-func (m *metrics) RecordRateLimited(ctx context.Context, orgID string) {
+func (m *metrics) RecordRateLimited(ctx context.Context, orgID, model, reasoning string) {
 	if m.rateLimited == nil {
 		return
 	}
-	m.rateLimited.Add(ctx, 1, metric.WithAttributes(attr.OrganizationID(orgID)))
+	m.rateLimited.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attribute.String("model", model),
+		attribute.String("reasoning", reasoning),
+	))
 }

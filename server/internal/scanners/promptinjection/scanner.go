@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strconv"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
@@ -32,13 +33,14 @@ type Request struct {
 }
 
 type Result struct {
-	Label     string
-	Score     float64
-	Rationale string
-	Kind      string
-	Target    string
-	Severity  string
-	Action    string
+	Label string
+	// Score retains the legacy binary judge's confidence semantics. Typed
+	// verdicts leave it zero and carry their evidence in the fields below.
+	Score         float64
+	Rationale     string
+	DirectiveKind string
+	Target        string
+	Operational   bool
 }
 
 type Classifier func(ctx context.Context, req Request) ([]Result, error)
@@ -46,7 +48,7 @@ type Classifier func(ctx context.Context, req Request) ([]Result, error)
 func NoopClassifier(_ context.Context, req Request) ([]Result, error) {
 	results := make([]Result, len(req.Messages))
 	for i := range results {
-		results[i] = Result{Label: LabelSafe, Score: 0, Rationale: "", Kind: "", Target: "", Severity: "", Action: ""}
+		results[i] = Result{Label: LabelSafe, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
 	}
 	return results, nil
 }
@@ -143,18 +145,19 @@ func (s *Scanner) findingFromResult(text string, r Result) *scanners.Finding {
 	if r.Label != LabelInjection {
 		return nil
 	}
+	// Emit the finding into the existing risk-policy path. That static policy,
+	// not the judge metadata, decides whether the finding blocks or surfaces.
 	ruleID, description := Describe()
 	if r.Rationale != "" {
 		description = r.Rationale
 	}
 	tags := []string{"llm-judge", "layer-1"}
-	if r.Kind != "" {
+	if r.DirectiveKind != "" {
 		tags = append(tags,
-			"semantic-consensus",
-			"directive_kind:"+r.Kind,
+			"semantic-typed",
+			"directive_kind:"+r.DirectiveKind,
 			"target:"+r.Target,
-			"severity:"+r.Severity,
-			"action:"+r.Action,
+			"operational:"+strconv.FormatBool(r.Operational),
 		)
 	}
 	return &scanners.Finding{

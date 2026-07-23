@@ -59,7 +59,7 @@ func TestRedesignedSystemMessageUsesEphemeralCacheControl(t *testing.T) {
 	require.Contains(t, string(encoded), `"ephemeral"`)
 }
 
-func TestDetectionPredicateAndTargetDrivenSeverity(t *testing.T) {
+func TestDetectionPredicateCarriesTypedFields(t *testing.T) {
 	t.Parallel()
 
 	require.True(t, IsInjection(typedVerdict(DirectiveExternalExfiltration, TargetGuardedAgent, true)))
@@ -68,34 +68,14 @@ func TestDetectionPredicateAndTargetDrivenSeverity(t *testing.T) {
 	require.False(t, IsInjection(typedVerdict(DirectiveNone, TargetNone, true)))
 	require.False(t, IsInjection(typedVerdict(DirectiveInstructionOverride, TargetGuardedAgent, false)))
 
-	guarded := Aggregate([]Verdict{
-		typedVerdict(DirectiveInstructionOverride, TargetGuardedAgent, true),
-		typedVerdict(DirectiveInstructionOverride, TargetGuardedAgent, true),
-		typedVerdict(DirectiveInstructionOverride, TargetGuardedAgent, true),
-	})
-	require.Equal(t, SeverityHigh, SeverityFor(guarded, Provenance{Indirect: false}))
-	require.Equal(t, ActionBlock, Decide(guarded, SeverityHigh))
-
-	unclear := Aggregate([]Verdict{
-		typedVerdict(DirectiveExternalExfiltration, TargetUnclear, true),
-		typedVerdict(DirectiveExternalExfiltration, TargetUnclear, true),
-		typedVerdict(DirectiveExternalExfiltration, TargetUnclear, true),
-	})
-	require.Equal(t, SeverityMedium, SeverityFor(unclear, Provenance{Indirect: false}))
-	require.Equal(t, ActionWarn, Decide(unclear, SeverityMedium))
-
-	splitUnclear := Aggregate([]Verdict{
-		typedVerdict(DirectiveGuardedSecretExtraction, TargetUnclear, true),
-		typedVerdict(DirectiveGuardedSecretExtraction, TargetUnclear, true),
-		{},
-	})
-	require.Equal(t, SeverityLow, SeverityFor(splitUnclear, Provenance{Indirect: false}))
-	require.Equal(t, ActionLog, Decide(splitUnclear, SeverityLow))
-	require.True(t, splitUnclear.IsInjection, "severity and action must never gate a typed detection")
-	require.Equal(t, SeverityMedium, SeverityFor(splitUnclear, Provenance{Indirect: true}), "indirect provenance raises but does not gate")
+	stabilized := StabilizeSingle(typedVerdict(DirectiveGuardedSecretExtraction, TargetUnclear, true))
+	require.True(t, stabilized.IsInjection)
+	require.Equal(t, DirectiveGuardedSecretExtraction, stabilized.DirectiveKind)
+	require.Equal(t, TargetUnclear, stabilized.Target)
+	require.True(t, stabilized.Operational)
 }
 
-func TestRedesignVotesInParallelAndSurfacesAllEligibleDetections(t *testing.T) {
+func TestOptionalMultiSampleOverrideAggregatesInParallel(t *testing.T) {
 	t.Parallel()
 
 	var response atomic.Int64
@@ -105,7 +85,7 @@ func TestRedesignVotesInParallelAndSurfacesAllEligibleDetections(t *testing.T) {
 		}
 		return "malformed"
 	}}
-	engine := newEngine(t, client).WithRedesign(SamplesPerEvent)
+	engine := newEngine(t, client).WithRedesign(3)
 	in := req("current event")
 	in.Trajectories = []judgemessage.Trajectory{{PriorUserRequest: "inspect output", RecentUntrustedContent: "untrusted context"}}
 
@@ -113,11 +93,10 @@ func TestRedesignVotesInParallelAndSurfacesAllEligibleDetections(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, promptinjection.LabelInjection, results[0].Label)
-	require.InDelta(t, 2.0/3.0, results[0].Score, 0.0001)
-	require.Equal(t, DirectiveGuardedSecretExtraction, results[0].Kind)
+	require.Zero(t, results[0].Score)
+	require.Equal(t, DirectiveGuardedSecretExtraction, results[0].DirectiveKind)
 	require.Equal(t, TargetUnclear, results[0].Target)
-	require.Equal(t, string(SeverityLow), results[0].Severity)
-	require.Equal(t, string(ActionLog), results[0].Action)
+	require.True(t, results[0].Operational)
 	require.Equal(t, int64(3), client.calls.Load())
 
 	client.mu.Lock()
@@ -145,7 +124,7 @@ func TestRedesignUsesOneSharedDeadline(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeCompletionClient{blockUntilCanceled: true}
-	engine := newEngine(t, client).WithRedesign(SamplesPerEvent)
+	engine := newEngine(t, client).WithRedesign(3)
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
@@ -157,16 +136,30 @@ func TestRedesignUsesOneSharedDeadline(t *testing.T) {
 	require.Equal(t, promptinjection.LabelSafe, results[0].Label)
 }
 
-func TestRedesignSamplesOneMakesOnePhysicalCall(t *testing.T) {
+func TestTypedPathIsDefaultAndMakesOnePhysicalCall(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeCompletionClient{responder: func(string) string {
 		return `{"directive_kind":"instruction_override","target":"guarded_agent","operational":true,"rationale":"override"}`
 	}}
-	results, err := newEngine(t, client).WithRedesign(1).Classify(t.Context(), req("current event"))
+	results, err := newEngine(t, client).Classify(t.Context(), req("current event"))
 	require.NoError(t, err)
 	require.Equal(t, promptinjection.LabelInjection, results[0].Label)
+	require.Zero(t, results[0].Score, "typed metadata must not overload legacy confidence")
+	require.Equal(t, DirectiveInstructionOverride, results[0].DirectiveKind)
+	require.Equal(t, TargetGuardedAgent, results[0].Target)
+	require.True(t, results[0].Operational)
 	require.Equal(t, int64(1), client.calls.Load())
+
+	client.mu.Lock()
+	require.Len(t, client.requests, 1)
+	request := client.requests[0]
+	client.mu.Unlock()
+	require.Equal(t, DefaultModel, request.Model)
+	require.NotNil(t, request.Reasoning)
+	require.Equal(t, DefaultReasoningEffort, request.Reasoning.Effort)
+	require.NotNil(t, request.JSONSchema)
+	require.Equal(t, VerdictSchema(), request.JSONSchema.Schema)
 }
 
 func TestRedesignLimiterStoreFailureStillCallsModel(t *testing.T) {
@@ -175,7 +168,7 @@ func TestRedesignLimiterStoreFailureStillCallsModel(t *testing.T) {
 	client := &fakeCompletionClient{responder: func(string) string {
 		return `{"directive_kind":"instruction_override","target":"guarded_agent","operational":true,"rationale":"override"}`
 	}}
-	engine := newEngine(t, client).WithRedesign(SamplesPerEvent)
+	engine := newEngine(t, client).WithRedesign(3)
 	engine.limiter = ratelimit.New(nil, "unavailable", ratelimit.Rate{})
 
 	results, err := engine.Classify(t.Context(), req("current event"))
@@ -194,36 +187,25 @@ func TestRedesignFailOpenReasonsAreBounded(t *testing.T) {
 	require.Equal(t, "error", redesignFailureReason(context.Canceled, o11y.OutcomeFailure))
 }
 
-func TestZeroRedesignConfigPreservesLegacyRequest(t *testing.T) {
+func TestLegacyProfileOverrideRestoresBinaryRequest(t *testing.T) {
 	t.Parallel()
 
 	responder := func(string) string {
 		return `{"is_attack":true,"confidence":0.91,"rationale":"legacy verdict"}`
 	}
-	baselineClient := &fakeCompletionClient{responder: responder}
-	baseline, err := newEngine(t, baselineClient).Classify(t.Context(), req("legacy event"))
-	require.NoError(t, err)
-
-	gatedClient := &fakeCompletionClient{responder: responder}
-	results, err := newEngine(t, gatedClient).ConfigureRedesign(RedesignConfig{Samples: 0, Model: "", Reasoning: ""}).Classify(t.Context(), req("legacy event"))
+	legacyClient := &fakeCompletionClient{responder: responder}
+	results, err := newEngine(t, legacyClient).Configure(Config{Profile: ProfileLegacy, Samples: 0, Model: "", Reasoning: ""}).Classify(t.Context(), req("legacy event"))
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	require.Equal(t, baseline, results, "unset gates preserve the complete legacy verdict")
 	require.Equal(t, promptinjection.LabelInjection, results[0].Label)
 	require.InDelta(t, 0.91, results[0].Score, 0.0001)
-	require.Empty(t, results[0].Kind)
-	require.Equal(t, int64(1), baselineClient.calls.Load())
-	require.Equal(t, int64(1), gatedClient.calls.Load())
+	require.Empty(t, results[0].DirectiveKind)
+	require.Equal(t, int64(1), legacyClient.calls.Load())
 
-	baselineClient.mu.Lock()
-	require.Len(t, baselineClient.requests, 1)
-	baselineRequest := baselineClient.requests[0]
-	baselineClient.mu.Unlock()
-	gatedClient.mu.Lock()
-	require.Len(t, gatedClient.requests, 1)
-	request := gatedClient.requests[0]
-	gatedClient.mu.Unlock()
-	require.Equal(t, baselineRequest, request, "unset gates preserve the complete OpenRouter request")
+	legacyClient.mu.Lock()
+	require.Len(t, legacyClient.requests, 1)
+	request := legacyClient.requests[0]
+	legacyClient.mu.Unlock()
 	require.Equal(t, defaultModel, request.Model)
 	require.NotNil(t, request.Temperature)
 	require.Zero(t, *request.Temperature)

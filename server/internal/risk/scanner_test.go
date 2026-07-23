@@ -57,13 +57,12 @@ func (e *recordingPIEngine) Classify(_ context.Context, req promptinjection.Requ
 	results := make([]promptinjection.Result, len(req.Messages))
 	for i := range results {
 		results[i] = promptinjection.Result{
-			Label:     promptinjection.LabelInjection,
-			Score:     1,
-			Rationale: "test prompt injection",
-			Kind:      "",
-			Target:    "",
-			Severity:  "",
-			Action:    "",
+			Label:         promptinjection.LabelInjection,
+			Score:         1,
+			Rationale:     "test prompt injection",
+			DirectiveKind: "",
+			Target:        "",
+			Operational:   false,
 		}
 	}
 	return results, nil

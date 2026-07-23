@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/scanners"
-	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 )
 
 func TestLoadCorpusPreservesTrajectoryTwinSemantics(t *testing.T) {
@@ -31,7 +30,7 @@ func TestLoadCorpusPreservesTrajectoryTwinSemantics(t *testing.T) {
 func TestSummariesCaptureStabilityAndDistributions(t *testing.T) {
 	t.Parallel()
 
-	positive := []scanners.Finding{{RuleID: "pi", Tags: []string{"pi.action:" + string(piopenrouter.ActionBlock)}}}
+	positive := []scanners.Finding{{RuleID: "pi", Tags: []string{"semantic-typed"}}}
 	corpus := []labeledCase{
 		{ID: "stable-fp", Label: "benign", Source: "test"},
 		{ID: "stable-negative", Label: "benign", Source: "test"},
@@ -140,7 +139,7 @@ func TestResolveDirectivePresenceFromMutationSeed(t *testing.T) {
 	require.ErrorContains(t, resolveDirectivePresence(cycle), "seed cycle")
 }
 
-func TestSummarizeEvaluationAndEnforcement(t *testing.T) {
+func TestSummarizeEvaluation(t *testing.T) {
 	t.Parallel()
 
 	stats := summarizeEvaluation([]decisionObservation{{
@@ -154,17 +153,6 @@ func TestSummarizeEvaluationAndEnforcement(t *testing.T) {
 	require.Equal(t, 1, stats.CallsOver10Seconds)
 	require.Equal(t, 1, stats.Timeouts)
 	require.Equal(t, 10, stats.PromptTokens)
-
-	block := scanners.Finding{RuleID: "pi", Tags: []string{"pi.action:" + string(piopenrouter.ActionBlock)}}
-	logOnly := scanners.Finding{RuleID: "pi", Tags: []string{"pi.action:" + string(piopenrouter.ActionLog)}}
-	enforcement := summarizeEnforcement(
-		[]labeledCase{{Label: "benign"}, {Label: "benign"}, {Label: "malicious"}},
-		[][]scanners.Finding{{block}, {logOnly}, {block}},
-	)
-	require.Equal(t, 2, enforcement.SurfaceFalsePositives)
-	require.Equal(t, 1, enforcement.WouldBlockFalsePositives)
-	require.InDelta(t, 1.0, enforcement.DetectRecall, 0.0001)
-	require.InDelta(t, 1.0, enforcement.WouldBlockRecall, 0.0001)
 }
 
 func TestCommittedRecallFixturesUseReviewedDirectiveTaxonomy(t *testing.T) {

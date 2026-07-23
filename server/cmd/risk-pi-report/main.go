@@ -160,22 +160,21 @@ type exampleCase struct {
 }
 
 type modeSummary struct {
-	Name                     string           `json:"name"`
-	Skipped                  bool             `json:"skipped,omitempty"`
-	SkipReason               string           `json:"skip_reason,omitempty"`
-	Total                    int              `json:"total"`
-	Counts                   counts           `json:"counts"`
-	Overall                  metricsBlock     `json:"overall"`
-	Sources                  []sourceSummary  `json:"by_source,omitempty"`
-	Rules                    []ruleHist       `json:"by_rule,omitempty"`
-	NewFalsePositives        []exampleCase    `json:"new_false_positives,omitempty"`
-	RecoveredTruePositive    []exampleCase    `json:"recovered_true_positives,omitempty"`
-	MissedAttacks            []exampleCase    `json:"missed_attacks,omitempty"`
-	InScope                  int              `json:"in_scope,omitempty"`
-	LostTruePositives        []exampleCase    `json:"lost_true_positives,omitempty"`
-	SuppressedFalsePositives []exampleCase    `json:"suppressed_false_positives,omitempty"`
-	Evaluation               evaluationStats  `json:"evaluation"`
-	Enforcement              enforcementStats `json:"enforcement"`
+	Name                     string          `json:"name"`
+	Skipped                  bool            `json:"skipped,omitempty"`
+	SkipReason               string          `json:"skip_reason,omitempty"`
+	Total                    int             `json:"total"`
+	Counts                   counts          `json:"counts"`
+	Overall                  metricsBlock    `json:"overall"`
+	Sources                  []sourceSummary `json:"by_source,omitempty"`
+	Rules                    []ruleHist      `json:"by_rule,omitempty"`
+	NewFalsePositives        []exampleCase   `json:"new_false_positives,omitempty"`
+	RecoveredTruePositive    []exampleCase   `json:"recovered_true_positives,omitempty"`
+	MissedAttacks            []exampleCase   `json:"missed_attacks,omitempty"`
+	InScope                  int             `json:"in_scope,omitempty"`
+	LostTruePositives        []exampleCase   `json:"lost_true_positives,omitempty"`
+	SuppressedFalsePositives []exampleCase   `json:"suppressed_false_positives,omitempty"`
+	Evaluation               evaluationStats `json:"evaluation"`
 }
 
 type evaluationStats struct {
@@ -194,13 +193,6 @@ type evaluationStats struct {
 	DecisionLatencyP50MS float64 `json:"decision_latency_p50_ms"`
 	DecisionLatencyP95MS float64 `json:"decision_latency_p95_ms"`
 	DecisionLatencyP99MS float64 `json:"decision_latency_p99_ms"`
-}
-
-type enforcementStats struct {
-	SurfaceFalsePositives    int     `json:"surface_false_positives"`
-	WouldBlockFalsePositives int     `json:"would_block_false_positives"`
-	DetectRecall             float64 `json:"detect_recall"`
-	WouldBlockRecall         float64 `json:"would_block_recall"`
 }
 
 type accuracySummary struct {
@@ -272,7 +264,6 @@ type envelope struct {
 	Reasoning       string          `json:"reasoning"`
 	ProviderRoute   string          `json:"provider_route"`
 	SamplesPerEvent int             `json:"samples_per_event"`
-	ConsensusVotes  int             `json:"consensus_votes"`
 	TimeoutMS       int64           `json:"timeout_ms"`
 	PromptSHA256    string          `json:"prompt_sha256"`
 	SchemaSHA256    string          `json:"schema_sha256"`
@@ -290,14 +281,14 @@ type options struct {
 	reasoning        string
 	extraCorpus      string
 	repeats          int
+	samples          int
 }
 
 const (
 	// defaultJudgeModel is the report's judge model when none is provided.
 	defaultJudgeModel = piopenrouter.DefaultModel
-	// judgeConcurrency bounds concurrent logical events. Each redesigned event
-	// fans out three physical calls, matching the production engine's four-event
-	// concurrency cap without turning the benchmark into a provider load test.
+	// judgeConcurrency bounds concurrent logical events without turning the
+	// benchmark into a provider load test.
 	defaultJudgeConcurrency = 4
 	// benchOrgID/benchProjectID label the judge calls. The judge needs an
 	// org/project for the request shape; these are inert identifiers (the
@@ -325,16 +316,18 @@ func parseFlags() options {
 		reasoning:        "",
 		extraCorpus:      "",
 		repeats:          0,
+		samples:          0,
 	}
 	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
 	flag.BoolVar(&opts.checkFloors, "check-floors", true, "fail if judge metrics violate floors.json")
 	flag.StringVar(&opts.judgeModel, "judge-model", defaultJudgeModel, "OpenRouter model id for the judge (must be allowlisted)")
-	flag.IntVar(&opts.judgeConcurrency, "judge-concurrency", defaultJudgeConcurrency, "max concurrent logical events; each event fans out three model calls")
+	flag.IntVar(&opts.judgeConcurrency, "judge-concurrency", defaultJudgeConcurrency, "max concurrent logical events")
 	flag.StringVar(&opts.sources, "sources", "", "comma-separated source substrings to keep (empty = all); use to judge a cheap iteration slice")
 	flag.StringVar(&opts.reasoning, "reasoning", piopenrouter.DefaultReasoningEffort, "OpenRouter reasoning effort for the judge call")
 	flag.StringVar(&opts.extraCorpus, "extra-corpus", "", "absolute path to an additional local JSONL corpus; never loaded by default")
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
+	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
 	flag.Parse()
 	return opts
 }
@@ -396,6 +389,9 @@ func run(ctx context.Context, opts options) error {
 
 	if opts.repeats < 1 {
 		return fmt.Errorf("--repeats must be at least 1")
+	}
+	if opts.samples < 1 {
+		return fmt.Errorf("--samples must be at least 1")
 	}
 	modes := make([]modeSummary, 0, opts.repeats*2)
 	allFindings := make([][][]scanners.Finding, 0, opts.repeats)
@@ -700,9 +696,6 @@ func printSummary(w *os.File, modes []modeSummary) {
 				m.Evaluation.DecisionLatencyP50MS, m.Evaluation.DecisionLatencyP95MS, m.Evaluation.DecisionLatencyP99MS,
 				m.Evaluation.PromptTokens, m.Evaluation.CompletionTokens, m.Evaluation.CostUSD)
 		}
-		p("             shadow: surface_FP=%d would_block_FP=%d detect_recall=%.3f would_block_recall=%.3f\n",
-			m.Enforcement.SurfaceFalsePositives, m.Enforcement.WouldBlockFalsePositives,
-			m.Enforcement.DetectRecall, m.Enforcement.WouldBlockRecall)
 		if m.InScope > 0 || len(m.LostTruePositives) > 0 || len(m.SuppressedFalsePositives) > 0 {
 			p("             scope: in_scope=%d suppressed_FPs=%d LOST_TPs=%d\n",
 				m.InScope, len(m.SuppressedFalsePositives), len(m.LostTruePositives))
@@ -978,7 +971,6 @@ func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (mod
 
 	mode := summarizeFindings("judge", corpus, findings)
 	mode.Evaluation = eval
-	mode.Enforcement = summarizeEnforcement(corpus, findings)
 	empty := make([][]scanners.Finding, len(corpus))
 	mode.NewFalsePositives = changedExamples(corpus, empty, findings, "benign", 500)
 	mode.RecoveredTruePositive = changedExamples(corpus, empty, findings, "malicious", 500)
@@ -1019,7 +1011,7 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 
 			text := corpus[i].Text
 			msg := corpus[i].judgeMessage()
-			result, action, observation := judgeOne(ctx, client, opts.judgeModel, opts.reasoning, msg, corpus[i].trajectory())
+			result, observation := judgeOne(ctx, client, opts.judgeModel, opts.reasoning, opts.samples, msg, corpus[i].trajectory())
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -1038,8 +1030,8 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 				StartPos:         0,
 				EndPos:           len(text),
 				Source:           promptinjection.Source,
-				Confidence:       float64(result.PositiveVotes) / float64(result.Samples),
-				Tags:             []string{"llm-judge", "layer-1", "pi.action:" + string(action), "pi.target:" + result.Target, "pi.kind:" + result.DirectiveKind},
+				Confidence:       0,
+				Tags:             []string{"llm-judge", "layer-1", "semantic-typed", "directive_kind:" + result.DirectiveKind, "target:" + result.Target, "operational:true"},
 				DeadLetterReason: "",
 
 				McpLookupToolCallID: "",
@@ -1103,17 +1095,17 @@ func durationQuantileMS(values []time.Duration, q float64) float64 {
 	return float64(values[index]) / float64(time.Millisecond)
 }
 
-// judgeOne uses the production typed prompt, schema, vote aggregation, severity,
-// and shadow action policy. All samples share one event deadline.
-func judgeOne(ctx context.Context, client openrouter.CompletionClient, model, reasoning string, msg judgemessage.Message, trajectory judgemessage.Trajectory) (piopenrouter.Stabilized, piopenrouter.Action, decisionObservation) {
+// judgeOne uses the production typed prompt and schema. The production default
+// is a direct single call; optional multi-sample runs share one event deadline.
+func judgeOne(ctx context.Context, client openrouter.CompletionClient, model, reasoning string, samples int, msg judgemessage.Message, trajectory judgemessage.Trajectory) (piopenrouter.Stabilized, decisionObservation) {
 	decisionCtx, cancel := context.WithTimeout(ctx, piopenrouter.JudgeTimeout)
 	defer cancel()
 	start := time.Now()
 
-	verdicts := make([]piopenrouter.Verdict, piopenrouter.SamplesPerEvent)
-	observation := decisionObservation{Calls: make([]callObservation, piopenrouter.SamplesPerEvent), Latency: 0}
+	verdicts := make([]piopenrouter.Verdict, samples)
+	observation := decisionObservation{Calls: make([]callObservation, samples), Latency: 0}
 	var wg sync.WaitGroup
-	for sample := range piopenrouter.SamplesPerEvent {
+	for sample := range samples {
 		wg.Go(func() {
 			verdicts[sample], observation.Calls[sample] = judgeVote(decisionCtx, client, model, reasoning, msg, trajectory)
 		})
@@ -1121,9 +1113,10 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model, re
 	wg.Wait()
 	observation.Latency = time.Since(start)
 
-	result := piopenrouter.Aggregate(verdicts)
-	severity := piopenrouter.SeverityFor(result, piopenrouter.Provenance{Indirect: msg.Type == message.ToolResponse})
-	return result, piopenrouter.Decide(result, severity), observation
+	if samples == 1 {
+		return piopenrouter.StabilizeSingle(verdicts[0]), observation
+	}
+	return piopenrouter.Aggregate(verdicts), observation
 }
 
 func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, reasoning string, msg judgemessage.Message, trajectory judgemessage.Trajectory) (piopenrouter.Verdict, callObservation) {
@@ -1316,36 +1309,6 @@ func summarizeFindings(mode string, corpus []labeledCase, findings [][]scanners.
 		LostTruePositives:        nil,
 		SuppressedFalsePositives: nil,
 		Evaluation:               evaluation,
-		Enforcement:              summarizeEnforcement(corpus, findings),
-	}
-}
-
-func summarizeEnforcement(corpus []labeledCase, findings [][]scanners.Finding) enforcementStats {
-	var surfaceTP, surfaceFP, blockTP, blockFP, malicious int
-	for i, c := range corpus {
-		if c.Label == "malicious" {
-			malicious++
-		}
-		if len(findings[i]) == 0 {
-			continue
-		}
-		if c.Label == "malicious" {
-			surfaceTP++
-		} else {
-			surfaceFP++
-		}
-		wouldBlock := slices.Contains(findings[i][0].Tags, "pi.action:"+string(piopenrouter.ActionBlock))
-		if wouldBlock && c.Label == "malicious" {
-			blockTP++
-		} else if wouldBlock {
-			blockFP++
-		}
-	}
-	return enforcementStats{
-		SurfaceFalsePositives:    surfaceFP,
-		WouldBlockFalsePositives: blockFP,
-		DetectRecall:             safeDiv(surfaceTP, malicious),
-		WouldBlockRecall:         safeDiv(blockTP, malicious),
 	}
 }
 
@@ -1431,9 +1394,8 @@ func writeMetrics(path string, opts options, corpus []labeledCase, summary accur
 		Timestamp:       time.Now().UTC().Format(time.RFC3339),
 		Model:           opts.judgeModel,
 		Reasoning:       opts.reasoning,
-		ProviderRoute:   "OpenRouter route unpinned; voting diversity must be re-measured if pinned",
-		SamplesPerEvent: piopenrouter.SamplesPerEvent,
-		ConsensusVotes:  piopenrouter.ConsensusVotes,
+		ProviderRoute:   "OpenRouter default routing",
+		SamplesPerEvent: opts.samples,
 		TimeoutMS:       piopenrouter.JudgeTimeout.Milliseconds(),
 		PromptSHA256:    fmt.Sprintf("%x", promptHash),
 		SchemaSHA256:    fmt.Sprintf("%x", schemaHash),

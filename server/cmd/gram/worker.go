@@ -761,7 +761,7 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
 
-			piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).ConfigureRedesign(piRedesignConfigFromEnv()).Classify)
+			piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Configure(piJudgeConfigFromEnv()).Classify)
 
 			customRuleScanner, err := customruleanalyzer.NewScanner(db)
 			if err != nil {

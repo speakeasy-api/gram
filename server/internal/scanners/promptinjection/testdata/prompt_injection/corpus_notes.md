@@ -49,6 +49,6 @@ We commit deepset as-is rather than re-labeling per our own taxonomy because (a)
 
 `floors.json` is a recall-only gate for the typed redesign. Recall is computed only over the explicitly curated directive-present, in-taxonomy rows from the adversarial, LiteLLM, mutation, and trajectory-twin sources. Rows with an AGE-3048 `known_gap` marker are reported but excluded.
 
-`fp_rate_max` remains as historical metadata so older reports still deserialize it, but the evaluator does not enforce it. Shadow detection is expected to surface more false positives than the eventual would-block policy, so an FP cap on all surfaced findings would gate the wrong behavior. The report instead emits surface and would-block FP counts separately.
+`fp_rate_max` remains as historical metadata so older reports still deserialize it, but the evaluator does not enforce it. False-positive measurements from the local hard-negative challenge corpus are reported separately from the committed directive-present recall gate. The existing risk-policy layer decides whether a detected finding blocks or surfaces.
 
 `recall_floor` is set from the three-run shipped-profile measurement. Each configured source also has a conservative minimum so a strong aggregate cannot hide a source regression. Live model evaluation is manual because CI has no provider key.
