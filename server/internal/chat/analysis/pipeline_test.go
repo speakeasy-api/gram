@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -108,6 +110,36 @@ func TestReserve_SkipsActiveChats(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reserved, 1, "a session still writing messages is not analyzable")
 	require.Equal(t, quiet, reserved[0].ChatID)
+}
+
+func TestReserveQuery_RechecksQuietWindowAtWrite(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	fixture := newAnalysisFixture(t, "reserve_recheck")
+	roster := testJudges(t, stubNamedJudge{name: "work_units", verdict: stubVerdict(1), err: nil})
+	fixture.enableJudge(t, "work_units", 10)
+
+	chatID := fixture.seedChat(t, 2, time.Hour)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
+	require.NoError(t, err)
+	pending := fixture.pendingEvaluations(t)
+	require.Len(t, pending, 1)
+
+	// A message lands after the candidate read admitted the evaluation: the
+	// reserve write's own quiet recheck must leave the row pending.
+	fixture.seedMessage(t, chatID, time.Minute)
+
+	now := time.Now().UTC()
+	written, err := repo.New(fixture.db).ReserveChatAnalysisEvaluations(ctx, repo.ReserveChatAnalysisEvaluationsParams{
+		ReservedOn: pgtype.Date{Time: time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), InfinityModifier: pgtype.Finite, Valid: true},
+		ProjectID:  fixture.projectID,
+		Ids:        []uuid.UUID{pending[0].ID},
+		Inactivity: pgtype.Interval{Microseconds: InactivityWindow.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Empty(t, written, "an active session must not be reserved")
+	require.Equal(t, StatePending, fixture.evaluation(t, pending[0].ID).State)
 }
 
 func TestPublish_ScoresReservedBatch(t *testing.T) {

@@ -80,10 +80,12 @@ func EnqueuePage(ctx context.Context, db *pgxpool.Pool, judges *Judges, projectI
 		return EnqueuePageResult{Scanned: 0, NextCursor: cursor, Exhausted: true}, nil
 	}
 
+	// organization_id is not carried here: the insert derives it from the
+	// project row so the queue can never disagree with the projects table the
+	// spend count joins through.
 	insert := repo.EnqueueChatAnalysisEvaluationsParams{
-		ProjectID:       projectID,
-		OrganizationIds: make([]string, 0, len(page)),
-		ChatIds:         make([]uuid.UUID, 0, len(page)),
+		ProjectID: projectID,
+		ChatIds:   make([]uuid.UUID, 0, len(page)),
 		// The chats walk has no raw session id to carry: the chat IS the session
 		// here, and judges that need the original session string bring their own
 		// unit source.
@@ -92,7 +94,6 @@ func EnqueuePage(ctx context.Context, db *pgxpool.Pool, judges *Judges, projectI
 		Judges:      enabled,
 	}
 	for _, candidate := range page {
-		insert.OrganizationIds = append(insert.OrganizationIds, candidate.OrganizationID)
 		insert.ChatIds = append(insert.ChatIds, candidate.ID)
 		insert.SessionIds = append(insert.SessionIds, "")
 		insert.ObservedAts = append(insert.ObservedAts, candidate.LastMessageAt)

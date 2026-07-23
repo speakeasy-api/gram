@@ -60,7 +60,6 @@ WHERE p.id = @project_id::uuid;
 -- quiet check both describe transcript activity rather than chat creation.
 SELECT
   c.id,
-  c.organization_id,
   c.created_at,
   latest.last_message_at::timestamptz AS last_message_at
 FROM chats c
@@ -86,6 +85,11 @@ LIMIT @page_size;
 -- chats crossed with the judge roster. Scored and failed units are left alone;
 -- a pending unit refreshes observed_at so a resumed session keeps its place in
 -- the recent-first reservation order and its quiet clock restarts.
+--
+-- organization_id is derived from the project row, never taken from the
+-- caller: the daily spend count reaches evaluations through the project's
+-- organization, so a caller-supplied value that disagreed with the projects
+-- table would misattribute the tenant and slip past the cap.
 INSERT INTO chat_analysis_evaluations (
   organization_id,
   project_id,
@@ -95,20 +99,22 @@ INSERT INTO chat_analysis_evaluations (
   observed_at
 )
 SELECT
-  unit.organization_id,
-  @project_id,
+  p.organization_id,
+  p.id,
   unit.chat_id,
   unit.session_id,
   j.judge,
   unit.observed_at
-FROM (
+FROM projects p
+CROSS JOIN (
   SELECT
-    unnest(@organization_ids::text[]) AS organization_id,
     unnest(@chat_ids::uuid[]) AS chat_id,
     unnest(@session_ids::text[]) AS session_id,
     unnest(@observed_ats::timestamptz[]) AS observed_at
 ) unit
 CROSS JOIN unnest(@judges::text[]) AS j(judge)
+WHERE p.id = @project_id
+  AND p.deleted IS FALSE
 ON CONFLICT (project_id, chat_id, judge) DO UPDATE
 SET observed_at = GREATEST(chat_analysis_evaluations.observed_at, excluded.observed_at),
     updated_at = clock_timestamp()
@@ -178,14 +184,28 @@ WHERE e.project_id = @project_id
 ORDER BY e.observed_at DESC, e.id DESC
 LIMIT @page_size;
 
--- name: ReserveChatAnalysisEvaluations :execrows
-UPDATE chat_analysis_evaluations
+-- name: ReserveChatAnalysisEvaluations :many
+-- The quiet window the candidate read checked is rechecked at the write: a
+-- message can land between the candidate SELECT and this UPDATE, and a session
+-- that just resumed must not be reserved and judged mid-conversation. A row
+-- that fails the recheck is simply not written — it stays pending, spends no
+-- budget, and a later pass sees it once its transcript is quiet again.
+UPDATE chat_analysis_evaluations e
 SET state = 'reserved',
     reserved_on = @reserved_on::date,
     updated_at = clock_timestamp()
-WHERE project_id = @project_id
-  AND id = ANY(@ids::uuid[])
-  AND state = 'pending';
+WHERE e.project_id = @project_id
+  AND e.id = ANY(@ids::uuid[])
+  AND e.state = 'pending'
+  AND e.observed_at <= now() - @inactivity::interval
+  AND NOT EXISTS (
+    SELECT 1
+    FROM chat_messages cm
+    WHERE cm.chat_id = e.chat_id
+      AND (cm.project_id IS NULL OR cm.project_id = e.project_id)
+      AND cm.created_at > now() - @inactivity::interval
+  )
+RETURNING e.id;
 
 -- name: LoadReservedChatAnalysisEvaluations :many
 -- Crash-recovery claim. Ownership is soft and time-bounded: a reserved row is

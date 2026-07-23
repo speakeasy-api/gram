@@ -116,16 +116,22 @@ func (f analysisFixture) seedChat(t *testing.T, messages int, lastMessageAge tim
 	require.NoError(t, err)
 
 	for i := range messages {
-		age := lastMessageAge + time.Duration(messages-1-i)*time.Minute
-		_, err := queries.SeedChatMessage(ctx, chatrepo.SeedChatMessageParams{
-			ChatID:    chatID,
-			ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true},
-			CreatedAt: conv.ToPGTimestamptz(time.Now().UTC().Add(-age)),
-		})
-		require.NoError(t, err)
+		f.seedMessage(t, chatID, lastMessageAge+time.Duration(messages-1-i)*time.Minute)
 	}
 
 	return chatID
+}
+
+// seedMessage writes one message to an existing chat, age old.
+func (f analysisFixture) seedMessage(t *testing.T, chatID uuid.UUID, age time.Duration) {
+	t.Helper()
+
+	_, err := chatrepo.New(f.db).SeedChatMessage(t.Context(), chatrepo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true},
+		CreatedAt: conv.ToPGTimestamptz(time.Now().UTC().Add(-age)),
+	})
+	require.NoError(t, err)
 }
 
 // pendingEvaluations reads the whole pending queue by walking the keyset pages

@@ -164,25 +164,30 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, judges *Judges, projectID uu
 		ReservedOn: reservedOn,
 		ProjectID:  projectID,
 		Ids:        ids,
+		Inactivity: pgtype.Interval{Microseconds: InactivityWindow.Microseconds(), Days: 0, Months: 0, Valid: true},
 	})
 	if err != nil {
 		return nil, fromHead, fmt.Errorf("reserve chat analysis evaluations: %w", err)
 	}
-	// pending -> reserved is written only under the organization's advisory lock,
-	// which this transaction holds, so every admitted candidate must still have
-	// been pending. A short count means the budget accounting no longer describes
-	// what was written and the batch must not be handed out.
-	if reserved != int64(len(ids)) {
-		return nil, fromHead, fmt.Errorf("reserve chat analysis evaluations: reserved %d of %d locked candidates", reserved, len(ids))
+	// The UPDATE rechecks the quiet window the candidate read applied, so a
+	// candidate whose session wrote a message between the two is legitimately
+	// not written: it stays pending, and only the rows actually reserved are
+	// handed out. Its in-memory budget decrement dies with this pass — the
+	// durable spend count only ever sees committed reserved_on stamps.
+	written := make(map[uuid.UUID]struct{}, len(reserved))
+	for _, id := range reserved {
+		written[id] = struct{}{}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fromHead, fmt.Errorf("commit chat analysis reservation: %w", err)
 	}
 
-	evaluations := make([]Evaluation, 0, len(admitted))
+	evaluations := make([]Evaluation, 0, len(reserved))
 	for _, row := range admitted {
-		evaluations = append(evaluations, NewEvaluation(row))
+		if _, ok := written[row.ID]; ok {
+			evaluations = append(evaluations, NewEvaluation(row))
+		}
 	}
 
 	return evaluations, next, nil

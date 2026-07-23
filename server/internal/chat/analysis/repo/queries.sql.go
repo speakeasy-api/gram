@@ -66,20 +66,22 @@ INSERT INTO chat_analysis_evaluations (
   observed_at
 )
 SELECT
-  unit.organization_id,
-  $1,
+  p.organization_id,
+  p.id,
   unit.chat_id,
   unit.session_id,
   j.judge,
   unit.observed_at
-FROM (
+FROM projects p
+CROSS JOIN (
   SELECT
-    unnest($2::text[]) AS organization_id,
-    unnest($3::uuid[]) AS chat_id,
-    unnest($4::text[]) AS session_id,
-    unnest($5::timestamptz[]) AS observed_at
+    unnest($1::uuid[]) AS chat_id,
+    unnest($2::text[]) AS session_id,
+    unnest($3::timestamptz[]) AS observed_at
 ) unit
-CROSS JOIN unnest($6::text[]) AS j(judge)
+CROSS JOIN unnest($4::text[]) AS j(judge)
+WHERE p.id = $5
+  AND p.deleted IS FALSE
 ON CONFLICT (project_id, chat_id, judge) DO UPDATE
 SET observed_at = GREATEST(chat_analysis_evaluations.observed_at, excluded.observed_at),
     updated_at = clock_timestamp()
@@ -87,26 +89,29 @@ WHERE chat_analysis_evaluations.state = 'pending'
 `
 
 type EnqueueChatAnalysisEvaluationsParams struct {
-	ProjectID       uuid.UUID
-	OrganizationIds []string
-	ChatIds         []uuid.UUID
-	SessionIds      []string
-	ObservedAts     []pgtype.Timestamptz
-	Judges          []string
+	ChatIds     []uuid.UUID
+	SessionIds  []string
+	ObservedAts []pgtype.Timestamptz
+	Judges      []string
+	ProjectID   uuid.UUID
 }
 
 // Idempotent enqueue: one row per (chat, judge) unit, expanded from the page's
 // chats crossed with the judge roster. Scored and failed units are left alone;
 // a pending unit refreshes observed_at so a resumed session keeps its place in
 // the recent-first reservation order and its quiet clock restarts.
+//
+// organization_id is derived from the project row, never taken from the
+// caller: the daily spend count reaches evaluations through the project's
+// organization, so a caller-supplied value that disagreed with the projects
+// table would misattribute the tenant and slip past the cap.
 func (q *Queries) EnqueueChatAnalysisEvaluations(ctx context.Context, arg EnqueueChatAnalysisEvaluationsParams) error {
 	_, err := q.db.Exec(ctx, enqueueChatAnalysisEvaluations,
-		arg.ProjectID,
-		arg.OrganizationIds,
 		arg.ChatIds,
 		arg.SessionIds,
 		arg.ObservedAts,
 		arg.Judges,
+		arg.ProjectID,
 	)
 	return err
 }
@@ -283,7 +288,6 @@ func (q *Queries) GetChatAnalysisSettingsForProject(ctx context.Context, project
 const listChatAnalysisCandidateChats = `-- name: ListChatAnalysisCandidateChats :many
 SELECT
   c.id,
-  c.organization_id,
   c.created_at,
   latest.last_message_at::timestamptz AS last_message_at
 FROM chats c
@@ -314,10 +318,9 @@ type ListChatAnalysisCandidateChatsParams struct {
 }
 
 type ListChatAnalysisCandidateChatsRow struct {
-	ID             uuid.UUID
-	OrganizationID string
-	CreatedAt      pgtype.Timestamptz
-	LastMessageAt  pgtype.Timestamptz
+	ID            uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	LastMessageAt pgtype.Timestamptz
 }
 
 // One enqueue page: live chats holding at least one stored message, walked
@@ -340,12 +343,7 @@ func (q *Queries) ListChatAnalysisCandidateChats(ctx context.Context, arg ListCh
 	var items []ListChatAnalysisCandidateChatsRow
 	for rows.Next() {
 		var i ListChatAnalysisCandidateChatsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.CreatedAt,
-			&i.LastMessageAt,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.CreatedAt, &i.LastMessageAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -735,28 +733,60 @@ func (q *Queries) RecordChatAnalysisEvaluationAttempt(ctx context.Context, arg R
 	return i, err
 }
 
-const reserveChatAnalysisEvaluations = `-- name: ReserveChatAnalysisEvaluations :execrows
-UPDATE chat_analysis_evaluations
+const reserveChatAnalysisEvaluations = `-- name: ReserveChatAnalysisEvaluations :many
+UPDATE chat_analysis_evaluations e
 SET state = 'reserved',
     reserved_on = $1::date,
     updated_at = clock_timestamp()
-WHERE project_id = $2
-  AND id = ANY($3::uuid[])
-  AND state = 'pending'
+WHERE e.project_id = $2
+  AND e.id = ANY($3::uuid[])
+  AND e.state = 'pending'
+  AND e.observed_at <= now() - $4::interval
+  AND NOT EXISTS (
+    SELECT 1
+    FROM chat_messages cm
+    WHERE cm.chat_id = e.chat_id
+      AND (cm.project_id IS NULL OR cm.project_id = e.project_id)
+      AND cm.created_at > now() - $4::interval
+  )
+RETURNING e.id
 `
 
 type ReserveChatAnalysisEvaluationsParams struct {
 	ReservedOn pgtype.Date
 	ProjectID  uuid.UUID
 	Ids        []uuid.UUID
+	Inactivity pgtype.Interval
 }
 
-func (q *Queries) ReserveChatAnalysisEvaluations(ctx context.Context, arg ReserveChatAnalysisEvaluationsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, reserveChatAnalysisEvaluations, arg.ReservedOn, arg.ProjectID, arg.Ids)
+// The quiet window the candidate read checked is rechecked at the write: a
+// message can land between the candidate SELECT and this UPDATE, and a session
+// that just resumed must not be reserved and judged mid-conversation. A row
+// that fails the recheck is simply not written — it stays pending, spends no
+// budget, and a later pass sees it once its transcript is quiet again.
+func (q *Queries) ReserveChatAnalysisEvaluations(ctx context.Context, arg ReserveChatAnalysisEvaluationsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, reserveChatAnalysisEvaluations,
+		arg.ReservedOn,
+		arg.ProjectID,
+		arg.Ids,
+		arg.Inactivity,
+	)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const resetStaleChatAnalysisReservations = `-- name: ResetStaleChatAnalysisReservations :execrows
