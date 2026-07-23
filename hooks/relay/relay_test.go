@@ -638,6 +638,7 @@ func TestClaudeConfigChangeIsRelayed(t *testing.T) {
 	cfg := authedConfig(t, fs.URL)
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
 	t.Setenv("PATH", t.TempDir())
+	stubMCPInventorySpawn(t)
 	payload := []byte(`{"session_id":"session-1","hook_event_name":"ConfigChange","source":"project_settings"}`)
 
 	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
@@ -646,7 +647,7 @@ func TestClaudeConfigChangeIsRelayed(t *testing.T) {
 	require.Equal(t, 1, fs.count())
 	require.Equal(t, components.TypeSessionUpdated, fs.last().Event.Type)
 	require.Equal(t, "ConfigChange", *fs.last().Source.RawEventName)
-	require.Nil(t, fs.last().Data, "a missing Claude CLI must fail open without inventory")
+	require.Nil(t, fs.last().Data, "the config-change event never carries inventory; the detached collector relays it")
 }
 
 func TestParseClaudeMCPInventory(t *testing.T) {
@@ -666,7 +667,55 @@ func TestParseClaudeMCPInventory(t *testing.T) {
 	require.Equal(t, "Notion (Acme)", entries[2].Name)
 }
 
-func TestClaudeSessionStartRelaysRedactedMCPInventory(t *testing.T) {
+// recordedInventorySpawn captures one detached-collector spawn for assertions.
+type recordedInventorySpawn struct {
+	cwd       string
+	sessionID string
+}
+
+// stubMCPInventorySpawn replaces the detached collector spawn with a recorder so
+// tests that drive SessionStart/ConfigChange through the runner never fork a
+// real background process (which would re-exec the test binary). It returns a
+// pointer to the slice of recorded spawns.
+func stubMCPInventorySpawn(t *testing.T) *[]recordedInventorySpawn {
+	t.Helper()
+	var got []recordedInventorySpawn
+	orig := spawnMCPInventory
+	spawnMCPInventory = func(_ Config, cwd, sessionID string) error {
+		got = append(got, recordedInventorySpawn{cwd: cwd, sessionID: sessionID})
+		return nil
+	}
+	t.Cleanup(func() { spawnMCPInventory = orig })
+	return &got
+}
+
+// TestClaudeSessionStartSpawnsMCPInventoryCollector proves session start relays
+// immediately and delegates the slow inventory collection to a detached worker
+// instead of blocking on it (DNO-607).
+func TestClaudeSessionStartSpawnsMCPInventoryCollector(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	spawns := stubMCPInventorySpawn(t)
+	cwd := t.TempDir()
+	payload := []byte(`{"session_id":"session-inventory","cwd":"` + cwd + `","hook_event_name":"SessionStart","source":"startup"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	// The session-start event is relayed without the inventory riding on it.
+	require.Equal(t, 1, fs.count())
+	require.Equal(t, components.TypeSessionStarted, fs.last().Event.Type)
+	require.Nil(t, fs.last().Data, "the session-start event never carries inventory; the detached collector relays it")
+	// The collector is spawned once, carrying the session's identity.
+	require.Len(t, *spawns, 1)
+	require.Equal(t, cwd, (*spawns)[0].cwd)
+	require.Equal(t, "session-inventory", (*spawns)[0].sessionID)
+}
+
+// TestMCPInventoryCollectorRelaysRedactedInventory exercises the detached
+// collector entrypoint: it runs `claude mcp list` in the session cwd and relays
+// a redacted inventory snapshot as its own session.updated event.
+func TestMCPInventoryCollectorRelaysRedactedInventory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake claude executable uses a POSIX shell")
 	}
@@ -686,12 +735,11 @@ func TestClaudeSessionStartRelaysRedactedMCPInventory(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
 	cwd := t.TempDir()
-	payload := []byte(`{"session_id":"session-inventory","cwd":"` + cwd + `","hook_event_name":"SessionStart","source":"startup"}`)
 
-	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+	require.Equal(t, 0, RunMCPInventory(context.Background(), cfg, cwd, "session-inventory"))
 
-	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, 1, fs.count())
+	require.Equal(t, components.TypeSessionUpdated, fs.last().Event.Type)
 	require.NotNil(t, fs.last().Data)
 	require.Len(t, fs.last().Data.McpInventory, 2)
 	require.Equal(t, "remote", *fs.last().Data.McpInventory[0].ServerName)
@@ -703,7 +751,9 @@ func TestClaudeSessionStartRelaysRedactedMCPInventory(t *testing.T) {
 	require.Equal(t, cwd, strings.TrimSpace(string(invocationCWD)))
 }
 
-func TestClaudeConfigChangeCollectsFreshMCPInventory(t *testing.T) {
+// TestMCPInventoryCollectorCollectsFreshInventory proves each collector run
+// re-reads the live server list rather than reusing a stale snapshot.
+func TestMCPInventoryCollectorCollectsFreshInventory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake claude executable uses a POSIX shell")
 	}
@@ -715,17 +765,13 @@ func TestClaudeConfigChangeCollectsFreshMCPInventory(t *testing.T) {
 
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
-	runner := NewRunner(cfg)
 	cwd := t.TempDir()
-	payload := []byte(`{"session_id":"session-inventory-refresh","cwd":"` + cwd + `","hook_event_name":"ConfigChange","source":"project_settings"}`)
 
 	t.Setenv("FAKE_CLAUDE_MCP_LIST", "first: https://first.example.com/mcp (HTTP) - connected")
-	first := agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload, "--variant=cli")
-	require.Equal(t, 0, first.ExitCode)
+	require.Equal(t, 0, RunMCPInventory(context.Background(), cfg, cwd, "session-refresh"))
 
 	t.Setenv("FAKE_CLAUDE_MCP_LIST", "second: https://second.example.com/mcp (HTTP) - connected")
-	second := agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload, "--variant=cli")
-	require.Equal(t, 0, second.ExitCode)
+	require.Equal(t, 0, RunMCPInventory(context.Background(), cfg, cwd, "session-refresh"))
 
 	require.Equal(t, 2, fs.count())
 	require.Equal(t, "https://first.example.com/mcp", *fs.requests[0].Data.McpInventory[0].URL)

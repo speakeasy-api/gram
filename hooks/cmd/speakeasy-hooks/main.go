@@ -49,6 +49,10 @@ func main() {
 			os.Exit(relay.RunDrain(context.Background(), os.Stdout))
 		case "upload-skill":
 			os.Exit(relay.RunSkillUpload(context.Background(), os.Args[2:], os.Stdin))
+		case "mcp-inventory":
+			// Detached collector spawned by the SessionStart/ConfigChange hook.
+			// Runs `claude mcp list` off the hook's path and relays the result.
+			os.Exit(relay.RunMCPInventoryCmd(context.Background(), os.Args[2:]))
 		}
 	}
 
