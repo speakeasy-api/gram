@@ -1464,7 +1464,17 @@ type SearchUsersPayload struct {
 	// identity, first/last activity, and input/output token sums — a much cheaper
 	// aggregation for large orgs (e.g. the employee enrollment list, which renders
 	// only those fields). The remaining fields are zero/empty under 'basic'.
+	// Ignored when source='agent_metrics'.
 	Metrics string
+	// Where per-user summaries are read from (internal employee grouping only).
+	// 'logs' (default) scans raw telemetry_logs and computes the metrics selected
+	// by 'metrics'. 'agent_metrics' reads the pre-aggregated
+	// attribute_metrics_summaries view — canonical observed agent usage (Claude
+	// Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper but
+	// returns only identity, last activity (hourly), and input/output/total token
+	// sums; users without an email in the window are surfaced separately from raw
+	// logs with activity but no token counts.
+	Source string
 }
 
 // SearchUsersResult is the result type of the telemetry service searchUsers

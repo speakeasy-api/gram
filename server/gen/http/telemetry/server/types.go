@@ -80,7 +80,17 @@ type SearchUsersRequestBody struct {
 	// identity, first/last activity, and input/output token sums — a much cheaper
 	// aggregation for large orgs (e.g. the employee enrollment list, which renders
 	// only those fields). The remaining fields are zero/empty under 'basic'.
+	// Ignored when source='agent_metrics'.
 	Metrics *string `form:"metrics,omitempty" json:"metrics,omitempty" xml:"metrics,omitempty"`
+	// Where per-user summaries are read from (internal employee grouping only).
+	// 'logs' (default) scans raw telemetry_logs and computes the metrics selected
+	// by 'metrics'. 'agent_metrics' reads the pre-aggregated
+	// attribute_metrics_summaries view — canonical observed agent usage (Claude
+	// Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper but
+	// returns only identity, last activity (hourly), and input/output/total token
+	// sums; users without an email in the window are surfaced separately from raw
+	// logs with activity but no token counts.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
 }
 
 // CaptureEventRequestBody is the type of the "telemetry" service
@@ -12072,6 +12082,9 @@ func NewSearchUsersPayload(body *SearchUsersRequestBody, apikeyToken *string, se
 	if body.Metrics != nil {
 		v.Metrics = *body.Metrics
 	}
+	if body.Source != nil {
+		v.Source = *body.Source
+	}
 	v.Filter = unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(body.Filter)
 	if body.GroupBy == nil {
 		v.GroupBy = "employee"
@@ -12084,6 +12097,9 @@ func NewSearchUsersPayload(body *SearchUsersRequestBody, apikeyToken *string, se
 	}
 	if body.Metrics == nil {
 		v.Metrics = "full"
+	}
+	if body.Source == nil {
+		v.Source = "logs"
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -13038,6 +13054,11 @@ func ValidateSearchUsersRequestBody(body *SearchUsersRequestBody) (err error) {
 	if body.Metrics != nil {
 		if !(*body.Metrics == "full" || *body.Metrics == "basic") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.metrics", *body.Metrics, []any{"full", "basic"}))
+		}
+	}
+	if body.Source != nil {
+		if !(*body.Source == "logs" || *body.Source == "agent_metrics") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"logs", "agent_metrics"}))
 		}
 	}
 	return

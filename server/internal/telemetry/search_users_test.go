@@ -1259,6 +1259,106 @@ func TestSearchUsers_BasicMetricsOmitsBreakdowns(t *testing.T) {
 	assert.Empty(t, u.Tools)
 }
 
+// TestSearchUsers_AgentMetricsSource pins the enrollment-list path that reads
+// the pre-aggregated attribute_metrics_summaries view (source=agent_metrics):
+// email-keyed users come from the view with token totals, and identities that
+// never carry an email in the window are supplemented from raw logs with
+// activity but no token counts, so unknown users stay visible (DNO-618).
+func TestSearchUsers_AgentMetricsSource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+
+	now := time.Now().UTC()
+	email := "agent-user-" + uuid.New().String() + "@example.com"
+	emaillessUserID := "emailless-" + uuid.New().String()
+
+	// Email user: a Claude api_request row flows into attribute_metrics_summaries
+	// with token usage (300 in / 150 out).
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.New().String(), 1.5, 300, 150, 0, 0, "claude-sonnet-4", email, "", nil, "", "", "", "", "")
+	// Email-less identity: a tool-call row carrying a user_id but no email. It is
+	// not an agent-usage row, so the view can't key it — the supplement must.
+	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, emaillessUserID, "")
+
+	// Drain async inserts (and the MV write they trigger) so the view is
+	// deterministically populated before querying (see the telemetry README).
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	res, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From: from,
+			To:   to,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+		Source:   "agent_metrics",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	byID := make(map[string]*gen.UserSummary, len(res.Users))
+	for _, u := range res.Users {
+		byID[u.UserID] = u
+	}
+
+	// Global sort across the two sources: the email-less identity's activity
+	// (-8m) is more recent than the agent user's (-10m), so it sorts first even
+	// though the supplement rows are appended after the view rows.
+	require.NotEmpty(t, res.Users)
+	assert.Equal(t, emaillessUserID, res.Users[0].UserID, "merged results should be globally sorted by last activity")
+
+	// Email-keyed user comes from the view, keyed by email, with token totals.
+	agentUser := byID[email]
+	require.NotNil(t, agentUser, "email-keyed agent user should be present from the view")
+	assert.Equal(t, int64(300), agentUser.TotalInputTokens)
+	assert.Equal(t, int64(150), agentUser.TotalOutputTokens)
+	assert.NotEqual(t, "0", agentUser.LastSeenUnixNano, "agent user should carry last activity")
+
+	// Email-less identity is surfaced from raw logs with activity but no tokens.
+	emaillessUser := byID[emaillessUserID]
+	require.NotNil(t, emaillessUser, "email-less identity should still be surfaced")
+	assert.Equal(t, int64(0), emaillessUser.TotalInputTokens)
+	assert.Equal(t, int64(0), emaillessUser.TotalOutputTokens)
+	assert.NotEqual(t, "0", emaillessUser.LastSeenUnixNano, "email-less identity should carry last activity")
+}
+
+// TestSearchUsers_AgentMetricsSourceRejectsUnsupportedFilters pins that the
+// agent-metrics source fails loud rather than silently returning project-wide
+// data when given a filter it cannot honor (the view is keyed by email + time
+// only).
+func TestSearchUsers_AgentMetricsSourceRejectsUnsupportedFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	now := time.Now().UTC()
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	deploymentID := uuid.New().String()
+
+	_, err := ti.service.SearchUsers(ctx, &gen.SearchUsersPayload{
+		Filter: &gen.SearchUsersFilter{
+			From:         from,
+			To:           to,
+			DeploymentID: &deploymentID,
+		},
+		UserType: "internal",
+		Limit:    100,
+		Sort:     "desc",
+		Source:   "agent_metrics",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported with source=agent_metrics")
+}
+
 func insertHookLogWithUser(t *testing.T, ctx context.Context, projectID, deploymentID string, timestamp time.Time, userID, externalUserID, hookSource string, success bool) {
 	t.Helper()
 
