@@ -61,6 +61,7 @@ var (
 	TemplateV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.template_event_v1", "Emitted when changes to prompt templates are made")
 	ToolsetV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.toolset_event_v1", "Emitted when changes to toolsets used by MCP servers are made")
 	TunneledMcpServerV1         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.tunneled_mcp_server_event_v1", "Emitted when changes to tunneled MCP servers are made")
+	TunneledMcpServerHeaderV1   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.tunneled_mcp_server_header_event_v1", "Emitted when changes to tunneled MCP server headers are made")
 	TriggerInstanceV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.trigger_instance_event_v1", "Emitted when changes to assistant triggers are made")
 	UserSessionClientV1         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_client_event_v1", "Emitted when changes to user session clients are made")
 	UserSessionConsentV1        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_consent_event_v1", "Emitted when changes to user session consents are made")

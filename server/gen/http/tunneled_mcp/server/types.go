@@ -36,6 +36,49 @@ type RotateServerKeyRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
+// CreateServerHeaderRequestBody is the type of the "tunneledMcp" service
+// "createServerHeader" endpoint HTTP request body.
+type CreateServerHeaderRequestBody struct {
+	// The ID of the tunneled MCP server to add the header to
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	// The header name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Description of the header
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether the header is required. Defaults to false.
+	IsRequired *bool `form:"is_required,omitempty" json:"is_required,omitempty" xml:"is_required,omitempty"`
+	// Whether the header value is a secret. Defaults to false. Incompatible with
+	// value_from_request_header.
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// Static header value (mutually exclusive with value_from_request_header)
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Name of the inbound request header to pass through (mutually exclusive with
+	// value)
+	ValueFromRequestHeader *string `form:"value_from_request_header,omitempty" json:"value_from_request_header,omitempty" xml:"value_from_request_header,omitempty"`
+}
+
+// UpdateServerHeaderRequestBody is the type of the "tunneledMcp" service
+// "updateServerHeader" endpoint HTTP request body.
+type UpdateServerHeaderRequestBody struct {
+	// The ID of the header to update
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The header name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Description of the header
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether the header is required. Defaults to false.
+	IsRequired *bool `form:"is_required,omitempty" json:"is_required,omitempty" xml:"is_required,omitempty"`
+	// Whether the header value is a secret. Defaults to false. Incompatible with
+	// value_from_request_header.
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// Static header value (mutually exclusive with value_from_request_header).
+	// Omit on an existing secret header to preserve its stored value.
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Name of the inbound request header to pass through (mutually exclusive with
+	// value)
+	ValueFromRequestHeader *string `form:"value_from_request_header,omitempty" json:"value_from_request_header,omitempty" xml:"value_from_request_header,omitempty"`
+}
+
 // CreateServerResponseBody is the type of the "tunneledMcp" service
 // "createServer" endpoint HTTP response body.
 type CreateServerResponseBody struct {
@@ -125,6 +168,81 @@ type RotateServerKeyResponseBody struct {
 	Server *TunneledMcpServerResponseBody `form:"server" json:"server" xml:"server"`
 	// Plaintext tunnel key. Only returned after rotation.
 	TunnelKey string `form:"tunnel_key" json:"tunnel_key" xml:"tunnel_key"`
+}
+
+// ListServerHeadersResponseBody is the type of the "tunneledMcp" service
+// "listServerHeaders" endpoint HTTP response body.
+type ListServerHeadersResponseBody struct {
+	Headers []*TunneledMcpServerHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
+}
+
+// GetServerHeaderResponseBody is the type of the "tunneledMcp" service
+// "getServerHeader" endpoint HTTP response body.
+type GetServerHeaderResponseBody struct {
+	// The ID of the header
+	ID string `form:"id" json:"id" xml:"id"`
+	// The header name
+	Name string `form:"name" json:"name" xml:"name"`
+	// Description of the header
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether the header is required
+	IsRequired bool `form:"is_required" json:"is_required" xml:"is_required"`
+	// Whether the header value is a secret
+	IsSecret bool `form:"is_secret" json:"is_secret" xml:"is_secret"`
+	// The header value (redacted if secret)
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Name of the inbound request header to pass through
+	ValueFromRequestHeader *string `form:"value_from_request_header,omitempty" json:"value_from_request_header,omitempty" xml:"value_from_request_header,omitempty"`
+	// When the header was created
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the header was last updated
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// CreateServerHeaderResponseBody is the type of the "tunneledMcp" service
+// "createServerHeader" endpoint HTTP response body.
+type CreateServerHeaderResponseBody struct {
+	// The ID of the header
+	ID string `form:"id" json:"id" xml:"id"`
+	// The header name
+	Name string `form:"name" json:"name" xml:"name"`
+	// Description of the header
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether the header is required
+	IsRequired bool `form:"is_required" json:"is_required" xml:"is_required"`
+	// Whether the header value is a secret
+	IsSecret bool `form:"is_secret" json:"is_secret" xml:"is_secret"`
+	// The header value (redacted if secret)
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Name of the inbound request header to pass through
+	ValueFromRequestHeader *string `form:"value_from_request_header,omitempty" json:"value_from_request_header,omitempty" xml:"value_from_request_header,omitempty"`
+	// When the header was created
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the header was last updated
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UpdateServerHeaderResponseBody is the type of the "tunneledMcp" service
+// "updateServerHeader" endpoint HTTP response body.
+type UpdateServerHeaderResponseBody struct {
+	// The ID of the header
+	ID string `form:"id" json:"id" xml:"id"`
+	// The header name
+	Name string `form:"name" json:"name" xml:"name"`
+	// Description of the header
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether the header is required
+	IsRequired bool `form:"is_required" json:"is_required" xml:"is_required"`
+	// Whether the header value is a secret
+	IsSecret bool `form:"is_secret" json:"is_secret" xml:"is_secret"`
+	// The header value (redacted if secret)
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Name of the inbound request header to pass through
+	ValueFromRequestHeader *string `form:"value_from_request_header,omitempty" json:"value_from_request_header,omitempty" xml:"value_from_request_header,omitempty"`
+	// When the header was created
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the header was last updated
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateServerUnauthorizedResponseBody is the type of the "tunneledMcp"
@@ -1420,6 +1538,953 @@ type DeleteServerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListServerHeadersUnauthorizedResponseBody is the type of the "tunneledMcp"
+// service "listServerHeaders" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListServerHeadersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerHeadersForbiddenResponseBody is the type of the "tunneledMcp"
+// service "listServerHeaders" endpoint HTTP response body for the "forbidden"
+// error.
+type ListServerHeadersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerHeadersBadRequestResponseBody is the type of the "tunneledMcp"
+// service "listServerHeaders" endpoint HTTP response body for the
+// "bad_request" error.
+type ListServerHeadersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerHeadersNotFoundResponseBody is the type of the "tunneledMcp"
+// service "listServerHeaders" endpoint HTTP response body for the "not_found"
+// error.
+type ListServerHeadersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerHeadersConflictResponseBody is the type of the "tunneledMcp"
+// service "listServerHeaders" endpoint HTTP response body for the "conflict"
+// error.
+type ListServerHeadersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerHeadersUnsupportedMediaResponseBody is the type of the
+// "tunneledMcp" service "listServerHeaders" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListServerHeadersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerHeadersInvalidResponseBody is the type of the "tunneledMcp"
+// service "listServerHeaders" endpoint HTTP response body for the "invalid"
+// error.
+type ListServerHeadersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerHeadersInvariantViolationResponseBody is the type of the
+// "tunneledMcp" service "listServerHeaders" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListServerHeadersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerHeadersUnexpectedResponseBody is the type of the "tunneledMcp"
+// service "listServerHeaders" endpoint HTTP response body for the "unexpected"
+// error.
+type ListServerHeadersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListServerHeadersGatewayErrorResponseBody is the type of the "tunneledMcp"
+// service "listServerHeaders" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListServerHeadersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerHeaderUnauthorizedResponseBody is the type of the "tunneledMcp"
+// service "getServerHeader" endpoint HTTP response body for the "unauthorized"
+// error.
+type GetServerHeaderUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerHeaderForbiddenResponseBody is the type of the "tunneledMcp"
+// service "getServerHeader" endpoint HTTP response body for the "forbidden"
+// error.
+type GetServerHeaderForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerHeaderBadRequestResponseBody is the type of the "tunneledMcp"
+// service "getServerHeader" endpoint HTTP response body for the "bad_request"
+// error.
+type GetServerHeaderBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerHeaderNotFoundResponseBody is the type of the "tunneledMcp" service
+// "getServerHeader" endpoint HTTP response body for the "not_found" error.
+type GetServerHeaderNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerHeaderConflictResponseBody is the type of the "tunneledMcp" service
+// "getServerHeader" endpoint HTTP response body for the "conflict" error.
+type GetServerHeaderConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerHeaderUnsupportedMediaResponseBody is the type of the "tunneledMcp"
+// service "getServerHeader" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetServerHeaderUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerHeaderInvalidResponseBody is the type of the "tunneledMcp" service
+// "getServerHeader" endpoint HTTP response body for the "invalid" error.
+type GetServerHeaderInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerHeaderInvariantViolationResponseBody is the type of the
+// "tunneledMcp" service "getServerHeader" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetServerHeaderInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerHeaderUnexpectedResponseBody is the type of the "tunneledMcp"
+// service "getServerHeader" endpoint HTTP response body for the "unexpected"
+// error.
+type GetServerHeaderUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerHeaderGatewayErrorResponseBody is the type of the "tunneledMcp"
+// service "getServerHeader" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetServerHeaderGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerHeaderUnauthorizedResponseBody is the type of the "tunneledMcp"
+// service "createServerHeader" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateServerHeaderUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerHeaderForbiddenResponseBody is the type of the "tunneledMcp"
+// service "createServerHeader" endpoint HTTP response body for the "forbidden"
+// error.
+type CreateServerHeaderForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerHeaderBadRequestResponseBody is the type of the "tunneledMcp"
+// service "createServerHeader" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateServerHeaderBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerHeaderNotFoundResponseBody is the type of the "tunneledMcp"
+// service "createServerHeader" endpoint HTTP response body for the "not_found"
+// error.
+type CreateServerHeaderNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerHeaderConflictResponseBody is the type of the "tunneledMcp"
+// service "createServerHeader" endpoint HTTP response body for the "conflict"
+// error.
+type CreateServerHeaderConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerHeaderUnsupportedMediaResponseBody is the type of the
+// "tunneledMcp" service "createServerHeader" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CreateServerHeaderUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerHeaderInvalidResponseBody is the type of the "tunneledMcp"
+// service "createServerHeader" endpoint HTTP response body for the "invalid"
+// error.
+type CreateServerHeaderInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerHeaderInvariantViolationResponseBody is the type of the
+// "tunneledMcp" service "createServerHeader" endpoint HTTP response body for
+// the "invariant_violation" error.
+type CreateServerHeaderInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerHeaderUnexpectedResponseBody is the type of the "tunneledMcp"
+// service "createServerHeader" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateServerHeaderUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateServerHeaderGatewayErrorResponseBody is the type of the "tunneledMcp"
+// service "createServerHeader" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateServerHeaderGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateServerHeaderUnauthorizedResponseBody is the type of the "tunneledMcp"
+// service "updateServerHeader" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateServerHeaderUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateServerHeaderForbiddenResponseBody is the type of the "tunneledMcp"
+// service "updateServerHeader" endpoint HTTP response body for the "forbidden"
+// error.
+type UpdateServerHeaderForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateServerHeaderBadRequestResponseBody is the type of the "tunneledMcp"
+// service "updateServerHeader" endpoint HTTP response body for the
+// "bad_request" error.
+type UpdateServerHeaderBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateServerHeaderNotFoundResponseBody is the type of the "tunneledMcp"
+// service "updateServerHeader" endpoint HTTP response body for the "not_found"
+// error.
+type UpdateServerHeaderNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateServerHeaderConflictResponseBody is the type of the "tunneledMcp"
+// service "updateServerHeader" endpoint HTTP response body for the "conflict"
+// error.
+type UpdateServerHeaderConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateServerHeaderUnsupportedMediaResponseBody is the type of the
+// "tunneledMcp" service "updateServerHeader" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateServerHeaderUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateServerHeaderInvalidResponseBody is the type of the "tunneledMcp"
+// service "updateServerHeader" endpoint HTTP response body for the "invalid"
+// error.
+type UpdateServerHeaderInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateServerHeaderInvariantViolationResponseBody is the type of the
+// "tunneledMcp" service "updateServerHeader" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateServerHeaderInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateServerHeaderUnexpectedResponseBody is the type of the "tunneledMcp"
+// service "updateServerHeader" endpoint HTTP response body for the
+// "unexpected" error.
+type UpdateServerHeaderUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateServerHeaderGatewayErrorResponseBody is the type of the "tunneledMcp"
+// service "updateServerHeader" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateServerHeaderGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteServerHeaderUnauthorizedResponseBody is the type of the "tunneledMcp"
+// service "deleteServerHeader" endpoint HTTP response body for the
+// "unauthorized" error.
+type DeleteServerHeaderUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteServerHeaderForbiddenResponseBody is the type of the "tunneledMcp"
+// service "deleteServerHeader" endpoint HTTP response body for the "forbidden"
+// error.
+type DeleteServerHeaderForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteServerHeaderBadRequestResponseBody is the type of the "tunneledMcp"
+// service "deleteServerHeader" endpoint HTTP response body for the
+// "bad_request" error.
+type DeleteServerHeaderBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteServerHeaderNotFoundResponseBody is the type of the "tunneledMcp"
+// service "deleteServerHeader" endpoint HTTP response body for the "not_found"
+// error.
+type DeleteServerHeaderNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteServerHeaderConflictResponseBody is the type of the "tunneledMcp"
+// service "deleteServerHeader" endpoint HTTP response body for the "conflict"
+// error.
+type DeleteServerHeaderConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteServerHeaderUnsupportedMediaResponseBody is the type of the
+// "tunneledMcp" service "deleteServerHeader" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DeleteServerHeaderUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteServerHeaderInvalidResponseBody is the type of the "tunneledMcp"
+// service "deleteServerHeader" endpoint HTTP response body for the "invalid"
+// error.
+type DeleteServerHeaderInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteServerHeaderInvariantViolationResponseBody is the type of the
+// "tunneledMcp" service "deleteServerHeader" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DeleteServerHeaderInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteServerHeaderUnexpectedResponseBody is the type of the "tunneledMcp"
+// service "deleteServerHeader" endpoint HTTP response body for the
+// "unexpected" error.
+type DeleteServerHeaderUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteServerHeaderGatewayErrorResponseBody is the type of the "tunneledMcp"
+// service "deleteServerHeader" endpoint HTTP response body for the
+// "gateway_error" error.
+type DeleteServerHeaderGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // TunneledMcpServerResponseBody is used to define fields on response body
 // types.
 type TunneledMcpServerResponseBody struct {
@@ -1470,6 +2535,29 @@ type TunneledMcpConnectionResponseBody struct {
 	ActiveConsumerSessions int `form:"active_consumer_sessions" json:"active_consumer_sessions" xml:"active_consumer_sessions"`
 	// User-provided tunnel metadata reported by the agent
 	Metadata map[string]string `form:"metadata" json:"metadata" xml:"metadata"`
+}
+
+// TunneledMcpServerHeaderResponseBody is used to define fields on response
+// body types.
+type TunneledMcpServerHeaderResponseBody struct {
+	// The ID of the header
+	ID string `form:"id" json:"id" xml:"id"`
+	// The header name
+	Name string `form:"name" json:"name" xml:"name"`
+	// Description of the header
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether the header is required
+	IsRequired bool `form:"is_required" json:"is_required" xml:"is_required"`
+	// Whether the header value is a secret
+	IsSecret bool `form:"is_secret" json:"is_secret" xml:"is_secret"`
+	// The header value (redacted if secret)
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Name of the inbound request header to pass through
+	ValueFromRequestHeader *string `form:"value_from_request_header,omitempty" json:"value_from_request_header,omitempty" xml:"value_from_request_header,omitempty"`
+	// When the header was created
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the header was last updated
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateServerResponseBody builds the HTTP response body from the result of
@@ -1573,6 +2661,76 @@ func NewRotateServerKeyResponseBody(res *tunneledmcp.RotateTunneledMcpServerKeyR
 	}
 	if res.Server != nil {
 		body.Server = marshalTypesTunneledMcpServerToTunneledMcpServerResponseBody(res.Server)
+	}
+	return body
+}
+
+// NewListServerHeadersResponseBody builds the HTTP response body from the
+// result of the "listServerHeaders" endpoint of the "tunneledMcp" service.
+func NewListServerHeadersResponseBody(res *tunneledmcp.ListTunneledMcpServerHeadersResult) *ListServerHeadersResponseBody {
+	body := &ListServerHeadersResponseBody{}
+	if res.Headers != nil {
+		body.Headers = make([]*TunneledMcpServerHeaderResponseBody, len(res.Headers))
+		for i, val := range res.Headers {
+			if val == nil {
+				body.Headers[i] = nil
+				continue
+			}
+			body.Headers[i] = marshalTypesTunneledMcpServerHeaderToTunneledMcpServerHeaderResponseBody(val)
+		}
+	} else {
+		body.Headers = []*TunneledMcpServerHeaderResponseBody{}
+	}
+	return body
+}
+
+// NewGetServerHeaderResponseBody builds the HTTP response body from the result
+// of the "getServerHeader" endpoint of the "tunneledMcp" service.
+func NewGetServerHeaderResponseBody(res *types.TunneledMcpServerHeader) *GetServerHeaderResponseBody {
+	body := &GetServerHeaderResponseBody{
+		ID:                     res.ID,
+		Name:                   res.Name,
+		Description:            res.Description,
+		IsRequired:             res.IsRequired,
+		IsSecret:               res.IsSecret,
+		Value:                  res.Value,
+		ValueFromRequestHeader: res.ValueFromRequestHeader,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
+	}
+	return body
+}
+
+// NewCreateServerHeaderResponseBody builds the HTTP response body from the
+// result of the "createServerHeader" endpoint of the "tunneledMcp" service.
+func NewCreateServerHeaderResponseBody(res *types.TunneledMcpServerHeader) *CreateServerHeaderResponseBody {
+	body := &CreateServerHeaderResponseBody{
+		ID:                     res.ID,
+		Name:                   res.Name,
+		Description:            res.Description,
+		IsRequired:             res.IsRequired,
+		IsSecret:               res.IsSecret,
+		Value:                  res.Value,
+		ValueFromRequestHeader: res.ValueFromRequestHeader,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
+	}
+	return body
+}
+
+// NewUpdateServerHeaderResponseBody builds the HTTP response body from the
+// result of the "updateServerHeader" endpoint of the "tunneledMcp" service.
+func NewUpdateServerHeaderResponseBody(res *types.TunneledMcpServerHeader) *UpdateServerHeaderResponseBody {
+	body := &UpdateServerHeaderResponseBody{
+		ID:                     res.ID,
+		Name:                   res.Name,
+		Description:            res.Description,
+		IsRequired:             res.IsRequired,
+		IsSecret:               res.IsSecret,
+		Value:                  res.Value,
+		ValueFromRequestHeader: res.ValueFromRequestHeader,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
 	}
 	return body
 }
@@ -2571,6 +3729,737 @@ func NewDeleteServerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteServe
 	return body
 }
 
+// NewListServerHeadersUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listServerHeaders" endpoint of the "tunneledMcp"
+// service.
+func NewListServerHeadersUnauthorizedResponseBody(res *goa.ServiceError) *ListServerHeadersUnauthorizedResponseBody {
+	body := &ListServerHeadersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerHeadersForbiddenResponseBody builds the HTTP response body from
+// the result of the "listServerHeaders" endpoint of the "tunneledMcp" service.
+func NewListServerHeadersForbiddenResponseBody(res *goa.ServiceError) *ListServerHeadersForbiddenResponseBody {
+	body := &ListServerHeadersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerHeadersBadRequestResponseBody builds the HTTP response body
+// from the result of the "listServerHeaders" endpoint of the "tunneledMcp"
+// service.
+func NewListServerHeadersBadRequestResponseBody(res *goa.ServiceError) *ListServerHeadersBadRequestResponseBody {
+	body := &ListServerHeadersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerHeadersNotFoundResponseBody builds the HTTP response body from
+// the result of the "listServerHeaders" endpoint of the "tunneledMcp" service.
+func NewListServerHeadersNotFoundResponseBody(res *goa.ServiceError) *ListServerHeadersNotFoundResponseBody {
+	body := &ListServerHeadersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerHeadersConflictResponseBody builds the HTTP response body from
+// the result of the "listServerHeaders" endpoint of the "tunneledMcp" service.
+func NewListServerHeadersConflictResponseBody(res *goa.ServiceError) *ListServerHeadersConflictResponseBody {
+	body := &ListServerHeadersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerHeadersUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listServerHeaders" endpoint of the
+// "tunneledMcp" service.
+func NewListServerHeadersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListServerHeadersUnsupportedMediaResponseBody {
+	body := &ListServerHeadersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerHeadersInvalidResponseBody builds the HTTP response body from
+// the result of the "listServerHeaders" endpoint of the "tunneledMcp" service.
+func NewListServerHeadersInvalidResponseBody(res *goa.ServiceError) *ListServerHeadersInvalidResponseBody {
+	body := &ListServerHeadersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerHeadersInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listServerHeaders" endpoint of the
+// "tunneledMcp" service.
+func NewListServerHeadersInvariantViolationResponseBody(res *goa.ServiceError) *ListServerHeadersInvariantViolationResponseBody {
+	body := &ListServerHeadersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerHeadersUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listServerHeaders" endpoint of the "tunneledMcp"
+// service.
+func NewListServerHeadersUnexpectedResponseBody(res *goa.ServiceError) *ListServerHeadersUnexpectedResponseBody {
+	body := &ListServerHeadersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListServerHeadersGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listServerHeaders" endpoint of the "tunneledMcp"
+// service.
+func NewListServerHeadersGatewayErrorResponseBody(res *goa.ServiceError) *ListServerHeadersGatewayErrorResponseBody {
+	body := &ListServerHeadersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerHeaderUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewGetServerHeaderUnauthorizedResponseBody(res *goa.ServiceError) *GetServerHeaderUnauthorizedResponseBody {
+	body := &GetServerHeaderUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerHeaderForbiddenResponseBody builds the HTTP response body from
+// the result of the "getServerHeader" endpoint of the "tunneledMcp" service.
+func NewGetServerHeaderForbiddenResponseBody(res *goa.ServiceError) *GetServerHeaderForbiddenResponseBody {
+	body := &GetServerHeaderForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerHeaderBadRequestResponseBody builds the HTTP response body from
+// the result of the "getServerHeader" endpoint of the "tunneledMcp" service.
+func NewGetServerHeaderBadRequestResponseBody(res *goa.ServiceError) *GetServerHeaderBadRequestResponseBody {
+	body := &GetServerHeaderBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerHeaderNotFoundResponseBody builds the HTTP response body from
+// the result of the "getServerHeader" endpoint of the "tunneledMcp" service.
+func NewGetServerHeaderNotFoundResponseBody(res *goa.ServiceError) *GetServerHeaderNotFoundResponseBody {
+	body := &GetServerHeaderNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerHeaderConflictResponseBody builds the HTTP response body from
+// the result of the "getServerHeader" endpoint of the "tunneledMcp" service.
+func NewGetServerHeaderConflictResponseBody(res *goa.ServiceError) *GetServerHeaderConflictResponseBody {
+	body := &GetServerHeaderConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerHeaderUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewGetServerHeaderUnsupportedMediaResponseBody(res *goa.ServiceError) *GetServerHeaderUnsupportedMediaResponseBody {
+	body := &GetServerHeaderUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerHeaderInvalidResponseBody builds the HTTP response body from the
+// result of the "getServerHeader" endpoint of the "tunneledMcp" service.
+func NewGetServerHeaderInvalidResponseBody(res *goa.ServiceError) *GetServerHeaderInvalidResponseBody {
+	body := &GetServerHeaderInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerHeaderInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewGetServerHeaderInvariantViolationResponseBody(res *goa.ServiceError) *GetServerHeaderInvariantViolationResponseBody {
+	body := &GetServerHeaderInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerHeaderUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getServerHeader" endpoint of the "tunneledMcp" service.
+func NewGetServerHeaderUnexpectedResponseBody(res *goa.ServiceError) *GetServerHeaderUnexpectedResponseBody {
+	body := &GetServerHeaderUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerHeaderGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewGetServerHeaderGatewayErrorResponseBody(res *goa.ServiceError) *GetServerHeaderGatewayErrorResponseBody {
+	body := &GetServerHeaderGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerHeaderUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewCreateServerHeaderUnauthorizedResponseBody(res *goa.ServiceError) *CreateServerHeaderUnauthorizedResponseBody {
+	body := &CreateServerHeaderUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerHeaderForbiddenResponseBody builds the HTTP response body
+// from the result of the "createServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewCreateServerHeaderForbiddenResponseBody(res *goa.ServiceError) *CreateServerHeaderForbiddenResponseBody {
+	body := &CreateServerHeaderForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerHeaderBadRequestResponseBody builds the HTTP response body
+// from the result of the "createServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewCreateServerHeaderBadRequestResponseBody(res *goa.ServiceError) *CreateServerHeaderBadRequestResponseBody {
+	body := &CreateServerHeaderBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerHeaderNotFoundResponseBody builds the HTTP response body from
+// the result of the "createServerHeader" endpoint of the "tunneledMcp" service.
+func NewCreateServerHeaderNotFoundResponseBody(res *goa.ServiceError) *CreateServerHeaderNotFoundResponseBody {
+	body := &CreateServerHeaderNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerHeaderConflictResponseBody builds the HTTP response body from
+// the result of the "createServerHeader" endpoint of the "tunneledMcp" service.
+func NewCreateServerHeaderConflictResponseBody(res *goa.ServiceError) *CreateServerHeaderConflictResponseBody {
+	body := &CreateServerHeaderConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerHeaderUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createServerHeader" endpoint of the
+// "tunneledMcp" service.
+func NewCreateServerHeaderUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateServerHeaderUnsupportedMediaResponseBody {
+	body := &CreateServerHeaderUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerHeaderInvalidResponseBody builds the HTTP response body from
+// the result of the "createServerHeader" endpoint of the "tunneledMcp" service.
+func NewCreateServerHeaderInvalidResponseBody(res *goa.ServiceError) *CreateServerHeaderInvalidResponseBody {
+	body := &CreateServerHeaderInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerHeaderInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createServerHeader" endpoint of the
+// "tunneledMcp" service.
+func NewCreateServerHeaderInvariantViolationResponseBody(res *goa.ServiceError) *CreateServerHeaderInvariantViolationResponseBody {
+	body := &CreateServerHeaderInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerHeaderUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewCreateServerHeaderUnexpectedResponseBody(res *goa.ServiceError) *CreateServerHeaderUnexpectedResponseBody {
+	body := &CreateServerHeaderUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateServerHeaderGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewCreateServerHeaderGatewayErrorResponseBody(res *goa.ServiceError) *CreateServerHeaderGatewayErrorResponseBody {
+	body := &CreateServerHeaderGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateServerHeaderUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewUpdateServerHeaderUnauthorizedResponseBody(res *goa.ServiceError) *UpdateServerHeaderUnauthorizedResponseBody {
+	body := &UpdateServerHeaderUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateServerHeaderForbiddenResponseBody builds the HTTP response body
+// from the result of the "updateServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewUpdateServerHeaderForbiddenResponseBody(res *goa.ServiceError) *UpdateServerHeaderForbiddenResponseBody {
+	body := &UpdateServerHeaderForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateServerHeaderBadRequestResponseBody builds the HTTP response body
+// from the result of the "updateServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewUpdateServerHeaderBadRequestResponseBody(res *goa.ServiceError) *UpdateServerHeaderBadRequestResponseBody {
+	body := &UpdateServerHeaderBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateServerHeaderNotFoundResponseBody builds the HTTP response body from
+// the result of the "updateServerHeader" endpoint of the "tunneledMcp" service.
+func NewUpdateServerHeaderNotFoundResponseBody(res *goa.ServiceError) *UpdateServerHeaderNotFoundResponseBody {
+	body := &UpdateServerHeaderNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateServerHeaderConflictResponseBody builds the HTTP response body from
+// the result of the "updateServerHeader" endpoint of the "tunneledMcp" service.
+func NewUpdateServerHeaderConflictResponseBody(res *goa.ServiceError) *UpdateServerHeaderConflictResponseBody {
+	body := &UpdateServerHeaderConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateServerHeaderUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "updateServerHeader" endpoint of the
+// "tunneledMcp" service.
+func NewUpdateServerHeaderUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateServerHeaderUnsupportedMediaResponseBody {
+	body := &UpdateServerHeaderUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateServerHeaderInvalidResponseBody builds the HTTP response body from
+// the result of the "updateServerHeader" endpoint of the "tunneledMcp" service.
+func NewUpdateServerHeaderInvalidResponseBody(res *goa.ServiceError) *UpdateServerHeaderInvalidResponseBody {
+	body := &UpdateServerHeaderInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateServerHeaderInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "updateServerHeader" endpoint of the
+// "tunneledMcp" service.
+func NewUpdateServerHeaderInvariantViolationResponseBody(res *goa.ServiceError) *UpdateServerHeaderInvariantViolationResponseBody {
+	body := &UpdateServerHeaderInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateServerHeaderUnexpectedResponseBody builds the HTTP response body
+// from the result of the "updateServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewUpdateServerHeaderUnexpectedResponseBody(res *goa.ServiceError) *UpdateServerHeaderUnexpectedResponseBody {
+	body := &UpdateServerHeaderUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateServerHeaderGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updateServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewUpdateServerHeaderGatewayErrorResponseBody(res *goa.ServiceError) *UpdateServerHeaderGatewayErrorResponseBody {
+	body := &UpdateServerHeaderGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteServerHeaderUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "deleteServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewDeleteServerHeaderUnauthorizedResponseBody(res *goa.ServiceError) *DeleteServerHeaderUnauthorizedResponseBody {
+	body := &DeleteServerHeaderUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteServerHeaderForbiddenResponseBody builds the HTTP response body
+// from the result of the "deleteServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewDeleteServerHeaderForbiddenResponseBody(res *goa.ServiceError) *DeleteServerHeaderForbiddenResponseBody {
+	body := &DeleteServerHeaderForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteServerHeaderBadRequestResponseBody builds the HTTP response body
+// from the result of the "deleteServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewDeleteServerHeaderBadRequestResponseBody(res *goa.ServiceError) *DeleteServerHeaderBadRequestResponseBody {
+	body := &DeleteServerHeaderBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteServerHeaderNotFoundResponseBody builds the HTTP response body from
+// the result of the "deleteServerHeader" endpoint of the "tunneledMcp" service.
+func NewDeleteServerHeaderNotFoundResponseBody(res *goa.ServiceError) *DeleteServerHeaderNotFoundResponseBody {
+	body := &DeleteServerHeaderNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteServerHeaderConflictResponseBody builds the HTTP response body from
+// the result of the "deleteServerHeader" endpoint of the "tunneledMcp" service.
+func NewDeleteServerHeaderConflictResponseBody(res *goa.ServiceError) *DeleteServerHeaderConflictResponseBody {
+	body := &DeleteServerHeaderConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteServerHeaderUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "deleteServerHeader" endpoint of the
+// "tunneledMcp" service.
+func NewDeleteServerHeaderUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteServerHeaderUnsupportedMediaResponseBody {
+	body := &DeleteServerHeaderUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteServerHeaderInvalidResponseBody builds the HTTP response body from
+// the result of the "deleteServerHeader" endpoint of the "tunneledMcp" service.
+func NewDeleteServerHeaderInvalidResponseBody(res *goa.ServiceError) *DeleteServerHeaderInvalidResponseBody {
+	body := &DeleteServerHeaderInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteServerHeaderInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "deleteServerHeader" endpoint of the
+// "tunneledMcp" service.
+func NewDeleteServerHeaderInvariantViolationResponseBody(res *goa.ServiceError) *DeleteServerHeaderInvariantViolationResponseBody {
+	body := &DeleteServerHeaderInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteServerHeaderUnexpectedResponseBody builds the HTTP response body
+// from the result of the "deleteServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewDeleteServerHeaderUnexpectedResponseBody(res *goa.ServiceError) *DeleteServerHeaderUnexpectedResponseBody {
+	body := &DeleteServerHeaderUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteServerHeaderGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "deleteServerHeader" endpoint of the "tunneledMcp"
+// service.
+func NewDeleteServerHeaderGatewayErrorResponseBody(res *goa.ServiceError) *DeleteServerHeaderGatewayErrorResponseBody {
+	body := &DeleteServerHeaderGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateServerPayload builds a tunneledMcp service createServer endpoint
 // payload.
 func NewCreateServerPayload(body *CreateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.CreateServerPayload {
@@ -2657,6 +4546,80 @@ func NewDeleteServerPayload(id string, sessionToken *string, apikeyToken *string
 	return v
 }
 
+// NewListServerHeadersPayload builds a tunneledMcp service listServerHeaders
+// endpoint payload.
+func NewListServerHeadersPayload(tunneledMcpServerID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.ListServerHeadersPayload {
+	v := &tunneledmcp.ListServerHeadersPayload{}
+	v.TunneledMcpServerID = tunneledMcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetServerHeaderPayload builds a tunneledMcp service getServerHeader
+// endpoint payload.
+func NewGetServerHeaderPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.GetServerHeaderPayload {
+	v := &tunneledmcp.GetServerHeaderPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCreateServerHeaderPayload builds a tunneledMcp service createServerHeader
+// endpoint payload.
+func NewCreateServerHeaderPayload(body *CreateServerHeaderRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.CreateServerHeaderPayload {
+	v := &tunneledmcp.CreateServerHeaderPayload{
+		TunneledMcpServerID:    *body.TunneledMcpServerID,
+		Name:                   *body.Name,
+		Description:            body.Description,
+		IsRequired:             body.IsRequired,
+		IsSecret:               body.IsSecret,
+		Value:                  body.Value,
+		ValueFromRequestHeader: body.ValueFromRequestHeader,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewUpdateServerHeaderPayload builds a tunneledMcp service updateServerHeader
+// endpoint payload.
+func NewUpdateServerHeaderPayload(body *UpdateServerHeaderRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.UpdateServerHeaderPayload {
+	v := &tunneledmcp.UpdateServerHeaderPayload{
+		ID:                     *body.ID,
+		Name:                   *body.Name,
+		Description:            body.Description,
+		IsRequired:             body.IsRequired,
+		IsSecret:               body.IsSecret,
+		Value:                  body.Value,
+		ValueFromRequestHeader: body.ValueFromRequestHeader,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDeleteServerHeaderPayload builds a tunneledMcp service deleteServerHeader
+// endpoint payload.
+func NewDeleteServerHeaderPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.DeleteServerHeaderPayload {
+	v := &tunneledmcp.DeleteServerHeaderPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // ValidateCreateServerRequestBody runs the validations defined on
 // CreateServerRequestBody
 func ValidateCreateServerRequestBody(body *CreateServerRequestBody) (err error) {
@@ -2686,6 +4649,36 @@ func ValidateUpdateServerRequestBody(body *UpdateServerRequestBody) (err error) 
 func ValidateRotateServerKeyRequestBody(body *RotateServerKeyRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateCreateServerHeaderRequestBody runs the validations defined on
+// CreateServerHeaderRequestBody
+func ValidateCreateServerHeaderRequestBody(body *CreateServerHeaderRequestBody) (err error) {
+	if body.TunneledMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tunneled_mcp_server_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.TunneledMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateUpdateServerHeaderRequestBody runs the validations defined on
+// UpdateServerHeaderRequestBody
+func ValidateUpdateServerHeaderRequestBody(body *UpdateServerHeaderRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

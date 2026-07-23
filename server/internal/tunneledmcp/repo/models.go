@@ -36,3 +36,18 @@ type TunneledMcpServer struct {
 	// Generated soft-delete flag derived from deleted_at and used by partial indexes.
 	Deleted bool
 }
+
+type TunneledMcpServerHeader struct {
+	ID                     uuid.UUID
+	TunneledMcpServerID    uuid.UUID
+	Name                   string
+	Description            pgtype.Text
+	IsRequired             bool
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
