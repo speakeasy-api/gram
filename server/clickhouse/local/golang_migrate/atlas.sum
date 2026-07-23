@@ -1,4 +1,4 @@
-h1:yLUlrKnRIuBcRKkFJSNzuzfK96sVUIPUfmsO5P4Txd0=
+h1:HLLynRSK5fKTp1TELnSqhHGCNv2TwuPbibgzZ9sIlZg=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -73,3 +73,4 @@ h1:yLUlrKnRIuBcRKkFJSNzuzfK96sVUIPUfmsO5P4Txd0=
 20260722190436_trace-summaries-start-time-index.up.sql h1:8L7oNfTfclSq/MKHf1TeuuwtUrhxFV6qlRsekEkHOFI=
 20260722201116_codex-otel-usage-in-summaries.up.sql h1:1LpbU+CABtmUHyRnEVlnhZr6PA5/UwReoH/g6/BBugQ=
 20260723183339_chat-analysis-scores.up.sql h1:WwyI894hLkpE60kLJ4gXyKBWHvsFZLtGhnCgjA8SvYQ=
+20260723230336_work_delivered_efficiency.up.sql h1:sqLABehxIG2tiPn7exvZNSmunayBXRA/rkhFPmYLa6U=

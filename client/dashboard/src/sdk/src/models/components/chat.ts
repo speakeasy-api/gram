@@ -118,6 +118,14 @@ export type Chat = {
    * The ID of the user who created the chat
    */
   userId?: string | undefined;
+  /**
+   * Work units of value delivered in this chat as judged by the work-units analysis. Absent unless the organization has work-units analysis enabled and this chat has been scored.
+   */
+  workUnits?: number | undefined;
+  /**
+   * Full work-units analysis verdict as JSON (per-task breakdown, rationales, and flags). Present only when `work_units` is present.
+   */
+  workUnitsReport?: string | undefined;
 };
 
 /** @internal */
@@ -159,6 +167,8 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       z.transform(v => new Date(v)),
     ),
     user_id: z.optional(z.string()),
+    work_units: z.optional(z.number()),
+    work_units_report: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -183,6 +193,8 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "total_tokens": "totalTokens",
       "updated_at": "updatedAt",
       "user_id": "userId",
+      "work_units": "workUnits",
+      "work_units_report": "workUnitsReport",
     });
   }),
 );

@@ -3675,6 +3675,255 @@ paths:
             x-speakeasy-react-hook:
                 name: UpsertShadowMCPInventoryPolicyBypass
                 type: mutation
+    /rpc/adminChatAnalysis.getSettings:
+        get:
+            description: Get the active organization's chat analysis settings. Requires platform admin.
+            operationId: getChatAnalysisSettings
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ChatAnalysisSettings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getSettings adminChatAnalysis
+            tags:
+                - adminChatAnalysis
+            x-speakeasy-name-override: getSettings
+            x-speakeasy-react-hook:
+                name: ChatAnalysisSettings
+    /rpc/adminChatAnalysis.triggerAnalysis:
+        post:
+            description: Wake the chat analysis coordinator for every project in the active organization, instead of waiting for the periodic sweep. Requires platform admin.
+            operationId: triggerChatAnalysis
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TriggerAnalysisResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: triggerAnalysis adminChatAnalysis
+            tags:
+                - adminChatAnalysis
+            x-speakeasy-name-override: triggerAnalysis
+            x-speakeasy-react-hook:
+                name: TriggerChatAnalysis
+    /rpc/adminChatAnalysis.upsertWorkUnitsSettings:
+        post:
+            description: Create or replace the active organization's chat analysis settings. Requires platform admin.
+            operationId: upsertChatAnalysisSettings
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpsertWorkUnitsSettingsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ChatAnalysisSettings'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: upsertWorkUnitsSettings adminChatAnalysis
+            tags:
+                - adminChatAnalysis
+            x-speakeasy-name-override: upsertWorkUnitsSettings
+            x-speakeasy-react-hook:
+                name: UpsertChatAnalysisSettings
     /rpc/adminRemoteSessions.createGlobalClient:
         post:
             description: Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.
@@ -8763,6 +9012,120 @@ paths:
             tags:
                 - chat
             x-speakeasy-name-override: generateTitle
+    /rpc/chat.getWorkUnitsTrend:
+        get:
+            description: 'Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.'
+            operationId: getWorkUnitsTrend
+            parameters:
+                - allowEmptyValue: true
+                  description: Start of the window (ISO 8601). Defaults to 30 days before `to`.
+                  in: query
+                  name: from
+                  schema:
+                    description: Start of the window (ISO 8601). Defaults to 30 days before `to`.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: End of the window (ISO 8601). Defaults to now.
+                  in: query
+                  name: to
+                  schema:
+                    description: End of the window (ISO 8601). Defaults to now.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkUnitsTrendResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
+            summary: getWorkUnitsTrend chat
+            tags:
+                - chat
+            x-speakeasy-name-override: getWorkUnitsTrend
+            x-speakeasy-react-hook:
+                name: WorkUnitsTrend
+                type: query
     /rpc/chat.list:
         get:
             description: List all chats for a project
@@ -46747,6 +47110,13 @@ components:
                 user_id:
                     type: string
                     description: The ID of the user who created the chat
+                work_units:
+                    type: number
+                    description: Work units of value delivered in this chat as judged by the work-units analysis. Absent unless the organization has work-units analysis enabled and this chat has been scored.
+                    format: double
+                work_units_report:
+                    type: string
+                    description: Full work-units analysis verdict as JSON (per-task breakdown, rationales, and flags). Present only when `work_units` is present.
             required:
                 - messages
                 - generation
@@ -46759,6 +47129,30 @@ components:
                 - created_at
                 - updated_at
                 - last_message_timestamp
+        ChatAnalysisSettings:
+            type: object
+            properties:
+                is_default:
+                    type: boolean
+                    description: Whether these values are platform defaults rather than stored organization settings.
+                organization_id:
+                    type: string
+                    description: Organization these settings apply to.
+                work_units_daily_cap:
+                    type: integer
+                    description: Maximum work-units evaluations reserved across the organization each UTC day. 0 disables scoring as surely as the switch.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                work_units_enabled:
+                    type: boolean
+                    description: Whether work-units chat analysis is enabled.
+            description: Per-organization switches and budgets for chat session analysis judges.
+            required:
+                - organization_id
+                - work_units_enabled
+                - work_units_daily_cap
+                - is_default
         ChatMessage:
             type: object
             properties:
@@ -46879,6 +47273,10 @@ components:
                 user_id:
                     type: string
                     description: The ID of the user who created the chat
+                work_units:
+                    type: number
+                    description: Work units of value delivered in this chat as judged by the work-units analysis. Absent unless the organization has work-units analysis enabled and this chat has been scored.
+                    format: double
             required:
                 - id
                 - title
@@ -62069,6 +62467,16 @@ components:
                 - user_id
                 - user_type
                 - activity_count
+        TriggerAnalysisResponseBody:
+            type: object
+            properties:
+                projects_signaled:
+                    type: integer
+                    description: Number of projects whose analysis coordinator was woken.
+                    format: int64
+            description: How far the trigger reached.
+            required:
+                - projects_signaled
         TriggerDefinition:
             type: object
             properties:
@@ -63982,6 +64390,21 @@ components:
                 - per_skill_daily_cap
                 - org_daily_cap
                 - new_version_burst
+        UpsertWorkUnitsSettingsRequestBody:
+            type: object
+            properties:
+                work_units_daily_cap:
+                    type: integer
+                    description: Maximum work-units evaluations reserved across the organization each UTC day. 0 disables scoring as surely as the switch.
+                    format: int64
+                    minimum: 0
+                    maximum: 10000
+                work_units_enabled:
+                    type: boolean
+                    description: Whether work-units chat analysis is enabled.
+            required:
+                - work_units_enabled
+                - work_units_daily_cap
         UsageTiers:
             type: object
             properties:
@@ -64437,6 +64860,57 @@ components:
                 provider_type:
                     type: string
                     description: SSO provider type to shortcut into a specific setup flow (e.g. OktaSAML, GoogleSAML).
+        WorkUnitsTrendBucket:
+            type: object
+            properties:
+                cost_per_unit:
+                    type: number
+                    description: Cost per unit of work. Absent when the bucket has no positive work or no cost telemetry.
+                    format: double
+                scored_sessions:
+                    type: integer
+                    description: Number of chat sessions scored by the work-units analysis in this bucket.
+                    format: int64
+                timestamp:
+                    type: string
+                    description: Start of the UTC day this bucket covers.
+                    format: date-time
+                tokens_per_unit:
+                    type: number
+                    description: Tokens per unit of work. Absent when the bucket has no positive work or no token telemetry.
+                    format: double
+                total_cost:
+                    type: number
+                    description: Total cost in USD across the bucket's scored sessions.
+                    format: double
+                total_tokens:
+                    type: integer
+                    description: Total tokens across the bucket's scored sessions.
+                    format: int64
+                work_units:
+                    type: number
+                    description: Total work units delivered across the bucket's scored sessions.
+                    format: double
+            required:
+                - timestamp
+                - scored_sessions
+                - work_units
+                - total_cost
+                - total_tokens
+        WorkUnitsTrendResult:
+            type: object
+            properties:
+                buckets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkUnitsTrendBucket'
+                    description: One bucket per UTC day in the window, oldest first, zero-filled for days without scores.
+                scores_available:
+                    type: boolean
+                    description: Whether any work-units scores exist in the window. False for organizations without work-units analysis.
+            required:
+                - scores_available
+                - buckets
     securitySchemes:
         admin_auth_header_Authorization:
             type: apiKey
@@ -64536,6 +65010,8 @@ tags:
       description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
     - name: packages
       description: Manages packages in Gram.
+    - name: adminChatAnalysis
+      description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
     - name: plugins
       description: Manage distributable plugin bundles of MCP servers and hooks.
     - name: features

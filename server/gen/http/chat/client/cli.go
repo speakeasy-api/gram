@@ -238,6 +238,58 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	return v, nil
 }
 
+// BuildGetWorkUnitsTrendPayload builds the payload for the chat
+// getWorkUnitsTrend endpoint from CLI flags.
+func BuildGetWorkUnitsTrendPayload(chatGetWorkUnitsTrendFrom string, chatGetWorkUnitsTrendTo string, chatGetWorkUnitsTrendSessionToken string, chatGetWorkUnitsTrendProjectSlugInput string, chatGetWorkUnitsTrendChatSessionsToken string) (*chat.GetWorkUnitsTrendPayload, error) {
+	var err error
+	var from *string
+	{
+		if chatGetWorkUnitsTrendFrom != "" {
+			from = &chatGetWorkUnitsTrendFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if chatGetWorkUnitsTrendTo != "" {
+			to = &chatGetWorkUnitsTrendTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if chatGetWorkUnitsTrendSessionToken != "" {
+			sessionToken = &chatGetWorkUnitsTrendSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatGetWorkUnitsTrendProjectSlugInput != "" {
+			projectSlugInput = &chatGetWorkUnitsTrendProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatGetWorkUnitsTrendChatSessionsToken != "" {
+			chatSessionsToken = &chatGetWorkUnitsTrendChatSessionsToken
+		}
+	}
+	v := &chat.GetWorkUnitsTrendPayload{}
+	v.From = from
+	v.To = to
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
 func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {

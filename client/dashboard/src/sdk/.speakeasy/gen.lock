@@ -116,6 +116,7 @@ trackedFiles:
   src/funcs/chatCreditUsage.ts: {}
   src/funcs/chatDelete.ts: {}
   src/funcs/chatGenerateTitle.ts: {}
+  src/funcs/chatGetWorkUnitsTrend.ts: {}
   src/funcs/chatList.ts: {}
   src/funcs/chatListSources.ts: {}
   src/funcs/chatLoad.ts: {}
@@ -1156,6 +1157,8 @@ trackedFiles:
   src/models/components/workosdomainverificationintentoptions.ts: {}
   src/models/components/workosintentoptions.ts: {}
   src/models/components/workosssointentoptions.ts: {}
+  src/models/components/workunitstrendbucket.ts: {}
+  src/models/components/workunitstrendresult.ts: {}
   src/models/errors/apierror.ts: {}
   src/models/errors/gramerror.ts: {}
   src/models/errors/httpclienterrors.ts: {}
@@ -1370,6 +1373,7 @@ trackedFiles:
   src/models/operations/getusermetricssummary.ts: {}
   src/models/operations/getusersessionclient.ts: {}
   src/models/operations/getusersessionissuer.ts: {}
+  src/models/operations/getworkunitstrend.ts: {}
   src/models/operations/hooksnumberclaude.ts: {}
   src/models/operations/hooksnumbercodex.ts: {}
   src/models/operations/hooksnumbercursor.ts: {}
@@ -2246,6 +2250,8 @@ trackedFiles:
   src/react-query/verifyOnboardingHooksSetup.core.ts: {}
   src/react-query/verifyOnboardingHooksSetup.ts: {}
   src/react-query/verifyRemoteMcpURL.ts: {}
+  src/react-query/workUnitsTrend.core.ts: {}
+  src/react-query/workUnitsTrend.ts: {}
   src/sdk/access.ts: {}
   src/sdk/adminchatanalysis.ts: {}
   src/sdk/adminremotesessions.ts: {}
@@ -4633,6 +4639,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getWorkUnitsTrend:
+    speakeasy-default-get-work-units-trend:
+      responses:
+        "200":
+          application/json: {"buckets": [{"scored_sessions": 973242, "timestamp": "2025-12-08T05:48:19.477Z", "total_cost": 5947.57, "total_tokens": 656311, "work_units": 3127.17}], "scores_available": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   hooks#claude:
     speakeasy-default-hooks#claude:
       requestBody:

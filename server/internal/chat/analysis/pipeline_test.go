@@ -264,7 +264,7 @@ func TestPublish_EmitsWorkUnitsScoreEvent(t *testing.T) {
 	fixture.enableJudge(t, "work_units", 10)
 
 	chatID := fixture.seedChat(t, 3, time.Hour)
-	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
 	require.NoError(t, err)
 	reserved, _, err := Reserve(ctx, fixture.db, roster, fixture.projectID, PendingCursor{}, MaxReservedClaimBatch)
 	require.NoError(t, err)
@@ -316,7 +316,7 @@ func TestPublish_SkipsScoreEventWithoutSessionFacts(t *testing.T) {
 	fixture.enableJudge(t, "work_units", 10)
 
 	fixture.seedChat(t, 3, time.Hour)
-	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, ChatsEnqueueSource, nil, MaxEnqueuePageSize)
+	_, err := EnqueuePage(ctx, fixture.db, roster, fixture.projectID, EnqueueCursor{}, MaxEnqueuePageSize)
 	require.NoError(t, err)
 	reserved, _, err := Reserve(ctx, fixture.db, roster, fixture.projectID, PendingCursor{}, MaxReservedClaimBatch)
 	require.NoError(t, err)
