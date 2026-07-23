@@ -12,7 +12,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -46,7 +45,6 @@ func TestMain(m *testing.M) {
 type fixture struct {
 	conn        *pgxpool.Pool
 	redisClient *redis.Client
-	accessStore accesscontrol.Store
 	client      *shadowmcp.Client
 	orgID       string
 	projectID   uuid.UUID
@@ -63,8 +61,7 @@ func newFixture(t *testing.T) *fixture {
 
 	logger := testenv.NewLogger(t)
 	cacheImpl := cache.NewRedisCacheAdapter(redisClient)
-	accessStore := accesscontrol.NewRedisStore(cacheImpl, accesscontrol.AlphaTTL)
-	client := shadowmcp.NewClient(logger, conn, cacheImpl, accessStore, nil)
+	client := shadowmcp.NewClient(logger, conn, cacheImpl, nil)
 
 	orgID := "test-org-" + uuid.NewString()[:8]
 	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
@@ -86,7 +83,6 @@ func newFixture(t *testing.T) *fixture {
 	return &fixture{
 		conn:        conn,
 		redisClient: redisClient,
-		accessStore: accessStore,
 		client:      client,
 		orgID:       orgID,
 		projectID:   project.ID,

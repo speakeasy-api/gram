@@ -1,4 +1,5 @@
 import { CommandGroup, CommandItem } from "@/components/ui/command";
+import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
@@ -8,9 +9,9 @@ import { useLatestDeploymentSuspense } from "@gram/client/react-query/latestDepl
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import { useListToolsetsSuspense } from "@gram/client/react-query/listToolsets.js";
 import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-query/riskListCustomDetectionRules.js";
+import { useRiskListPolicyBypassRequestsSuspense } from "@gram/client/react-query/riskListPolicyBypassRequests.js";
 import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
 import { usePluginsSuspense } from "@gram/client/react-query/plugins";
-import { useShadowMCPApprovalRequestsSuspense } from "@gram/client/react-query/shadowMCPApprovalRequests.js";
 import { Icon, type IconName } from "@speakeasy-api/moonshine";
 import { Suspense, useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router";
@@ -321,8 +322,10 @@ function DetectionRulesGroup({ onNavigate }: GroupProps) {
 function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const { data } = useShadowMCPApprovalRequestsSuspense({
+  const { projectSlug = "" } = useSlugs();
+  const { data } = useRiskListPolicyBypassRequestsSuspense({
     status: "requested",
+    gramProject: projectSlug,
   });
   const requests = data?.requests ?? [];
   if (!requests.length) return null;
@@ -330,10 +333,10 @@ function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
     <CommandGroup heading="Approval Requests">
       {requests.map((request) => {
         const label =
-          request.observedName ??
-          request.toolName ??
-          request.requesterDisplayName ??
-          request.observedServerIdentity ??
+          request.targetLabel ??
+          request.targetKey ??
+          request.requesterEmail ??
+          request.requesterUserId ??
           request.id;
         return (
           <ResultItem

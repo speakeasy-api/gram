@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -47,6 +49,46 @@ const (
 	shadowMCPInventoryDecisionAllow = "allow"
 	shadowMCPInventoryDecisionDeny  = "deny"
 )
+
+func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	return ac, nil
+}
+
+func (s *Service) requireProjectInOrganization(ctx context.Context, organizationID string, projectID uuid.UUID) error {
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, nil, "project not found").LogError(ctx, s.logger)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "get project").LogError(ctx, s.logger)
+	case project.OrganizationID != organizationID:
+		return oops.E(oops.CodeNotFound, nil, "project not found").LogError(ctx, s.logger)
+	default:
+		return nil
+	}
+}
+
+func formatTimePtrValue(ts *time.Time) *string {
+	if ts == nil || ts.IsZero() {
+		return nil
+	}
+	value := ts.UTC().Format(time.RFC3339)
+	return &value
+}
+
+func formatTimeValue(ts time.Time) string {
+	if ts.IsZero() {
+		return time.Time{}.UTC().Format(time.RFC3339)
+	}
+	return ts.UTC().Format(time.RFC3339)
+}
 
 func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListShadowMCPInventoryPayload) (*gen.ListShadowMCPInventoryResult, error) {
 	ac, err := s.requireOrgAdmin(ctx)

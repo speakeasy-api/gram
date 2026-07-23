@@ -18,7 +18,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -68,7 +67,6 @@ type testInstance struct {
 	chConn          clickhouse.Conn
 	redisClient     *redis.Client
 	spendGateCache  cache.Cache
-	accessStore     accesscontrol.Store
 	sessionManager  *sessions.Manager
 	assetStorage    assets.BlobStore
 	efficacySignals *recordingEfficacySignaler
@@ -179,13 +177,12 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetStorage)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
-	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	serverURL, err := url.Parse("https://localhost:8080")
 	require.NoError(t, err)
 	efficacySignals := &recordingEfficacySignaler{mu: sync.Mutex{}, err: nil, signals: nil}
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore, serverURL)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL)
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	spendCelEngine, err := spendcelenv.New()
 	require.NoError(t, err)
@@ -222,47 +219,10 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		chConn:          chConn,
 		redisClient:     redisClient,
 		spendGateCache:  spendGateCache,
-		accessStore:     accessStore,
 		sessionManager:  sessionManager,
 		assetStorage:    assetStorage,
 		efficacySignals: efficacySignals,
 	}
-}
-
-func createHookAccessRule(t *testing.T, ctx context.Context, ti *testInstance, projectID string, accessScope string, disposition string, matchKind string, matchValue string, displayName string) accesscontrol.AccessRule {
-	t.Helper()
-
-	now := time.Now().UTC()
-	rule, err := ti.accessStore.CreateRule(ctx, accesscontrol.AccessRule{
-		ID:             uuid.NewString(),
-		OrganizationID: authOrganizationID(t, ctx),
-		ProjectID:      projectID,
-		AccessScope:    accessScope,
-		ResourceType:   accesscontrol.ResourceTypeShadowMCP,
-		Disposition:    disposition,
-		MatchKind:      matchKind,
-		MatchValue:     matchValue,
-		DisplayName:    displayName,
-		ObservedSummary: accesscontrol.ObservedSummary{
-			Name:           nil,
-			FullURL:        nil,
-			URLHost:        nil,
-			ServerIdentity: nil,
-			ToolName:       nil,
-			ToolCall:       nil,
-			BlockReason:    nil,
-			RiskPolicyID:   nil,
-			RiskResultID:   nil,
-		},
-		SourceRequestID: "",
-		CreatedBy:       "",
-		UpdatedBy:       "",
-		Reason:          "",
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	})
-	require.NoError(t, err)
-	return rule
 }
 
 func authOrganizationID(t *testing.T, ctx context.Context) string {
