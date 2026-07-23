@@ -8,10 +8,7 @@ import (
 )
 
 const (
-	// SourceGitleaks is the policy source value for secret scanning. Its default
-	// ruleset is extended with AWS secret-access-key and session-token rules
-	// (see the gitleaks package), so all three AWS credential flavors surface
-	// under this one source.
+	// SourceGitleaks is the policy source value for secret scanning.
 	SourceGitleaks = gitleaks.Source
 	// SourceCLIDestructive is the policy source value that flags tool calls
 	// whose arguments contain a curated destructive CLI command pattern

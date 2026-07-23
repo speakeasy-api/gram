@@ -1430,11 +1430,9 @@ func RedactMatchAll(match string, orgID string) string {
 // a secret:
 //   - shadow_mcp / account_identity: an MCP server URL or account email IS the
 //     report.
-//   - an AWS access key id (the gitleaks aws-access-token rule): the AKIA/ASIA
-//     prefix identifies the key type (long-lived vs temporary) and is useful to
-//     see. AWS itself treats the id as non-sensitive (it appears in CloudTrail).
-//     The paired secret access key and session token are NOT passed through —
-//     they fall to RedactMatchAll like any other secret.
+//   - an AWS access key id (the gitleaks aws-access-token rule): an identifier,
+//     non-sensitive (AWS logs it in CloudTrail). Its paired secret access key
+//     and session token still redact like any other secret.
 func redactMatch(source, ruleID string, match *string, orgID string) string {
 	if match == nil || *match == "" {
 		return "<redacted len=0>"
