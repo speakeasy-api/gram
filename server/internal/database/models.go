@@ -1837,15 +1837,15 @@ type SpendRule struct {
 	Version        int64
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ArchivedAt     pgtype.Timestamptz
+	Archived       bool
+	SupersededBy   uuid.NullUUID
 }
 
 type SpendRuleEvent struct {
 	ID             uuid.UUID
 	OrganizationID string
 	SpendRuleID    uuid.UUID
-	RuleVersion    int64
 	RuleUrn        string
 	EventType      string
 	UserID         pgtype.Text
@@ -1855,20 +1855,6 @@ type SpendRuleEvent struct {
 	LimitUsd       float64
 	WindowStart    pgtype.Timestamptz
 	WindowEnd      pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-}
-
-type SpendRuleVersion struct {
-	ID             uuid.UUID
-	OrganizationID string
-	SpendRuleID    uuid.UUID
-	Version        int64
-	TargetExpr     string
-	RuleExpr       string
-	LimitUsd       float64
-	WindowKind     string
-	WarnAtPct      int32
-	Action         string
 	CreatedAt      pgtype.Timestamptz
 }
 
