@@ -1151,6 +1151,12 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     request_id String DEFAULT '' COMMENT 'Internal request ID that produced the finding, when set.' CODEC(ZSTD),
     chat_message_id String DEFAULT '' COMMENT 'Chat message the finding was detected in.' CODEC(ZSTD),
 
+    -- Denormalized attribution, resolved from Postgres at ingest so
+    -- session-level and per-user rollups never need a cross-store join.
+    chat_id String DEFAULT '' COMMENT 'Denormalized chats.id of the chat the finding was detected in. Empty when unresolved.' CODEC(ZSTD),
+    user_id String DEFAULT '' COMMENT 'Resolved internal user id: chat_messages.user_id with fallback to chats.user_id. Empty when unresolved.' CODEC(ZSTD),
+    external_user_id String DEFAULT '' COMMENT 'Resolved external user id: chat_messages.external_user_id with fallback to chats.external_user_id. Empty when unresolved.' CODEC(ZSTD),
+
     -- Owning policy
     risk_policy_id String DEFAULT '' COMMENT 'Risk policy the message was scanned against.' CODEC(ZSTD),
     risk_policy_version Int64 DEFAULT 0 COMMENT 'Version of the risk policy at scan time.',
@@ -1160,6 +1166,7 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     description String DEFAULT '' COMMENT 'Human-readable description of the rule that fired.' CODEC(ZSTD),
     source LowCardinality(String) COMMENT 'Detection source: gitleaks | presidio | shadow_mcp | prompt_injection | llm_judge | account_identity.',
     confidence Float64 DEFAULT 0 COMMENT 'Detection confidence in the range 0.0 to 1.0.',
+    category LowCardinality(String) DEFAULT '' COMMENT 'Risk category derived from rule_id and source at ingest, e.g. pii or secrets. Empty when the rule maps to no category.',
     tags Array(LowCardinality(String)) COMMENT 'Category tags for the finding, e.g. [pii].',
     start_pos Int32 DEFAULT 0 COMMENT 'Byte offset of the match start within the scanned field.',
     end_pos Int32 DEFAULT 0 COMMENT 'Byte offset of the match end within the scanned field.',
@@ -1180,7 +1187,8 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- it is recorded here rather than dropped, so excluded findings remain
     -- auditable and can be filtered in or out at read time.
     excluded_at Nullable(DateTime64(9)) COMMENT 'Time the finding was suppressed by an exclusion. Null when the finding is not excluded.' CODEC(DoubleDelta, ZSTD),
-    exclusion_id Nullable(UUID) COMMENT 'Id of the risk_exclusions row that suppressed the finding. Null when the finding is not excluded.' CODEC(ZSTD)
+    exclusion_id Nullable(UUID) COMMENT 'Id of the risk_exclusions row that suppressed the finding. Null when the finding is not excluded.' CODEC(ZSTD),
+    false_positive_at Nullable(DateTime64(9)) COMMENT 'Time the finding was marked a false positive, mirrored from Postgres after the fact. Null when the finding is not marked.' CODEC(DoubleDelta, ZSTD)
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)
@@ -1191,6 +1199,7 @@ COMMENT 'Risk findings event log: one row per detected secret or sensitive-data 
 -- Bloom filter indices for point lookups (organization_id and project_id are
 -- already in the ORDER BY so no bloom filters needed for them).
 CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_message_id ON risk_findings (chat_message_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_risk_findings_chat_id ON risk_findings (chat_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (risk_policy_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;
 
