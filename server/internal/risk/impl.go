@@ -512,28 +512,6 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		return &gen.ListRiskPoliciesResult{Policies: []*types.RiskPolicy{}}, nil
 	}
 
-	// Enrichment is resolved once for the whole set rather than per policy (the
-	// old N+1). totalMessages is project-wide and identical for every policy;
-	// analyzed counts and audience grants are batched into one query each and
-	// looked up per row below.
-	totalMessages, err := s.repo.CountTotalMessages(ctx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true})
-	if err != nil {
-		totalMessages = 0
-	}
-
-	// Analyzed counts are optional status enrichment, so a failure degrades to
-	// zero (pending = total) rather than failing the whole list — matching the
-	// tolerance of the single-policy CountAnalyzedMessages path.
-	analyzedByPolicy := map[analyzedMessagesKey]int64{}
-	if analyzedRows, err := s.repo.CountAnalyzedMessagesByProject(ctx, *authCtx.ProjectID); err != nil {
-		s.logger.WarnContext(ctx, "count analyzed messages for risk policy list failed", attr.SlogError(err))
-	} else {
-		analyzedByPolicy = make(map[analyzedMessagesKey]int64, len(analyzedRows))
-		for _, r := range analyzedRows {
-			analyzedByPolicy[analyzedMessagesKey{policyID: r.RiskPolicyID, version: r.RiskPolicyVersion}] = r.AnalyzedMessages
-		}
-	}
-
 	policyIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
 		policyIDs = append(policyIDs, row.ID.String())
@@ -543,20 +521,16 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audiences").LogError(ctx, s.logger)
 	}
 
+	// Message counts are intentionally omitted here: no list consumer reads
+	// them, and computing them re-aggregates every risk_results row for the
+	// project on each call. Progress lives on the single-policy paths
+	// (riskPoliciesStatus, getRiskPolicy).
 	policies := make([]*types.RiskPolicy, 0, len(rows))
 	for _, row := range rows {
-		analyzedMessages := analyzedByPolicy[analyzedMessagesKey{policyID: row.ID, version: row.Version}]
-		policies = append(policies, buildRiskPolicyType(row, totalMessages, analyzedMessages, audienceByPolicy[row.ID.String()]))
+		policies = append(policies, buildRiskPolicyType(row, nil, nil, audienceByPolicy[row.ID.String()]))
 	}
 
 	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
-}
-
-// analyzedMessagesKey keys the batched analyzed-message counts by the
-// (policy, version) pair they were aggregated on.
-type analyzedMessagesKey struct {
-	policyID uuid.UUID
-	version  int64
 }
 
 // ListBuiltinExclusions returns the built-in exclusion library grouped by
@@ -3293,15 +3267,17 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		return nil, fmt.Errorf("load risk policy audience: %w", err)
 	}
 
-	return buildRiskPolicyType(row, totalMessages, analyzedMessages, audiencePrincipalURNs), nil
+	return buildRiskPolicyType(row, &totalMessages, &analyzedMessages, audiencePrincipalURNs), nil
 }
 
 // buildRiskPolicyType assembles the API type from a policy row and its already
-// resolved message counts and audience. The enrichment queries are the caller's
-// responsibility so batched paths (ListRiskPolicies) can resolve them once for
-// the whole set instead of per policy.
-func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages int64, audiencePrincipalURNs []string) *types.RiskPolicy {
-	pendingMessages := max(totalMessages-analyzedMessages, 0)
+// resolved message counts and audience. Counts are optional enrichment: nil
+// (the list path) omits them from the response rather than reporting zeros.
+func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages *int64, audiencePrincipalURNs []string) *types.RiskPolicy {
+	var pendingMessages *int64
+	if totalMessages != nil && analyzedMessages != nil {
+		pendingMessages = new(max(*totalMessages-*analyzedMessages, 0))
+	}
 
 	return &types.RiskPolicy{
 		ID:                     row.ID.String(),
@@ -3368,8 +3344,8 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		Version:                row.Version,
 		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:        -1,
-		TotalMessages:          -1,
+		PendingMessages:        nil,
+		TotalMessages:          nil,
 	}
 }
 
