@@ -62,6 +62,26 @@ var workUnitsFlags = []string{"harm", "unverified_claims", "digest_insufficient"
 // workUnitsBands is the closed set of scoring bands the prompt defines.
 var workUnitsBands = []string{"A", "B", "C", "D", "E", "F"}
 
+// workUnitsBandRanges is each band's base-unit range from the prompt's band
+// table. Harm entries carry a negated band value, so magnitude is what the
+// range bounds.
+var workUnitsBandRanges = map[string][2]float64{
+	"A": {1, 2},
+	"B": {3, 7},
+	"C": {8, 15},
+	"D": {16, 30},
+	"E": {31, 60},
+	"F": {61, 100},
+}
+
+// workUnitsModifiers and workUnitsCompletions are the snap sets Steps 3 and 4
+// of the prompt allow. The literals 0.3 and 0.7 are the same float64 values
+// JSON decoding produces for those tokens, so exact comparison is sound.
+var (
+	workUnitsModifiers   = []float64{0.5, 0.75, 1.0, 1.25, 1.5}
+	workUnitsCompletions = []float64{0.0, 0.3, 0.5, 0.7, 1.0}
+)
+
 // WorkUnitsTask is one user-requested task the judge identified and scored.
 type WorkUnitsTask struct {
 	ID              int     `json:"id"`
@@ -204,8 +224,9 @@ func ParseWorkUnitsVerdict(raw string) (WorkUnitsVerdict, error) {
 // as the tasks' sum, flags restricted to the allowed set, and free text
 // capped. The structured-output schema already requires every field, so the
 // shape checks here are defense in depth against a model that returned empty
-// or null anyway. A non-finite number is the one unfixable case — clamping
-// NaN would invent a score the judge never gave — so it is reported as a
+// or null anyway. A non-finite number, a modifier or completion outside its
+// snap set, or a base outside the task's band is unfixable — repairing any of
+// them would invent a score the judge never gave — so each is reported as a
 // model failure.
 func (v WorkUnitsVerdict) Normalize() (WorkUnitsVerdict, error) {
 	if v.Tasks == nil {
@@ -222,6 +243,19 @@ func (v WorkUnitsVerdict) Normalize() (WorkUnitsVerdict, error) {
 			if math.IsNaN(value) || math.IsInf(value, 0) {
 				return WorkUnitsVerdict{}, fmt.Errorf("work units verdict number is not finite: %w", ErrModelFailure)
 			}
+		}
+		// Recomputing units from the factors only helps if the factors themselves
+		// sit inside the contract: an out-of-set modifier or completion, or a base
+		// outside the task's band, would let a wayward answer inflate or invert
+		// the score through the arithmetic.
+		if !slices.Contains(workUnitsModifiers, task.Modifier) {
+			return WorkUnitsVerdict{}, fmt.Errorf("work units verdict modifier %v is not an allowed value: %w", task.Modifier, ErrModelFailure)
+		}
+		if !slices.Contains(workUnitsCompletions, task.Completion) {
+			return WorkUnitsVerdict{}, fmt.Errorf("work units verdict completion %v is not an allowed value: %w", task.Completion, ErrModelFailure)
+		}
+		if bounds := workUnitsBandRanges[task.Band]; math.Abs(task.BaseUnits) < bounds[0] || math.Abs(task.BaseUnits) > bounds[1] {
+			return WorkUnitsVerdict{}, fmt.Errorf("work units verdict base units %v are outside band %s: %w", task.BaseUnits, task.Band, ErrModelFailure)
 		}
 
 		task.Units = math.Round(max(minTaskUnits, min(maxTaskUnits, task.BaseUnits*task.Modifier*task.Completion)))

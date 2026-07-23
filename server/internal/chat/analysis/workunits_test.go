@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -67,6 +68,43 @@ func TestParseWorkUnitsVerdict_RecomputesUnitsFromFactors(t *testing.T) {
 	require.NoError(t, err)
 	require.InDelta(t, 10, verdict.Tasks[0].Units, 0.0001)
 	require.InDelta(t, 10, verdict.SessionUnits, 0.0001)
+}
+
+func TestParseWorkUnitsVerdict_OutOfContractFactorsAreModelFailure(t *testing.T) {
+	t.Parallel()
+
+	// Each factor sits outside its snap set or band range; recomputation must
+	// refuse the arithmetic rather than amplify it (band A base 1 × modifier 100
+	// would store 100).
+	task := `{"id": 1, "request": "lookup", "band": "A", "base_units": %s, "modifier": %s, "completion": %s, "units": 1, "nearest_exemplar": "E1", "rationale": "r"}`
+	for _, factors := range [][3]string{
+		{"1", "100", "1.0"},  // modifier outside the snap set
+		{"1", "1.0", "0.9"},  // completion outside the snap set
+		{"50", "1.0", "1.0"}, // base units outside band A's 1-2 range
+		{"0", "1.0", "1.0"},  // zero base is below every band
+	} {
+		raw := fmt.Sprintf(`{"tasks": [`+task+`], "session_units": 1, "flags": []}`,
+			factors[0], factors[1], factors[2])
+		_, err := ParseWorkUnitsVerdict(raw)
+		require.ErrorIs(t, err, ErrModelFailure, "factors %v", factors)
+	}
+}
+
+func TestParseWorkUnitsVerdict_NegatedHarmBaseStaysInBand(t *testing.T) {
+	t.Parallel()
+
+	// A harm entry negates its band value; the magnitude still bounds it.
+	raw := `{
+		"tasks": [
+			{"id": 1, "request": "harmful incident", "band": "C", "base_units": -10, "modifier": 1.0, "completion": 1.0, "units": -10, "nearest_exemplar": "E37", "rationale": "harm"}
+		],
+		"session_units": -10,
+		"flags": ["harm"]
+	}`
+
+	verdict, err := ParseWorkUnitsVerdict(raw)
+	require.NoError(t, err)
+	require.InDelta(t, -10, verdict.Tasks[0].Units, 0.0001)
 }
 
 func TestParseWorkUnitsVerdict_EmptyObjectIsModelFailure(t *testing.T) {
