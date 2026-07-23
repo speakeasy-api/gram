@@ -112,7 +112,7 @@ export function OrgSidebar({
     orgRoutes.remoteIdentityProviders,
   ].some((r) => r.active);
 
-  const dataActive = [orgRoutes.data, orgRoutes.dataRedactions].some(
+  const dataActive = [orgRoutes.data, orgRoutes.dataConfiguration].some(
     (r) => r.active,
   );
 
@@ -140,7 +140,7 @@ export function OrgSidebar({
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
     orgRoutes.data,
-    orgRoutes.dataRedactions,
+    orgRoutes.dataConfiguration,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
   const activeItem = activeRoute?.title;
@@ -273,8 +273,8 @@ export function OrgSidebar({
                   scope={["org:read", "org:admin"]}
                 />
                 <ScopeGatedNavItem
-                  item={orgRoutes.dataRedactions}
-                  scope="org:admin"
+                  item={orgRoutes.dataConfiguration}
+                  scope={["org:read", "org:admin"]}
                 />
               </CollapsibleNavGroup>
             </SidebarMenu>

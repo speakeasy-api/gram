@@ -455,7 +455,9 @@ export function ProjectDashboard(): JSX.Element {
       <Page.Section.Body>
         <div className="space-y-8">
           {showDisabledBanner && (
-            <LoggingDisabledBanner settingsHref={orgRoutes.logs.href()} />
+            <LoggingDisabledBanner
+              settingsHref={orgRoutes.dataConfiguration.href()}
+            />
           )}
 
           {logsEnabled && (

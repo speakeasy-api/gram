@@ -683,7 +683,7 @@ function LogsToolsContent({
             <div className="flex items-center gap-2">
               <HooksSetupButton />
               <Button variant="outline" size="sm" asChild>
-                <Link to={orgRoutes.logs.href()}>
+                <Link to={orgRoutes.dataConfiguration.href()}>
                   <Settings className="h-4 w-4" />
                   Configure settings
                 </Link>

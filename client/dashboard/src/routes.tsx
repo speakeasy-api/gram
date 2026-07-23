@@ -32,7 +32,7 @@ import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import { LogsRoot } from "./pages/logs/Logs";
 import { DataRoot } from "./pages/data/Data";
-import { RedactionRules } from "./pages/data/RedactionRules";
+import { DataConfiguration } from "./pages/data/DataConfiguration";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
@@ -873,7 +873,7 @@ const ORG_ROUTE_STRUCTURE = {
     component: OrgDomains,
   },
   logs: {
-    title: "Logging & Telemetry",
+    title: "Hook Behavior",
     url: "logs",
     icon: "file-text",
     component: OrgLogs,
@@ -915,12 +915,11 @@ const ORG_ROUTE_STRUCTURE = {
     stage: "preview",
     component: DataRoot,
   },
-  dataRedactions: {
-    title: "Redaction Rules",
-    url: "data/redaction-rules",
-    icon: "eye-off",
-    stage: "preview",
-    component: RedactionRules,
+  dataConfiguration: {
+    title: "Configuration",
+    url: "data/configuration",
+    icon: "settings-2",
+    component: DataConfiguration,
   },
   remoteIdentityProviders: {
     title: "Remote Identity Providers",
