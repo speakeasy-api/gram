@@ -287,6 +287,43 @@ func (q *Queries) GetOrganizationSlugForHealthNotification(ctx context.Context, 
 	return slug, err
 }
 
+const listActivatedCustomDomainResources = `-- name: ListActivatedCustomDomainResources :many
+SELECT
+    domain,
+    provisioner_kind,
+    COALESCE(ingress_name, '')::text AS resource_name
+FROM custom_domains
+WHERE activated IS TRUE
+  AND ingress_name IS NOT NULL
+  AND deleted IS FALSE
+`
+
+type ListActivatedCustomDomainResourcesRow struct {
+	Domain          string
+	ProvisionerKind string
+	ResourceName    string
+}
+
+func (q *Queries) ListActivatedCustomDomainResources(ctx context.Context) ([]ListActivatedCustomDomainResourcesRow, error) {
+	rows, err := q.db.Query(ctx, listActivatedCustomDomainResources)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActivatedCustomDomainResourcesRow
+	for rows.Next() {
+		var i ListActivatedCustomDomainResourcesRow
+		if err := rows.Scan(&i.Domain, &i.ProvisionerKind, &i.ResourceName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActivatedCustomDomainsForHealthCheck = `-- name: ListActivatedCustomDomainsForHealthCheck :many
 SELECT id, organization_id
 FROM custom_domains
@@ -320,32 +357,6 @@ func (q *Queries) ListActivatedCustomDomainsForHealthCheck(ctx context.Context, 
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listActiveCustomDomainNames = `-- name: ListActiveCustomDomainNames :many
-SELECT domain
-FROM custom_domains
-WHERE deleted IS FALSE
-`
-
-func (q *Queries) ListActiveCustomDomainNames(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, listActiveCustomDomainNames)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var domain string
-		if err := rows.Scan(&domain); err != nil {
-			return nil, err
-		}
-		items = append(items, domain)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

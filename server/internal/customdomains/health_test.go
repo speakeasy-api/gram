@@ -89,6 +89,47 @@ func TestReconcileHealthState(t *testing.T) {
 	})
 }
 
+func TestReconcileHealthStateAnchorsUnhealthySinceWhenCheckFailedResolves(t *testing.T) {
+	t.Parallel()
+
+	firstCheck := time.Date(2026, time.July, 21, 9, 0, 0, 0, time.UTC)
+	secondCheck := firstCheck.Add(24 * time.Hour)
+
+	// check_failed episode resolving into a real issue starts the confirmed
+	// outage — UnhealthySince re-anchors to this check.
+	state := ReconcileHealthState(HealthState{
+		Status:              HealthStatusUnhealthy,
+		Issue:               HealthIssueCheckFailed,
+		CheckedAt:           &firstCheck,
+		UnhealthySince:      &firstCheck,
+		ConsecutiveFailures: 1,
+	}, HealthObservation{
+		Status: HealthStatusUnhealthy,
+		Issue:  HealthIssueDNSNotFound,
+	}, secondCheck)
+
+	require.Equal(t, HealthIssueDNSNotFound, state.Issue)
+	require.Equal(t, int32(2), state.ConsecutiveFailures)
+	require.Equal(t, &secondCheck, state.UnhealthySince)
+	require.True(t, IsRetryOfUnhealthyTransition(state, secondCheck),
+		"a retried commit of this transition must be recognizable")
+
+	// A continuing check_failed episode keeps its original start.
+	state = ReconcileHealthState(HealthState{
+		Status:              HealthStatusUnhealthy,
+		Issue:               HealthIssueCheckFailed,
+		CheckedAt:           &firstCheck,
+		UnhealthySince:      &firstCheck,
+		ConsecutiveFailures: 1,
+	}, HealthObservation{
+		Status: HealthStatusUnhealthy,
+		Issue:  HealthIssueCheckFailed,
+	}, secondCheck)
+
+	require.Equal(t, &firstCheck, state.UnhealthySince)
+	require.False(t, IsRetryOfUnhealthyTransition(state, secondCheck))
+}
+
 func TestReconcileHealthStateIgnoresOlderObservation(t *testing.T) {
 	t.Parallel()
 
@@ -145,4 +186,79 @@ func TestShouldNotifyUnhealthyTransitionCheckFailedExcluded(t *testing.T) {
 		HealthState{Status: HealthStatusHealthy},
 		HealthState{Status: HealthStatusUnhealthy, Issue: HealthIssueCheckFailed},
 	))
+}
+
+func TestShouldNotifyUnhealthyTransitionCheckFailedThenActionableIssueNotifies(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, ShouldNotifyUnhealthyTransition(
+		HealthState{Status: HealthStatusUnhealthy, Issue: HealthIssueCheckFailed},
+		HealthState{Status: HealthStatusUnhealthy, Issue: HealthIssueDNSNotFound},
+	))
+	// A repeated probe failure still stays quiet.
+	require.False(t, ShouldNotifyUnhealthyTransition(
+		HealthState{Status: HealthStatusUnhealthy, Issue: HealthIssueCheckFailed},
+		HealthState{Status: HealthStatusUnhealthy, Issue: HealthIssueCheckFailed},
+	))
+}
+
+func TestIsRetryOfUnhealthyTransition(t *testing.T) {
+	t.Parallel()
+
+	checkedAt := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
+	earlier := checkedAt.Add(-24 * time.Hour)
+
+	// The check at checkedAt flipped the domain unhealthy: retry re-emits.
+	require.True(t, IsRetryOfUnhealthyTransition(HealthState{
+		Status:         HealthStatusUnhealthy,
+		Issue:          HealthIssueDNSNotFound,
+		CheckedAt:      &checkedAt,
+		UnhealthySince: &checkedAt,
+	}, checkedAt))
+
+	// Long-running outage checked at checkedAt: transition predates this check.
+	require.False(t, IsRetryOfUnhealthyTransition(HealthState{
+		Status:         HealthStatusUnhealthy,
+		Issue:          HealthIssueDNSNotFound,
+		CheckedAt:      &checkedAt,
+		UnhealthySince: &earlier,
+	}, checkedAt))
+
+	// A different (newer) check: not a retry.
+	require.False(t, IsRetryOfUnhealthyTransition(HealthState{
+		Status:         HealthStatusUnhealthy,
+		Issue:          HealthIssueDNSNotFound,
+		CheckedAt:      &earlier,
+		UnhealthySince: &earlier,
+	}, checkedAt))
+
+	// Probe failures never notify, so retries of them re-emit nothing.
+	require.False(t, IsRetryOfUnhealthyTransition(HealthState{
+		Status:         HealthStatusUnhealthy,
+		Issue:          HealthIssueCheckFailed,
+		CheckedAt:      &checkedAt,
+		UnhealthySince: &checkedAt,
+	}, checkedAt))
+
+	// Healthy domains have nothing to re-emit.
+	require.False(t, IsRetryOfUnhealthyTransition(HealthState{
+		Status:    HealthStatusHealthy,
+		CheckedAt: &checkedAt,
+	}, checkedAt))
+}
+
+func TestHealthIssueMessageCertificateProblemsAreManagedByGram(t *testing.T) {
+	t.Parallel()
+
+	for _, issue := range []HealthIssue{
+		HealthIssueCertificateMissing,
+		HealthIssueCertificateNotReady,
+		HealthIssueCertificateExpired,
+		HealthIssueCertificateInvalid,
+	} {
+		require.Equal(t,
+			"There is a problem with the domain's TLS certificate. We're working to resolve it.",
+			HealthIssueMessage(issue),
+		)
+	}
 }

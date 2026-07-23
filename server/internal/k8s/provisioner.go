@@ -13,9 +13,7 @@ const (
 	ProvisionerKindGateway ProvisionerKind = "gateway"
 )
 
-// Labels stamped on every provisioned custom domain resource. The orphan
-// detection in ListManagedCustomDomainResources selects on the managed-by
-// pair, so all provisioners must apply these.
+// Orphan reconciliation relies on every provisioner applying these labels.
 const (
 	managedByLabelKey    = "app.kubernetes.io/managed-by"
 	managedByLabelValue  = "custom-domain-chart"

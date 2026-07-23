@@ -149,13 +149,16 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		return oops.E(oops.CodeUnexpected, err, "failed to find custom domain mapping for %s", domain.Domain).LogError(ctx, d.logger)
 	}
 	switch routingIssue {
-	case "":
 	case customdomains.HealthIssueDNSNotFound:
 		return newDNSNotFoundError(errors.New("custom domain DNS not found"), domain.Domain)
-	case customdomains.HealthIssueDNSTargetMismatch:
-		return oops.E(oops.CodeUnexpected, errors.New("custom domain is not pointing to expected target"), "custom domain %s is not pointing to %s", domain.Domain, d.expectedTargetCNAME).LogError(ctx, d.logger)
 	default:
-		return oops.E(oops.CodeUnexpected, fmt.Errorf("unsupported custom domain routing issue: %s", routingIssue), "failed to verify custom domain routing").LogError(ctx, d.logger)
+		// Routing shape is advisory at registration time: proxied/CDN domains
+		// and forwarding setups legitimately resolve elsewhere. Ownership is
+		// proven by the TXT record below.
+		if routingIssue != "" {
+			d.logger.InfoContext(ctx, "custom domain not resolving to expected target, continuing to ownership check",
+				attr.SlogURLDomain(domain.Domain), attr.SlogReason(string(routingIssue)))
+		}
 	}
 
 	txtName := "_gram." + domain.Domain

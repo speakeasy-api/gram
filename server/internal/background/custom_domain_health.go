@@ -23,6 +23,7 @@ const (
 	customDomainHealthSweepWorkflowID       = customDomainHealthScheduleID + "/scheduled"
 	customDomainHealthInterval              = 24 * time.Hour
 	customDomainHealthRunTimeout            = 30 * time.Minute
+	customDomainNotifyRunTimeout            = 15 * time.Minute
 )
 
 type CustomDomainHealthCheckParams struct {
@@ -43,6 +44,10 @@ func manualCustomDomainHealthCheckWorkflowID(customDomainID uuid.UUID) string {
 	return fmt.Sprintf("v1:custom-domain-health:manual:%s:%s", customDomainID.String(), uuid.NewString())
 }
 
+func customDomainNotifyWorkflowID(customDomainID uuid.UUID, checkedAt time.Time) string {
+	return fmt.Sprintf("v1:custom-domain-unhealthy-notify:%s:%d", customDomainID.String(), checkedAt.UnixMicro())
+}
+
 func (c *CustomDomainRegistrationClient) ExecuteCustomDomainHealthCheck(ctx context.Context, organizationID string, customDomainID uuid.UUID) (client.WorkflowRun, error) {
 	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                 manualCustomDomainHealthCheckWorkflowID(customDomainID),
@@ -52,7 +57,7 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainHealthCheck(ctx cont
 }
 
 func CustomDomainHealthCheckWorkflow(ctx workflow.Context, params CustomDomainHealthCheckParams) error {
-	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+	healthCheckCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    activities.CustomDomainHealthCheckMaxAttempts,
@@ -63,14 +68,49 @@ func CustomDomainHealthCheckWorkflow(ctx workflow.Context, params CustomDomainHe
 	})
 
 	var a *Activities
-	if err := workflow.ExecuteActivity(ctx, a.CheckCustomDomainHealth, activities.CheckCustomDomainHealthArgs{
+	checkedAt := workflow.Now(ctx).UTC().Truncate(time.Microsecond)
+	var notification activities.NotifyCustomDomainUnhealthyArgs
+	if err := workflow.ExecuteActivity(healthCheckCtx, a.CheckCustomDomainHealth, activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: params.CustomDomainID,
 		OrganizationID: params.OrganizationID,
-		// timestamptz keeps microseconds only; truncate so activity retries
-		// compare equal to the persisted checked-at value.
-		CheckedAt: workflow.Now(ctx).UTC().Truncate(time.Microsecond),
-	}).Get(ctx, nil); err != nil {
+		// Match PostgreSQL's microsecond timestamptz precision across activity retries.
+		CheckedAt: checkedAt,
+	}).Get(healthCheckCtx, &notification); err != nil {
 		return fmt.Errorf("check custom domain health: %w", err)
+	}
+	if notification.Issue == "" {
+		return nil
+	}
+
+	// Deliver the email in a detached child workflow so a slow or failing email
+	// provider can neither block callers waiting on this workflow (the manual
+	// dashboard recheck) nor burn this workflow's run timeout. Only the start is
+	// awaited; delivery retries run under the child's own timeout.
+	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+		WorkflowID:         customDomainNotifyWorkflowID(params.CustomDomainID, notification.CheckedAt),
+		WorkflowRunTimeout: customDomainNotifyRunTimeout,
+		ParentClosePolicy:  enums.PARENT_CLOSE_POLICY_ABANDON,
+	})
+	if err := workflow.ExecuteChildWorkflow(childCtx, CustomDomainUnhealthyNotifyWorkflow, notification).GetChildWorkflowExecution().Get(childCtx, nil); err != nil {
+		return fmt.Errorf("start custom domain unhealthy notification: %w", err)
+	}
+	return nil
+}
+
+func CustomDomainUnhealthyNotifyWorkflow(ctx workflow.Context, args activities.NotifyCustomDomainUnhealthyArgs) error {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts:    10,
+			InitialInterval:    5 * time.Second,
+			BackoffCoefficient: 2,
+			MaximumInterval:    30 * time.Second,
+		},
+	})
+
+	var a *Activities
+	if err := workflow.ExecuteActivity(ctx, a.NotifyCustomDomainUnhealthy, args).Get(ctx, nil); err != nil {
+		return fmt.Errorf("notify custom domain unhealthy: %w", err)
 	}
 	return nil
 }
@@ -118,8 +158,6 @@ func CustomDomainHealthSweepWorkflow(ctx workflow.Context, params CustomDomainHe
 		}
 
 		if len(targets) < int(customDomainHealthPageSize) {
-			// Final page: reconcile gram-managed Kubernetes resources against the
-			// custom_domains table so orphans fail the sweep run loudly.
 			if err := workflow.ExecuteActivity(ctx, a.FindOrphanCustomDomainResources).Get(ctx, nil); err != nil {
 				return fmt.Errorf("find orphan custom domain resources: %w", err)
 			}

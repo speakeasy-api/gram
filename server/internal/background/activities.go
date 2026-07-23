@@ -204,7 +204,7 @@ func NewActivities(
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
-		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, emailService, siteURL),
+		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, emailService, siteURL, guardianPolicy),
 		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
@@ -325,9 +325,18 @@ func (a *Activities) ListCustomDomainsForHealthCheck(ctx context.Context, input 
 	return targets, nil
 }
 
-func (a *Activities) CheckCustomDomainHealth(ctx context.Context, input activities.CheckCustomDomainHealthArgs) error {
-	if err := a.customDomainHealth.Check(ctx, input); err != nil {
-		return fmt.Errorf("check custom domain health: %w", err)
+func (a *Activities) CheckCustomDomainHealth(ctx context.Context, input activities.CheckCustomDomainHealthArgs) (activities.NotifyCustomDomainUnhealthyArgs, error) {
+	notification, err := a.customDomainHealth.Check(ctx, input)
+	if err != nil {
+		var noNotification activities.NotifyCustomDomainUnhealthyArgs
+		return noNotification, fmt.Errorf("check custom domain health: %w", err)
+	}
+	return notification, nil
+}
+
+func (a *Activities) NotifyCustomDomainUnhealthy(ctx context.Context, input activities.NotifyCustomDomainUnhealthyArgs) error {
+	if err := a.customDomainHealth.NotifyOrgAdmins(ctx, input); err != nil {
+		return fmt.Errorf("notify custom domain unhealthy: %w", err)
 	}
 	return nil
 }

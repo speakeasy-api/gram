@@ -203,14 +203,15 @@ func TestVerifyCustomDomain_ProhibitedDomain(t *testing.T) {
 	require.Contains(t, err.Error(), "prohibited")
 }
 
-func TestVerifyCustomDomain_CNAMEMismatch(t *testing.T) {
+func TestVerifyCustomDomain_CNAMEMismatchProceedsToOwnership(t *testing.T) {
 	t.Parallel()
 
 	const orgID = "org-cname-mismatch"
 	const domain = "cname-mismatch.example.com"
 	ctx, ti := newTestInstance(t, orgID, domain)
 
-	// Return a CNAME that doesn't match the expected target
+	// A CNAME pointing elsewhere is advisory (proxied/CDN setups do this);
+	// the TXT ownership record decides verification.
 	cfg := newPassingDNSResolverConfig(testTargetCNAME, domain, orgID)
 	cfg.LookupCNAMEFunc = func(context.Context, string) (string, error) { return "wrong.target.com.", nil }
 	ti.resolver = dns.NewMockResolver(cfg)
@@ -222,8 +223,7 @@ func TestVerifyCustomDomain_CNAMEMismatch(t *testing.T) {
 		Domain:    domain,
 		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not pointing to")
+	require.NoError(t, err)
 }
 
 func TestVerifyCustomDomain_TXTRecordMismatch(t *testing.T) {
@@ -280,9 +280,7 @@ func TestVerifyCustomDomain_CNAMEFailsButARecordExists(t *testing.T) {
 	const domain = "a-record.example.com"
 	ctx, ti := newTestInstance(t, orgID, domain)
 
-	// CNAME fails but the domain's A records intersect the expected target's
-	// (the mock resolves every host to 1.2.3.4) — routing passes and
-	// verification continues to the TXT check.
+	// Both hosts resolve to the same A record, so verification can fall back after CNAME fails.
 	ti.resolver = dns.NewMockResolver(dns.MockResolverConfig{
 		LookupCNAMEFunc: func(context.Context, string) (string, error) { return "", fmt.Errorf("no CNAME") },
 		LookupHostFunc:  func(context.Context, string) ([]string, error) { return []string{"1.2.3.4"}, nil },
@@ -359,8 +357,9 @@ func TestVerifyCustomDomain_CNAMEFailsAndARecordPointsElsewhere(t *testing.T) {
 		CreatedBy: urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
 	})
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not pointing to")
+	// A records pointing elsewhere (forwarding proxies) are advisory; the TXT
+	// ownership record decides verification.
+	require.NoError(t, err)
 }
 
 func TestVerifyCustomDomain_SpecialTestDomainAllowed(t *testing.T) {
