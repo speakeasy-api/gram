@@ -77,39 +77,66 @@ func NewPolicyBypassEvaluator(logger *slog.Logger, db repo.DBTX) *PolicyBypassEv
 }
 
 func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypassEvaluation) bool {
-	input.UserID = strings.TrimSpace(input.UserID)
-	if input.UserID == urn.AllUsersPrincipalID || strings.TrimSpace(input.PolicyID) == "" {
-		return false
-	}
-
-	grants, ok := e.loadGrants(ctx, input)
-	if !ok {
-		return false
-	}
-
-	check := authz.RiskPolicyBypassCheck(input.PolicyID, policyBypassCheckDimensions(input.Target))
-	return authz.GrantsSatisfy(grants, check)
+	return e.CanBypassBatch(ctx, []PolicyBypassEvaluation{input})[input]
 }
 
-func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, input PolicyBypassEvaluation) ([]authz.Grant, bool) {
-	principals, err := authz.ResolveUserPrincipals(ctx, e.db, input.OrganizationID, input.UserID)
+// CanBypassBatch evaluates inputs after loading principals and grants once per
+// organization/user pair. Results are keyed by their complete input so callers
+// do not have to correlate parallel slices. Missing entries deny by default.
+func (e *PolicyBypassEvaluator) CanBypassBatch(ctx context.Context, inputs []PolicyBypassEvaluation) map[PolicyBypassEvaluation]bool {
+	results := make(map[PolicyBypassEvaluation]bool, len(inputs))
+	grouped := make(map[policyBypassPrincipalKey][]PolicyBypassEvaluation)
+	for _, input := range inputs {
+		results[input] = false
+		userID := strings.TrimSpace(input.UserID)
+		if userID == urn.AllUsersPrincipalID || strings.TrimSpace(input.PolicyID) == "" {
+			continue
+		}
+		key := policyBypassPrincipalKey{
+			organizationID: input.OrganizationID,
+			userID:         userID,
+		}
+		grouped[key] = append(grouped[key], input)
+	}
+
+	for key, evaluations := range grouped {
+		grants, ok := e.loadGrants(ctx, key.organizationID, key.userID, evaluations[0].PolicyID)
+		if !ok {
+			continue
+		}
+		for _, input := range evaluations {
+			check := authz.RiskPolicyBypassCheck(input.PolicyID, policyBypassCheckDimensions(input.Target))
+			results[input] = authz.GrantsSatisfy(grants, check)
+		}
+	}
+
+	return results
+}
+
+type policyBypassPrincipalKey struct {
+	organizationID string
+	userID         string
+}
+
+func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, organizationID string, userID string, policyID string) ([]authz.Grant, bool) {
+	principals, err := authz.ResolveUserPrincipals(ctx, e.db, organizationID, userID)
 	if err != nil {
 		e.logger.WarnContext(ctx, "failed to resolve principals for risk policy bypass",
 			attr.SlogError(err),
-			attr.SlogOrganizationID(input.OrganizationID),
-			attr.SlogUserID(input.UserID),
-			attr.SlogRiskPolicyID(input.PolicyID),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogUserID(userID),
+			attr.SlogRiskPolicyID(policyID),
 		)
 		return nil, false
 	}
 
-	grants, err := authz.LoadGrants(ctx, e.db, input.OrganizationID, principals)
+	grants, err := authz.LoadGrants(ctx, e.db, organizationID, principals)
 	if err != nil {
 		e.logger.WarnContext(ctx, "failed to load risk policy bypass grants",
 			attr.SlogError(err),
-			attr.SlogOrganizationID(input.OrganizationID),
-			attr.SlogUserID(input.UserID),
-			attr.SlogRiskPolicyID(input.PolicyID),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogUserID(userID),
+			attr.SlogRiskPolicyID(policyID),
 		)
 		return nil, false
 	}

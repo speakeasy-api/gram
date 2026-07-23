@@ -20,13 +20,18 @@ import (
 // a URL was resolved should read ServerURL, which is set only for HTTP/SSE
 // servers whose URL the sender actually knew.
 //
+// ServerIdentity is the `gram.tool_call.source` recorded for the same call. It
+// remains separate from Match because URL-based bypass grants may strictly pin
+// both the resolved URL and the sender's server identity.
+//
 // HookSource is the reporting agent (claude, codex, cursor, ...), carried so
 // callers can attribute provenance coverage per sender rather than as a
 // single opaque rate.
 type MCPProvenance struct {
-	Match      string
-	ServerURL  string
-	HookSource string
+	Match          string
+	ServerURL      string
+	ServerIdentity string
+	HookSource     string
 }
 
 // LookupMCPProvenanceByToolCallID returns a map of tool_call_id → the MCP
@@ -81,6 +86,7 @@ func (q *Queries) LookupMCPProvenanceByToolCallID(ctx context.Context, projectID
 		SELECT trace_id,
 		       max(toString(attributes.gram.mcp.match)) AS match,
 		       max(toString(attributes.gram.mcp.server_url)) AS server_url,
+		       max(toString(attributes.gram.tool_call.source)) AS server_identity,
 		       max(hook_source) AS hook_source
 		FROM telemetry_logs
 		WHERE gram_project_id = ?
@@ -102,8 +108,8 @@ func (q *Queries) LookupMCPProvenanceByToolCallID(ctx context.Context, projectID
 
 	out := make(map[string]MCPProvenance, len(traceIDs))
 	for rows.Next() {
-		var traceID, match, serverURL, hookSource string
-		if err := rows.Scan(&traceID, &match, &serverURL, &hookSource); err != nil {
+		var traceID, match, serverURL, serverIdentity, hookSource string
+		if err := rows.Scan(&traceID, &match, &serverURL, &serverIdentity, &hookSource); err != nil {
 			return nil, fmt.Errorf("scan mcp provenance row: %w", err)
 		}
 		toolCallID, ok := traceToToolCallID[traceID]
@@ -112,9 +118,10 @@ func (q *Queries) LookupMCPProvenanceByToolCallID(ctx context.Context, projectID
 		}
 		// One row per trace: the GROUP BY already collapsed siblings.
 		out[toolCallID] = MCPProvenance{
-			Match:      match,
-			ServerURL:  serverURL,
-			HookSource: hookSource,
+			Match:          match,
+			ServerURL:      serverURL,
+			ServerIdentity: serverIdentity,
+			HookSource:     hookSource,
 		}
 	}
 	if err := rows.Err(); err != nil {

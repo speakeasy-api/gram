@@ -80,7 +80,7 @@ func NewAnalyzeBatch(
 	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
-	shadowMCPBypass ShadowMCPBypassChecker,
+	shadowMCPBypass shadowmcpscan.BypassChecker,
 ) (*AnalyzeBatch, error) {
 	logger = logger.With(attr.SlogComponent("risk-analysis-dispatcher"))
 

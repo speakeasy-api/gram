@@ -94,35 +94,27 @@ func (f *fakeCoverage) RecordShadowMCPResolution(_ context.Context, _ string, ho
 	f.got = append(f.got, recordedResolution{hookSource: hookSource, resolution: resolution})
 }
 
-type bypassCheck struct {
-	organizationID string
-	userID         string
-	policyID       uuid.UUID
-	evidence       shadowmcp.AccessEvidence
-	toolName       string
-}
-
 type fakeBypassChecker struct {
-	allowed bool
-	checks  []bypassCheck
+	allowed  bool
+	policyID uuid.UUID
+	requests []BypassRequest
+	calls    int
 }
 
 func (f *fakeBypassChecker) CanBypassShadowMCP(
 	_ context.Context,
-	organizationID string,
-	userID string,
+	_ string,
 	policyID uuid.UUID,
-	evidence shadowmcp.AccessEvidence,
-	toolName string,
-) bool {
-	f.checks = append(f.checks, bypassCheck{
-		organizationID: organizationID,
-		userID:         userID,
-		policyID:       policyID,
-		evidence:       evidence,
-		toolName:       toolName,
-	})
-	return f.allowed
+	requests []BypassRequest,
+) map[BypassRequest]bool {
+	f.calls++
+	f.policyID = policyID
+	f.requests = append(f.requests, requests...)
+	results := make(map[BypassRequest]bool, len(requests))
+	for _, request := range requests {
+		results[request] = f.allowed
+	}
+	return results
 }
 
 func gramHosted() *fakeHosted {
@@ -137,7 +129,7 @@ func TestScanner_HostedProvenanceIsCleanWithoutSignature(t *testing.T) {
 
 	validator := &fakeValidator{denied: map[string]bool{"delete": true}, orgIDs: nil}
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://app.getgram.ai/x/mcp/abc", ServerURL: "https://app.getgram.ai/x/mcp/abc", HookSource: "claude"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://app.getgram.ai/x/mcp/abc", ServerURL: "https://app.getgram.ai/x/mcp/abc", ServerIdentity: "", HookSource: "claude"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -146,8 +138,8 @@ func TestScanner_HostedProvenanceIsCleanWithoutSignature(t *testing.T) {
 	coverage := &fakeCoverage{got: nil}
 	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Len(t, out, 1)
@@ -161,7 +153,7 @@ func TestScanner_ThirdPartyURLProvenanceIsFlagged(t *testing.T) {
 
 	validator := &fakeValidator{denied: map[string]bool{}, orgIDs: nil}
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://evil.example/mcp", ServerURL: "https://evil.example/mcp", HookSource: "claude"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://evil.example/mcp", ServerURL: "https://evil.example/mcp", ServerIdentity: "", HookSource: "claude"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -170,8 +162,8 @@ func TestScanner_ThirdPartyURLProvenanceIsFlagged(t *testing.T) {
 	coverage := &fakeCoverage{got: nil}
 	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Len(t, out[0], 1)
@@ -191,31 +183,99 @@ func TestScanner_URLBypassGrantSuppressesFinding(t *testing.T) {
 	policyID := uuid.New()
 	serverURL := "https://third-party.example/mcp"
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: serverURL, ServerURL: serverURL, HookSource: "cursor"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: serverURL, ServerURL: serverURL, ServerIdentity: "", HookSource: "cursor"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
 		callCount: 0,
 	}
-	bypass := &fakeBypassChecker{allowed: true, checks: nil}
+	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
 	s := NewScannerWithBypass(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, bypass)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), policyID, []string{"user-1"}, [][]ToolCall{
-		{{ID: "call-1", Name: "MCP:delete_row", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), policyID, []Message{
+		{UserID: "user-1", ToolCalls: []ToolCall{{ID: "call-1", Name: "MCP:delete_row", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"}}},
 	})
 
 	require.Empty(t, out[0])
-	require.Equal(t, []bypassCheck{{
-		organizationID: "org-1",
-		userID:         "user-1",
-		policyID:       policyID,
-		evidence: shadowmcp.AccessEvidence{
+	require.Equal(t, policyID, bypass.policyID)
+	require.Equal(t, []BypassRequest{{
+		UserID: "user-1",
+		Evidence: shadowmcp.AccessEvidence{
 			FullURL:        serverURL,
 			URLHost:        "",
 			ServerIdentity: "",
 		},
-		toolName: "MCP:delete_row",
-	}}, bypass.checks)
+		ToolName: "MCP:delete_row",
+		Resolved: true,
+	}}, bypass.requests)
+}
+
+func TestScanner_BatchesDuplicateBypassChecksAndPreservesURLIdentity(t *testing.T) {
+	t.Parallel()
+
+	policyID := uuid.New()
+	serverURL := "https://third-party.example/mcp"
+	serverIdentity := "third-party.example"
+	prov := &fakeProvenance{
+		found: map[string]telemetryrepo.MCPProvenance{
+			"call-1": {Match: serverURL, ServerURL: serverURL, ServerIdentity: serverIdentity, HookSource: "cursor"},
+			"call-2": {Match: serverURL, ServerURL: serverURL, ServerIdentity: serverIdentity, HookSource: "cursor"},
+		},
+		err:       nil,
+		gotIDs:    nil,
+		gotSince:  time.Time{},
+		callCount: 0,
+	}
+	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
+	s := NewScannerWithBypass(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, bypass)
+
+	out := s.Scan(t.Context(), "org-1", uuid.New(), policyID, []Message{{
+		UserID: "user-1",
+		ToolCalls: []ToolCall{
+			{ID: "call-1", Name: "MCP:authenticate", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"},
+			{ID: "call-2", Name: "MCP:authenticate", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"},
+		},
+	}})
+
+	require.Empty(t, out[0])
+	require.Equal(t, 1, bypass.calls)
+	require.Equal(t, []BypassRequest{{
+		UserID: "user-1",
+		Evidence: shadowmcp.AccessEvidence{
+			FullURL:        serverURL,
+			URLHost:        "",
+			ServerIdentity: serverIdentity,
+		},
+		ToolName: "MCP:authenticate",
+		Resolved: true,
+	}}, bypass.requests)
+}
+
+func TestScanner_UnresolvedDeniedCallCanUseWholePolicyDecision(t *testing.T) {
+	t.Parallel()
+
+	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
+	s := NewScannerWithBypass(
+		discardLogger(),
+		&fakeValidator{denied: map[string]bool{"delete": true}, orgIDs: nil},
+		gramHosted(),
+		noProvenance(),
+		nil,
+		bypass,
+	)
+
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.New(), []Message{{
+		UserID:    "user-1",
+		ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	}})
+
+	require.Empty(t, out[0])
+	require.Equal(t, []BypassRequest{{
+		UserID:   "user-1",
+		Evidence: shadowmcp.AccessEvidence{FullURL: "", URLHost: "", ServerIdentity: ""},
+		ToolName: "mcp__db__delete",
+		Resolved: false,
+	}}, bypass.requests)
 }
 
 func TestScanner_UnattributedSessionCannotBypassFinding(t *testing.T) {
@@ -223,21 +283,22 @@ func TestScanner_UnattributedSessionCannotBypassFinding(t *testing.T) {
 
 	serverURL := "https://third-party.example/mcp"
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: serverURL, ServerURL: serverURL, HookSource: "cursor"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: serverURL, ServerURL: serverURL, ServerIdentity: "", HookSource: "cursor"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
 		callCount: 0,
 	}
-	bypass := &fakeBypassChecker{allowed: true, checks: nil}
+	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
 	s := NewScannerWithBypass(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, bypass)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.New(), []string{""}, [][]ToolCall{
-		{{ID: "call-1", Name: "MCP:delete_row", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.New(), []Message{
+		{UserID: "", ToolCalls: []ToolCall{{ID: "call-1", Name: "MCP:delete_row", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"}}},
 	})
 
 	require.Len(t, out[0], 1)
-	require.Empty(t, bypass.checks, "unattributed sessions must not consult grants, including all-users grants")
+	require.Empty(t, bypass.requests, "unattributed sessions must not consult grants, including all-users grants")
+	require.Zero(t, bypass.calls)
 }
 
 // A stdio server has no URL; the launch command is the resolved identity and
@@ -247,7 +308,7 @@ func TestScanner_StdioCommandProvenanceIsFlagged(t *testing.T) {
 
 	validator := &fakeValidator{denied: map[string]bool{}, orgIDs: nil}
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "npx -y @acme/mcp", ServerURL: "", HookSource: "codex"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "npx -y @acme/mcp", ServerURL: "", ServerIdentity: "", HookSource: "codex"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -255,8 +316,8 @@ func TestScanner_StdioCommandProvenanceIsFlagged(t *testing.T) {
 	}
 	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Len(t, out[0], 1)
@@ -270,31 +331,31 @@ func TestScanner_StdioBypassGrantSuppressesFinding(t *testing.T) {
 	policyID := uuid.New()
 	command := "npx -y @example/mcp"
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: command, ServerURL: "", HookSource: "codex"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: command, ServerURL: "", ServerIdentity: "", HookSource: "codex"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
 		callCount: 0,
 	}
-	bypass := &fakeBypassChecker{allowed: true, checks: nil}
+	bypass := &fakeBypassChecker{allowed: true, policyID: uuid.Nil, requests: nil, calls: 0}
 	s := NewScannerWithBypass(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil, bypass)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), policyID, []string{"user-1"}, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Codex"}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), policyID, []Message{
+		{UserID: "user-1", ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Codex"}}},
 	})
 
 	require.Empty(t, out[0])
-	require.Equal(t, []bypassCheck{{
-		organizationID: "org-1",
-		userID:         "user-1",
-		policyID:       policyID,
-		evidence: shadowmcp.AccessEvidence{
+	require.Equal(t, policyID, bypass.policyID)
+	require.Equal(t, []BypassRequest{{
+		UserID: "user-1",
+		Evidence: shadowmcp.AccessEvidence{
 			FullURL:        "",
 			URLHost:        "",
 			ServerIdentity: command,
 		},
-		toolName: "mcp__db__delete",
-	}}, bypass.checks)
+		ToolName: "mcp__db__delete",
+		Resolved: true,
+	}}, bypass.requests)
 }
 
 // The match attribute degrades to the bare mcp__<server>__ prefix when the
@@ -307,7 +368,7 @@ func TestScanner_BarePrefixProvenanceFallsBackToSignature(t *testing.T) {
 
 	validator := &fakeValidator{denied: map[string]bool{}, orgIDs: nil}
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "db", ServerURL: "", HookSource: "claude"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "db", ServerURL: "", ServerIdentity: "", HookSource: "claude"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -316,8 +377,8 @@ func TestScanner_BarePrefixProvenanceFallsBackToSignature(t *testing.T) {
 	coverage := &fakeCoverage{got: nil}
 	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Empty(t, out[0], "validator allowed the call, so the fallback keeps it clean")
@@ -332,9 +393,9 @@ func TestScanner_UnresolvedProvenanceFallsBackToSignature(t *testing.T) {
 	coverage := &fakeCoverage{got: nil}
 	s := NewScanner(discardLogger(), validator, gramHosted(), noProvenance(), coverage)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Codex"}},
-		{{ID: "call-2", Name: "mcp__db__read", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Codex"}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Codex"}}},
+		{ToolCalls: []ToolCall{{ID: "call-2", Name: "mcp__db__read", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Codex"}}},
 	})
 
 	require.Len(t, out[0], 1, "denied by signature")
@@ -358,7 +419,7 @@ func TestScanner_ProvenanceHookSourceWinsOverMessageSender(t *testing.T) {
 	t.Parallel()
 
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://evil.example/mcp", ServerURL: "https://evil.example/mcp", HookSource: "claude"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://evil.example/mcp", ServerURL: "https://evil.example/mcp", ServerIdentity: "", HookSource: "claude"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -367,8 +428,8 @@ func TestScanner_ProvenanceHookSourceWinsOverMessageSender(t *testing.T) {
 	coverage := &fakeCoverage{got: nil}
 	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, coverage)
 
-	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"}},
+	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Cursor"}}},
 	})
 
 	require.Equal(t, []recordedResolution{{hookSource: "claude", resolution: ResolutionShadow}}, coverage.got)
@@ -384,8 +445,8 @@ func TestScanner_ProvenanceErrorFallsBackToSignature(t *testing.T) {
 	prov := &fakeProvenance{found: nil, err: errors.New("boom"), gotIDs: nil, gotSince: time.Time{}, callCount: 0}
 	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Len(t, out[0], 1)
@@ -400,7 +461,7 @@ func TestScanner_ServerURLPreferredOverMatch(t *testing.T) {
 
 	validator := &fakeValidator{denied: map[string]bool{}, orgIDs: nil}
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "db", ServerURL: "https://app.getgram.ai/mcp/team", HookSource: "cursor"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "db", ServerURL: "https://app.getgram.ai/mcp/team", ServerIdentity: "", HookSource: "cursor"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -408,8 +469,8 @@ func TestScanner_ServerURLPreferredOverMatch(t *testing.T) {
 	}
 	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Empty(t, out[0], "server URL resolves to a Gram host despite the degraded match")
@@ -423,7 +484,7 @@ func TestScanner_CursorStyleToolNameUsesProvenance(t *testing.T) {
 
 	validator := &fakeValidator{denied: map[string]bool{}, orgIDs: nil}
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://evil.example/mcp", ServerURL: "https://evil.example/mcp", HookSource: "cursor"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://evil.example/mcp", ServerURL: "https://evil.example/mcp", ServerIdentity: "", HookSource: "cursor"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -431,8 +492,8 @@ func TestScanner_CursorStyleToolNameUsesProvenance(t *testing.T) {
 	}
 	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "MCP:delete_row", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "MCP:delete_row", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Len(t, out[0], 1)
@@ -446,12 +507,12 @@ func TestScanner_SkipsNonMCPAndNamelessCalls(t *testing.T) {
 	prov := noProvenance()
 	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{
 			{ID: "a", Name: "", Arguments: `{}`, CreatedAt: time.Now()},              // nameless
 			{ID: "b", Name: "Bash", Arguments: `{}`, CreatedAt: time.Now()},          // native, non-MCP
 			{ID: "c", Name: "mcp__db__read", Arguments: `{}`, CreatedAt: time.Now()}, // MCP, allowed
-		},
+		}},
 	})
 
 	require.Len(t, out, 1)
@@ -466,9 +527,9 @@ func TestScanner_BatchPositionalAlignmentAndSingleLookup(t *testing.T) {
 	validator := &fakeValidator{denied: map[string]bool{}, orgIDs: nil}
 	prov := &fakeProvenance{
 		found: map[string]telemetryrepo.MCPProvenance{
-			"call-0": {Match: "https://evil.example/mcp", ServerURL: "https://evil.example/mcp", HookSource: "claude"},
-			"call-1": {Match: "https://app.getgram.ai/mcp/team", ServerURL: "https://app.getgram.ai/mcp/team", HookSource: "claude"},
-			"call-2": {Match: "npx -y @acme/mcp", ServerURL: "", HookSource: "claude"},
+			"call-0": {Match: "https://evil.example/mcp", ServerURL: "https://evil.example/mcp", ServerIdentity: "", HookSource: "claude"},
+			"call-1": {Match: "https://app.getgram.ai/mcp/team", ServerURL: "https://app.getgram.ai/mcp/team", ServerIdentity: "", HookSource: "claude"},
+			"call-2": {Match: "npx -y @acme/mcp", ServerURL: "", ServerIdentity: "", HookSource: "claude"},
 		},
 		err:       nil,
 		gotIDs:    nil,
@@ -477,10 +538,10 @@ func TestScanner_BatchPositionalAlignmentAndSingleLookup(t *testing.T) {
 	}
 	s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-0", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
-		{{ID: "call-1", Name: "mcp__db__read", Arguments: `{}`, CreatedAt: time.Now()}},
-		{{ID: "call-2", Name: "mcp__fs__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-0", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__read", Arguments: `{}`, CreatedAt: time.Now()}}},
+		{ToolCalls: []ToolCall{{ID: "call-2", Name: "mcp__fs__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Len(t, out, 3)
@@ -503,9 +564,9 @@ func TestScanner_LookupIsBoundedByOldestMessage(t *testing.T) {
 	prov := noProvenance()
 	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil)
 
-	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-0", Name: "mcp__db__read", Arguments: `{}`, CreatedAt: time.Now()}},
-		{{ID: "call-1", Name: "mcp__db__read", Arguments: `{}`, CreatedAt: oldest}},
+	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-0", Name: "mcp__db__read", Arguments: `{}`, CreatedAt: time.Now()}}},
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__read", Arguments: `{}`, CreatedAt: oldest}}},
 	})
 
 	require.Equal(t, oldest.Add(-provenanceLookback), prov.gotSince)
@@ -517,8 +578,8 @@ func TestScanner_NoMCPCallsSkipsLookup(t *testing.T) {
 	prov := noProvenance()
 	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "Bash", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "Bash", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Empty(t, out[0])
@@ -551,12 +612,12 @@ func TestResolvedServerIdentity(t *testing.T) {
 		wantValue    string
 		wantResolved bool
 	}{
-		{"server url wins", telemetryrepo.MCPProvenance{Match: "db", ServerURL: "https://x.test/mcp", HookSource: ""}, "db", "https://x.test/mcp", true},
-		{"url match", telemetryrepo.MCPProvenance{Match: "https://x.test/mcp", ServerURL: "", HookSource: ""}, "db", "https://x.test/mcp", true},
-		{"stdio command match", telemetryrepo.MCPProvenance{Match: "npx -y @acme/mcp", ServerURL: "", HookSource: ""}, "db", "npx -y @acme/mcp", true},
-		{"bare prefix is unresolved", telemetryrepo.MCPProvenance{Match: "db", ServerURL: "", HookSource: ""}, "db", "", false},
-		{"empty is unresolved", telemetryrepo.MCPProvenance{Match: "", ServerURL: "", HookSource: ""}, "db", "", false},
-		{"whitespace is unresolved", telemetryrepo.MCPProvenance{Match: "   ", ServerURL: "", HookSource: ""}, "db", "", false},
+		{"server url wins", telemetryrepo.MCPProvenance{Match: "db", ServerURL: "https://x.test/mcp", ServerIdentity: "", HookSource: ""}, "db", "https://x.test/mcp", true},
+		{"url match", telemetryrepo.MCPProvenance{Match: "https://x.test/mcp", ServerURL: "", ServerIdentity: "", HookSource: ""}, "db", "https://x.test/mcp", true},
+		{"stdio command match", telemetryrepo.MCPProvenance{Match: "npx -y @acme/mcp", ServerURL: "", ServerIdentity: "", HookSource: ""}, "db", "npx -y @acme/mcp", true},
+		{"bare prefix is unresolved", telemetryrepo.MCPProvenance{Match: "db", ServerURL: "", ServerIdentity: "", HookSource: ""}, "db", "", false},
+		{"empty is unresolved", telemetryrepo.MCPProvenance{Match: "", ServerURL: "", ServerIdentity: "", HookSource: ""}, "db", "", false},
+		{"whitespace is unresolved", telemetryrepo.MCPProvenance{Match: "   ", ServerURL: "", ServerIdentity: "", HookSource: ""}, "db", "", false},
 	}
 
 	for _, tc := range cases {
@@ -626,8 +687,8 @@ func TestScanner_ResolvesTrustedHostsOncePerScan(t *testing.T) {
 	hosted := gramHosted()
 	prov := &fakeProvenance{
 		found: map[string]telemetryrepo.MCPProvenance{
-			"call-0": {Match: "https://evil.example/mcp", ServerURL: "https://evil.example/mcp", HookSource: "claude"},
-			"call-1": {Match: "https://other.example/mcp", ServerURL: "https://other.example/mcp", HookSource: "claude"},
+			"call-0": {Match: "https://evil.example/mcp", ServerURL: "https://evil.example/mcp", ServerIdentity: "", HookSource: "claude"},
+			"call-1": {Match: "https://other.example/mcp", ServerURL: "https://other.example/mcp", ServerIdentity: "", HookSource: "claude"},
 		},
 		err:       nil,
 		gotIDs:    nil,
@@ -636,9 +697,9 @@ func TestScanner_ResolvesTrustedHostsOncePerScan(t *testing.T) {
 	}
 	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, prov, nil)
 
-	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-0", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
-		{{ID: "call-1", Name: "mcp__fs__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-0", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__fs__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Equal(t, 1, hosted.calls)
@@ -654,7 +715,7 @@ func TestScanner_HostResolutionFailureFallsBackToSignature(t *testing.T) {
 	hosted.err = errors.New("boom")
 	validator := &fakeValidator{denied: map[string]bool{"delete": true}, orgIDs: nil}
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://mcp.customer.example/mcp", ServerURL: "https://mcp.customer.example/mcp", HookSource: "claude"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://mcp.customer.example/mcp", ServerURL: "https://mcp.customer.example/mcp", ServerIdentity: "", HookSource: "claude"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -663,8 +724,8 @@ func TestScanner_HostResolutionFailureFallsBackToSignature(t *testing.T) {
 	coverage := &fakeCoverage{got: nil}
 	s := NewScanner(discardLogger(), validator, hosted, prov, coverage)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Claude"}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now(), Sender: "Claude"}}},
 	})
 
 	require.Len(t, out[0], 1, "the signature check still denies this call")
@@ -681,7 +742,7 @@ func TestScanner_HostResolutionFailureDoesNotFlagSignedCalls(t *testing.T) {
 	hosted := gramHosted()
 	hosted.err = errors.New("boom")
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://mcp.customer.example/mcp", ServerURL: "https://mcp.customer.example/mcp", HookSource: "claude"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "https://mcp.customer.example/mcp", ServerURL: "https://mcp.customer.example/mcp", ServerIdentity: "", HookSource: "claude"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -689,8 +750,8 @@ func TestScanner_HostResolutionFailureDoesNotFlagSignedCalls(t *testing.T) {
 	}
 	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, prov, nil)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Empty(t, out[0])
@@ -704,8 +765,8 @@ func TestScanner_NoMCPCallsSkipsHostLookup(t *testing.T) {
 	hosted := gramHosted()
 	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, hosted, noProvenance(), nil)
 
-	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "Bash", Arguments: `{}`, CreatedAt: time.Now()}},
+	s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "Bash", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Zero(t, hosted.calls)
@@ -719,7 +780,7 @@ func TestScanner_StdioCommandFrontingGramURLIsClean(t *testing.T) {
 
 	validator := &fakeValidator{denied: map[string]bool{"delete": true}, orgIDs: nil}
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "npx mcp-remote@0.1.25 https://app.getgram.ai/mcp/team-foo", ServerURL: "", HookSource: "claude"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "npx mcp-remote@0.1.25 https://app.getgram.ai/mcp/team-foo", ServerURL: "", ServerIdentity: "", HookSource: "claude"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -728,8 +789,8 @@ func TestScanner_StdioCommandFrontingGramURLIsClean(t *testing.T) {
 	coverage := &fakeCoverage{got: nil}
 	s := NewScanner(discardLogger(), validator, gramHosted(), prov, coverage)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Empty(t, out[0], "a stdio server fronting a Gram URL is Gram-hosted")
@@ -744,7 +805,7 @@ func TestScanner_NonHTTPSchemeGramURLIsClean(t *testing.T) {
 	t.Parallel()
 
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "sse://app.getgram.ai/mcp/team", HookSource: "cursor"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "sse://app.getgram.ai/mcp/team", ServerIdentity: "", HookSource: "cursor"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -752,8 +813,8 @@ func TestScanner_NonHTTPSchemeGramURLIsClean(t *testing.T) {
 	}
 	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Empty(t, out[0])
@@ -765,7 +826,7 @@ func TestScanner_UntrimmedServerURLIsClean(t *testing.T) {
 	t.Parallel()
 
 	prov := &fakeProvenance{
-		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "https://app.getgram.ai/mcp/team\n", HookSource: "cursor"}},
+		found:     map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "", ServerURL: "https://app.getgram.ai/mcp/team\n", ServerIdentity: "", HookSource: "cursor"}},
 		err:       nil,
 		gotIDs:    nil,
 		gotSince:  time.Time{},
@@ -773,8 +834,8 @@ func TestScanner_UntrimmedServerURLIsClean(t *testing.T) {
 	}
 	s := NewScanner(discardLogger(), &fakeValidator{denied: map[string]bool{}, orgIDs: nil}, gramHosted(), prov, nil)
 
-	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, nil, [][]ToolCall{
-		{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}},
+	out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
 	require.Empty(t, out[0])

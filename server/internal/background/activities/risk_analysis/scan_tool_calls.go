@@ -10,7 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -22,18 +21,9 @@ type MCPProvenanceLookup interface {
 	LookupMCPProvenanceByToolCallID(ctx context.Context, projectID uuid.UUID, toolCallIDs []string, since time.Time) (map[string]telemetryrepo.MCPProvenance, error)
 }
 
-// ShadowMCPBypassChecker is the risk-analysis boundary for evaluating an
-// attributed user's bypass grants without importing internal/risk, which
-// already depends on this package.
-type ShadowMCPBypassChecker interface {
-	CanBypassShadowMCP(ctx context.Context, organizationID string, userID string, policyID uuid.UUID, evidence shadowmcp.AccessEvidence, toolName string) bool
-}
-
 func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, projectID uuid.UUID, policyID uuid.UUID, messages []batchMessage) [][]scanners.Finding {
-	calls := make([][]shadowmcpscan.ToolCall, len(messages))
-	messageUserIDs := make([]string, len(messages))
+	scanMessages := make([]shadowmcpscan.Message, len(messages))
 	for i, msg := range messages {
-		messageUserIDs[i] = msg.UserID
 		msgCalls := make([]shadowmcpscan.ToolCall, 0, len(msg.ToolCalls))
 		for _, call := range msg.ToolCalls {
 			msgCalls = append(msgCalls, shadowmcpscan.ToolCall{
@@ -44,9 +34,12 @@ func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, projectI
 				Sender:    msg.Source,
 			})
 		}
-		calls[i] = msgCalls
+		scanMessages[i] = shadowmcpscan.Message{
+			UserID:    msg.UserID,
+			ToolCalls: msgCalls,
+		}
 	}
-	return a.shadowMCPScanner.Scan(ctx, orgID, projectID, policyID, messageUserIDs, calls)
+	return a.shadowMCPScanner.Scan(ctx, orgID, projectID, policyID, scanMessages)
 }
 
 func (a *AnalyzeBatch) scanDestructiveToolAnnotations(ctx context.Context, orgID string, messages []batchMessage) [][]scanners.Finding {
