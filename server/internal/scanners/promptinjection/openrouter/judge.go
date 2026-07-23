@@ -11,7 +11,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
@@ -500,19 +499,31 @@ func (c *Engine) classifyTyped(ctx context.Context, req promptinjection.Request,
 }
 
 func observeTrajectory(trajectory judgemessage.Trajectory) trajectoryTelemetry {
-	priorPresent := strings.TrimSpace(trajectory.PriorUserRequest) != ""
-	recentPresent := strings.TrimSpace(trajectory.RecentUntrustedContent) != ""
-	priorLen := utf8.RuneCountInString(trajectory.PriorUserRequest)
-	recentLen := utf8.RuneCountInString(trajectory.RecentUntrustedContent)
+	priorPresent, priorLen, priorTruncated := observeTrajectoryField(trajectory.PriorUserRequest)
+	recentPresent, recentLen, recentTruncated := observeTrajectoryField(trajectory.RecentUntrustedContent)
 	return trajectoryTelemetry{
 		contextPresent:  priorPresent || recentPresent,
 		priorPresent:    priorPresent,
 		recentPresent:   recentPresent,
-		priorTruncated:  priorLen > judgemessage.MaxTrajectoryBodyRunes,
-		recentTruncated: recentLen > judgemessage.MaxTrajectoryBodyRunes,
+		priorTruncated:  priorTruncated,
+		recentTruncated: recentTruncated,
 		priorLen:        priorLen,
 		recentLen:       recentLen,
 	}
+}
+
+func observeTrajectoryField(value string) (present bool, length int, truncated bool) {
+	present = value != ""
+	for range value {
+		length++
+		if length > judgemessage.MaxTrajectoryBodyRunes {
+			// Max+1 is a bounded sentinel: it distinguishes every truncated
+			// field without scanning an attacker-sized value before the judge
+			// deadline.
+			return present, length, true
+		}
+	}
+	return present, length, false
 }
 
 func (c *Engine) classifyTypedSample(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) (Verdict, error) {

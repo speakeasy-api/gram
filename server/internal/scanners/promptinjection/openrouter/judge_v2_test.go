@@ -214,7 +214,7 @@ func TestTypedContextObservabilityIncludesSuppressedVerdict(t *testing.T) {
 	in := req("both context fields", "prior only", "recent only", "no context")
 	in.Trajectories = []judgemessage.Trajectory{
 		{
-			PriorUserRequest:       strings.Repeat("界", judgemessage.MaxTrajectoryBodyRunes+1),
+			PriorUserRequest:       strings.Repeat("界", judgemessage.MaxTrajectoryBodyRunes+100),
 			RecentUntrustedContent: "recent untrusted context",
 		},
 		{PriorUserRequest: "prior context", RecentUntrustedContent: ""},
