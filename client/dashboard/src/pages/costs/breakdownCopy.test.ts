@@ -287,9 +287,9 @@ describe("breakdown copy", () => {
   });
 
   describe("the efficiency lens", () => {
-    it("titles by work units, keeping the sessions list name", () => {
+    it("titles by work delivered, keeping the sessions list name", () => {
       expect(breakdownTitle(Dimension.Model, Dimension.Model, true)).toBe(
-        "Work units by Model",
+        "Work delivered by Model",
       );
       expect(breakdownTitle(SESSIONS_AXIS, Dimension.Model, true)).toBe(
         "Agent sessions",
@@ -304,10 +304,12 @@ describe("breakdown copy", () => {
           axisValue: Dimension.Model,
           groupBy: Dimension.Model,
           path: [],
-          costLabel: "1,204.5 work units",
+          costLabel: "1,204.5 work delivered",
           groupCount: 3,
         }),
-      ).toBe("Showing all project spend — 1,204.5 work units across 3 Models.");
+      ).toBe(
+        "Showing all project spend — 1,204.5 work delivered across 3 Models.",
+      );
     });
   });
 

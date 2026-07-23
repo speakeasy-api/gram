@@ -141,8 +141,8 @@ export function CostBreakdownChart({
   if (efficiency) {
     return (
       <StackedTimeSeriesPanel
-        title="Work Units Over Time"
-        headerHint="Work units delivered over time, stacked by the selected breakdown. Click or drag on the chart to zoom to a period."
+        title="Work Delivered Over Time"
+        headerHint="Work delivered over time, stacked by the selected breakdown. Click or drag on the chart to zoom to a period."
         bucketsMs={bucketsMs}
         stacks={isError ? [] : stacks}
         formatValue={formatWorkUnits}
@@ -150,7 +150,7 @@ export function CostBreakdownChart({
         emptyMessage={
           isError
             ? "Failed to load cost data."
-            : "No work-units scores in this range."
+            : "No work analysis scores in this range."
         }
         loading={loading}
         onSelectRange={onSelectRange}

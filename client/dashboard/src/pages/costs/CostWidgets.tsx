@@ -590,7 +590,7 @@ export function CostWidgets({
       return (
         <>
           <KpiTile
-            label="Work units"
+            label="Work delivered"
             value={formatWorkUnits(totals.workUnits)}
             series={series.workUnits}
             delta={relDelta(totals.workUnits, prevTotals.workUnits)}
@@ -598,7 +598,7 @@ export function CostWidgets({
             loading={loading}
           />
           <KpiTile
-            label="Cost / unit"
+            label="Cost efficiency"
             value={unitCost !== null ? formatCost(unitCost) : "—"}
             series={unitCostSeries}
             delta={

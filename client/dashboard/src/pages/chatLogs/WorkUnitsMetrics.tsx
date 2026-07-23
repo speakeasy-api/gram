@@ -1,4 +1,4 @@
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge, Icon, type IconName } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -15,6 +15,25 @@ import {
 /** "Work done" plus efficiency entries for an agent-sessions table row.
  * Renders nothing when the session has no work-units score, which is the
  * norm: most organizations don't run the analysis. */
+function WorkMetric({
+  icon,
+  tooltip,
+  value,
+}: {
+  icon: IconName;
+  tooltip: string;
+  value: string;
+}): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={tooltip}>
+      <span className="flex items-center gap-1 tabular-nums">
+        <Icon name={icon} className="size-4 opacity-60" />
+        {value}
+      </span>
+    </SimpleTooltip>
+  );
+}
+
 export function WorkUnitsRowMetrics({
   chat,
 }: {
@@ -24,30 +43,30 @@ export function WorkUnitsRowMetrics({
   const { costPerUnit, tokensPerUnit } = workUnitsEfficiency(chat);
 
   return (
-    <>
-      <SimpleTooltip tooltip="Work done — work units this session was judged to have delivered">
-        <span className="flex items-center gap-1.5">
-          <Icon name="hammer" className="size-4 opacity-60" />
-          <span className="tabular-nums">
-            {formatWorkUnits(chat.workUnits)} units
-          </span>
-        </span>
-      </SimpleTooltip>
+    <span
+      className="border-border/60 inline-flex items-center gap-2 border-l pl-2"
+      aria-label="Work analysis metrics"
+    >
+      <WorkMetric
+        icon="hammer"
+        tooltip="Work delivered in this session, as judged by work analysis"
+        value={formatWorkUnits(chat.workUnits)}
+      />
       {costPerUnit !== null && (
-        <SimpleTooltip tooltip="Cost efficiency — spend per unit of work">
-          <span className="tabular-nums">
-            {formatUsageCost(costPerUnit)}/unit
-          </span>
-        </SimpleTooltip>
+        <WorkMetric
+          icon="circle-dollar-sign"
+          tooltip="Cost efficiency — spend relative to work delivered"
+          value={formatUsageCost(costPerUnit)}
+        />
       )}
       {tokensPerUnit !== null && (
-        <SimpleTooltip tooltip="Token efficiency — tokens per unit of work">
-          <span className="tabular-nums">
-            {formatTokenCount(tokensPerUnit)} tok/unit
-          </span>
-        </SimpleTooltip>
+        <WorkMetric
+          icon="binary"
+          tooltip="Token efficiency — tokens relative to work delivered"
+          value={formatTokenCount(tokensPerUnit)}
+        />
       )}
-    </>
+    </span>
   );
 }
 
@@ -85,7 +104,7 @@ function WorkUnitsTaskRow({
           {task.request || `Task ${task.id ?? index + 1}`}
         </p>
         <span className="shrink-0 text-sm font-semibold tabular-nums">
-          {formatWorkUnits(task.units ?? 0)} units
+          Work delivered: {formatWorkUnits(task.units ?? 0)}
         </span>
       </div>
       <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
@@ -123,16 +142,16 @@ export function WorkUnitsHeaderMetrics({
   const badges = (
     <>
       <WorkUnitsMetricBadge>
-        {formatWorkUnits(chat.workUnits)} units of work
+        {formatWorkUnits(chat.workUnits)} work delivered
       </WorkUnitsMetricBadge>
       {costPerUnit !== null && (
         <WorkUnitsMetricBadge>
-          {formatUsageCost(costPerUnit)}/unit
+          Cost efficiency: {formatUsageCost(costPerUnit)}
         </WorkUnitsMetricBadge>
       )}
       {tokensPerUnit !== null && (
         <WorkUnitsMetricBadge>
-          {formatTokenCount(tokensPerUnit)} tok/unit
+          Token efficiency: {formatTokenCount(tokensPerUnit)}
         </WorkUnitsMetricBadge>
       )}
     </>

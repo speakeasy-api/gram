@@ -97,6 +97,7 @@ export function AppSidebar({
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
+  const isOrgMemoryEnabled = telemetry.isFeatureEnabled("org-memory") ?? false;
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
   const isDeploymentsPageEnabled =
     telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
@@ -121,6 +122,7 @@ export function AppSidebar({
     routes.costs,
     routes.insights,
     routes.agentSessions,
+    ...(isOrgMemoryEnabled ? [routes.orgMemory] : []),
     routes.logs,
   ].some((r) => r.active);
 
@@ -233,6 +235,12 @@ export function AppSidebar({
               item={routes.agentSessions}
               {...accessFor(routes.agentSessions)}
             />
+            {isOrgMemoryEnabled && (
+              <ScopeGatedNavItem
+                item={routes.orgMemory}
+                {...accessFor(routes.orgMemory)}
+              />
+            )}
             <ScopeGatedNavItem item={routes.logs} {...accessFor(routes.logs)} />
             <ScopeGatedNavItem
               item={routes.employees}
