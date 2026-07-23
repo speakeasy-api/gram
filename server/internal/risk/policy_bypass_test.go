@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -276,6 +277,45 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 		UserID:         "not_connected_user",
 		PolicyID:       rolePolicyID,
 		Target:         &roleTarget,
+	}))
+}
+
+func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	policyID := "policy_legacy_combined_target"
+	serverURL := "https://mcp.example.com/legacy"
+	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
+	selector[authz.SelectorKeyServerURL] = serverURL
+	selector[authz.SelectorKeyServerIdentity] = "legacy-alias"
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Effect:     authz.PolicyEffectAllow,
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
+	}))
+
+	target := risk.ShadowMCPPolicyBypassTarget(shadowmcp.AccessEvidence{
+		FullURL:        serverURL,
+		URLHost:        "",
+		ServerIdentity: "",
+	}, "list_events")
+	require.NotNil(t, target)
+	require.NotContains(t, target.Dimensions, authz.SelectorKeyServerIdentity)
+	require.True(t, risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).CanBypass(ctx, risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+		PolicyID:       policyID,
+		Target:         target,
 	}))
 }
 

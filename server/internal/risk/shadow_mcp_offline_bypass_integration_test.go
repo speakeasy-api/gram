@@ -137,7 +137,7 @@ func TestOfflineShadowMCPScan_CursorApprovalWithURLAndIdentitySuppressesFinding(
 	require.NoError(t, err)
 	require.Equal(t, "approved", approved.Status)
 	require.Equal(t, serverURL, approved.TargetDimensions[authz.SelectorKeyServerURL])
-	require.Equal(t, serverIdentity, approved.TargetDimensions[authz.SelectorKeyServerIdentity])
+	require.NotContains(t, approved.TargetDimensions, authz.SelectorKeyServerIdentity, "URL targets must not add an alias as a second authorization constraint")
 
 	countingDB := &countingBypassDB{DBTX: ti.conn, readCalls: 0}
 	checker := &offlineBypassChecker{
@@ -149,8 +149,8 @@ func TestOfflineShadowMCPScan_CursorApprovalWithURLAndIdentitySuppressesFinding(
 		offlineBypassValidator{},
 		offlineBypassHostedChecker{},
 		offlineBypassProvenance{found: map[string]telemetryrepo.MCPProvenance{
-			"cursor-call-1": {Match: serverURL, ServerURL: serverURL, ServerIdentity: serverIdentity, HookSource: "cursor"},
-			"cursor-call-2": {Match: serverURL, ServerURL: serverURL, ServerIdentity: serverIdentity, HookSource: "cursor"},
+			"cursor-call-1": {Match: serverURL, ServerURL: serverURL, ServerIdentity: "", HookSource: "cursor"},
+			"cursor-call-2": {Match: serverURL, ServerURL: serverURL, ServerIdentity: "", HookSource: "cursor"},
 		}},
 		nil,
 		checker,

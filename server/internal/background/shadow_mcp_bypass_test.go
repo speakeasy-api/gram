@@ -26,7 +26,7 @@ func (e *capturePolicyBypassBatchEvaluator) CanBypassBatch(_ context.Context, in
 	return results
 }
 
-func TestShadowMCPPolicyBypassChecker_PreservesResolvedDimensionsAndWholePolicyFallback(t *testing.T) {
+func TestShadowMCPPolicyBypassChecker_UsesCanonicalURLAndWholePolicyFallback(t *testing.T) {
 	t.Parallel()
 
 	serverURL := "https://mcp.example.test/sse"
@@ -69,7 +69,7 @@ func TestShadowMCPPolicyBypassChecker_PreservesResolvedDimensionsAndWholePolicyF
 	require.Len(t, evaluator.evaluations, 3)
 	require.NotNil(t, evaluator.evaluations[0].Target)
 	require.Equal(t, serverURL, evaluator.evaluations[0].Target.Dimensions[authz.SelectorKeyServerURL])
-	require.Equal(t, serverIdentity, evaluator.evaluations[0].Target.Dimensions[authz.SelectorKeyServerIdentity])
+	require.NotContains(t, evaluator.evaluations[0].Target.Dimensions, authz.SelectorKeyServerIdentity)
 	require.Nil(t, evaluator.evaluations[1].Target)
 	require.Nil(t, evaluator.evaluations[2].Target)
 }

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"log/slog"
+	"maps"
 	"net/url"
 	"strings"
 
@@ -140,7 +141,28 @@ func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, organizationID s
 		)
 		return nil, false
 	}
-	return grants, true
+	return canonicalizeRiskPolicyBypassGrants(grants), true
+}
+
+// canonicalizeRiskPolicyBypassGrants keeps existing approvals compatible with
+// URL-first targeting. Older access-request approvals stored both server_url
+// and server_identity; the identity was metadata rather than an independent
+// constraint whenever a canonical URL existed. Dropping it only for runtime
+// evaluation gives those rows the same semantics as new URL-only approvals
+// without changing their persisted selector (which is still needed to revoke
+// or edit the original grant).
+func canonicalizeRiskPolicyBypassGrants(grants []authz.Grant) []authz.Grant {
+	for i := range grants {
+		selector := grants[i].Selector
+		if grants[i].Scope != authz.ScopeRiskPolicyBypass ||
+			selector[authz.SelectorKeyServerURL] == "" ||
+			selector[authz.SelectorKeyServerIdentity] == "" {
+			continue
+		}
+		grants[i].Selector = maps.Clone(selector)
+		delete(grants[i].Selector, authz.SelectorKeyServerIdentity)
+	}
+	return grants
 }
 
 func policyBypassCheckDimensions(target *PolicyBypassTarget) authz.RiskPolicyDimensions {
@@ -160,7 +182,10 @@ func ShadowMCPPolicyBypassTarget(evidence shadowmcp.AccessEvidence, toolName str
 		if observed := shadowmcp.ObservedName(normalized, toolName); observed != nil && *observed != "" {
 			label = *observed
 		}
-		target := ShadowMCPServerPolicyBypassTarget(serverURL, normalized.ServerIdentity, label)
+		// A resolved URL is the canonical server key. ServerIdentity remains
+		// useful display metadata, but must not become a second authorization
+		// constraint: senders can report aliases that differ for the same URL.
+		target := ShadowMCPServerPolicyBypassTarget(serverURL, "", label)
 		return &target
 	}
 	if normalized.ServerIdentity != "" {
