@@ -3,6 +3,7 @@ import {
   activeTabFromPath,
   initialTabFromHash,
   isLegacyAuthenticationTabPath,
+  isLegacyToolsTabPath,
 } from "./MCPServerDetailsRouting";
 
 describe("activeTabFromPath", () => {
@@ -12,7 +13,7 @@ describe("activeTabFromPath", () => {
     ).toBeUndefined();
   });
 
-  it.each(["overview", "team-access", "settings"] as const)(
+  it.each(["overview", "inspect", "team-access", "settings"] as const)(
     "reads the %s tab when the server slug has the same value",
     (tab) => {
       expect(
@@ -63,6 +64,33 @@ describe("activeTabFromPath", () => {
     ).toBe(true);
   });
 
+  it("does not treat the legacy tools path as an active tab", () => {
+    expect(
+      activeTabFromPath(
+        "/acme/projects/default/mcp/x/my-server/tools",
+        "my-server",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("detects the legacy tools path for redirects", () => {
+    expect(
+      isLegacyToolsTabPath(
+        "/acme/projects/default/mcp/x/my-server/tools",
+        "my-server",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not confuse the inspect tab with the legacy tools path", () => {
+    expect(
+      isLegacyToolsTabPath(
+        "/acme/projects/default/mcp/x/my-server/inspect",
+        "my-server",
+      ),
+    ).toBe(false);
+  });
+
   it("matches decoded server slug segments", () => {
     expect(
       activeTabFromPath(
@@ -85,6 +113,10 @@ describe("activeTabFromPath", () => {
 describe("initialTabFromHash", () => {
   it("maps the legacy authentication hash to settings", () => {
     expect(initialTabFromHash("#authentication", true)).toBe("settings");
+  });
+
+  it("maps the legacy tools hash to inspect", () => {
+    expect(initialTabFromHash("#tools", true)).toBe("inspect");
   });
 
   it("keeps team access behind the RBAC feature flag", () => {

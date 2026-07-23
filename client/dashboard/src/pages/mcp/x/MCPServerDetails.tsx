@@ -33,14 +33,15 @@ import {
   activeTabFromPath,
   initialTabFromHash,
   isLegacyAuthenticationTabPath,
+  isLegacyToolsTabPath,
   mcpServerTabHref,
 } from "./MCPServerDetailsRouting";
 import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
-import { ToolsTab } from "./tabs/ToolsTab";
+import { InspectTab } from "./tabs/InspectTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
 
-const MCP_X_TAB_URLS = ["overview", "tools", "team-access", "settings"];
+const MCP_X_TAB_URLS = ["overview", "inspect", "team-access", "settings"];
 
 export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -54,6 +55,7 @@ export default function MCPServerDetails(): JSX.Element {
     location.pathname,
     idOrSlug,
   );
+  const legacyToolsPath = isLegacyToolsTabPath(location.pathname, idOrSlug);
 
   const {
     data: mcpServer,
@@ -83,6 +85,11 @@ export default function MCPServerDetails(): JSX.Element {
         to={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
         replace
       />
+    );
+  }
+  if (legacyToolsPath) {
+    return (
+      <Navigate to={mcpServerTabHref(routes, idOrSlug, "inspect")} replace />
     );
   }
   if (!activeTab) {
@@ -121,10 +128,10 @@ export default function MCPServerDetails(): JSX.Element {
             />
           )
         );
-      case "tools":
+      case "inspect":
         return (
           mcpServer && (
-            <ToolsTab
+            <InspectTab
               mcpServer={mcpServer}
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
