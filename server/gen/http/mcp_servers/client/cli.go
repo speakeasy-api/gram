@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	mcpservers "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	types "github.com/speakeasy-api/gram/server/gen/types"
@@ -317,6 +318,266 @@ func BuildListToolFiltersPayload(mcpServersListToolFiltersID string, mcpServersL
 	v := &mcpservers.ListToolFiltersPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetToolMetadataBatchPayload builds the payload for the mcpServers
+// setToolMetadataBatch endpoint from CLI flags.
+func BuildSetToolMetadataBatchPayload(mcpServersSetToolMetadataBatchBody string, mcpServersSetToolMetadataBatchSessionToken string, mcpServersSetToolMetadataBatchApikeyToken string, mcpServersSetToolMetadataBatchProjectSlugInput string) (*mcpservers.SetToolMetadataBatchPayload, error) {
+	var err error
+	var body SetToolMetadataBatchRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpServersSetToolMetadataBatchBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tools\": [\n         {\n            \"destructive_hint\": false,\n            \"idempotent_hint\": false,\n            \"open_world_hint\": false,\n            \"read_only_hint\": false,\n            \"title\": \"abc123\",\n            \"tool_name\": \"abc123\"\n         }\n      ]\n   }'")
+		}
+		if body.Tools == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersSetToolMetadataBatchSessionToken != "" {
+			sessionToken = &mcpServersSetToolMetadataBatchSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersSetToolMetadataBatchApikeyToken != "" {
+			apikeyToken = &mcpServersSetToolMetadataBatchApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersSetToolMetadataBatchProjectSlugInput != "" {
+			projectSlugInput = &mcpServersSetToolMetadataBatchProjectSlugInput
+		}
+	}
+	v := &mcpservers.SetToolMetadataBatchPayload{
+		McpServerID: body.McpServerID,
+	}
+	if body.Tools != nil {
+		v.Tools = make([]*mcpservers.ToolMetadataForm, len(body.Tools))
+		for i, val := range body.Tools {
+			if val == nil {
+				v.Tools[i] = nil
+				continue
+			}
+			v.Tools[i] = marshalToolMetadataFormRequestBodyToMcpserversToolMetadataForm(val)
+		}
+	} else {
+		v.Tools = []*mcpservers.ToolMetadataForm{}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildAddToolMetadataBatchPayload builds the payload for the mcpServers
+// addToolMetadataBatch endpoint from CLI flags.
+func BuildAddToolMetadataBatchPayload(mcpServersAddToolMetadataBatchBody string, mcpServersAddToolMetadataBatchSessionToken string, mcpServersAddToolMetadataBatchApikeyToken string, mcpServersAddToolMetadataBatchProjectSlugInput string) (*mcpservers.AddToolMetadataBatchPayload, error) {
+	var err error
+	var body AddToolMetadataBatchRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpServersAddToolMetadataBatchBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tools\": [\n         {\n            \"destructive_hint\": false,\n            \"idempotent_hint\": false,\n            \"open_world_hint\": false,\n            \"read_only_hint\": false,\n            \"title\": \"abc123\",\n            \"tool_name\": \"abc123\"\n         }\n      ]\n   }'")
+		}
+		if body.Tools == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersAddToolMetadataBatchSessionToken != "" {
+			sessionToken = &mcpServersAddToolMetadataBatchSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersAddToolMetadataBatchApikeyToken != "" {
+			apikeyToken = &mcpServersAddToolMetadataBatchApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersAddToolMetadataBatchProjectSlugInput != "" {
+			projectSlugInput = &mcpServersAddToolMetadataBatchProjectSlugInput
+		}
+	}
+	v := &mcpservers.AddToolMetadataBatchPayload{
+		McpServerID: body.McpServerID,
+	}
+	if body.Tools != nil {
+		v.Tools = make([]*mcpservers.ToolMetadataForm, len(body.Tools))
+		for i, val := range body.Tools {
+			if val == nil {
+				v.Tools[i] = nil
+				continue
+			}
+			v.Tools[i] = marshalToolMetadataFormRequestBodyToMcpserversToolMetadataForm(val)
+		}
+	} else {
+		v.Tools = []*mcpservers.ToolMetadataForm{}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListToolMetadataPayload builds the payload for the mcpServers
+// listToolMetadata endpoint from CLI flags.
+func BuildListToolMetadataPayload(mcpServersListToolMetadataMcpServerID string, mcpServersListToolMetadataIncludeDeleted string, mcpServersListToolMetadataSessionToken string, mcpServersListToolMetadataApikeyToken string, mcpServersListToolMetadataProjectSlugInput string) (*mcpservers.ListToolMetadataPayload, error) {
+	var err error
+	var mcpServerID string
+	{
+		mcpServerID = mcpServersListToolMetadataMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var includeDeleted *bool
+	{
+		if mcpServersListToolMetadataIncludeDeleted != "" {
+			var val bool
+			val, err = strconv.ParseBool(mcpServersListToolMetadataIncludeDeleted)
+			includeDeleted = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeDeleted, must be BOOL")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersListToolMetadataSessionToken != "" {
+			sessionToken = &mcpServersListToolMetadataSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersListToolMetadataApikeyToken != "" {
+			apikeyToken = &mcpServersListToolMetadataApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersListToolMetadataProjectSlugInput != "" {
+			projectSlugInput = &mcpServersListToolMetadataProjectSlugInput
+		}
+	}
+	v := &mcpservers.ListToolMetadataPayload{}
+	v.McpServerID = mcpServerID
+	v.IncludeDeleted = includeDeleted
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetToolMetadataPayload builds the payload for the mcpServers
+// setToolMetadata endpoint from CLI flags.
+func BuildSetToolMetadataPayload(mcpServersSetToolMetadataBody string, mcpServersSetToolMetadataSessionToken string, mcpServersSetToolMetadataApikeyToken string, mcpServersSetToolMetadataProjectSlugInput string) (*mcpservers.SetToolMetadataPayload, error) {
+	var err error
+	var body SetToolMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpServersSetToolMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"destructive_hint\": false,\n      \"idempotent_hint\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"open_world_hint\": false,\n      \"read_only_hint\": false,\n      \"title\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersSetToolMetadataSessionToken != "" {
+			sessionToken = &mcpServersSetToolMetadataSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersSetToolMetadataApikeyToken != "" {
+			apikeyToken = &mcpServersSetToolMetadataApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersSetToolMetadataProjectSlugInput != "" {
+			projectSlugInput = &mcpServersSetToolMetadataProjectSlugInput
+		}
+	}
+	v := &mcpservers.SetToolMetadataPayload{
+		McpServerID:     body.McpServerID,
+		ToolName:        body.ToolName,
+		Title:           body.Title,
+		ReadOnlyHint:    body.ReadOnlyHint,
+		DestructiveHint: body.DestructiveHint,
+		IdempotentHint:  body.IdempotentHint,
+		OpenWorldHint:   body.OpenWorldHint,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeleteToolMetadataPayload builds the payload for the mcpServers
+// deleteToolMetadata endpoint from CLI flags.
+func BuildDeleteToolMetadataPayload(mcpServersDeleteToolMetadataMcpServerID string, mcpServersDeleteToolMetadataToolName string, mcpServersDeleteToolMetadataSessionToken string, mcpServersDeleteToolMetadataApikeyToken string, mcpServersDeleteToolMetadataProjectSlugInput string) (*mcpservers.DeleteToolMetadataPayload, error) {
+	var err error
+	var mcpServerID string
+	{
+		mcpServerID = mcpServersDeleteToolMetadataMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var toolName string
+	{
+		toolName = mcpServersDeleteToolMetadataToolName
+	}
+	var sessionToken *string
+	{
+		if mcpServersDeleteToolMetadataSessionToken != "" {
+			sessionToken = &mcpServersDeleteToolMetadataSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersDeleteToolMetadataApikeyToken != "" {
+			apikeyToken = &mcpServersDeleteToolMetadataApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersDeleteToolMetadataProjectSlugInput != "" {
+			projectSlugInput = &mcpServersDeleteToolMetadataProjectSlugInput
+		}
+	}
+	v := &mcpservers.DeleteToolMetadataPayload{}
+	v.McpServerID = mcpServerID
+	v.ToolName = toolName
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

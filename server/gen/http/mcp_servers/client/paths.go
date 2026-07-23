@@ -37,6 +37,31 @@ func ListToolFiltersMcpServersPath() string {
 	return "/rpc/mcpServers.listToolFilters"
 }
 
+// SetToolMetadataBatchMcpServersPath returns the URL path to the mcpServers service setToolMetadataBatch HTTP endpoint.
+func SetToolMetadataBatchMcpServersPath() string {
+	return "/rpc/mcpServers.setToolMetadataBatch"
+}
+
+// AddToolMetadataBatchMcpServersPath returns the URL path to the mcpServers service addToolMetadataBatch HTTP endpoint.
+func AddToolMetadataBatchMcpServersPath() string {
+	return "/rpc/mcpServers.addToolMetadataBatch"
+}
+
+// ListToolMetadataMcpServersPath returns the URL path to the mcpServers service listToolMetadata HTTP endpoint.
+func ListToolMetadataMcpServersPath() string {
+	return "/rpc/mcpServers.listToolMetadata"
+}
+
+// SetToolMetadataMcpServersPath returns the URL path to the mcpServers service setToolMetadata HTTP endpoint.
+func SetToolMetadataMcpServersPath() string {
+	return "/rpc/mcpServers.setToolMetadata"
+}
+
+// DeleteToolMetadataMcpServersPath returns the URL path to the mcpServers service deleteToolMetadata HTTP endpoint.
+func DeleteToolMetadataMcpServersPath() string {
+	return "/rpc/mcpServers.deleteToolMetadata"
+}
+
 // DeleteMcpServerMcpServersPath returns the URL path to the mcpServers service deleteMcpServer HTTP endpoint.
 func DeleteMcpServerMcpServersPath() string {
 	return "/rpc/mcpServers.delete"

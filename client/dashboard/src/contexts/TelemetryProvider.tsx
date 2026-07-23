@@ -35,6 +35,9 @@ export const TelemetryProvider = (props: {
           : "phc_5S3YhOs1lONwM2yKa0ytVSAyWOR2GhVhwAebkyi022l",
         {
           api_host: "https://metrics.speakeasy.com",
+          // PostHog otherwise collects the hardware model by default on
+          // Chromium-based Android browsers.
+          disableDeviceModel: true,
           feature_flag_request_timeout_ms: 1000,
         },
         "speakeasy",

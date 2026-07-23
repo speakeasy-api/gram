@@ -43,6 +43,24 @@ type Service interface {
 	// effective tags with the same logic as the runtime ?tags= filter. Returns
 	// filtering disabled when no explicit group is set.
 	ListToolFilters(context.Context, *ListToolFiltersPayload) (res *types.ListToolFiltersResult, err error)
+	// Authoritative batch upsert of tool metadata for an MCP server. Every tool in
+	// the payload is upserted and any stored tool absent from the payload is
+	// soft-deleted, all in one transaction.
+	SetToolMetadataBatch(context.Context, *SetToolMetadataBatchPayload) (res *SetToolMetadataBatchResult, err error)
+	// Strictly additive batch insert of tool metadata for an MCP server. Every
+	// tool in the payload is inserted; if any of them already has a live stored
+	// entry the whole batch fails with a conflict and nothing is inserted. Stored
+	// tools absent from the payload are left untouched and nothing is deleted.
+	// Callers are expected to send only tools they know are new.
+	AddToolMetadataBatch(context.Context, *AddToolMetadataBatchPayload) (res *AddToolMetadataBatchResult, err error)
+	// List stored tool metadata for an MCP server.
+	ListToolMetadata(context.Context, *ListToolMetadataPayload) (res *ListToolMetadataResult, err error)
+	// Set the annotation hints of a single tool metadata entry (manual override).
+	// This is a full-record replace: omitted hints become unset on the stored
+	// record.
+	SetToolMetadata(context.Context, *SetToolMetadataPayload) (res *types.ToolMetadata, err error)
+	// Soft-delete a single tool metadata entry.
+	DeleteToolMetadata(context.Context, *DeleteToolMetadataPayload) (err error)
 	// Delete an MCP server
 	DeleteMcpServer(context.Context, *DeleteMcpServerPayload) (err error)
 }
@@ -67,7 +85,27 @@ const ServiceName = "mcpServers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"createMcpServer", "getMcpServer", "listMcpServers", "listMcpServersForOrg", "updateMcpServer", "listToolFilters", "deleteMcpServer"}
+var MethodNames = [12]string{"createMcpServer", "getMcpServer", "listMcpServers", "listMcpServersForOrg", "updateMcpServer", "listToolFilters", "setToolMetadataBatch", "addToolMetadataBatch", "listToolMetadata", "setToolMetadata", "deleteToolMetadata", "deleteMcpServer"}
+
+// AddToolMetadataBatchPayload is the payload type of the mcpServers service
+// addToolMetadataBatch method.
+type AddToolMetadataBatchPayload struct {
+	// The ID of the MCP server the tool metadata belongs to
+	McpServerID string
+	// The net-new tools to record. Every entry must be absent from the server's
+	// stored tool metadata.
+	Tools            []*ToolMetadataForm
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// AddToolMetadataBatchResult is the result type of the mcpServers service
+// addToolMetadataBatch method.
+type AddToolMetadataBatchResult struct {
+	// The tool metadata entries created by this call
+	Tools []*types.ToolMetadata
+}
 
 // CreateMcpServerPayload is the payload type of the mcpServers service
 // createMcpServer method.
@@ -97,6 +135,18 @@ type CreateMcpServerPayload struct {
 type DeleteMcpServerPayload struct {
 	// The ID of the MCP server to delete
 	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// DeleteToolMetadataPayload is the payload type of the mcpServers service
+// deleteToolMetadata method.
+type DeleteToolMetadataPayload struct {
+	// The ID of the MCP server the tool metadata belongs to
+	McpServerID string
+	// The name of the tool to delete
+	ToolName         string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -150,6 +200,89 @@ type ListToolFiltersPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// ListToolMetadataPayload is the payload type of the mcpServers service
+// listToolMetadata method.
+type ListToolMetadataPayload struct {
+	// The ID of the MCP server the tool metadata belongs to
+	McpServerID string
+	// Include soft-deleted tool metadata entries in the result. Deleted entries
+	// carry a deleted_at timestamp.
+	IncludeDeleted   *bool
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListToolMetadataResult is the result type of the mcpServers service
+// listToolMetadata method.
+type ListToolMetadataResult struct {
+	// The stored tool metadata for the MCP server
+	Tools []*types.ToolMetadata
+}
+
+// SetToolMetadataBatchPayload is the payload type of the mcpServers service
+// setToolMetadataBatch method.
+type SetToolMetadataBatchPayload struct {
+	// The ID of the MCP server the tool metadata belongs to
+	McpServerID string
+	// The authoritative set of tools for the MCP server. Stored tools absent from
+	// this list are soft-deleted.
+	Tools            []*ToolMetadataForm
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// SetToolMetadataBatchResult is the result type of the mcpServers service
+// setToolMetadataBatch method.
+type SetToolMetadataBatchResult struct {
+	// The stored tool metadata after the upsert
+	Tools []*types.ToolMetadata
+	// The number of stored tools soft-deleted because they were absent from the
+	// payload
+	Deleted int
+}
+
+// SetToolMetadataPayload is the payload type of the mcpServers service
+// setToolMetadata method.
+type SetToolMetadataPayload struct {
+	// The ID of the MCP server the tool metadata belongs to
+	McpServerID string
+	// The name of the tool to update
+	ToolName string
+	// A human-readable title for the tool
+	Title *string
+	// Hint that the tool does not modify its environment
+	ReadOnlyHint *bool
+	// Hint that the tool may perform destructive updates to its environment
+	DestructiveHint *bool
+	// Hint that calling the tool repeatedly with the same arguments has no
+	// additional effect
+	IdempotentHint *bool
+	// Hint that the tool may interact with an open world of external entities
+	OpenWorldHint    *bool
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// A single tool entry in a tool metadata batch.
+type ToolMetadataForm struct {
+	// The name of the tool
+	ToolName string
+	// A human-readable title for the tool
+	Title *string
+	// Hint that the tool does not modify its environment
+	ReadOnlyHint *bool
+	// Hint that the tool may perform destructive updates to its environment
+	DestructiveHint *bool
+	// Hint that calling the tool repeatedly with the same arguments has no
+	// additional effect
+	IdempotentHint *bool
+	// Hint that the tool may interact with an open world of external entities
+	OpenWorldHint *bool
 }
 
 // UpdateMcpServerPayload is the payload type of the mcpServers service

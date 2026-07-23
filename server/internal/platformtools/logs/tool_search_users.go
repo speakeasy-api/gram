@@ -86,7 +86,7 @@ func (s *SearchUsers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 		Sort:             input.Sort,
 		Limit:            input.Limit,
 		Metrics:          "full", // API metrics level; surfaces the complete per-user metrics
-
+		Source:           "logs", // read from raw telemetry_logs (full metric set)
 	})
 	if err != nil {
 		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {
