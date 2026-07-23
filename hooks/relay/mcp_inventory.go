@@ -15,8 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
-const claudeMCPInventoryTimeout = 15 * time.Second
-
 // newMCPInventoryCommand builds the detached collector invocation. Deployment
 // identity is forwarded via the same flags main.go accepts so the child
 // re-resolves the full config (including the config-file org key) itself,
@@ -82,15 +80,26 @@ func RunMCPInventoryCmd(ctx context.Context, args []string) int {
 	return RunMCPInventory(ctx, cfg, *cwd, *sessionID)
 }
 
-// RunMCPInventory collects the Claude MCP inventory and relays it as its own
-// fire-and-forget session.updated event. It is always non-blocking from the
-// hook's perspective because it runs in the detached child. Returns 0 even when
-// nothing is sent: an absent CLI, an empty list, or a missing credential are
-// all normal and must not surface as a failure.
+// RunMCPInventory warms the shared agenthooks MCP inventory cache and relays
+// the same list to the server as its own fire-and-forget session.updated event.
+// The single `claude mcp list` run serves both purposes: it primes the cache
+// that per-tool-call URL attribution reads (so the first MCP tool call never
+// stalls) and produces the full inventory for admin visibility. Always
+// non-blocking from the hook's perspective because it runs in the detached
+// child. Returns 0 even when nothing is sent: an absent CLI, an empty list, or a
+// missing credential are all normal and must not surface as a failure.
 func RunMCPInventory(ctx context.Context, cfg Config, cwd, sessionID string) int {
-	entries := collectClaudeMCPInventory(ctx, cwd)
-	if len(entries) == 0 {
+	// The CLI fallback only ever adds plugin- and claude.ai-connector servers,
+	// which are user-global rather than project-scoped (project servers come
+	// from config files via the cwd-aware fast path), so the collector needs no
+	// particular working directory.
+	listed := agenthooks.WarmClaudeMCPList()
+	if len(listed) == 0 {
 		return 0
+	}
+	entries := make([]mcpInventoryEntry, 0, len(listed))
+	for _, e := range listed {
+		entries = append(entries, mcpInventoryEntry{Name: e.Name, URL: e.URL, Command: e.Command})
 	}
 	NewRelay(cfg).sendMCPInventory(ctx, sessionID, cwd, entries)
 	return 0
@@ -154,88 +163,6 @@ type mcpInventoryEntry struct {
 	Name    string
 	URL     string
 	Command string
-}
-
-// collectClaudeMCPInventory asks Claude for the effective server list so
-// plugin and claude.ai connector servers, which are absent from config files,
-// are included. Collection is best-effort: hooks must continue when the CLI
-// is unavailable, slow, or returns an unfamiliar format.
-func collectClaudeMCPInventory(ctx context.Context, cwd string) []mcpInventoryEntry {
-	bin, err := exec.LookPath("claude")
-	if err != nil {
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, claudeMCPInventoryTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, "mcp", "list")
-	if cwd != "" {
-		cmd.Dir = cwd
-	}
-	out, err := cmd.Output()
-	if err != nil && len(out) == 0 {
-		return nil
-	}
-	return parseClaudeMCPInventory(string(out))
-}
-
-// parseClaudeMCPInventory parses `<name>: <target> (<transport>) - <status>`.
-// Names may contain colons, so delimiters are consumed from the right.
-func parseClaudeMCPInventory(out string) []mcpInventoryEntry {
-	var entries []mcpInventoryEntry
-	for line := range strings.SplitSeq(out, "\n") {
-		line = strings.TrimSpace(line)
-		statusAt := strings.LastIndex(line, " - ")
-		if line == "" || statusAt < 0 {
-			continue
-		}
-
-		head := strings.TrimSpace(line[:statusAt])
-		if strings.HasSuffix(head, ")") {
-			if open := strings.LastIndex(head, " ("); open > 0 && upperAlpha(head[open+2:len(head)-1]) {
-				head = strings.TrimSpace(head[:open])
-			}
-		}
-		separator := strings.LastIndex(head, ": ")
-		if separator < 0 {
-			continue
-		}
-		name := strings.TrimSpace(head[:separator])
-		target := strings.TrimSpace(head[separator+2:])
-		if name == "" || target == "" {
-			continue
-		}
-		if after, ok := strings.CutPrefix(name, "claude.ai "); ok {
-			name = after
-		} else if after, ok := strings.CutPrefix(name, "plugin:"); ok {
-			if _, display, found := strings.Cut(after, ":"); found {
-				name = display
-			} else {
-				name = after
-			}
-		}
-
-		entry := mcpInventoryEntry{Name: name, URL: "", Command: ""}
-		if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
-			entry.URL = target
-		} else {
-			entry.Command = target
-		}
-		entries = append(entries, entry)
-	}
-	return entries
-}
-
-func upperAlpha(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		if r < 'A' || r > 'Z' {
-			return false
-		}
-	}
-	return true
 }
 
 func attachMCPInventory(payload *components.IngestRequestBody, entries []mcpInventoryEntry) {
