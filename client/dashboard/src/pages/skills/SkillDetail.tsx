@@ -175,7 +175,7 @@ function SkillDetailSections({
 
   return (
     <>
-      {latestVersion && <SkillPluginBanner skillId={skillId} />}
+      <SkillPluginBanner skill={skill} />
 
       <SettingsSection>
         <SettingsSection.Header>
@@ -557,9 +557,9 @@ function versionColumns({
     {
       key: "hash",
       header: "Version",
-      width: "160px",
+      width: "280px",
       render: (version) => (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm">
             {version.canonicalSha256.slice(0, 8)}
           </span>

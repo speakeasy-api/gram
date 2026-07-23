@@ -17,6 +17,7 @@ function skill(overrides: Partial<Skill>): Skill {
     classification: "custom",
     latestVersionId: "version_a",
     versionCount: 1,
+    hasValidVersion: true,
     createdAt: new Date("2026-07-16T00:00:00Z"),
     updatedAt: new Date("2026-07-16T00:00:00Z"),
     ...overrides,

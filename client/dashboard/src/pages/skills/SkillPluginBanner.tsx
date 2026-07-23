@@ -11,6 +11,7 @@ import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { ClientIconFan } from "@/pages/mcp/overview/PluginStatusBanner";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { Skill } from "@gram/client/models/components/skill.js";
 import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
 import {
@@ -20,7 +21,12 @@ import {
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
 import { Button, cn } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ChevronDown, CircleCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  CircleAlert,
+  CircleCheck,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -59,13 +65,17 @@ function saveButtonLabel(isSaving: boolean, isDistributed: boolean): string {
 /**
  * The distribution status banner at the top of the skill detail page:
  * summarizes which plugins carry this skill and lets writers stage and save
- * plugin membership changes in one place.
+ * plugin membership changes in one place. When the skill has nothing the
+ * distribute endpoint would accept (no versions, or none valid), the banner
+ * turns red and explains what blocks distribution instead of offering the
+ * picker.
  */
 export function SkillPluginBanner({
-  skillId,
+  skill,
 }: {
-  skillId: string;
+  skill: Skill;
 }): JSX.Element | null {
+  const skillId = skill.id;
   const project = useProject();
   const queryClient = useQueryClient();
   const { data: pluginsData } = usePlugins(undefined, undefined, {
@@ -93,6 +103,9 @@ export function SkillPluginBanner({
   const undistribute = useUndistributeSkillMutation();
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  // Shared mutation observers only reflect their latest call, so a local flag
+  // covers the whole allSettled batch to keep the controls locked until it ends.
+  const [isSaving, setIsSaving] = useState(false);
 
   // Sort+join so the effect only re-fires when membership actually changes,
   // not on every unrelated refetch.
@@ -126,8 +139,6 @@ export function SkillPluginBanner({
     distributions.some(
       (distribution) => !selectedIdSet.has(distribution.pluginId),
     );
-  const isSaving = distribute.isPending || undistribute.isPending;
-
   const togglePlugin = (pluginId: string) => {
     setSelectedPluginIds((prev) =>
       prev.includes(pluginId)
@@ -141,41 +152,85 @@ export function SkillPluginBanner({
     const toRemove = distributions.filter(
       (distribution) => !selectedIdSet.has(distribution.pluginId),
     );
-    if (toAdd.length === 0 && toRemove.length === 0) return;
-    // allSettled + unconditional invalidation: some mutations in the batch
-    // may succeed even when others fail, and the cache must reflect what the
-    // server actually committed.
-    const results = await Promise.allSettled([
-      ...toAdd.map((pluginId) =>
-        distribute.mutateAsync({
-          request: {
-            distributeSkillRequestBody: { id: skillId, pluginId },
-          },
-        }),
-      ),
-      ...toRemove.map((distribution) =>
-        undistribute.mutateAsync({
-          request: {
-            undistributeSkillRequestBody: {
-              id: skillId,
-              pluginId: distribution.pluginId,
+    if ((toAdd.length === 0 && toRemove.length === 0) || isSaving) return;
+    setIsSaving(true);
+    try {
+      // allSettled + unconditional invalidation: some mutations in the batch
+      // may succeed even when others fail, and the cache must reflect what the
+      // server actually committed.
+      const results = await Promise.allSettled([
+        ...toAdd.map((pluginId) =>
+          distribute.mutateAsync({
+            request: {
+              distributeSkillRequestBody: { id: skillId, pluginId },
             },
-          },
-        }),
-      ),
-    ]);
-    await invalidateAllSkillDistributions(queryClient);
-    const firstFailure = results.find((result) => result.status === "rejected");
-    if (firstFailure) {
-      toast.error(
-        firstFailure.reason instanceof Error
-          ? firstFailure.reason.message
-          : "Failed to update plugin distributions",
+          }),
+        ),
+        ...toRemove.map((distribution) =>
+          undistribute.mutateAsync({
+            request: {
+              undistributeSkillRequestBody: {
+                id: skillId,
+                pluginId: distribution.pluginId,
+              },
+            },
+          }),
+        ),
+      ]);
+      await invalidateAllSkillDistributions(queryClient);
+      const firstFailure = results.find(
+        (result) => result.status === "rejected",
       );
-      return;
+      if (firstFailure) {
+        toast.error(
+          firstFailure.reason instanceof Error
+            ? firstFailure.reason.message
+            : "Failed to update plugin distributions",
+        );
+        return;
+      }
+      toast.success(describeSaveResult(toAdd.length, toRemove.length));
+    } finally {
+      setIsSaving(false);
     }
-    toast.success(describeSaveResult(toAdd.length, toRemove.length));
   };
+
+  const isBlocked = !skill.hasValidVersion;
+  const blockedReason =
+    skill.versionCount === 0
+      ? "This skill has no recorded versions yet. Record a SKILL.md manifest before it can be distributed."
+      : "None of this skill's versions pass validation. Fix the validation errors in SKILL.md before it can be distributed.";
+
+  let headline: JSX.Element;
+  if (isBlocked) {
+    headline = (
+      <>
+        <CircleAlert className="text-destructive h-4 w-4 shrink-0" />
+        <Type className="text-destructive text-base font-semibold">
+          Distribution blocked
+        </Type>
+      </>
+    );
+  } else if (isDistributed) {
+    headline = (
+      <>
+        <CircleCheck className="text-emerald-500 h-4 w-4 shrink-0" />
+        <Type className="text-emerald-500 text-base font-semibold">
+          Distributed to {distributions.length} plugin
+          {distributions.length > 1 ? "s" : ""}
+        </Type>
+      </>
+    );
+  } else {
+    headline = (
+      <>
+        <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
+        <Type className="text-warning-foreground text-base font-semibold">
+          Not distributed to any plugin
+        </Type>
+      </>
+    );
+  }
 
   return (
     <div className="border-border/70 relative overflow-hidden rounded-xl border shadow-sm">
@@ -183,43 +238,32 @@ export function SkillPluginBanner({
         aria-hidden="true"
         className={cn(
           "absolute inset-0 bg-gradient-to-tr from-slate-50 via-slate-50 to-orange-100 transition-all duration-700 ease-in-out dark:from-slate-950 dark:via-neutral-800 dark:to-amber-900/60",
-          isDistributed ? "opacity-0" : "opacity-100",
+          !isDistributed && !isBlocked ? "opacity-100" : "opacity-0",
         )}
       />
       <div
         aria-hidden="true"
         className={cn(
           "absolute inset-0 bg-gradient-to-br from-slate-50/10 via-slate-50 to-emerald-100/50 transition-colors transition-opacity duration-700 ease-in-out dark:from-slate-950/60 dark:via-neutral-800 dark:to-emerald-900/30",
-          isDistributed ? "opacity-100" : "opacity-0",
+          isDistributed && !isBlocked ? "opacity-100" : "opacity-0",
+        )}
+      />
+      <div
+        aria-hidden="true"
+        className={cn(
+          "absolute inset-0 bg-gradient-to-tr from-slate-50 via-slate-50 to-red-100 transition-all duration-700 ease-in-out dark:from-slate-950 dark:via-neutral-800 dark:to-red-900/60",
+          isBlocked ? "opacity-100" : "opacity-0",
         )}
       />
       <div className="relative flex items-center justify-between gap-8 p-6">
         <div className="flex max-w-md flex-col gap-3">
-          <div className="flex items-center gap-2">
-            {isDistributed ? (
-              <CircleCheck className="text-emerald-500 h-4 w-4 shrink-0" />
-            ) : (
-              <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
-            )}
-            <Type
-              className={cn(
-                "text-warning-foreground text-base font-semibold",
-                isDistributed && "text-emerald-500",
-              )}
-            >
-              {isDistributed
-                ? `Distributed to ${distributions.length} plugin${
-                    distributions.length > 1 ? "s" : ""
-                  }`
-                : "Not distributed to any plugin"}
-            </Type>
-          </div>
+          <div className="flex items-center gap-2">{headline}</div>
           <Type variant="small" className="text-muted-foreground/90">
-            Plugins are the preferred way to distribute skills to your
-            organization's users. Skills distributed to a plugin ship inside the
-            plugin package and reach everyone who installs it.
+            {isBlocked
+              ? blockedReason
+              : "Plugins are the preferred way to distribute skills to your organization's users. Skills distributed to a plugin ship inside the plugin package and reach everyone who installs it."}
           </Type>
-          {plugins.length > 0 && (
+          {!isBlocked && plugins.length > 0 && (
             <RequireScope
               scope="skill:write"
               resourceId={project.id}

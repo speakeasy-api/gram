@@ -47,6 +47,25 @@ func TestCaptureSkillContent_CreatesCapturedSkillVersionAndAlias(t *testing.T) {
 	require.NotEmpty(t, alias.CanonicalSha256)
 }
 
+func TestCaptureSkillContent_BackfillsSummaryOnObservedSkill(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	observed, err := ti.repo.CreateObservedSkill(ctx, repo.CreateObservedSkillParams{
+		ProjectID: ti.projectID, Name: "observed-skill", DisplayName: "observed-skill",
+	})
+	require.NoError(t, err)
+	require.False(t, observed.Summary.Valid)
+
+	result, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, capturedManifest("observed-skill", "Backfilled summary.", "body"))
+	require.NoError(t, err)
+	require.False(t, result.CreatedSkill)
+	require.True(t, result.CreatedVersion)
+	require.Equal(t, observed.ID, result.SkillID)
+	skill, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: result.SkillID})
+	require.NoError(t, err)
+	require.Equal(t, "Backfilled summary.", skill.Summary.String)
+}
+
 func TestCaptureSkillContent_RawVariantsCollapseAndSameNameContentVersions(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -92,7 +111,8 @@ func TestCaptureSkillContent_DedupesManualWithoutOriginAndPreservesPresentation(
 	skill, err := ti.repo.GetSkill(ctx, repo.GetSkillParams{ProjectID: ti.projectID, ID: result.SkillID})
 	require.NoError(t, err)
 	require.Equal(t, "manual-skill", skill.DisplayName)
-	require.Equal(t, "Manual summary.", skill.Summary.String)
+	// The newly captured version became current, so the summary follows it.
+	require.Equal(t, "Captured replacement.", skill.Summary.String)
 }
 
 func TestCaptureSkillContent_ReusesRenamedSkillByRawHash(t *testing.T) {

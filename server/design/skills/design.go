@@ -451,6 +451,7 @@ var Skill = Type("Skill", func() {
 		Format(FormatUUID)
 	})
 	Attribute("version_count", Int64, "The number of immutable versions recorded for the skill.")
+	Attribute("has_valid_version", Boolean, "Whether the skill has at least one valid version available to distribute.")
 	Attribute("first_seen_at", String, "When this skill was first activated.", func() { Format(FormatDateTime) })
 	Attribute("last_seen_at", String, "When this skill was most recently activated.", func() { Format(FormatDateTime) })
 	Attribute("seen_count", Int64, "The number of reconciled activations observed for this skill.")
@@ -461,7 +462,7 @@ var Skill = Type("Skill", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "name", "display_name", "source_kind", "classification", "version_count", "seen_count", "created_at", "updated_at")
+	Required("id", "project_id", "name", "display_name", "source_kind", "classification", "version_count", "has_valid_version", "seen_count", "created_at", "updated_at")
 })
 
 var SkillVersion = Type("SkillVersion", func() {

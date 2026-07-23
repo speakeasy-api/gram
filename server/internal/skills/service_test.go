@@ -138,7 +138,7 @@ func TestSkillsVersioningByNormalizedNameAndExplicitAdd(t *testing.T) {
 	require.NotEqual(t, first.Version.ID, second.Version.ID)
 	require.Equal(t, "my-skill", second.Skill.Name)
 	require.Equal(t, "My_Skill", second.Skill.DisplayName)
-	require.Equal(t, "First summary.", *second.Skill.Summary)
+	require.Equal(t, "Second summary.", *second.Skill.Summary)
 	require.Equal(t, int64(2), second.Skill.VersionCount)
 	require.NotNil(t, second.Skill.LatestVersionID)
 	require.Equal(t, second.Version.ID, *second.Skill.LatestVersionID)
@@ -158,7 +158,7 @@ func TestSkillsVersioningByNormalizedNameAndExplicitAdd(t *testing.T) {
 	require.Equal(t, int64(3), third.Skill.VersionCount)
 	require.NotNil(t, third.Skill.LatestVersionID)
 	require.Equal(t, third.Version.ID, *third.Skill.LatestVersionID)
-	require.Equal(t, "First summary.", *third.Skill.Summary)
+	require.Equal(t, "Third summary.", *third.Skill.Summary)
 
 	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{
 		ID:               first.Skill.ID,
@@ -221,7 +221,7 @@ func TestSkillsCurateCapturedSkillWithVersionLineage(t *testing.T) {
 	require.Equal(t, captured.SkillVersionID.String(), *derived.Version.DerivedFromVersionID)
 	require.Equal(t, "curated-name", derived.Skill.Name)
 	require.Equal(t, "Curated skill", derived.Skill.DisplayName)
-	require.Equal(t, "Curated summary.", *derived.Skill.Summary)
+	require.Equal(t, "Edited description.", *derived.Skill.Summary)
 
 	other := createSkill(t, ctx, ti, "other-skill", "Other summary.")
 	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{
@@ -316,7 +316,9 @@ func TestSkillsHistoricalDuplicateDoesNotMoveLatestBackward(t *testing.T) {
 	require.NotNil(t, duplicate.Skill.LatestVersionID)
 	require.Equal(t, newer.Version.ID, *duplicate.Skill.LatestVersionID)
 	require.Equal(t, int64(2), duplicate.Skill.VersionCount)
-	require.Equal(t, "First.", *duplicate.Skill.Summary)
+	// The duplicate re-record creates no version, so the summary stays with
+	// the current (newer) version's description.
+	require.Equal(t, "Second.", *duplicate.Skill.Summary)
 }
 
 func TestSkillsArchiveIsIdempotentAndAllowsReplacement(t *testing.T) {
