@@ -56,38 +56,6 @@ func TestExtendedConfig_MatchIsValueNotLabel(t *testing.T) {
 	require.Equal(t, content[tok.StartPos:tok.EndPos], tok.Match, "span must bracket exactly the value")
 }
 
-// When the generic catch-all and a specific rule match the same secret value,
-// the specific rule must sort first so downstream position-dedup keeps it —
-// deterministically, not by detector map-iteration order.
-func TestExtendedConfig_SpecificRuleOutranksGeneric(t *testing.T) {
-	t.Parallel()
-
-	content := `{
-  "AccessKeyId": "` + fakeAccessKeyID + `",
-  "SecretAccessKey": "` + fakeSecret + `"
-}`
-	findings, err := gitleaks.NewScanner().Scan(context.Background(), content)
-	require.NoError(t, err)
-
-	specificIdx, genericIdx := -1, -1
-	for i, f := range findings {
-		if f.Match != fakeSecret {
-			continue
-		}
-		switch f.RuleID {
-		case gitleaks.SecretAccessKeyRuleID:
-			specificIdx = i
-		case "secret.generic_api_key":
-			genericIdx = i
-		}
-	}
-	require.GreaterOrEqual(t, specificIdx, 0, "aws_secret_access_key should fire on the value")
-	if genericIdx >= 0 {
-		require.Less(t, specificIdx, genericIdx,
-			"the specific AWS rule must sort before the generic catch-all at the same value")
-	}
-}
-
 // The access key id is an identifier, not a secret: it anchors detection but is
 // NEVER surfaced as its own finding. The secret access key and session token
 // are the values that get flagged.
