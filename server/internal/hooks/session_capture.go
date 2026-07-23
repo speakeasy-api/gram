@@ -179,6 +179,17 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 	if payload == nil {
 		return makeHookResult(ev.RawEventType), nil
 	}
+	// Spend gate runs before any risk-policy evaluation: an over-budget user
+	// is denied outright.
+	if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+		reason := spendBlockReason("prompt", block)
+		if payload.SessionID != nil {
+			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, reason)
+			}
+		}
+		return constructBlockResponse(payload.HookEventName, reason), nil
+	}
 	if s.riskScanner != nil && ev.Prompt != "" && ev.ConversationID != "" {
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			// Warn (challenge) defers to the tool call: Claude Code can only show

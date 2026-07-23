@@ -673,6 +673,8 @@ tags:
     description: Manage organization-wide skill efficacy sampling settings.
   - name: skills
     description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
+  - name: spendRules
+    description: Manage budget rules, view budget events, and preview actor targeting.
   - name: telemetry
     description: Fetch telemetry data for tools in Gram.
   - name: templates

@@ -111,6 +111,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skillefficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
+	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/templates"
@@ -1040,6 +1042,12 @@ func newStartCommand() *cli.Command {
 			}
 			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
 
+			spendCelEngine, err := spendcelenv.New()
+			if err != nil {
+				return fmt.Errorf("create spend rules cel engine: %w", err)
+			}
+			spendGate := spendrules.NewGate(logger, cache.NewRedisCacheAdapter(redisClient))
+
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
@@ -1069,6 +1077,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				riskScanner,
 				policyBypass,
+				spendGate,
 				shadowMCPClient,
 				chatWriter,
 				efficacySignaler,
@@ -1211,6 +1220,33 @@ func newStartCommand() *cli.Command {
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
+			spendEvaluator := &background.TemporalSpendRuleEvaluator{TemporalEnv: temporalEnv}
+			spendrules.Attach(mux, spendrules.NewService(
+				logger,
+				tracerProvider,
+				db,
+				chDB,
+				sessionManager,
+				authzEngine,
+				auditLogger,
+				spendCelEngine,
+				spendEvaluator,
+			))
+
+			// Fresh spend-relevant telemetry (Claude Code OTEL logs,
+			// Codex/Cursor usage rows) triggers a throttled per-org
+			// evaluation so breached budgets block within seconds instead of
+			// waiting for the scheduled sweep. Flushed in the drain goroutine
+			// below, not via shutdownFuncs, for the same gRPC-close race
+			// reason as riskSignaler.
+			spendUsageTrigger := spendrules.NewUsageTrigger(
+				logger,
+				cache.NewRedisCacheAdapter(redisClient),
+				spendEvaluator,
+				spendrules.UsageSignalCooldown,
+			)
+			telemLogger.AddObserver(spendUsageTrigger)
+
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChatsTools(chatService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantRiskTools(riskService)...)
@@ -1343,6 +1379,9 @@ func newStartCommand() *cli.Command {
 				}
 				if err := efficacySignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending skill efficacy signals", attr.SlogError(err))
+				}
+				if err := spendUsageTrigger.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(err))
 				}
 			})
 

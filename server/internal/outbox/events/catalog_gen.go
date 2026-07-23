@@ -50,6 +50,7 @@ var All = []outbox.EventRegistration{
 	ShadowMCPApprovalV1,
 	SkillEfficacySettingsV1,
 	SkillV1,
+	SpendRuleV1,
 	TemplateV1,
 	ToolsetV1,
 	TriggerInstanceV1,

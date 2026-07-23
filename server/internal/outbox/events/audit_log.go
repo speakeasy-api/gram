@@ -58,6 +58,7 @@ var (
 	ShadowMCPApprovalV1         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_approval_event_v1", "Deprecated: use audit_log.access_request_event_v1.")
 	SkillEfficacySettingsV1     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.skill_efficacy_settings_event_v1", "Emitted when skill efficacy sampling settings are changed")
 	SkillV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.skill_event_v1", "Emitted when changes to skills are made")
+	SpendRuleV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.spend_rule_event_v1", "Emitted when changes to spend rules are made")
 	TemplateV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.template_event_v1", "Emitted when changes to prompt templates are made")
 	ToolsetV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.toolset_event_v1", "Emitted when changes to toolsets used by MCP servers are made")
 	TunneledMcpServerV1         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.tunneled_mcp_server_event_v1", "Emitted when changes to tunneled MCP servers are made")

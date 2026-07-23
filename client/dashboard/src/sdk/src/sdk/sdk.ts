@@ -49,6 +49,7 @@ import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
 import { SkillEfficacy } from "./skillefficacy.js";
 import { Skills } from "./skills.js";
+import { SpendRules } from "./spendrules.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
 import { TokenExchange } from "./tokenexchange.js";
@@ -304,6 +305,11 @@ export class Gram extends ClientSDK {
   private _skills?: Skills;
   get skills(): Skills {
     return (this._skills ??= new Skills(this._options));
+  }
+
+  private _spendRules?: SpendRules;
+  get spendRules(): SpendRules {
+    return (this._spendRules ??= new SpendRules(this._options));
   }
 
   private _telemetry?: Telemetry;
