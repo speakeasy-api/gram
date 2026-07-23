@@ -61,6 +61,9 @@ trackedFiles:
   src/funcs/accessUpdateShadowMCPAccessRule.ts: {}
   src/funcs/accessUpdateShadowMCPInventoryServerName.ts: {}
   src/funcs/accessUpsertShadowMCPInventoryPolicyBypass.ts: {}
+  src/funcs/adminChatAnalysisGetSettings.ts: {}
+  src/funcs/adminChatAnalysisTriggerAnalysis.ts: {}
+  src/funcs/adminChatAnalysisUpsertWorkUnitsSettings.ts: {}
   src/funcs/adminRemoteSessionsCreateGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsCreateGlobalIssuer.ts: {}
   src/funcs/adminRemoteSessionsDeleteGlobalClient.ts: {}
@@ -531,6 +534,7 @@ trackedFiles:
   src/models/components/challengebucket.ts: {}
   src/models/components/challengeresolution.ts: {}
   src/models/components/chat.ts: {}
+  src/models/components/chatanalysissettings.ts: {}
   src/models/components/chatmessage.ts: {}
   src/models/components/chatoverview.ts: {}
   src/models/components/chatsummary.ts: {}
@@ -1066,6 +1070,7 @@ trackedFiles:
   src/models/components/toolvariationgroupresult.ts: {}
   src/models/components/topserver.ts: {}
   src/models/components/topuser.ts: {}
+  src/models/components/triggeranalysisresponsebody.ts: {}
   src/models/components/triggerdefinition.ts: {}
   src/models/components/triggerenvrequirement.ts: {}
   src/models/components/triggerinstance.ts: {}
@@ -1133,6 +1138,7 @@ trackedFiles:
   src/models/components/upsertkeyrequestbody.ts: {}
   src/models/components/upsertrequestbody.ts: {}
   src/models/components/upsertsettingsrequestbody.ts: {}
+  src/models/components/upsertworkunitssettingsrequestbody.ts: {}
   src/models/components/usagetiers.ts: {}
   src/models/components/useraccount.ts: {}
   src/models/components/usersession.ts: {}
@@ -1292,6 +1298,7 @@ trackedFiles:
   src/models/operations/getassistantmemory.ts: {}
   src/models/operations/getawsiamcredential.ts: {}
   src/models/operations/getawskmskey.ts: {}
+  src/models/operations/getchatanalysissettings.ts: {}
   src/models/operations/getcustomdetectionrule.ts: {}
   src/models/operations/getdeployment.ts: {}
   src/models/operations/getdeploymentlogs.ts: {}
@@ -1537,6 +1544,7 @@ trackedFiles:
   src/models/operations/switchauthscopes.ts: {}
   src/models/operations/testdetectionrule.ts: {}
   src/models/operations/tokenexchange.ts: {}
+  src/models/operations/triggerchatanalysis.ts: {}
   src/models/operations/triggerriskanalysis.ts: {}
   src/models/operations/undistributeskill.ts: {}
   src/models/operations/unmaskriskresult.ts: {}
@@ -1585,6 +1593,7 @@ trackedFiles:
   src/models/operations/uploadskillcontent.ts: {}
   src/models/operations/upsertaiintegrationconfig.ts: {}
   src/models/operations/upsertallowedorigin.ts: {}
+  src/models/operations/upsertchatanalysissettings.ts: {}
   src/models/operations/upsertglobalvariation.ts: {}
   src/models/operations/upsertmodelproviderkey.ts: {}
   src/models/operations/upsertotelforwardingconfig.ts: {}
@@ -1631,6 +1640,8 @@ trackedFiles:
   src/react-query/challengeBuckets.ts: {}
   src/react-query/challenges.core.ts: {}
   src/react-query/challenges.ts: {}
+  src/react-query/chatAnalysisSettings.core.ts: {}
+  src/react-query/chatAnalysisSettings.ts: {}
   src/react-query/chatDelete.ts: {}
   src/react-query/chatGenerateTitle.ts: {}
   src/react-query/chatSessionsCreate.ts: {}
@@ -2161,6 +2172,7 @@ trackedFiles:
   src/react-query/toolset.ts: {}
   src/react-query/trigger.core.ts: {}
   src/react-query/trigger.ts: {}
+  src/react-query/triggerChatAnalysis.ts: {}
   src/react-query/triggerDefinitions.core.ts: {}
   src/react-query/triggerDefinitions.ts: {}
   src/react-query/triggers.core.ts: {}
@@ -2209,6 +2221,7 @@ trackedFiles:
   src/react-query/uploadOpenAPIv3.ts: {}
   src/react-query/upsertAIIntegrationConfig.ts: {}
   src/react-query/upsertAllowedOrigin.ts: {}
+  src/react-query/upsertChatAnalysisSettings.ts: {}
   src/react-query/upsertGlobalVariation.ts: {}
   src/react-query/upsertModelProviderKey.ts: {}
   src/react-query/upsertOtelForwardingConfig.ts: {}
@@ -2234,6 +2247,7 @@ trackedFiles:
   src/react-query/verifyOnboardingHooksSetup.ts: {}
   src/react-query/verifyRemoteMcpURL.ts: {}
   src/sdk/access.ts: {}
+  src/sdk/adminchatanalysis.ts: {}
   src/sdk/adminremotesessions.ts: {}
   src/sdk/agent.ts: {}
   src/sdk/aiintegrations.ts: {}
@@ -3800,6 +3814,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getChatAnalysisSettings:
+    speakeasy-default-get-chat-analysis-settings:
+      responses:
+        "200":
+          application/json: {"is_default": true, "organization_id": "<id>", "work_units_daily_cap": 705479, "work_units_enabled": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getCustomDetectionRule:
     speakeasy-default-get-custom-detection-rule:
       parameters:
@@ -6483,6 +6506,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  triggerChatAnalysis:
+    speakeasy-default-trigger-chat-analysis:
+      responses:
+        "200":
+          application/json: {"projects_signaled": 455547}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   triggerRiskAnalysis:
     speakeasy-default-trigger-risk-analysis:
       requestBody:
@@ -7036,6 +7068,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  upsertChatAnalysisSettings:
+    speakeasy-default-upsert-chat-analysis-settings:
+      requestBody:
+        application/json: {"work_units_daily_cap": 17855, "work_units_enabled": true}
+      responses:
+        "200":
+          application/json: {"is_default": false, "organization_id": "<id>", "work_units_daily_cap": 697103, "work_units_enabled": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   upsertGlobalVariation:
     speakeasy-default-upsert-global-variation:
       requestBody:
