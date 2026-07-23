@@ -89,7 +89,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.riskEvents, scope: ["org:admin"] },
       { route: routes.shadowMCP, scope: readWrite },
       { route: routes.detectionRules, scope: readWrite },
-      { route: routes.settings, scope: ["project:write"] },
+      { route: routes.settings, scope: ["project:write", "org:admin"] },
     ];
   }, [
     routes,

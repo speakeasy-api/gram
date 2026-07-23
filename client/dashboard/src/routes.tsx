@@ -637,7 +637,7 @@ const ROUTE_STRUCTURE = {
     },
   },
   settings: {
-    title: "Project settings",
+    title: "Settings",
     url: "settings",
     icon: "settings",
     component: Settings,
