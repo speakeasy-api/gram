@@ -79,9 +79,10 @@ func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Contex
 	}
 
 	err := i.authz.Require(ctx, authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
-		Tool:        call.Params.Name,
-		Disposition: "",
-		ProjectID:   i.projectID,
+		Tool:            call.Params.Name,
+		Disposition:     "",
+		ProjectID:       i.projectID,
+		ToolAnnotations: "",
 	}))
 	if err != nil {
 		return fmt.Errorf("authorize remote MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))

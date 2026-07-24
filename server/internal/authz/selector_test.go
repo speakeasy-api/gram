@@ -420,3 +420,117 @@ func TestSelector_Matches_dispositionGrantDeniesWrongDisposition(t *testing.T) {
 	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "disposition": "read_only"}))
 	require.False(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "disposition": "destructive"}))
 }
+
+func TestValidateSelector_mcpToolAnnotationsAllowed(t *testing.T) {
+	t.Parallel()
+
+	known := Selector{"resource_kind": "mcp", "resource_id": "*", "tool_annotations": "known"}
+	none := Selector{"resource_kind": "mcp", "resource_id": "*", "tool_annotations": "none"}
+	unknown := Selector{"resource_kind": "mcp", "resource_id": "*", "tool_annotations": "unknown"}
+	require.NoError(t, ValidateSelector(ScopeMCPConnect, known))
+	require.NoError(t, ValidateSelector(ScopeMCPConnect, none))
+	require.NoError(t, ValidateSelector(ScopeMCPConnect, unknown))
+	require.NoError(t, ValidateSelector(ScopeMCPRead, unknown))
+	require.NoError(t, ValidateSelector(ScopeMCPWrite, unknown))
+}
+
+func TestValidateSelector_mcpToolAnnotationsInvalidValue(t *testing.T) {
+	t.Parallel()
+
+	sel := Selector{"resource_kind": "mcp", "resource_id": "*", "tool_annotations": "materialized"}
+	require.ErrorContains(t, ValidateSelector(ScopeMCPConnect, sel), "invalid tool_annotations value")
+}
+
+func TestValidateSelector_toolAnnotationsRejectedOutsideMCP(t *testing.T) {
+	t.Parallel()
+
+	sel := Selector{"resource_kind": "project", "resource_id": "proj_123", "tool_annotations": "known"}
+	require.ErrorContains(t, ValidateSelector(ScopeProjectRead, sel), "not allowed")
+}
+
+func TestSelector_Matches_toolAnnotationsGrantMatchesConnectionCheck(t *testing.T) {
+	t.Parallel()
+
+	// An allow grant constrained by tool_annotations still matches checks
+	// that don't carry the dimension (check isn't constraining it) — same
+	// semantics as disposition and project_id.
+	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "tool_annotations": "known"}
+	check := Selector{"resource_kind": "mcp", "resource_id": "toolsetA"}
+	require.True(t, grant.Matches(check))
+}
+
+func TestSelector_Matches_toolAnnotationsGrantDeniesWrongValue(t *testing.T) {
+	t.Parallel()
+
+	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "tool_annotations": "known"}
+	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "tool_annotations": "known"}))
+	require.False(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "tool_annotations": "unknown"}))
+}
+
+func TestSelector_StrictMatches_toolAnnotationsDenyRequiresDimension(t *testing.T) {
+	t.Parallel()
+
+	// A deny grant on tool_annotations must not match a check that doesn't
+	// carry the dimension — otherwise the deny would fire on every tool call
+	// on paths that don't emit the key yet. Default permissive.
+	deny := Selector{"resource_kind": "mcp", "resource_id": "*", "tool_annotations": "unknown"}
+	withoutDimension := Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "tool": "search"}
+	require.False(t, deny.StrictMatches(withoutDimension))
+
+	unknownCheck := Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "tool": "search", "tool_annotations": "unknown"}
+	require.True(t, deny.StrictMatches(unknownCheck))
+
+	knownCheck := Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "tool": "search", "tool_annotations": "known"}
+	require.False(t, deny.StrictMatches(knownCheck))
+}
+
+func TestMCPToolCallCheck_injectsToolAnnotations(t *testing.T) {
+	t.Parallel()
+
+	check := MCPToolCallCheck("toolsetA", MCPToolCallDimensions{
+		Tool:            "search",
+		Disposition:     "",
+		ProjectID:       "",
+		ToolAnnotations: ToolAnnotationsUnknown,
+	})
+	require.Equal(t, ScopeMCPConnect, check.Scope)
+	require.Equal(t, "unknown", check.Dimensions[SelectorKeyToolAnnotations])
+}
+
+func TestMCPToolCallCheck_emptyToolAnnotationsOmitsDimension(t *testing.T) {
+	t.Parallel()
+
+	check := MCPToolCallCheck("toolsetA", MCPToolCallDimensions{
+		Tool:            "search",
+		Disposition:     "",
+		ProjectID:       "",
+		ToolAnnotations: "",
+	})
+	_, ok := check.Dimensions[SelectorKeyToolAnnotations]
+	require.False(t, ok)
+}
+
+func TestSelector_StrictMatches_toolAnnotationsPolicyGates(t *testing.T) {
+	t.Parallel()
+
+	// The three values encode two policy strengths. The review gate
+	// (deny "unknown") lets "none" through: recording a zero-token metadata
+	// row moves a tool from unknown to none, which is the data-level escape
+	// hatch — deny grants accept no allow-side exceptions. The classification
+	// gate (deny "unknown" plus deny "none") catches both non-"known" states.
+	denyUnknown := Selector{"resource_kind": "mcp", "resource_id": "*", "tool_annotations": "unknown"}
+	denyNone := Selector{"resource_kind": "mcp", "resource_id": "*", "tool_annotations": "none"}
+
+	unknownCheck := Selector{"resource_kind": "mcp", "resource_id": "srv", "tool": "unvetted", "tool_annotations": "unknown"}
+	noneCheck := Selector{"resource_kind": "mcp", "resource_id": "srv", "tool": "vetted_plain", "tool_annotations": "none"}
+	knownCheck := Selector{"resource_kind": "mcp", "resource_id": "srv", "tool": "classified", "tool_annotations": "known"}
+
+	// Review gate: only "unknown" is denied.
+	require.True(t, denyUnknown.StrictMatches(unknownCheck))
+	require.False(t, denyUnknown.StrictMatches(noneCheck))
+	require.False(t, denyUnknown.StrictMatches(knownCheck))
+
+	// Classification gate adds the "none" deny: only "known" survives.
+	require.True(t, denyNone.StrictMatches(noneCheck))
+	require.False(t, denyNone.StrictMatches(knownCheck))
+}

@@ -15,13 +15,14 @@ import (
 type Selector map[string]string
 
 const (
-	SelectorKeyResourceKind   = "resource_kind"
-	SelectorKeyResourceID     = "resource_id"
-	SelectorKeyTool           = "tool"
-	SelectorKeyDisposition    = "disposition"
-	SelectorKeyProjectID      = "project_id"
-	SelectorKeyServerURL      = "server_url"
-	SelectorKeyServerIdentity = "server_identity"
+	SelectorKeyResourceKind    = "resource_kind"
+	SelectorKeyResourceID      = "resource_id"
+	SelectorKeyTool            = "tool"
+	SelectorKeyDisposition     = "disposition"
+	SelectorKeyToolAnnotations = "tool_annotations"
+	SelectorKeyProjectID       = "project_id"
+	SelectorKeyServerURL       = "server_url"
+	SelectorKeyServerIdentity  = "server_identity"
 )
 
 // Matches reports whether this (grant) selector satisfies the given check
@@ -103,14 +104,42 @@ var validDispositions = map[string]bool{
 	DispositionOpenWorld:   true,
 }
 
+// Tool annotation values describing what is known about a tool's disposition.
+// Three states, same lattice as SQL NULL vs empty set or DNS NXDOMAIN vs
+// NODATA:
+//
+//   - "known": disposition tokens are recorded for the tool.
+//   - "none": the tool was affirmatively recorded with zero tokens — a
+//     materialized remote-MCP metadata row with no dispositions, or a toolset
+//     definition without annotations. Reviewed; no behavior class applies.
+//   - "unknown": no information exists for the tool.
+//
+// Deny grants accept no allow-side exceptions (deny always wins), so the two
+// policy strengths are data-escapable by design: deny {"unknown"} is the
+// review gate (recording a zero-token row moves a tool to "none"), and
+// deny {"unknown"} + deny {"none"} is the classification gate.
+const (
+	ToolAnnotationsKnown   = "known"
+	ToolAnnotationsNone    = "none"
+	ToolAnnotationsUnknown = "unknown"
+)
+
+// validToolAnnotations is the set of allowed tool_annotations values.
+var validToolAnnotations = map[string]bool{
+	ToolAnnotationsKnown:   true,
+	ToolAnnotationsNone:    true,
+	ToolAnnotationsUnknown: true,
+}
+
 // allowedSelectorKeys defines which extra keys (beyond resource_kind and
 // resource_id) are valid for each scope family. Scope families not listed here
 // allow no extra keys.
 var allowedSelectorKeys = map[string]map[string]bool{
 	ResourceKindMCP: {
-		SelectorKeyTool:        true,
-		SelectorKeyDisposition: true,
-		SelectorKeyProjectID:   true,
+		SelectorKeyTool:            true,
+		SelectorKeyDisposition:     true,
+		SelectorKeyToolAnnotations: true,
+		SelectorKeyProjectID:       true,
 	},
 	ResourceKindEnvironment: {
 		SelectorKeyProjectID: true,
@@ -162,6 +191,9 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		}
 		if k == SelectorKeyDisposition && !validDispositions[v] {
 			return fmt.Errorf("invalid disposition value %q", v)
+		}
+		if k == SelectorKeyToolAnnotations && !validToolAnnotations[v] {
+			return fmt.Errorf("invalid tool_annotations value %q", v)
 		}
 		if k == SelectorKeyServerURL {
 			parsed, err := url.Parse(v)

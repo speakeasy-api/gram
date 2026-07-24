@@ -215,17 +215,24 @@ func handleToolsCall(
 	// tool and disposition dimensions. Public MCPs skip this — they're open to
 	// everyone, mirroring the connection-level guard in impl.go.
 	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
+		// Materialized tools carry authoritative annotations on their
+		// definition, so they resolve to known/none. Proxy tools (tool == nil
+		// here) have no recorded-metadata read path at call time yet, so their
+		// honest state is unknown — the recorded-metadata read path (AGE-2877)
+		// replaces this constant with a real lookup.
 		var disposition string
+		toolAnnotations := authz.ToolAnnotationsUnknown
 		if tool != nil {
-			baseTool, err := conv.ToBaseTool(tool)
-			if err == nil {
+			if baseTool, err := conv.ToBaseTool(tool); err == nil {
 				disposition = conv.DispositionFromAnnotations(baseTool.Annotations)
+				toolAnnotations = conv.Ternary(disposition != "", authz.ToolAnnotationsKnown, authz.ToolAnnotationsNone)
 			}
 		}
 		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
-			Tool:        params.Name,
-			Disposition: disposition,
-			ProjectID:   payload.projectID.String(),
+			Tool:            params.Name,
+			Disposition:     disposition,
+			ProjectID:       payload.projectID.String(),
+			ToolAnnotations: toolAnnotations,
 		})); err != nil {
 			return nil, fmt.Errorf("authorize MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
 		}
