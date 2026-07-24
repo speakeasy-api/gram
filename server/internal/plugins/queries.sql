@@ -136,6 +136,38 @@ WHERE plugin_id = @plugin_id
   AND mcp_server_id IS NOT DISTINCT FROM sqlc.narg('mcp_server_id')::uuid
   AND deleted IS FALSE;
 
+-- name: PluginServerDisplayNameExists :one
+-- Reports whether a live plugin server on the plugin already uses the display
+-- name. AttachToDefaultPlugin checks this before inserting so it can uniquify
+-- the name instead of tripping the (plugin_id, display_name) unique index,
+-- whose failed insert would abort the caller's surrounding transaction.
+-- Joins plugins to scope by project_id as defense-in-depth against IDOR.
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers
+  JOIN plugins ON plugins.id = plugin_servers.plugin_id
+  WHERE plugin_servers.plugin_id = @plugin_id
+    AND plugins.project_id = @project_id
+    AND plugin_servers.display_name = @display_name
+    AND plugin_servers.deleted IS FALSE
+);
+
+-- name: SoftDeletePluginServersByMCPServerID :many
+-- Soft-deletes every live plugin server backed by the mcp_server, joining
+-- plugins for project scoping. Returns the removed rows with their plugin's
+-- name and slug so callers can audit-log each removal. Used by mcpservers on
+-- server deletion so a deleted server does not keep holding a plugin's
+-- display name: the (plugin_id, display_name) unique index only excludes
+-- soft-deleted rows.
+UPDATE plugin_servers
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM plugins
+WHERE plugins.id = plugin_servers.plugin_id
+  AND plugins.project_id = @project_id
+  AND plugin_servers.mcp_server_id = @mcp_server_id
+  AND plugin_servers.deleted IS FALSE
+RETURNING plugin_servers.*, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
+
 -- name: AddPluginServer :one
 -- Inserts a plugin server backed by exactly one of a toolset or an mcp_server.
 -- The plugin_servers backend-exclusivity CHECK enforces the XOR; callers must
