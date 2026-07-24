@@ -47,11 +47,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+      - name: Setup Mise
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
-          go-version-file: "go.mod"
-          # Reference: https://github.com/actions/setup-go/issues/495
-          cache: false
+          install: true
+          cache: true
+          env: false
       - name: Decide
         id: decide
         env:
@@ -65,10 +66,14 @@ jobs:
             exit 0
           fi
 
-          # A force-push or a first push leaves no usable before-sha.
+          # A force-push or a first push leaves no usable before-sha, and the
+          # push can carry more commits than HEAD's parent covers. The gate
+          # only ever suppresses a release, so an unknown range releases.
           base="${BEFORE}"
           if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            base="${GITHUB_SHA}^"
+            echo "No usable before-sha to diff against; releasing."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           changed=$(git diff --name-only "$base" "$GITHUB_SHA")
 
