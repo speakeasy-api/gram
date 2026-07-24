@@ -661,6 +661,13 @@ CREATE TABLE IF NOT EXISTS device_agent_syncs (
   CONSTRAINT device_agent_syncs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+-- Serves the device-integration coverage join, which matches MDM-reported
+-- device emails against agent heartbeats case-insensitively (the raw-column
+-- device_agent_syncs_org_email_key cannot serve a LOWER(email) lookup). See
+-- mdm_devices.
+CREATE INDEX IF NOT EXISTS device_agent_syncs_organization_id_lower_email_idx
+ON device_agent_syncs (organization_id, LOWER(email));
+
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
@@ -4817,3 +4824,192 @@ ON spend_rule_events (spend_rule_id, event_type, email, window_start);
 -- (UUIDv7, so id order is creation order) with an `id <` cursor.
 CREATE INDEX IF NOT EXISTS spend_rule_events_organization_id_id_idx
 ON spend_rule_events (organization_id, id DESC);
+
+-- Device integrations connect an organization to external device-management
+-- and compliance vendors, in two capability families: inventory sources
+-- (MDMs such as Jamf or Kandji, polled for the managed-device fleet) and
+-- evidence sinks (compliance platforms such as Drata or Vanta, pushed
+-- agent-coverage evidence). One row per (organization, provider). This is the
+-- audited, human-written identity of an integration; machine-churned
+-- scheduler state lives in device_integration_syncs and synced inventory in
+-- mdm_devices, so poller writes never contend with these rows.
+CREATE TABLE IF NOT EXISTS device_integration_configs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  organization_id TEXT NOT NULL,
+  -- Vendor identifier (e.g. 'jamf', 'kandji', 'drata', 'vanta'). Free-form
+  -- text validated against the provider registry in application code so new
+  -- vendors need no schema change.
+  provider TEXT NOT NULL,
+  -- Secret credential material only (API keys, OAuth client secrets),
+  -- encrypted as a JSON document whose fields are provider-specific. Write
+  -- only: the management API never returns the value, only whether one is
+  -- set.
+  credentials_encrypted TEXT NOT NULL,
+  -- Non-secret, admin-visible provider settings (e.g. the Jamf instance URL
+  -- or Drata region). Split from credentials_encrypted so the dashboard can
+  -- redisplay them; validated against the provider's credential spec in
+  -- application code.
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+  enabled boolean NOT NULL DEFAULT TRUE,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT device_integration_configs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_integration_configs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- Partial unique index so a soft-deleted config doesn't block reconnecting
+-- the same provider (a plain UNIQUE would still cover deleted rows).
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_configs_organization_id_provider_key
+ON device_integration_configs (organization_id, provider)
+WHERE deleted IS FALSE;
+
+-- Non-partial index backing the organization_id FK's ON DELETE CASCADE. The
+-- unique index above is partial (excludes soft-deleted rows), so it can't
+-- serve a cascade delete, which must match every row for the org including
+-- deleted ones.
+CREATE INDEX IF NOT EXISTS device_integration_configs_organization_id_idx
+ON device_integration_configs (organization_id);
+
+-- Device integration syncs: scheduler state and failure metadata, one row
+-- per (config, schedule). Modeled on ai_integration_syncs; machine-churned
+-- by the poller every cycle, which is why it is a separate table from the
+-- audited config rows.
+CREATE TABLE IF NOT EXISTS device_integration_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  device_integration_config_id uuid NOT NULL,
+  -- Discriminator for the sync pipeline (e.g. 'jamf_inventory',
+  -- 'drata_evidence'). Declared by the provider's schedule spec.
+  schedule TEXT NOT NULL,
+
+  -- Completion time of the last fully completed snapshot. Inventory pulls
+  -- use this as the mark-missing cutoff; it advances only when a snapshot
+  -- completes, never on a partial pull.
+  poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_poll_success_at timestamptz,
+  last_poll_failed_at timestamptz,
+  last_poll_error TEXT,
+  consecutive_failures integer NOT NULL DEFAULT 0,
+  -- Digest of the last successfully pushed evidence snapshot. Evidence sinks
+  -- compare the current snapshot's digest against this and skip the push
+  -- when coverage hasn't changed. NULL for inventory schedules and before
+  -- the first successful push.
+  last_push_digest TEXT,
+  -- Set when the scheduler stops polling this schedule because the provider
+  -- repeatedly rejected the configuration (e.g. a revoked credential).
+  -- Paused schedules are skipped by candidate selection until the user
+  -- updates the integration, which resets the sync state and clears this.
+  auto_paused_at timestamptz,
+  -- Set when a user explicitly pauses this schedule from the dashboard.
+  -- Deliberately separate from auto_paused_at so "you paused this" and "we
+  -- paused this over a rejected configuration" stay distinguishable. Only
+  -- the user re-enabling the schedule clears it; config saves do not.
+  disabled_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_integration_syncs_pkey PRIMARY KEY (id),
+  CONSTRAINT device_integration_syncs_device_integration_config_id_fkey FOREIGN KEY (device_integration_config_id) REFERENCES device_integration_configs (id) ON DELETE CASCADE
+);
+
+-- One sync row per (config, schedule); the leading config_id column also
+-- backs the config FK's ON DELETE CASCADE.
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_syncs_config_id_schedule_key
+ON device_integration_syncs (device_integration_config_id, schedule);
+
+-- Serves the coordinator's candidates query: due, not auto-paused, not
+-- user-disabled. Enabled/deleted filtering happens on the joined config row.
+CREATE INDEX IF NOT EXISTS device_integration_syncs_next_poll_after_idx
+ON device_integration_syncs (next_poll_after)
+WHERE auto_paused_at IS NULL AND disabled_at IS NULL;
+
+-- mdm_devices is the MDM-reported hardware inventory synced from a device
+-- integration (one row per device per config). NOTE: distinct from
+-- device_owners, which maps an AI provider's anonymous per-device id to an
+-- employee for personal-account attribution — that table knows nothing about
+-- hardware, and this one nothing about AI accounts. Rows hang off the config
+-- rather than (organization, provider) so disconnecting an integration
+-- (soft-deleting its config) makes its inventory invisible to coverage
+-- queries, and reconnecting repopulates fresh with no stale-row merge
+-- questions. The sync never hard-deletes rows: devices absent from the
+-- latest fully completed snapshot are stamped missing_since instead (a
+-- laptop in a drawer isn't gone), so this table deliberately has no
+-- deleted_at — missing_since is its lifecycle column and config teardown
+-- cascades the rest.
+CREATE TABLE IF NOT EXISTS mdm_devices (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  device_integration_config_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  -- The MDM's own identifier for the device, unique within one config.
+  external_id TEXT NOT NULL,
+  -- Hardware serial number as reported by the MDM. Reserved join point for
+  -- device-level agent attestation: once the agent reports its hardware
+  -- serial, coverage can match on it instead of the per-user email join.
+  serial_number TEXT,
+  hostname TEXT,
+  os_name TEXT,
+  os_version TEXT,
+  -- Email of the device's assigned user exactly as the MDM reported it. May
+  -- be absent or fail to resolve to an org member; coverage surfaces those
+  -- as distinct buckets rather than silently mis-bucketing.
+  user_email TEXT,
+  -- The resolved org member for user_email, resolved at sync time via the
+  -- case-insensitive email lookups (same pattern as user_accounts.user_id
+  -- and directory_users.user_id). NULL when the MDM reported no email or it
+  -- doesn't resolve.
+  user_id TEXT,
+  -- Last device check-in as reported by the MDM (distinct from last_seen_at,
+  -- which is when *our* sync last observed the device in a snapshot).
+  mdm_last_check_in_at timestamptz,
+  -- Full vendor device record as returned by the MDM API. Lets future
+  -- normalized fields be a code change instead of a re-sync, and is the
+  -- debugging trail when a device looks wrong.
+  raw jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  -- Set when the device was absent from the latest fully completed snapshot;
+  -- cleared when it reappears. Only ever written in the same transaction
+  -- that records a completed snapshot, never by a partial pull.
+  missing_since timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mdm_devices_pkey PRIMARY KEY (id),
+  CONSTRAINT mdm_devices_device_integration_config_id_fkey FOREIGN KEY (device_integration_config_id) REFERENCES device_integration_configs (id) ON DELETE CASCADE,
+  CONSTRAINT mdm_devices_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT mdm_devices_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+-- Upsert key for inventory reconciliation; the leading config_id column also
+-- backs the config FK's ON DELETE CASCADE.
+CREATE UNIQUE INDEX IF NOT EXISTS mdm_devices_config_id_external_id_key
+ON mdm_devices (device_integration_config_id, external_id);
+
+-- Serves org-scoped coverage lookups by resolved member; the leading
+-- organization_id column also backs the org FK's ON DELETE CASCADE.
+CREATE INDEX IF NOT EXISTS mdm_devices_organization_id_user_id_idx
+ON mdm_devices (organization_id, user_id);
+
+-- Serves the coverage join's email fallback against present devices
+-- (missing devices are excluded from coverage). Pairs with
+-- device_agent_syncs_organization_id_lower_email_idx on the agent side.
+CREATE INDEX IF NOT EXISTS mdm_devices_organization_id_lower_user_email_idx
+ON mdm_devices (organization_id, LOWER(user_email))
+WHERE missing_since IS NULL;
+
+-- Backs the user FK's ON DELETE SET NULL, which must match every row for
+-- the user across orgs; the composite org-scoped index above cannot serve
+-- it.
+CREATE INDEX IF NOT EXISTS mdm_devices_user_id_idx
+ON mdm_devices (user_id)
+WHERE user_id IS NOT NULL;
