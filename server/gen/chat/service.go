@@ -425,6 +425,7 @@ type LoadChatPayload struct {
 	SessionToken      *string
 	ProjectSlugInput  *string
 	ChatSessionsToken *string
+	ApikeyToken       *string
 	// The ID of the chat
 	ID string
 	// Generation to load. A generation is an immutable snapshot of the chat

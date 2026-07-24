@@ -240,7 +240,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string, chatLoadChatApikeyToken string) (*chat.LoadChatPayload, error) {
 	var err error
 	var id string
 	{
@@ -367,6 +367,12 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 			chatSessionsToken = &chatLoadChatChatSessionsToken
 		}
 	}
+	var apikeyToken *string
+	{
+		if chatLoadChatApikeyToken != "" {
+			apikeyToken = &chatLoadChatApikeyToken
+		}
+	}
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.Generation = generation
@@ -379,6 +385,7 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
+	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }

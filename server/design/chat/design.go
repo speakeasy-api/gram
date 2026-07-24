@@ -98,12 +98,22 @@ var _ = Service("chat", func() {
 	})
 
 	Method("loadChat", func() {
+		// Reachable with a producer-scoped API key (in addition to a dashboard
+		// session or chat-session token) so backend integrations can pull chat
+		// transcripts programmatically without a browser session.
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ChatSessionsToken)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+
 		Description("Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).")
 
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
+			security.ByKeyPayload()
 			Attribute("id", String, "The ID of the chat")
 			Attribute("generation", Int, "Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.", func() {
 				Minimum(0)
@@ -147,6 +157,7 @@ var _ = Service("chat", func() {
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()
+			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 

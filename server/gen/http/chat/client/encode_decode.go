@@ -334,6 +334,10 @@ func EncodeLoadChatRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 			head := *p.ChatSessionsToken
 			req.Header.Set("Gram-Chat-Session", head)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
 		if p.Generation != nil {

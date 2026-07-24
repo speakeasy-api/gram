@@ -8523,6 +8523,13 @@ paths:
           schema:
             description: Chat Sessions token header
             type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
       responses:
         "200":
           content:
@@ -8588,6 +8595,8 @@ paths:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
         - chat_sessions_token_header_Gram-Chat-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - {}
       summary: loadChat chat
       tags:

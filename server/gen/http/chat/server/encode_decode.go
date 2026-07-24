@@ -421,6 +421,7 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			sessionToken      *string
 			projectSlugInput  *string
 			chatSessionsToken *string
+			apikeyToken       *string
 			err               error
 		)
 		qp := r.URL.Query()
@@ -538,10 +539,14 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if chatSessionsTokenRaw != "" {
 			chatSessionsToken = &chatSessionsTokenRaw
 		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewLoadChatPayload(id, generation, limit, beforeSeq, afterSeq, fromStart, riskOnly, query, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewLoadChatPayload(id, generation, limit, beforeSeq, afterSeq, fromStart, riskOnly, query, sessionToken, projectSlugInput, chatSessionsToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -561,6 +566,13 @@ func DecodeLoadChatRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ChatSessionsToken, " ", 2)[1]
 				payload.ChatSessionsToken = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 
