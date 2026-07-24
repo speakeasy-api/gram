@@ -372,6 +372,12 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, err
 	}
 
+	if enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP) {
+		if err := requireSingleShadowMCPBlockingPolicy(ctx, s.repo, *authCtx.ProjectID, uuid.Nil); err != nil {
+			return nil, err
+		}
+	}
+
 	var shadowMCPAllowedURLs []string
 	if payload.ShadowMcpAllowedUrls != nil {
 		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, shadowMCPDisposition, payload.ShadowMcpAllowedUrls)
@@ -827,6 +833,12 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	effectiveDisposition := effectiveShadowMCPDisposition(current.ShadowMcpDisposition, sources, action)
 	if current.ShadowMcpDisposition.Valid && current.ShadowMcpDisposition.String != "" && effectiveDisposition == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "cannot change the sources or action of a shadow mcp policy with a disposition; delete and recreate the policy instead")
+	}
+
+	if enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP) {
+		if err := requireSingleShadowMCPBlockingPolicy(ctx, s.repo, *authCtx.ProjectID, current.ID); err != nil {
+			return nil, err
+		}
 	}
 	if payload.ShadowMcpDisposition != nil {
 		if effectiveDisposition == "" {

@@ -69,8 +69,8 @@ func RiskPolicyAudienceTypeEnum() {
 // immutable after create — switching posture requires deleting and recreating
 // the policy.
 //
-// Must stay in sync with the ShadowMCPDisposition* constants in
-// server/internal/risk/shadow_mcp_policy_setup.go.
+// Must stay in sync with the Disposition* constants in
+// server/internal/shadowmcp/disposition.go.
 func RiskPolicyShadowMCPDispositionEnum() {
 	Enum("block_all", "allow_all")
 }

@@ -8,22 +8,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-// Default dispositions for shadow MCP blocking policies. block_all denies
-// every non-Gram-hosted server unless explicitly allowed (the original
-// behavior); allow_all permits every server unless it appears on the policy's
-// blocked-URL list. The disposition is immutable after create.
-//
-// Must stay in sync with RiskPolicyShadowMCPDispositionEnum in
-// server/design/shared/risk.go — the design package cannot import this one.
+// Default dispositions for shadow MCP blocking policies, aliased from the
+// shadowmcp package (which enforcement code uses directly). The disposition
+// is immutable after create.
 const (
-	ShadowMCPDispositionBlockAll = "block_all"
-	ShadowMCPDispositionAllowAll = "allow_all"
+	ShadowMCPDispositionBlockAll = shadowmcp.DispositionBlockAll
+	ShadowMCPDispositionAllowAll = shadowmcp.DispositionAllowAll
 )
 
 // validateShadowMCPDisposition rejects a disposition on anything other than a
@@ -57,6 +54,24 @@ func shadowMCPPolicyAutoName(sources []string, action string, existingNames []st
 	return name
 }
 
+// requireSingleShadowMCPBlockingPolicy rejects creating or enabling a second
+// enabled blocking shadow MCP policy in a project, so block_all and allow_all
+// postures can never conflict at enforcement time. excludePolicyID skips the
+// policy being updated; pass uuid.Nil on create.
+func requireSingleShadowMCPBlockingPolicy(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, excludePolicyID uuid.UUID) error {
+	policies, err := queries.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list shadow mcp blocking policies")
+	}
+	for _, p := range policies {
+		if p.ID == excludePolicyID || p.Action != "block" {
+			continue
+		}
+		return oops.E(oops.CodeConflict, nil, "project already has an enabled shadow mcp blocking policy %q; disable or delete it first", p.Name)
+	}
+	return nil
+}
+
 // validateShadowMCPBlockedURLs canonicalizes the blocked-URL set of an
 // allow_all policy. Unlike the allow list there is no inventory-observed
 // requirement: blocking a server that has not been seen yet is deliberate,
@@ -84,6 +99,32 @@ func effectiveShadowMCPDisposition(disposition pgtype.Text, sources []string, ac
 		return disposition.String
 	}
 	return ShadowMCPDispositionBlockAll
+}
+
+// loadShadowMCPBlockedURLs reads the canonical blocked-URL set of an
+// allow_all policy from its risk_policy:block grants. Block rules are
+// project-wide, so only the URL selector matters — the grant audience is
+// always the all-users principal.
+func loadShadowMCPBlockedURLs(ctx context.Context, db repo.DBTX, organizationID string, policyID string) ([]string, error) {
+	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
+		OrganizationID: organizationID,
+		Scope:          authz.ScopeRiskPolicyBlock,
+		ResourceID:     policyID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list shadow mcp policy block grants: %w", err)
+	}
+	urls := make([]string, 0, len(grants))
+	for _, grant := range grants {
+		if grant.Effect != authz.PolicyEffectAllow {
+			continue
+		}
+		if serverURL := grant.Selector[authz.SelectorKeyServerURL]; serverURL != "" {
+			urls = append(urls, serverURL)
+		}
+	}
+	slices.Sort(urls)
+	return slices.Compact(urls), nil
 }
 
 // ShadowMCPPolicyURLReconciler replaces the URL grants owned by one risk policy.

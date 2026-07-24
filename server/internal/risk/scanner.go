@@ -74,6 +74,19 @@ type ShadowMCPPolicy struct {
 	Name        string
 	Version     int64
 	UserMessage *string // nil/empty means "render the default message"
+	// Disposition is the policy's default posture: block_all (deny unless
+	// allowed — the original behavior) or allow_all (permit unless blocked).
+	Disposition string
+	// BlockedURLs is the canonical blocked-URL set of an allow_all policy.
+	// Always empty under block_all.
+	BlockedURLs []string
+}
+
+// IsAllowAll reports whether the policy permits servers by default and blocks
+// only the URLs on its blocked list. Bypass grants and fail-closed inventory
+// checks are block_all concepts and do not apply under allow-all.
+func (p *ShadowMCPPolicy) IsAllowAll() bool {
+	return p != nil && p.Disposition == ShadowMCPDispositionAllowAll
 }
 
 // ScanResult describes a match from an enforcing risk policy (block or warn).
@@ -427,11 +440,21 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 			continue
 		}
 		if p.Action == "block" {
+			disposition := effectiveShadowMCPDisposition(p.ShadowMcpDisposition, p.Sources, p.Action)
+			var blockedURLs []string
+			if disposition == ShadowMCPDispositionAllowAll {
+				blockedURLs, err = loadShadowMCPBlockedURLs(ctx, s.db, organizationID, p.ID.String())
+				if err != nil {
+					return nil, err
+				}
+			}
 			return &ShadowMCPPolicy{
 				ID:          p.ID.String(),
 				Name:        p.Name,
 				Version:     p.Version,
 				UserMessage: conv.FromPGText[string](p.UserMessage),
+				Disposition: disposition,
+				BlockedURLs: blockedURLs,
 			}, nil
 		}
 	}
