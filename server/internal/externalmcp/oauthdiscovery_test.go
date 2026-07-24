@@ -64,19 +64,23 @@ func TestDiscoverOAuthMetadata_PreservesProtectedResourceScopes(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/resource-metadata":
-			require.NoError(t, json.NewEncoder(w).Encode(protectedResourceMetadata{
+			if err := json.NewEncoder(w).Encode(protectedResourceMetadata{
 				Resource:             server.URL + "/mcp",
 				AuthorizationServers: []string{server.URL},
 				ScopesSupported:      []string{"resource.read", "resource.write"},
-			}))
+			}); err != nil {
+				t.Errorf("encode protected resource metadata: %v", err)
+			}
 		case "/.well-known/oauth-authorization-server":
-			require.NoError(t, json.NewEncoder(w).Encode(authServerMetadata{
+			if err := json.NewEncoder(w).Encode(authServerMetadata{
 				Issuer:                server.URL,
 				AuthorizationEndpoint: server.URL + "/authorize",
 				TokenEndpoint:         server.URL + "/token",
 				RegistrationEndpoint:  server.URL + "/register",
 				ScopesSupported:       nil,
-			}))
+			}); err != nil {
+				t.Errorf("encode authorization server metadata: %v", err)
+			}
 		default:
 			http.NotFound(w, r)
 		}
