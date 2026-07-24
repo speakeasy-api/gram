@@ -1,6 +1,8 @@
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
+import { BrandGradientLine } from "@/components/brand-gradient-line";
 import { AgentSessionShowcase } from "./agent-session-showcase";
 import { SpeakeasyWordmark } from "./speakeasy-wordmark";
+import { TermsFooter } from "./terms-footer";
 
 // Speakeasy brand tokens from the design system (colors_and_type.css). The
 // auth screens are a fixed light-mode brand surface, so these are scoped here
@@ -45,45 +47,7 @@ const BRAND_STYLES = `
 }
 `;
 
-// Signature full-spectrum gradient running through the brand language palette.
-function BrandGradientBar() {
-  return (
-    <div
-      className="absolute right-0 bottom-0 left-0 h-[5px]"
-      style={{
-        background:
-          "linear-gradient(90deg, rgb(50,15,30) 0%, rgb(200,50,40) 13%, rgb(251,135,63) 25%, rgb(210,220,145) 38%, rgb(90,130,80) 50%, rgb(0,35,20) 62%, rgb(0,20,60) 74%, rgb(40,115,215) 86%, rgb(155,195,255) 100%)",
-      }}
-    />
-  );
-}
-
-function TermsFooter() {
-  return (
-    <p className="absolute right-12 bottom-7 left-12 text-center text-[12px] text-[var(--stone)]">
-      By continuing, you agree to Speakeasy&apos;s{" "}
-      <a
-        href="https://www.speakeasy.com/terms-of-service"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-[var(--stone)] underline hover:text-[var(--ink)]"
-      >
-        Terms of Service
-      </a>{" "}
-      and{" "}
-      <a
-        href="https://www.speakeasy.com/privacy-policy"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-[var(--stone)] underline hover:text-[var(--ink)]"
-      >
-        Privacy Policy
-      </a>
-    </p>
-  );
-}
-
-export function BrandLockup(): JSX.Element {
+function BrandLockup() {
   return (
     <div className="flex items-center gap-3.5">
       <img src={speakeasyIcon} alt="" className="h-10 w-10" />
@@ -117,10 +81,18 @@ export function AuthShell({
 
         <section className="relative flex flex-col items-center justify-center border-[var(--hairline)] bg-[var(--paper)] px-8 pt-16 pb-28 xl:border-l">
           <div className="flex w-full max-w-[360px] flex-col items-center gap-6">
+            <BrandLockup />
             {children}
           </div>
-          <TermsFooter />
-          <BrandGradientBar />
+          <TermsFooter
+            className="absolute right-12 bottom-7 left-12 text-[var(--stone)]"
+            linkClassName="text-[var(--stone)] hover:text-[var(--ink)]"
+          />
+          {/* .brand-gradient-line owns position:relative (its animated ::after
+              needs it), so pin it via a wrapper instead of overriding. */}
+          <div className="absolute inset-x-0 bottom-0">
+            <BrandGradientLine className="h-[5px]" />
+          </div>
         </section>
       </div>
     </main>

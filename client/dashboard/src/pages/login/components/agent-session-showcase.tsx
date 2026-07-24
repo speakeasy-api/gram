@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
+import { memo, useEffect, useState } from "react";
 
 // Animated walkthrough of one governed agent session: five policy decisions
 // light up in sequence on a ~22s loop, mirroring the product's decision log.
@@ -51,23 +52,47 @@ const SPEED = 1.25;
 const REVEAL_DELAY_SECONDS = 1.6;
 const SESSION_COSTS = ["$0.00", "$0.01", "$0.02", "$0.02", "$0.03", "$0.05"];
 
+// The showcase pane is `hidden xl:flex`, so the ticker only runs when the
+// viewport can actually see it. Must match Tailwind's `xl` breakpoint.
+const SHOWCASE_VISIBLE_QUERY = "(min-width: 1280px)";
+
 function useSessionClock(): number {
   // With reduced motion the clock stays parked past the last reveal, so the
-  // card renders as a completed session instead of looping.
-  const [elapsed, setElapsed] = useState(LOOP_SECONDS - 1);
+  // card renders as a completed session (all rows revealed, progress at 100%)
+  // instead of looping.
+  const [elapsed, setElapsed] = useState(LOOP_SECONDS);
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       return;
     }
-    setElapsed(0);
-    const timer = setInterval(() => {
-      setElapsed((prev) => {
-        const next = prev + (TICK_MS / 1000) * SPEED;
-        return next >= LOOP_SECONDS ? 0 : next;
-      });
-    }, TICK_MS);
-    return () => clearInterval(timer);
+
+    const visible = window.matchMedia(SHOWCASE_VISIBLE_QUERY);
+    let timer: number | undefined;
+
+    const sync = () => {
+      if (visible.matches && timer === undefined) {
+        setElapsed(0);
+        timer = window.setInterval(() => {
+          setElapsed((prev) => {
+            const next = prev + (TICK_MS / 1000) * SPEED;
+            return next >= LOOP_SECONDS ? 0 : next;
+          });
+        }, TICK_MS);
+      } else if (!visible.matches && timer !== undefined) {
+        clearInterval(timer);
+        timer = undefined;
+      }
+    };
+
+    sync();
+    visible.addEventListener("change", sync);
+    return () => {
+      visible.removeEventListener("change", sync);
+      if (timer !== undefined) {
+        clearInterval(timer);
+      }
+    };
   }, []);
 
   return elapsed;
@@ -91,27 +116,29 @@ function revealOpacity(index: number, elapsed: number): number {
   return elapsed >= start + REVEAL_DELAY_SECONDS ? 1 : 0;
 }
 
-function DecisionRow({
+// Memoized so the 10Hz ticker only reconciles rows at step boundaries; the
+// per-tick DOM update is just the progress bar.
+const DecisionRow = memo(function DecisionRow({
   step,
-  index,
-  elapsed,
-  currentStep,
+  opacity,
+  reveal,
 }: {
   step: DecisionStep;
-  index: number;
-  elapsed: number;
-  currentStep: number;
+  opacity: number;
+  reveal: number;
 }) {
-  const reveal = revealOpacity(index, elapsed);
   return (
     <div
       className="border border-[var(--hairline)] px-3 py-[9px] transition-opacity duration-500"
-      style={{ opacity: rowOpacity(index, currentStep) }}
+      style={{ opacity }}
     >
       <div className="flex items-center justify-between gap-2.5">
         <span className="text-[14px]">{step.label}</span>
         <span
-          className={`auth-mono px-2 py-[3px] text-[10px] transition-opacity duration-400 ${step.chipClassName}`}
+          className={cn(
+            "auth-mono px-2 py-[3px] text-[10px] transition-opacity duration-400",
+            step.chipClassName,
+          )}
           style={{ opacity: reveal }}
         >
           {step.chip}
@@ -125,7 +152,7 @@ function DecisionRow({
       </div>
     </div>
   );
-}
+});
 
 function AgentSessionCard({ elapsed }: { elapsed: number }) {
   const currentStep = activeStep(elapsed);
@@ -157,9 +184,8 @@ function AgentSessionCard({ elapsed }: { elapsed: number }) {
           <DecisionRow
             key={step.label}
             step={step}
-            index={index}
-            elapsed={elapsed}
-            currentStep={currentStep}
+            opacity={rowOpacity(index, currentStep)}
+            reveal={revealOpacity(index, elapsed)}
           />
         ))}
       </div>

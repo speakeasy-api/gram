@@ -1,26 +1,18 @@
-import { buildLoginRedirectURL } from "@/lib/utils";
-import { useSearchParams } from "react-router";
-import { getAuthErrorMessage } from "./auth-errors";
-import { BrandLockup } from "./auth-shell";
-
-const PILLARS = ["Observe", "Secure", "Connect", "Distribute"];
+import { buildLoginRedirectURL, cn } from "@/lib/utils";
+import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
+import { SigninErrorNotice } from "./auth-errors";
 
 export function LoginPanel({
   redirectTo,
 }: {
   redirectTo: string | null;
 }): JSX.Element {
-  const [searchParams] = useSearchParams();
-  const signinError = searchParams.get("signin_error");
-
   const handleLogin = () => {
     window.location.href = buildLoginRedirectURL(redirectTo);
   };
 
   return (
     <>
-      <BrandLockup />
-
       <div className="text-center">
         <p className="text-[16px]">
           Securely scale AI usage across your organization.
@@ -31,7 +23,7 @@ export function LoginPanel({
       </div>
 
       <div className="flex gap-2">
-        {PILLARS.map((label) => (
+        {AUTH_PILLARS.map((label) => (
           <span
             key={label}
             className="auth-mono rounded-full border border-[var(--rule)] px-[11px] py-[5px] text-[11px]"
@@ -41,15 +33,11 @@ export function LoginPanel({
         ))}
       </div>
 
-      {signinError && (
-        <p className="text-center text-[14px] text-[var(--vermilion)]">
-          {getAuthErrorMessage(signinError)}
-        </p>
-      )}
+      <SigninErrorNotice />
 
       <button
         onClick={handleLogin}
-        className="mt-2 w-[280px] bg-[var(--ink)] py-3.5 text-center text-[16px] text-[var(--bone)] transition-opacity hover:opacity-85"
+        className={cn(AUTH_BUTTON_CLASSES, "mt-2 w-[280px]")}
       >
         Log in
       </button>

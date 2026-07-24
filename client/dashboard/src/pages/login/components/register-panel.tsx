@@ -1,4 +1,5 @@
 import { useTelemetry } from "@/contexts/Telemetry";
+import { cn } from "@/lib/utils";
 import { authInfo } from "@gram/client/funcs/authInfo";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import {
@@ -7,13 +8,14 @@ import {
 } from "@gram/client/react-query/register.js";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { useSearchParams } from "react-router";
-import { getAuthErrorMessage } from "./auth-errors";
-import { BrandLockup } from "./auth-shell";
+import { AUTH_BUTTON_CLASSES } from "./auth-constants";
+import { AuthErrorText, SigninErrorNotice } from "./auth-errors";
+
+const VALID_ORG_NAME_REGEX = /^[a-zA-Z0-9\s-_]+$/;
+const INVALID_ORG_NAME_MESSAGE =
+  "Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.";
 
 export function RegisterPanel(): JSX.Element {
-  const [searchParams] = useSearchParams();
-  const signinError = searchParams.get("signin_error");
   const telemetry = useTelemetry();
   const [companyName, setCompanyName] = useState("");
   const [validationError, setValidationError] = useState("");
@@ -39,6 +41,11 @@ export function RegisterPanel(): JSX.Element {
     },
 
     onSuccess: () => {
+      telemetry.capture("onboarding_event", {
+        action: "new_org_created",
+        company_name: companyName,
+        is_gram: true,
+      });
       window.location.replace("/");
     },
     onError: (error) => {
@@ -54,13 +61,8 @@ export function RegisterPanel(): JSX.Element {
     setValidationError("");
 
     // Validate using the regex on type
-    if (value.trim()) {
-      const validOrgNameRegex = /^[a-zA-Z0-9\s-_]+$/;
-      if (!validOrgNameRegex.test(value)) {
-        setValidationError(
-          "Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.",
-        );
-      }
+    if (value.trim() && !VALID_ORG_NAME_REGEX.test(value)) {
+      setValidationError(INVALID_ORG_NAME_MESSAGE);
     }
   };
 
@@ -72,11 +74,10 @@ export function RegisterPanel(): JSX.Element {
       return;
     }
 
-    telemetry.capture("onboarding_event", {
-      action: "new_org_created",
-      company_name: companyName,
-      is_gram: true,
-    });
+    if (!VALID_ORG_NAME_REGEX.test(companyName)) {
+      setValidationError(INVALID_ORG_NAME_MESSAGE);
+      return;
+    }
 
     // Call the register mutation
     registerMutation.mutate({
@@ -90,8 +91,6 @@ export function RegisterPanel(): JSX.Element {
 
   return (
     <>
-      <BrandLockup />
-
       <div className="text-center">
         <p className="text-[17px]">Create your organization.</p>
         <p className="mt-1.5 text-[15px] text-[var(--stone)]">
@@ -99,11 +98,7 @@ export function RegisterPanel(): JSX.Element {
         </p>
       </div>
 
-      {signinError && (
-        <p className="text-center text-[14px] text-[var(--vermilion)]">
-          {getAuthErrorMessage(signinError)}
-        </p>
-      )}
+      <SigninErrorNotice />
 
       <form
         onSubmit={handleSubmit}
@@ -131,15 +126,22 @@ export function RegisterPanel(): JSX.Element {
         </div>
 
         {(validationError || registerMutation.error) && (
-          <p className="text-center text-[14px] text-[var(--vermilion)]">
+          <AuthErrorText>
             {validationError || registerMutation.error?.message}
-          </p>
+          </AuthErrorText>
         )}
 
         <button
           type="submit"
-          disabled={registerMutation.isPending || !companyName.trim()}
-          className="w-full bg-[var(--ink)] py-3.5 text-center text-[16px] text-[var(--bone)] transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={
+            registerMutation.isPending ||
+            !companyName.trim() ||
+            Boolean(validationError)
+          }
+          className={cn(
+            AUTH_BUTTON_CLASSES,
+            "w-full disabled:cursor-not-allowed disabled:opacity-50",
+          )}
         >
           Create organization
         </button>

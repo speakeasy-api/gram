@@ -1,5 +1,9 @@
 // Speakeasy wordmark from the brand design system. Paths fill with
 // currentColor so the mark picks up the surrounding text color.
+// Deliberately not Moonshine's `Logo variant="wordmark"`: that one uses the
+// brandbook's older letterforms at a different aspect ratio and fills with the
+// theme-dependent `var(--foreground)`, which breaks on this fixed light-mode
+// brand surface.
 export function SpeakeasyWordmark({
   className,
 }: {

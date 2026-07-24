@@ -2,13 +2,13 @@
 
 import { cn } from "@/lib/utils";
 import { GramLogo } from "@/components/gram-logo/index";
+import { AUTH_PILLARS } from "./auth-constants";
+import { TermsFooter } from "./terms-footer";
 
-const FEATURE_BADGES = ["Connect", "Secure", "Control", "Observe"];
-
-function FeatureBadges({ labels = FEATURE_BADGES }: { labels?: string[] }) {
+function FeatureBadges() {
   return (
     <div className="flex justify-center gap-2">
-      {labels.map((label) => (
+      {AUTH_PILLARS.map((label) => (
         <span
           key={label}
           className="rounded-full border border-[#D3D3D3] px-3 py-1 font-mono text-xs tracking-[0.01em] text-[#8B8684] uppercase"
@@ -96,7 +96,7 @@ export function AuthLayout({
           <div className="flex flex-col gap-2 text-center text-sm dark:text-black">
             <p>Securely scale AI usage across your organization.</p>
             <p className="text-[#8B8684]">
-              Control plane to govern MCP, Skills, and Assistants
+              Control plane to govern Agents, MCP and Skills.
             </p>
           </div>
           <FeatureBadges />
@@ -105,26 +105,10 @@ export function AuthLayout({
         {children}
       </div>
 
-      <p className="absolute bottom-10 z-10 px-8 text-center text-[11px] text-[#8B8684]">
-        By continuing, you agree to Speakeasy&apos;s{" "}
-        <a
-          href="https://www.speakeasy.com/terms-of-service"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-slate-600"
-        >
-          Terms of Service
-        </a>{" "}
-        and{" "}
-        <a
-          href="https://www.speakeasy.com/privacy-policy"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-slate-600"
-        >
-          Privacy Policy
-        </a>
-      </p>
+      <TermsFooter
+        className="absolute bottom-10 z-10 px-8 text-[11px] text-[#8B8684]"
+        linkClassName="hover:text-slate-600"
+      />
 
       {/* Brand signature — RGB gradient bar at bottom edge */}
       <BrandGradientBar />
