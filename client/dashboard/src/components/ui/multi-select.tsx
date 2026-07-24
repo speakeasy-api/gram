@@ -892,10 +892,14 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
               }}
             >
               {selectedValues.length > 0 ? (
-                <div className="flex w-full items-center justify-between">
+                <div className="flex w-full items-start justify-between">
                   <div
                     className={cn(
-                      "flex items-center gap-1",
+                      // min-w-0 lets this badges column shrink below its content
+                      // width so a long badge label can't push the trailing
+                      // action controls (clear/chevron) past the container's
+                      // right edge (DNO-552).
+                      "flex min-w-0 items-center gap-1",
                       singleLine
                         ? "multiselect-singleline-scroll overflow-x-auto overflow-y-hidden"
                         : "flex-wrap",
@@ -932,8 +936,11 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                 "border-transparent text-white",
                               responsiveSettings.compactMode &&
                                 "px-1.5 py-0.5 text-xs",
-                              screenSize === "mobile" &&
-                                "max-w-[120px] truncate",
+                              // Cap badge width to the container so a long label
+                              // (e.g. an email principal) truncates instead of
+                              // bleeding past the trigger's right edge (DNO-552).
+                              "min-w-0 max-w-full",
+                              screenSize === "mobile" && "max-w-[120px]",
                               singleLine && "shrink-0 whitespace-nowrap",
                               "[&>svg]:pointer-events-auto",
                             )}
@@ -948,7 +955,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                             {IconComponent && !responsiveSettings.hideIcons && (
                               <IconComponent
                                 className={cn(
-                                  "mr-2 h-4 w-4",
+                                  "mr-2 h-4 w-4 shrink-0",
                                   responsiveSettings.compactMode &&
                                     "mr-1 h-3 w-3",
                                   customStyle?.iconColor && "text-current",
@@ -958,11 +965,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                 })}
                               />
                             )}
-                            <span
-                              className={cn(
-                                screenSize === "mobile" && "truncate",
-                              )}
-                            >
+                            <span className="min-w-0 truncate">
                               {option.label}
                             </span>
                             <div
@@ -983,7 +986,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                 }
                               }}
                               aria-label={`Remove ${option.label} from selection`}
-                              className="flex h-4 w-4 cursor-pointer hover:bg-white/20 focus:ring-1 focus:ring-white/50 focus:outline-none"
+                              className="flex h-4 w-4 shrink-0 cursor-pointer hover:bg-white/20 focus:ring-1 focus:ring-white/50 focus:outline-none"
                             >
                               <XIcon
                                 className={cn(
@@ -1031,7 +1034,10 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                       </Badge>
                     )}
                   </div>
-                  <div className="flex items-center justify-between">
+                  {/* h-7 matches a badge row so the clear/chevron controls sit
+                      aligned with the first badge instead of floating in the
+                      vertical middle of a tall wrapped stack (DNO-552). */}
+                  <div className="flex h-7 shrink-0 items-center justify-between">
                     <div
                       role="button"
                       tabIndex={0}
