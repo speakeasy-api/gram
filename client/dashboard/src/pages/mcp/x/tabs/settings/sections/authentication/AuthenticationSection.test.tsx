@@ -62,6 +62,14 @@ vi.mock("./RemoteIdentityProvidersField", () => ({
   ),
 }));
 
+vi.mock("./DeleteRemoteIdentityProviderDialog", () => ({
+  DeleteRemoteIdentityProviderDialog: () => null,
+}));
+
+vi.mock("./ModifyRemoteIdentityProviderSheet", () => ({
+  ModifyRemoteIdentityProviderSheet: () => null,
+}));
+
 vi.mock("./UserSessionDurationField", () => ({
   UserSessionDurationField: () => null,
 }));
