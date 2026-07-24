@@ -62,7 +62,7 @@ func NewCreateSpendRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -121,7 +121,7 @@ func NewListSpendRulesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -180,7 +180,7 @@ func NewGetSpendRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -239,7 +239,7 @@ func NewUpdateSpendRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -298,7 +298,7 @@ func NewArchiveSpendRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -357,7 +357,7 @@ func NewPreviewSpendRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -416,7 +416,7 @@ func NewListSpendRuleEventsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -475,7 +475,7 @@ func NewGetSpendRulesOverviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
