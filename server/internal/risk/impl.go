@@ -364,6 +364,11 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		}
 	}
 
+	shadowMCPDisposition := conv.PtrValOr(payload.ShadowMcpDisposition, "")
+	if err := validateShadowMCPDisposition(shadowMCPDisposition, sources, action); err != nil {
+		return nil, err
+	}
+
 	// Auto-generate a name when the caller opted in (explicit auto_name=true
 	// or omitted both auto_name and name). Setting auto_name=false with an
 	// empty name surfaces a validation error below rather than silently
@@ -376,6 +381,8 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		}
 		if policyType == ra.PolicyTypePromptBased {
 			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+		} else if shadowName := shadowMCPPolicyAutoName(sources, action, existingNames); shadowName != "" {
+			name = shadowName
 		} else {
 			customRuleTitles := s.customRuleTitlesForIDs(ctx, *authCtx.ProjectID, payload.CustomRuleIds)
 			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, customRuleTitles, action, existingNames)
@@ -449,6 +456,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
+		ShadowMcpDisposition: conv.ToPGTextEmpty(shadowMCPDisposition),
 		AutoName:             autoName,
 		UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
 		Prompt:               prompt,
@@ -786,6 +794,19 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		}
 	}
 
+	// The disposition is immutable: accept only the policy's current effective
+	// value (so form round-trips stay valid); anything else is a posture
+	// switch, which requires delete + recreate.
+	if payload.ShadowMcpDisposition != nil {
+		effective := effectiveShadowMCPDisposition(current.ShadowMcpDisposition, sources, action)
+		if effective == "" {
+			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
+		}
+		if *payload.ShadowMcpDisposition != effective {
+			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition is immutable; delete and recreate the policy to switch posture")
+		}
+	}
+
 	autoName := current.AutoName
 	if payload.AutoName != nil {
 		autoName = *payload.AutoName
@@ -835,6 +856,8 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		}
 		if current.PolicyType == ra.PolicyTypePromptBased {
 			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+		} else if shadowName := shadowMCPPolicyAutoName(sources, action, existingNames); shadowName != "" {
+			name = shadowName
 		} else {
 			customRuleTitles := s.customRuleTitlesForIDs(ctx, *authCtx.ProjectID, customRuleIds)
 			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, presidioEntities, customRuleTitles, action, existingNames)
@@ -3317,6 +3340,7 @@ func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages *i
 		Action:                 row.Action,
 		AudienceType:           row.AudienceType,
 		AudiencePrincipalUrns:  audiencePrincipalURNs,
+		ShadowMcpDisposition:   conv.PtrEmpty(effectiveShadowMCPDisposition(row.ShadowMcpDisposition, row.Sources, row.Action)),
 		AutoName:               row.AutoName,
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),
@@ -3354,6 +3378,7 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		Action:                 row.Action,
 		AudienceType:           row.AudienceType,
 		AudiencePrincipalUrns:  audiencePrincipalURNs,
+		ShadowMcpDisposition:   conv.PtrEmpty(effectiveShadowMCPDisposition(row.ShadowMcpDisposition, row.Sources, row.Action)),
 		AutoName:               row.AutoName,
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),

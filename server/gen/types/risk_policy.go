@@ -65,6 +65,11 @@ type RiskPolicy struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string
+	// Default disposition for shadow MCP blocking policies: block_all blocks every
+	// non-Gram-hosted server unless allowed, allow_all permits every server unless
+	// it appears on the blocked-URL list. Immutable after create. Only present on
+	// policies with the shadow_mcp source and block action.
+	ShadowMcpDisposition *string
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool

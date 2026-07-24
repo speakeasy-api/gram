@@ -10512,6 +10512,7 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		Enabled:                *v.Enabled,
 		Action:                 *v.Action,
 		AudienceType:           *v.AudienceType,
+		ShadowMcpDisposition:   v.ShadowMcpDisposition,
 		AutoName:               *v.AutoName,
 		UserMessage:            v.UserMessage,
 		Prompt:                 v.Prompt,

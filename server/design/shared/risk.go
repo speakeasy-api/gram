@@ -62,6 +62,16 @@ func RiskPolicyAudienceTypeEnum() {
 	Enum("everyone", "targeted")
 }
 
+// RiskPolicyShadowMCPDispositionEnum constrains the default disposition of a
+// shadow MCP blocking policy. `block_all` blocks every non-Gram-hosted server
+// unless explicitly allowed (the original behavior); `allow_all` permits every
+// server unless it appears on the policy's blocked-URL list. The disposition is
+// immutable after create — switching posture requires deleting and recreating
+// the policy.
+func RiskPolicyShadowMCPDispositionEnum() {
+	Enum("block_all", "allow_all")
+}
+
 // RiskPolicyEvalVerdictEnum constrains a policy-eval review verdict. It is the
 // reviewer's ground-truth judgment of a chat session under a prompt-based
 // policy: `correct` (guardrail agreed), `false_positive` (guardrail flagged a
@@ -151,6 +161,9 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Default("everyone")
 	})
 	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to. Contains user:all when audience_type is everyone.")
+	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless it appears on the blocked-URL list. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
+		RiskPolicyShadowMCPDispositionEnum()
+	})
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
 	Attribute("user_message", String, "Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.")
 	Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.")

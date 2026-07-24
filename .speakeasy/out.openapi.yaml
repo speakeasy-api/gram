@@ -51338,6 +51338,12 @@ components:
           items:
             type: string
           description: Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.
+        shadow_mcp_disposition:
+          type: string
+          description: 'Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.'
+          enum:
+            - block_all
+            - allow_all
         sources:
           type: array
           items:
@@ -60540,6 +60546,12 @@ components:
           format: double
           minimum: 0.1
           maximum: 10
+        shadow_mcp_disposition:
+          type: string
+          description: 'Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless it appears on the blocked-URL list. Immutable after create. Only present on policies with the shadow_mcp source and block action.'
+          enum:
+            - block_all
+            - allow_all
         sources:
           type: array
           items:
@@ -66901,6 +66913,12 @@ components:
           items:
             type: string
           description: Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
+        shadow_mcp_disposition:
+          type: string
+          description: 'The policy''s shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.'
+          enum:
+            - block_all
+            - allow_all
         sources:
           type: array
           items:
