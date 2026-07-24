@@ -85,7 +85,7 @@ export function AuthShell({
         </span>
       </header>
 
-      <div className="grid flex-1 xl:grid-cols-[1fr_560px]">
+      <div className="grid flex-1 xl:grid-cols-2">
         <AgentSessionShowcase />
 
         <section className="relative flex flex-col items-center justify-center border-[var(--edge-soft)] bg-[var(--card)] px-8 pt-16 pb-28 xl:border-l">
