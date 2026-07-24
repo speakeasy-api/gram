@@ -5,7 +5,8 @@ import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
-import { AlertCircle, ShieldAlert } from "lucide-react";
+import { AlertCircle, PlugZap, ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import { usePlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
 import { PlaygroundChat } from "./PlaygroundChat";
@@ -80,7 +81,11 @@ export function PlaygroundElements({
   // `Authorization: Bearer` on /mcp/{slug} requests, so the runtime gateway
   // resolves the dashboard user's stored upstream credentials via the same path
   // a real MCP client would after an OAuth dance — no special-casing in
-  // ApplyIssuerGate.
+  // ApplyIssuerGate. Minting persists a user_sessions row server-side, so the
+  // shared hook only mints after the user explicitly clicks Connect (see
+  // ConnectRequiredNotice below) — opening the playground alone must not
+  // establish a session. The consent is keyed by toolset id and persisted, so
+  // a toolset the user already connected reconnects without another click.
   const gatewayToken = issuerConnection.accessToken;
 
   // Don't render until we have a valid MCP URL
@@ -89,6 +94,18 @@ export function PlaygroundElements({
       <div className="flex h-full items-center justify-center">
         <Type muted>Select an MCP server to start chatting</Type>
       </div>
+    );
+  }
+
+  // Issuer-gated toolsets need an explicit Connect before the playground mints
+  // a user-session token (see the gatewayToken comment above). Checked ahead of
+  // `needsAuth`: until the user consents nothing is minted or probed.
+  if (issuerConnection.needsExplicitConnect) {
+    return (
+      <ConnectRequiredNotice
+        serverName={toolset?.name ?? "this MCP server"}
+        onConnect={issuerConnection.requestConnect}
+      />
     );
   }
 
@@ -144,6 +161,37 @@ function AuthWarningBanner({
           Configure now
         </routes.mcp.details.Link>
       </span>
+    </div>
+  );
+}
+
+/**
+ * The explicit-consent gate for issuer-gated toolsets: connecting mints a
+ * user-session token, which establishes a session on the server, so we wait
+ * for a deliberate click instead of minting on page load.
+ */
+function ConnectRequiredNotice({
+  serverName,
+  onConnect,
+}: {
+  serverName: string;
+  onConnect: () => void;
+}) {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="flex max-w-md flex-col items-center gap-3 px-4 text-center">
+        <div className="bg-muted rounded-full p-3">
+          <PlugZap className="text-muted-foreground size-6" />
+        </div>
+        <Type className="font-medium">Connect to start chatting</Type>
+        <Type muted className="text-sm">
+          Connecting to{" "}
+          <span className="text-foreground font-medium">{serverName}</span>{" "}
+          establishes a user session for your account so the playground can call
+          its tools on your behalf.
+        </Type>
+        <Button onClick={onConnect}>Connect</Button>
+      </div>
     </div>
   );
 }

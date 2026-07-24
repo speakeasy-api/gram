@@ -1,3 +1,4 @@
+import { useMcpConnectConsent } from "@/hooks/useMcpConnectConsent";
 import {
   useProxiedMcpTools,
   type ProxiedMcpTool,
@@ -37,6 +38,15 @@ export interface ProxiedMcpConnection {
    * unauthenticated chat.
    */
   connectionReady: boolean;
+  /**
+   * True while an issuer-gated server is waiting for the user's explicit
+   * Connect click. Minting a user-session JWT persists a session row
+   * server-side, so nothing is minted (and no connection is attempted) until
+   * the user consents via `requestConnect`.
+   */
+  needsExplicitConnect: boolean;
+  /** Records the Connect consent for this server (persisted across visits). */
+  requestConnect: () => void;
 }
 
 /**
@@ -70,9 +80,20 @@ export function useProxiedMcpConnection(
     return endpoint ? `${getServerURL()}/mcp/${endpoint.slug}` : undefined;
   }, [endpointsData]);
 
+  // Issuer-gated servers only mint a user-session token after an explicit
+  // Connect click — minting persists a session row, so opening the playground
+  // alone must not establish one. The consent is persisted (keyed by
+  // mcp_server id, shared with the server's Tools tab) so return visits
+  // reconnect without another click.
+  const { connectRequested, requestConnect } = useMcpConnectConsent(
+    isIssuerGated ? mcpServerId : undefined,
+  );
+  const needsExplicitConnect = isIssuerGated && !connectRequested;
+
   const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
     target: { kind: "mcpServer", id: mcpServerId },
     userSessionIssuerId,
+    enabled: connectRequested,
   });
 
   const headers = useMemo(
@@ -108,5 +129,7 @@ export function useProxiedMcpConnection(
     tools,
     isLoading: isLoadingEndpoints || isTokenLoading || isLoading,
     connectionReady,
+    needsExplicitConnect,
+    requestConnect,
   };
 }

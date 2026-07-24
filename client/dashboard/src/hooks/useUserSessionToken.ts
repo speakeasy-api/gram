@@ -54,13 +54,24 @@ function mintRequestBody(
  * Consumers sharing a target share the query key, so React Query dedupes the
  * mint across them — e.g. the playground's auth panel and chat surface issue a
  * single request between them.
+ *
+ * Minting persists a user_sessions row on the server (it shows up in the
+ * server's User sessions list), so callers must gate it behind an explicit
+ * user action via `enabled` — never mint just because a page rendered.
  */
 export function useUserSessionToken({
   target,
   userSessionIssuerId,
+  enabled: connectRequested,
 }: {
   target: UserSessionTokenTarget;
   userSessionIssuerId: string | undefined;
+  /**
+   * Explicit-consent gate: keep false until the user asks to connect (e.g.
+   * clicks a Connect button). While false the query stays idle and nothing is
+   * minted.
+   */
+  enabled: boolean;
 }): UseUserSessionTokenResult {
   const session = useSession();
   const project = useProject();
@@ -68,7 +79,7 @@ export function useUserSessionToken({
 
   const { kind, id } = target;
   const isIssuerGated = !!userSessionIssuerId;
-  const enabled = !!id && isIssuerGated;
+  const enabled = !!id && isIssuerGated && connectRequested;
 
   const query = useQuery({
     queryKey: [

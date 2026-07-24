@@ -35,6 +35,8 @@ export function PlaygroundProxiedChat({
     refetch,
     isLoading,
     connectionReady,
+    needsExplicitConnect,
+    requestConnect,
   } = useProxiedMcpConnection(mcpServerId, userSessionIssuerId);
 
   // When the user comes back from the connect tab, re-attempt the connection so
@@ -45,6 +47,12 @@ export function PlaygroundProxiedChat({
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [needsAuth, refetch]);
+
+  // Issuer-gated servers need an explicit Connect before the playground mints
+  // a user-session token (minting persists a session row server-side).
+  if (needsExplicitConnect) {
+    return <ExplicitConnectPrompt onConnect={requestConnect} />;
+  }
 
   if (needsAuth) {
     return <ProxiedConnectPrompt connectUrl={connectUrl} />;
@@ -102,6 +110,32 @@ function ProxiedStatusNotice({
           {message}
         </Type>
         {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The explicit-consent gate for issuer-gated servers: connecting mints a
+ * user-session token, which establishes a session on the server, so we wait
+ * for a deliberate click instead of minting on page load. Mirrors
+ * ConnectRequiredNotice in PlaygroundElements.tsx.
+ */
+function ExplicitConnectPrompt({
+  onConnect,
+}: {
+  onConnect: () => void;
+}): JSX.Element {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="border-neutral-softest flex max-w-md flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
+        <PlugZap className="text-muted-foreground/70 size-8" />
+        <Type className="font-medium">Connect to start chatting</Type>
+        <Type muted className="text-sm">
+          Connecting to this MCP server establishes a user session for your
+          account so the playground can call its tools on your behalf.
+        </Type>
+        <Button onClick={onConnect}>Connect</Button>
       </div>
     </div>
   );

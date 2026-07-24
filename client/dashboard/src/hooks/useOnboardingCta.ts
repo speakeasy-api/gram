@@ -1,5 +1,5 @@
 import { useSlugs } from "@/contexts/Sdk";
-import { createDismissedCtaStore } from "@/hooks/useDismissedCtaStore";
+import { createPersistedFlagStore } from "@/hooks/usePersistedFlagStore";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useRBAC } from "@/hooks/useRBAC";
 import { withViewTransition } from "@/lib/view-transition";
@@ -23,7 +23,7 @@ export const ONBOARDING_CTA_CONTENT_VT_CLASS =
 // The banner lives in the page header and the resume button lives in the
 // sidebar footer — different parts of the tree — so they sync off this
 // localStorage-backed store instead of a shared React context.
-const store = createDismissedCtaStore("gram-onboarding-banner-dismissed");
+const store = createPersistedFlagStore("gram-onboarding-banner-dismissed");
 
 /**
  * Coordinates the enterprise onboarding call-to-action across its two surfaces:
@@ -41,7 +41,7 @@ export function useOnboardingCta(): {
   const { hasScope } = useRBAC();
   const productTier = useProductTier();
 
-  const dismissed = store.useDismissed(orgSlug);
+  const dismissed = store.useFlag(orgSlug);
 
   const eligible =
     Boolean(orgSlug) && productTier === "enterprise" && hasScope("org:admin");
