@@ -15,7 +15,9 @@ use crate::runtime::{
 use crate::telemetry::SpanIdentity;
 
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
-use crate::wire::{RunnerStateResponse, ThreadStateView, ThreadTurnRequest, ThreadTurnResponse};
+use crate::wire::{
+    RunnerContent, RunnerStateResponse, ThreadStateView, ThreadTurnRequest, ThreadTurnResponse,
+};
 
 pub struct ServeConfig {
     pub addr: SocketAddr,
@@ -165,7 +167,7 @@ async fn thread_turn_inner(
     }
 
     thread
-        .enqueue(request.input)
+        .enqueue(RunnerContent::from_turn(request.input, request.input_parts))
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
     if let Some(ref mut guard) = admission_guard {

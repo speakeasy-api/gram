@@ -934,28 +934,28 @@ func TestServiceCoreLoadChatHistoryReplaysToolTurns(t *testing.T) {
 	require.Len(t, history, 5, "system row should be dropped; user/assistant/tool rows replayed in order")
 
 	require.Equal(t, "user", history[0].Role)
-	require.Equal(t, "what's the weather in oslo?", history[0].Content)
+	require.Equal(t, "what's the weather in oslo?", history[0].Content.Text())
 	require.Empty(t, history[0].ToolCalls)
 	require.Empty(t, history[0].ToolCallID)
 
 	require.Equal(t, "assistant", history[1].Role)
-	require.Empty(t, history[1].Content)
+	require.True(t, history[1].Content.IsZero())
 	require.Len(t, history[1].ToolCalls, 1)
 	require.Equal(t, "call_abc", history[1].ToolCalls[0].ID)
 	require.Equal(t, "get_weather", history[1].ToolCalls[0].Name)
 	require.JSONEq(t, `{"city":"oslo"}`, history[1].ToolCalls[0].Arguments)
 
 	require.Equal(t, "tool", history[2].Role)
-	require.JSONEq(t, `{"temp":"cold"}`, history[2].Content)
+	require.JSONEq(t, `{"temp":"cold"}`, history[2].Content.Text())
 	require.Equal(t, "call_abc", history[2].ToolCallID)
 	require.Empty(t, history[2].ToolCalls)
 
 	require.Equal(t, "assistant", history[3].Role)
-	require.Equal(t, "It's cold.", history[3].Content)
+	require.Equal(t, "It's cold.", history[3].Content.Text())
 	require.Empty(t, history[3].ToolCalls)
 
 	require.Equal(t, "user", history[4].Role)
-	require.Equal(t, "thanks", history[4].Content)
+	require.Equal(t, "thanks", history[4].Content.Text())
 }
 
 func TestServiceCoreLoadChatHistoryReturnsOnlyLatestGeneration(t *testing.T) {
@@ -1014,9 +1014,9 @@ func TestServiceCoreLoadChatHistoryReturnsOnlyLatestGeneration(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, history, 3, "only gen 2 rows make it into the replay")
-	require.Equal(t, "gen-2-user-a", history[0].Content)
-	require.Equal(t, "gen-2-asst", history[1].Content)
-	require.Equal(t, "gen-2-user-b", history[2].Content)
+	require.Equal(t, "gen-2-user-a", history[0].Content.Text())
+	require.Equal(t, "gen-2-asst", history[1].Content.Text())
+	require.Equal(t, "gen-2-user-b", history[2].Content.Text())
 }
 
 func TestServiceCoreLoadChatHistoryFailsWhenToolRowMissingCallID(t *testing.T) {

@@ -100,8 +100,8 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 	require.Len(t, history, selfHealUserMessageCap+1, "trimmed generation should contain the recovery notice + last 5 user messages")
 
 	require.Equal(t, "user", history[0].Role)
-	require.Contains(t, history[0].Content, "[gram self-heal]", "leading row must be the recovery notice")
-	require.Contains(t, history[0].Content, "tools", "notice should nudge the agent to recover via tools before bothering the user")
+	require.Contains(t, history[0].Content.Text(), "[gram self-heal]", "leading row must be the recovery notice")
+	require.Contains(t, history[0].Content.Text(), "tools", "notice should nudge the agent to recover via tools before bothering the user")
 
 	wantTail := []string{"fourth", "fifth", "sixth", "", "eighth"}
 	for i, want := range wantTail {
@@ -111,10 +111,10 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 		require.Empty(t, row.ToolCallID)
 		if want == "" {
 			// The oversize message must be truncated to the rune cap.
-			require.Lenf(t, []rune(row.Content), selfHealUserMessageMaxLen,
+			require.Lenf(t, []rune(row.Content.Text()), selfHealUserMessageMaxLen,
 				"oversized user message must be truncated to %d runes", selfHealUserMessageMaxLen)
 		} else {
-			require.Equal(t, want, row.Content, "trimmed tail must preserve recent user prompts verbatim")
+			require.Equal(t, want, row.Content.Text(), "trimmed tail must preserve recent user prompts verbatim")
 		}
 	}
 }

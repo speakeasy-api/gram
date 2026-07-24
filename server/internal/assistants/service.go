@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"strconv"
@@ -22,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -33,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -392,6 +395,7 @@ type ServiceCore struct {
 	contextWindow     *openrouter.ContextWindowResolver
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
+	assetStorage      assets.BlobStore
 	dashboardIngestor DashboardIngestor
 	turnClassified    metric.Int64Counter
 }
@@ -436,6 +440,7 @@ func NewServiceCore(
 		contextWindow:     contextWindow,
 		wakeCanceller:     nil,
 		chatWriter:        nil,
+		assetStorage:      nil,
 		dashboardIngestor: nil,
 		turnClassified:    turnClassified,
 	}
@@ -460,6 +465,14 @@ func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
 // site. Self-heal is skipped if the writer was never set.
 func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
 	s.chatWriter = w
+}
+
+// SetAssetStorage wires the blob store history replay uses to fetch
+// structured message content that overflowed content_raw. Set after
+// construction to match the existing post-construction injection pattern;
+// without it, oversized messages replay their plain-text projection.
+func (s *ServiceCore) SetAssetStorage(storage assets.BlobStore) {
+	s.assetStorage = storage
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram
@@ -3400,7 +3413,7 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 		case "user":
 			history = append(history, runtimeMessage{
 				Role:       "user",
-				Content:    message.Content,
+				Content:    s.loadHistoryMessageContent(ctx, message),
 				ToolCalls:  nil,
 				ToolCallID: "",
 			})
@@ -3411,7 +3424,7 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 			}
 			history = append(history, runtimeMessage{
 				Role:       "assistant",
-				Content:    message.Content,
+				Content:    s.loadHistoryMessageContent(ctx, message),
 				ToolCalls:  toolCalls,
 				ToolCallID: "",
 			})
@@ -3421,7 +3434,7 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 			}
 			history = append(history, runtimeMessage{
 				Role:       "tool",
-				Content:    message.Content,
+				Content:    s.loadHistoryMessageContent(ctx, message),
 				ToolCalls:  nil,
 				ToolCallID: message.ToolCallID.String,
 			})
@@ -3439,6 +3452,59 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 		}
 	}
 	return history, nil
+}
+
+// historyAssetReadLimit mirrors chat's maxAssetReadSize bound on content
+// fetched back from asset storage.
+const historyAssetReadLimit = 20 * 1024 * 1024 // 20 MiB
+
+// loadHistoryMessageContent resolves the replayed content for one chat row,
+// preferring the structured JSON captured at store time (content_raw inline,
+// then the content asset) over the plain-text projection column. The text
+// column remains the fallback whenever structured content is absent,
+// unreadable, or carries part types the runner wire does not model, so
+// text-only history replays exactly as before.
+func (s *ServiceCore) loadHistoryMessageContent(ctx context.Context, row chatrepo.ChatMessage) runtimeContent {
+	raw := row.ContentRaw
+	if len(raw) == 0 && row.ContentAssetUrl.Valid && row.ContentAssetUrl.String != "" && s.assetStorage != nil {
+		data, err := s.readHistoryContentAsset(ctx, row.ContentAssetUrl.String)
+		if err != nil {
+			s.logger.WarnContext(ctx, "read chat message content asset; using text projection",
+				attr.SlogError(err), attr.SlogChatID(row.ChatID.String()))
+		} else {
+			raw = data
+		}
+	}
+	if len(raw) == 0 {
+		return runtimeTextContent(row.Content)
+	}
+	var content runtimeContent
+	if err := json.Unmarshal(raw, &content); err != nil {
+		s.logger.WarnContext(ctx, "decode structured chat message content; using text projection",
+			attr.SlogError(err), attr.SlogChatID(row.ChatID.String()))
+		return runtimeTextContent(row.Content)
+	}
+	if !content.supportedParts() {
+		return runtimeTextContent(row.Content)
+	}
+	return content
+}
+
+func (s *ServiceCore) readHistoryContentAsset(ctx context.Context, rawURL string) ([]byte, error) {
+	assetURL, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse content asset url: %w", err)
+	}
+	reader, err := s.assetStorage.Read(ctx, assetURL)
+	if err != nil {
+		return nil, fmt.Errorf("open content asset: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return reader.Close() })
+	data, err := io.ReadAll(io.LimitReader(reader, historyAssetReadLimit))
+	if err != nil {
+		return nil, fmt.Errorf("read content asset: %w", err)
+	}
+	return data, nil
 }
 
 // decodePersistedToolCalls unmarshals the JSONB stored by the chat capture

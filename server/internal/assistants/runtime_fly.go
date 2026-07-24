@@ -846,6 +846,7 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 
 	reqBody, err := json.Marshal(runtimeTurnRequest{
 		Input:       prompt,
+		InputParts:  nil,
 		AuthToken:   authToken,
 		MCPServers:  mcpServers,
 		AssistantID: runtime.AssistantID.String(),
