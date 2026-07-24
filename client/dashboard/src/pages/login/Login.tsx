@@ -1,8 +1,8 @@
 import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { buildLoginRedirectURL } from "@/lib/utils";
-import { JourneyDemo } from "./components/journey-demo";
-import { LoginSection } from "./components/login-section";
+import { AuthShell } from "./components/auth-shell";
+import { LoginPanel } from "./components/login-panel";
 import { useSearchParams, useNavigate } from "react-router";
 import { useEffect } from "react";
 
@@ -35,9 +35,8 @@ export default function Login(): JSX.Element {
   }, [session.session, disposition, redirectTo, navigate, routes.home]);
 
   return (
-    <main className="flex min-h-screen flex-col md:flex-row">
-      <JourneyDemo />
-      <LoginSection redirectTo={redirectTo} />
-    </main>
+    <AuthShell page="Login">
+      <LoginPanel redirectTo={redirectTo} />
+    </AuthShell>
   );
 }
