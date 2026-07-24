@@ -18,7 +18,7 @@ type RBACState struct {
 
 // NewRBACState creates test RBAC state with the requested initial value.
 func NewRBACState(enabled bool) *RBACState {
-	state := &RBACState{}
+	state := new(RBACState)
 	state.enabled.Store(enabled)
 	return state
 }

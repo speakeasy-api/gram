@@ -650,6 +650,10 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 
 	organizationID := authCtx.ActiveOrganizationID
 	_, err, _ = e.rbacEnableGroup.Do(organizationID, func() (any, error) {
+		if _, bootstrapped := e.bootstrappedOrgs.Load(organizationID); bootstrapped {
+			return nil, nil
+		}
+
 		// The feature may have been enabled while this request waited for
 		// another bootstrap attempt.
 		enabled, err := e.isEnabled(ctx, organizationID)
@@ -658,7 +662,7 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		}
 		if !enabled {
 			if err := e.rbacEnabler.EnableRBAC(ctx, organizationID); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("bootstrap RBAC: %w", err)
 			}
 		}
 
