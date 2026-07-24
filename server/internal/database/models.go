@@ -542,21 +542,28 @@ type DeviceIntegrationConfig struct {
 	Deleted              bool
 }
 
-type DeviceIntegrationSync struct {
+type DeviceIntegrationSchedule struct {
 	ID                        uuid.UUID
 	DeviceIntegrationConfigID uuid.UUID
 	Schedule                  string
-	PollWatermarkAt           pgtype.Timestamptz
-	NextPollAfter             pgtype.Timestamptz
-	LastPollSuccessAt         pgtype.Timestamptz
-	LastPollFailedAt          pgtype.Timestamptz
-	LastPollError             pgtype.Text
-	ConsecutiveFailures       int32
-	LastPushDigest            pgtype.Text
-	AutoPausedAt              pgtype.Timestamptz
 	DisabledAt                pgtype.Timestamptz
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
+}
+
+type DeviceIntegrationSync struct {
+	ID                          uuid.UUID
+	DeviceIntegrationScheduleID uuid.UUID
+	PollWatermarkAt             pgtype.Timestamptz
+	NextPollAfter               pgtype.Timestamptz
+	LastPollSuccessAt           pgtype.Timestamptz
+	LastPollFailedAt            pgtype.Timestamptz
+	LastPollError               pgtype.Text
+	ConsecutiveFailures         int32
+	LastPushDigest              pgtype.Text
+	AutoPausedAt                pgtype.Timestamptz
+	CreatedAt                   pgtype.Timestamptz
+	UpdatedAt                   pgtype.Timestamptz
 }
 
 type DeviceOwner struct {

@@ -4875,17 +4875,47 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS device_integration_configs_organization_id_idx
 ON device_integration_configs (organization_id);
 
--- Device integration syncs: scheduler state and failure metadata, one row
--- per (config, schedule). Modeled on ai_integration_syncs; machine-churned
--- by the poller every cycle, which is why it is a separate table from the
--- audited config rows.
-CREATE TABLE IF NOT EXISTS device_integration_syncs (
+-- Device integration schedules: user-owned intent, one row per (config,
+-- schedule). Declares which of the provider's sync pipelines run for this
+-- integration and whether the user has paused one. Deliberately separate
+-- from device_integration_syncs (machine-owned execution state) so poller
+-- writes never touch user intent, and resetting sync state on a config
+-- update cannot clobber a user's pause by construction.
+CREATE TABLE IF NOT EXISTS device_integration_schedules (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
   device_integration_config_id uuid NOT NULL,
   -- Discriminator for the sync pipeline (e.g. 'jamf_inventory',
   -- 'drata_evidence'). Declared by the provider's schedule spec.
   schedule TEXT NOT NULL,
+  -- Set when a user explicitly pauses this schedule from the dashboard.
+  -- Only the user re-enabling the schedule clears it; config saves do not.
+  -- The machine-initiated counterpart (auto_paused_at) lives on the sync
+  -- row, so "you paused this" and "we paused this over a rejected
+  -- configuration" stay distinguishable.
+  disabled_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT device_integration_schedules_pkey PRIMARY KEY (id),
+  CONSTRAINT device_integration_schedules_device_integration_config_id_fkey FOREIGN KEY (device_integration_config_id) REFERENCES device_integration_configs (id) ON DELETE CASCADE
+);
+
+-- One schedule row per (config, schedule); the leading config_id column
+-- also backs the config FK's ON DELETE CASCADE.
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_schedules_config_id_schedule_key
+ON device_integration_schedules (device_integration_config_id, schedule);
+
+-- Device integration syncs: machine-owned execution state and failure
+-- metadata, exactly one row per schedule. The poller churns these rows
+-- every cycle; user intent lives on device_integration_schedules. A config
+-- update resets sync state by reinitializing these rows, leaving the
+-- schedule rows untouched.
+CREATE TABLE IF NOT EXISTS device_integration_syncs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  device_integration_schedule_id uuid NOT NULL,
 
   -- Completion time of the last fully completed snapshot. Inventory pulls
   -- use this as the mark-missing cutoff; it advances only when a snapshot
@@ -4905,30 +4935,27 @@ CREATE TABLE IF NOT EXISTS device_integration_syncs (
   -- repeatedly rejected the configuration (e.g. a revoked credential).
   -- Paused schedules are skipped by candidate selection until the user
   -- updates the integration, which resets the sync state and clears this.
+  -- The user-initiated counterpart (disabled_at) lives on the schedule row.
   auto_paused_at timestamptz,
-  -- Set when a user explicitly pauses this schedule from the dashboard.
-  -- Deliberately separate from auto_paused_at so "you paused this" and "we
-  -- paused this over a rejected configuration" stay distinguishable. Only
-  -- the user re-enabling the schedule clears it; config saves do not.
-  disabled_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT device_integration_syncs_pkey PRIMARY KEY (id),
-  CONSTRAINT device_integration_syncs_device_integration_config_id_fkey FOREIGN KEY (device_integration_config_id) REFERENCES device_integration_configs (id) ON DELETE CASCADE
+  CONSTRAINT device_integration_syncs_device_integration_schedule_id_fkey FOREIGN KEY (device_integration_schedule_id) REFERENCES device_integration_schedules (id) ON DELETE CASCADE
 );
 
--- One sync row per (config, schedule); the leading config_id column also
--- backs the config FK's ON DELETE CASCADE.
-CREATE UNIQUE INDEX IF NOT EXISTS device_integration_syncs_config_id_schedule_key
-ON device_integration_syncs (device_integration_config_id, schedule);
+-- Exactly one sync row per schedule; also backs the schedule FK's
+-- ON DELETE CASCADE.
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_syncs_schedule_id_key
+ON device_integration_syncs (device_integration_schedule_id);
 
--- Serves the coordinator's candidates query: due, not auto-paused, not
--- user-disabled. Enabled/deleted filtering happens on the joined config row.
+-- Serves the coordinator's candidates query: due and not auto-paused.
+-- User-disabled filtering happens on the joined schedule row, and
+-- enabled/deleted filtering on the joined config row.
 CREATE INDEX IF NOT EXISTS device_integration_syncs_next_poll_after_idx
 ON device_integration_syncs (next_poll_after)
-WHERE auto_paused_at IS NULL AND disabled_at IS NULL;
+WHERE auto_paused_at IS NULL;
 
 -- mdm_devices is the MDM-reported hardware inventory synced from a device
 -- integration (one row per device per config). NOTE: distinct from

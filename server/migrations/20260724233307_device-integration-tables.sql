@@ -17,11 +17,23 @@ CREATE TABLE "device_integration_configs" (
 CREATE INDEX "device_integration_configs_organization_id_idx" ON "device_integration_configs" ("organization_id");
 -- Create index "device_integration_configs_organization_id_provider_key" to table: "device_integration_configs"
 CREATE UNIQUE INDEX "device_integration_configs_organization_id_provider_key" ON "device_integration_configs" ("organization_id", "provider") WHERE (deleted IS FALSE);
--- Create "device_integration_syncs" table
-CREATE TABLE "device_integration_syncs" (
+-- Create "device_integration_schedules" table
+CREATE TABLE "device_integration_schedules" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "device_integration_config_id" uuid NOT NULL,
   "schedule" text NOT NULL,
+  "disabled_at" timestamptz NULL,
+  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY ("id"),
+  CONSTRAINT "device_integration_schedules_device_integration_config_id_fkey" FOREIGN KEY ("device_integration_config_id") REFERENCES "device_integration_configs" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+);
+-- Create index "device_integration_schedules_config_id_schedule_key" to table: "device_integration_schedules"
+CREATE UNIQUE INDEX "device_integration_schedules_config_id_schedule_key" ON "device_integration_schedules" ("device_integration_config_id", "schedule");
+-- Create "device_integration_syncs" table
+CREATE TABLE "device_integration_syncs" (
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "device_integration_schedule_id" uuid NOT NULL,
   "poll_watermark_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "next_poll_after" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "last_poll_success_at" timestamptz NULL,
@@ -30,16 +42,15 @@ CREATE TABLE "device_integration_syncs" (
   "consecutive_failures" integer NOT NULL DEFAULT 0,
   "last_push_digest" text NULL,
   "auto_paused_at" timestamptz NULL,
-  "disabled_at" timestamptz NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "device_integration_syncs_device_integration_config_id_fkey" FOREIGN KEY ("device_integration_config_id") REFERENCES "device_integration_configs" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+  CONSTRAINT "device_integration_syncs_device_integration_schedule_id_fkey" FOREIGN KEY ("device_integration_schedule_id") REFERENCES "device_integration_schedules" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
--- Create index "device_integration_syncs_config_id_schedule_key" to table: "device_integration_syncs"
-CREATE UNIQUE INDEX "device_integration_syncs_config_id_schedule_key" ON "device_integration_syncs" ("device_integration_config_id", "schedule");
 -- Create index "device_integration_syncs_next_poll_after_idx" to table: "device_integration_syncs"
-CREATE INDEX "device_integration_syncs_next_poll_after_idx" ON "device_integration_syncs" ("next_poll_after") WHERE ((auto_paused_at IS NULL) AND (disabled_at IS NULL));
+CREATE INDEX "device_integration_syncs_next_poll_after_idx" ON "device_integration_syncs" ("next_poll_after") WHERE (auto_paused_at IS NULL);
+-- Create index "device_integration_syncs_schedule_id_key" to table: "device_integration_syncs"
+CREATE UNIQUE INDEX "device_integration_syncs_schedule_id_key" ON "device_integration_syncs" ("device_integration_schedule_id");
 -- Create "mdm_devices" table
 CREATE TABLE "mdm_devices" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
