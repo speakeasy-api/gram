@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/agenthooks"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -68,6 +69,14 @@ type Service struct {
 	serverURL          *url.URL
 	siteURL            *url.URL
 	jwtSecret          string
+	// policies is the ingest decision pipeline: the agenthooks event router
+	// the canonical Ingest path runs its gating policies on (see
+	// newPolicyRunner in agenthooks_policies.go for the registration block
+	// documenting the run order). Built once in NewService; the stages are
+	// Service method values, so swapping a dependency field (riskScanner,
+	// siteURL, ...) after construction — as tests do — is picked up on the
+	// next event.
+	policies *agenthooks.Runner
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the
 	// Codex/OTEL fallbacks). Injectable so tests can pin telemetry event time
@@ -210,7 +219,7 @@ func NewService(
 	siteURL *url.URL,
 	jwtSecret string,
 ) *Service {
-	return &Service{
+	s := &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		metrics:            newMetrics(meterProvider, logger),
 		logger:             logger.With(attr.SlogComponent("hooks")),
@@ -233,8 +242,12 @@ func NewService(
 		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
+		policies:           nil,
 		nowFunc:            time.Now,
 	}
+	// Built after the literal: the policy stages are method values on s.
+	s.policies = s.newPolicyRunner()
+	return s
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

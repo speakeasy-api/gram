@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/agenthooks"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -510,123 +511,69 @@ func isReservedAssistantAdapter(adapter string) bool {
 	}
 }
 
+// evaluateCanonicalHook runs the policy router over one ingested event:
+// adapter (envelope -> typed event) -> Runner.Decide -> outcome mapping. It
+// returns today's (blockReason, userReason) contract — blockReason is the
+// audit reason persisted to telemetry, userReason the agent-facing message
+// (block-page URL / access-request link already appended by the stage that
+// denied). Event types the adapter does not map never gate.
+//
+// Outcome mapping, switching on the winning decision's Kind:
+//
+//   - Deny / BlockPrompt -> deny with the stage's reasons. An unacknowledged
+//     risk warn (challenge) denies here too, with the challenge framing and
+//     the ack link (see riskScanToolDecision).
+//   - Allow / AcceptPrompt / NoDecision -> allow. Acknowledged warns stay
+//     neutral in the stages, so evaluation falls through to the remaining
+//     checks exactly as the inline code fell through.
+//   - Anything else has no ingest mapping and allows with a log line.
+//
+// A pipeline error also allows: no registered stage returns an error — the
+// enforcement primitives swallow their failures internally (log + fail open)
+// exactly as the inline evaluation did — so an error here is a stage panic
+// or a canceled request context, and enforcement keeps the same fail-open
+// posture those paths already had.
 func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) (string, string) {
-	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
-	eventType := strings.TrimSpace(payload.Event.Type)
-
-	// Spend gate runs before any risk-policy evaluation, for every adapter
-	// with a per-provider enforcement surface (claude, codex, cursor) — the
-	// risk scans below already run adapter-agnostically, and an over-budget
-	// actor is over budget regardless of which agent carries the event.
-	// Adapters are self-reported slugs, so this remains a cooperative-client
-	// boundary like the rest of the ingest surface; matching is on the
-	// lowercased value so a case variant cannot dodge the gate. opencode
-	// still passes through untouched pending a product decision on its
-	// enforcement surface.
-	if spendGatedAdapter(payload.Source.Adapter) && (eventType == "prompt.submitted" || eventType == "tool.requested") {
-		if block := s.checkSpendGate(ctx, event); block != nil {
-			if eventType == "tool.requested" {
-				kind := "tool call"
-				if canonicalPermissionType(payload) != "" {
-					// Permission-shaped tool.requested events keep the
-					// permission framing, matching this path's risk wording
-					// and the legacy codex endpoint's spend deny.
-					kind = "permission request"
-				}
-				auditReason := spendBlockReason(kind, block)
-				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, canonicalToolName(payload), "", auditReason)
-			}
-			auditReason := spendBlockReason("prompt", block)
-			return auditReason, auditReason
-		}
+	typed := agenthooksTypedEvent(payload, timestamp)
+	if typed == nil {
+		return "", ""
 	}
-
-	switch eventType {
-	case "prompt.submitted":
-		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
-			Prompt: canonicalPromptText(payload),
-		})
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
-			if scanResult.Action == "warn" && authenticatedIngestOptions(ctx).AllowWarnAcknowledgement {
-				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
-					return "", ""
-				}
-				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
-					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-					return auditReason, userReason
-				}
-			}
-			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			return auditReason, renderUserBlockReason(scanResult.UserMessage, auditReason)
-		}
-	case "tool.requested":
-		toolName := canonicalToolName(payload)
-		toolInput := canonicalToolInput(payload)
-		if permissionType := canonicalPermissionType(payload); permissionType != "" {
-			ev := hookevents.NewPermissionRequest(event, hookevents.PermissionRequestParams{
-				ToolName:       toolName,
-				ToolInput:      toolInput,
-				PermissionType: permissionType,
-			})
-			// An acknowledged permission warn clears only this risk challenge; it
-			// must still fall through to the MCP/shadow-MCP guard below, never
-			// short-circuit the tool call (mirrors the Claude PreToolUse handler).
-			// So exclude acknowledged warns from the block condition rather than
-			// returning early on them.
-			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
-				(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, toolName)) {
-				if scanResult.Action == "warn" {
-					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
-						auditReason := fmt.Sprintf("Speakeasy challenged this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-						return auditReason, userReason
-					}
-				}
-				auditReason := fmt.Sprintf("Speakeasy blocked this permission request: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
-				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
-			}
-		}
-		if canonicalMCPData(payload) != nil || toolref.IsMCPToolName(toolName) {
-			ev := hookevents.NewBeforeMCPExecution(event, hookevents.BeforeMCPExecutionParams{
-				ToolName:  toolName,
-				ToolInput: toolInput,
-			})
-			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
-				if scanResult.Action == "warn" {
-					if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
-						return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
-					}
-					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
-						auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-						return auditReason, userReason
-					}
-				}
-				auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-				userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
-				return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
-			}
-			return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
-		}
-		ev := hookevents.NewBeforeToolUse(event, hookevents.BeforeToolUseParams{
-			ToolName:  toolName,
-			ToolInput: toolInput,
-		})
-		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
-			if scanResult.Action == "warn" {
-				if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
-					return "", ""
-				}
-				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
-					auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-					return auditReason, userReason
-				}
-			}
-			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
-			return auditReason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, auditReason, toolName, scanResult.PolicyID, userReason)
-		}
+	ctx = withIngestPolicyRequest(ctx, &ingestPolicyRequest{
+		payload: payload,
+		authCtx: authCtx,
+		actor:   actor,
+	})
+	decision, err := s.policies.Decide(ctx, typed)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "hook policy pipeline failed; failing open",
+			attr.SlogError(err),
+			attr.SlogHookSource(strings.TrimSpace(payload.Source.Adapter)),
+			attr.SlogHookEvent(strings.TrimSpace(payload.Event.Type)),
+		)
+		return "", ""
 	}
-	return "", ""
+	switch decision.Kind() {
+	case agenthooks.DecisionDeny, agenthooks.DecisionBlockPrompt:
+		return decision.Reason(), decision.SystemMessage()
+	case agenthooks.DecisionAllow, agenthooks.DecisionAcceptPrompt,
+		agenthooks.DecisionNoDecision:
+		return "", ""
+	default:
+		s.logger.WarnContext(ctx, "hook policy decision has no ingest mapping; allowing",
+			attr.SlogValueAny(decision.Kind().String()),
+			attr.SlogHookSource(strings.TrimSpace(payload.Source.Adapter)),
+			attr.SlogHookEvent(strings.TrimSpace(payload.Event.Type)),
+		)
+		return "", ""
+	}
+}
+
+// canonicalIsMCPToolRequest is the ingest path's MCP predicate: the payload
+// explicitly carries MCP transport data, or the tool name is MCP-routed. It
+// decides which risk-scan flavor a tool request gets and whether the
+// shadow-MCP gate applies.
+func canonicalIsMCPToolRequest(payload *gen.IngestPayload) bool {
+	return canonicalMCPData(payload) != nil || toolref.IsMCPToolName(canonicalToolName(payload))
 }
 
 // appendCanonicalBlockURL mints the durable block row for a policy-denied
@@ -684,7 +631,7 @@ func canonicalRiskEventType(payload *gen.IngestPayload) hookevents.EventType {
 	case "prompt.submitted":
 		return hookevents.EventTypeUserPromptSubmit
 	case "tool.requested":
-		if canonicalMCPData(payload) != nil || toolref.IsMCPToolName(canonicalToolName(payload)) {
+		if canonicalIsMCPToolRequest(payload) {
 			return hookevents.EventTypeBeforeMCPExecution
 		}
 		if canonicalPermissionType(payload) != "" {
