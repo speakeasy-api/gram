@@ -1,5 +1,23 @@
 # dashboard
 
+## 0.94.0
+
+### Minor Changes
+
+- cc076e2: Serve the Employee Enrollment list from the pre-aggregated `attribute_metrics_summaries` view (DNO-618). `telemetry.searchUsers` gains a `source` level: `logs` (default, unchanged) scans raw `telemetry_logs`, while `agent_metrics` reads the pre-aggregated view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper (the enrollment query drops from ~seconds to tens of milliseconds on large projects). Identities that never carry an email in the window (which have no token usage) are surfaced separately from raw logs with activity but no token counts, so unknown users stay visible.
+
+  Note the enrollment token numbers change: they now reflect the same canonical agent-usage measure the costs/billing pages use, rather than the previous raw `gen_ai.usage.*` sum that mixed in Gram-hosted completions and duplicate usage-metric rows while missing Claude Code OTEL usage. Only the enrollment list opts in via `source=agent_metrics`; all other `searchUsers` consumers are unchanged.
+
+### Patch Changes
+
+- 5e8e13f: Speed up the Employee Enrollment page (DNO-618). `telemetry.searchUsers` gains a `metrics` level: `full` (default, unchanged) computes the complete set of aggregates, while `basic` projects only user identity, first/last activity, input/output token sums, and the raw user ids the account-enrichment join needs — skipping the per-tool and per-hook-source map aggregations (`sumMapIf`), chat-cardinality (`uniqExactIf`), and cost/cache/avg columns that dominate the per-row ClickHouse work. The enrollment list, which renders only the lean fields (linked accounts come from Postgres), now requests `basic`, so its query no longer builds breakdowns it discards.
+- b8d43ac: Fix the Employee Enrollment page showing enrolled employees with 0 tokens (their usage appearing under "Unknown users" instead). When a member's telemetry splits across identity keys — an opaque user_id with no email (e.g. Gram tool calls) plus their email (Claude/Cursor usage) — the id-keyed, token-less summary was shadowing the member's token-bearing email summary. `buildEmployees` now matches a member against both their id and their email and merges the results, so their tokens, activity, and linked accounts are attributed correctly and their usage is no longer orphaned into the unattributed list.
+- c773dae: Keep MultiSelect trigger controls inside the container: selected badges now
+  shrink and truncate long labels with an ellipsis instead of pushing the
+  clear "X" and dropdown chevron past the right edge, as seen on the plugin
+  Manage assignments sheet.
+- e62d157: Add organization Skills settings for content upload and efficacy sampling.
+
 ## 0.93.0
 
 ### Minor Changes
