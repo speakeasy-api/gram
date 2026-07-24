@@ -169,7 +169,17 @@ func insertRetainedGramAggregateRow(t *testing.T, conn driver.Conn, projectID st
 	t.Helper()
 
 	err := conn.Exec(t.Context(), `
-		INSERT INTO attribute_metrics_summaries
+		INSERT INTO attribute_metrics_summaries (
+			gram_project_id, time_bucket,
+			department_name, job_title, employee_type, division_name, cost_center_name,
+			user_email, model, hook_source, roles, groups,
+			total_chats, total_input_tokens, total_output_tokens, total_tokens,
+			cache_read_input_tokens, cache_creation_input_tokens, total_cost,
+			total_tool_calls, unique_tool_calls,
+			account_type, provider, billing_mode,
+			query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name,
+			generation, is_active, hook_hostname
+		)
 		SELECT
 			toUUID(?) AS gram_project_id,
 			toStartOfHour(fromUnixTimestamp64Nano(?)) AS time_bucket,
@@ -206,7 +216,17 @@ func insertObservedClaudeAggregateRow(t *testing.T, conn driver.Conn, projectID 
 	t.Helper()
 
 	err := conn.Exec(t.Context(), `
-		INSERT INTO attribute_metrics_summaries
+		INSERT INTO attribute_metrics_summaries (
+			gram_project_id, time_bucket,
+			department_name, job_title, employee_type, division_name, cost_center_name,
+			user_email, model, hook_source, roles, groups,
+			total_chats, total_input_tokens, total_output_tokens, total_tokens,
+			cache_read_input_tokens, cache_creation_input_tokens, total_cost,
+			total_tool_calls, unique_tool_calls,
+			account_type, provider, billing_mode,
+			query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name,
+			generation, is_active, hook_hostname
+		)
 		SELECT
 			toUUID(?) AS gram_project_id,
 			toStartOfHour(fromUnixTimestamp64Nano(?)) AS time_bucket,
