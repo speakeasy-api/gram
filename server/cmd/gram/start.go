@@ -1059,6 +1059,10 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create spend rules cel engine: %w", err)
 			}
+			spendGate, err := spendrules.NewGate(logger, cache.NewRedisCacheAdapter(redisClient), spendCelEngine)
+			if err != nil {
+				return fmt.Errorf("create spend gate: %w", err)
+			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
@@ -1089,6 +1093,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				riskScanner,
 				policyBypass,
+				spendGate,
 				shadowMCPClient,
 				chatWriter,
 				efficacySignaler,
@@ -1236,8 +1241,7 @@ func newStartCommand() *cli.Command {
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
-			// Mutation-triggered re-evaluation is wired in the spend-control
-			// runtime PR; the API serves reads/writes with a nil signaler.
+			spendEvaluator := &background.TemporalSpendRuleEvaluator{TemporalEnv: temporalEnv}
 			spendrules.Attach(mux, spendrules.NewService(
 				logger,
 				tracerProvider,
@@ -1247,8 +1251,22 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				auditLogger,
 				spendCelEngine,
-				nil,
+				spendEvaluator,
 			))
+
+			// Fresh spend-relevant telemetry (Claude Code OTEL logs,
+			// Codex/Cursor usage rows) triggers a throttled per-org
+			// evaluation so breached budgets block within seconds instead of
+			// waiting for the scheduled sweep. Flushed in the drain goroutine
+			// below, not via shutdownFuncs, for the same gRPC-close race
+			// reason as riskSignaler.
+			spendUsageTrigger := spendrules.NewUsageTrigger(
+				logger,
+				cache.NewRedisCacheAdapter(redisClient),
+				spendEvaluator,
+				spendrules.UsageSignalCooldown,
+			)
+			telemLogger.AddObserver(spendUsageTrigger)
 
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChatsTools(chatService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
@@ -1385,6 +1403,9 @@ func newStartCommand() *cli.Command {
 				}
 				if err := chatAnalysisSignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending chat analysis signals", attr.SlogError(err))
+				}
+				if err := spendUsageTrigger.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(err))
 				}
 			})
 
