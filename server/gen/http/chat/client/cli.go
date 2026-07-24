@@ -506,6 +506,49 @@ func BuildSetPinnedPayload(chatSetPinnedBody string, chatSetPinnedSessionToken s
 	return v, nil
 }
 
+// BuildSummarizePayload builds the payload for the chat summarize endpoint
+// from CLI flags.
+func BuildSummarizePayload(chatSummarizeBody string, chatSummarizeSessionToken string, chatSummarizeProjectSlugInput string) (*chat.SummarizePayload, error) {
+	var err error
+	var body SummarizeRequestBody
+	{
+		err = json.Unmarshal([]byte(chatSummarizeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regenerate\": false\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatSummarizeSessionToken != "" {
+			sessionToken = &chatSummarizeSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatSummarizeProjectSlugInput != "" {
+			projectSlugInput = &chatSummarizeProjectSlugInput
+		}
+	}
+	v := &chat.SummarizePayload{
+		ID:         body.ID,
+		Regenerate: body.Regenerate,
+	}
+	{
+		var zero bool
+		if v.Regenerate == zero {
+			v.Regenerate = false
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildSubmitFeedbackPayload builds the payload for the chat submitFeedback
 // endpoint from CLI flags.
 func BuildSubmitFeedbackPayload(chatSubmitFeedbackBody string, chatSubmitFeedbackSessionToken string, chatSubmitFeedbackProjectSlugInput string, chatSubmitFeedbackChatSessionsToken string) (*chat.SubmitFeedbackPayload, error) {

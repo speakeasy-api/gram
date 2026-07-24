@@ -75,6 +75,10 @@ export type Chat = {
    */
   numMessages: number;
   /**
+   * True when the chat is pinned
+   */
+  pinned?: boolean | undefined;
+  /**
    * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
    */
   riskFindingsCount?: number | undefined;
@@ -86,6 +90,14 @@ export type Chat = {
    * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
   source?: string | undefined;
+  /**
+   * Persisted LLM summary of the session transcript, if one has been generated
+   */
+  summary?: string | undefined;
+  /**
+   * When the session summary was last generated.
+   */
+  summaryGeneratedAt?: Date | undefined;
   /**
    * The title of the chat
    */
@@ -145,9 +157,14 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     max_generation: z.int(),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
+    pinned: z.optional(z.boolean()),
     risk_findings_count: z.optional(z.int()),
     risk_segments: z.optional(z.array(RiskSegment$inboundSchema)),
     source: z.optional(z.string()),
+    summary: z.optional(z.string()),
+    summary_generated_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     title: z.string(),
     total_cost: z.optional(z.number()),
     total_input_tokens: z.optional(z.int()),
@@ -177,6 +194,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "num_messages": "numMessages",
       "risk_findings_count": "riskFindingsCount",
       "risk_segments": "riskSegments",
+      "summary_generated_at": "summaryGeneratedAt",
       "total_cost": "totalCost",
       "total_input_tokens": "totalInputTokens",
       "total_output_tokens": "totalOutputTokens",

@@ -1812,6 +1812,7 @@ candidate_chats AS (
     c.external_user_id,
     c.created_at,
     c.updated_at,
+    c.pinned_at,
     COALESCE(ua.account_type, '')::text AS account_type,
     COALESCE(ua.email, '')::text AS account_email
   FROM chats c
@@ -1910,6 +1911,7 @@ filtered_chats AS (
     cc.external_user_id,
     cc.created_at,
     cc.updated_at,
+    cc.pinned_at,
     cs.num_messages,
     cs.last_message_timestamp,
     cc.account_type,
@@ -1927,6 +1929,7 @@ limited_chats AS (
     fc.external_user_id,
     fc.created_at,
     fc.updated_at,
+    fc.pinned_at,
     fc.num_messages,
     (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
     fc.last_message_timestamp,
@@ -1964,6 +1967,7 @@ SELECT
   lc.source,
   lc.created_at,
   lc.updated_at,
+  lc.pinned_at,
   lc.num_messages,
   lc.last_message_timestamp,
   -- Active findings for the returned page rows only; must stay in sync with
@@ -2016,6 +2020,7 @@ type ListChatsRow struct {
 	Source               pgtype.Text
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
+	PinnedAt             pgtype.Timestamptz
 	NumMessages          int32
 	LastMessageTimestamp pgtype.Timestamptz
 	RiskFindingsCount    int32
@@ -2071,6 +2076,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.Source,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PinnedAt,
 			&i.NumMessages,
 			&i.LastMessageTimestamp,
 			&i.RiskFindingsCount,
@@ -2949,6 +2955,35 @@ type UpdateAIIntegrationConfigChatCursorParams struct {
 func (q *Queries) UpdateAIIntegrationConfigChatCursor(ctx context.Context, arg UpdateAIIntegrationConfigChatCursorParams) error {
 	_, err := q.db.Exec(ctx, updateAIIntegrationConfigChatCursor, arg.LastCursorID, arg.ChatID)
 	return err
+}
+
+const updateChatSummary = `-- name: UpdateChatSummary :one
+UPDATE chats
+SET summary = $1,
+    summary_generated_at = NOW(),
+    updated_at = NOW()
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+RETURNING summary, summary_generated_at
+`
+
+type UpdateChatSummaryParams struct {
+	Summary   pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type UpdateChatSummaryRow struct {
+	Summary            pgtype.Text
+	SummaryGeneratedAt pgtype.Timestamptz
+}
+
+// Persist an on-demand LLM session summary. Project-scoped so a summarize write
+// can never touch another project's chat. Returns the updated row timestamps.
+func (q *Queries) UpdateChatSummary(ctx context.Context, arg UpdateChatSummaryParams) (UpdateChatSummaryRow, error) {
+	row := q.db.QueryRow(ctx, updateChatSummary, arg.Summary, arg.ID, arg.ProjectID)
+	var i UpdateChatSummaryRow
+	err := row.Scan(&i.Summary, &i.SummaryGeneratedAt)
+	return i, err
 }
 
 const updateChatTitle = `-- name: UpdateChatTitle :exec

@@ -260,6 +260,37 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "setPinned")
 	})
 
+	Method("summarize", func() {
+		Description("Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The ID of the chat to summarize", func() {
+				Format(FormatUUID)
+			})
+			Attribute("regenerate", Boolean, "When true, regenerate and overwrite any existing summary. Defaults to false.", func() {
+				Default(false)
+			})
+			Required("id")
+		})
+
+		Result(SummarizeChatResult)
+
+		HTTP(func() {
+			POST("/rpc/chat.summarize")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "summarizeChat")
+		Meta("openapi:extension:x-speakeasy-name-override", "summarize")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SummarizeChat"}`)
+	})
+
 	Method("submitFeedback", func() {
 		Description("Submit user feedback for a chat (success/failure)")
 
@@ -327,6 +358,16 @@ var ListChatsResult = Type("ListChatsResult", func() {
 	Required("chats", "total")
 })
 
+var SummarizeChatResult = Type("SummarizeChatResult", func() {
+	Attribute("summary", String, "The session summary text")
+	Attribute("summary_generated_at", String, func() {
+		Description("When the summary was last generated.")
+		Format(FormatDateTime)
+	})
+	Attribute("cached", Boolean, "True when an existing summary was returned without regenerating")
+	Required("summary", "summary_generated_at", "cached")
+})
+
 var ChatOverview = Type("ChatOverview", func() {
 	Attribute("id", String, "The ID of the chat")
 	Attribute("title", String, "The title of the chat")
@@ -355,6 +396,12 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("risk_findings_count", Int, "Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.")
 	Attribute("account_type", String, "Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.")
 	Attribute("account_email", String, "Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).")
+	Attribute("pinned", Boolean, "True when the chat is pinned")
+	Attribute("summary", String, "Persisted LLM summary of the session transcript, if one has been generated")
+	Attribute("summary_generated_at", String, func() {
+		Description("When the session summary was last generated.")
+		Format(FormatDateTime)
+	})
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
 })

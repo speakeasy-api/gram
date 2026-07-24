@@ -8787,6 +8787,102 @@ paths:
       tags:
         - chat
       x-speakeasy-name-override: submitFeedback
+  /rpc/chat.summarize:
+    post:
+      description: Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.
+      operationId: summarizeChat
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummarizeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummarizeChatResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: summarize chat
+      tags:
+        - chat
+      x-speakeasy-name-override: summarize
+      x-speakeasy-react-hook:
+        name: SummarizeChat
   /rpc/chatSessions.create:
     post:
       description: Creates a new chat session token
@@ -46933,6 +47029,9 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        pinned:
+          type: boolean
+          description: True when the chat is pinned
         risk_findings_count:
           type: integer
           description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
@@ -46945,6 +47044,13 @@ components:
         source:
           type: string
           description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
+        summary:
+          type: string
+          description: Persisted LLM summary of the session transcript, if one has been generated
+        summary_generated_at:
+          type: string
+          description: When the session summary was last generated.
+          format: date-time
         title:
           type: string
           description: The title of the chat
@@ -47072,6 +47178,9 @@ components:
           type: integer
           description: The number of messages in the chat
           format: int64
+        pinned:
+          type: boolean
+          description: True when the chat is pinned
         risk_findings_count:
           type: integer
           description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
@@ -47079,6 +47188,13 @@ components:
         source:
           type: string
           description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
+        summary:
+          type: string
+          description: Persisted LLM summary of the session transcript, if one has been generated
+        summary_generated_at:
+          type: string
+          description: When the session summary was last generated.
+          format: date-time
         title:
           type: string
           description: The title of the chat
@@ -60741,6 +60857,36 @@ components:
       required:
         - match_type
         - match_value
+    SummarizeChatResult:
+      type: object
+      properties:
+        cached:
+          type: boolean
+          description: True when an existing summary was returned without regenerating
+        summary:
+          type: string
+          description: The session summary text
+        summary_generated_at:
+          type: string
+          description: When the summary was last generated.
+          format: date-time
+      required:
+        - summary
+        - summary_generated_at
+        - cached
+    SummarizeRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the chat to summarize
+          format: uuid
+        regenerate:
+          type: boolean
+          description: When true, regenerate and overwrite any existing summary. Defaults to false.
+          default: false
+      required:
+        - id
     SyncedAgentUser:
       type: object
       properties:
