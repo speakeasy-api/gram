@@ -241,13 +241,17 @@ export function AgentSessionShowcase(): JSX.Element {
   const elapsed = useSessionClock();
 
   return (
-    <div className="relative hidden flex-col items-center justify-center gap-5 p-12 xl:flex">
-      <h2 className="w-[540px] [font-family:var(--f-display)] text-[51px] leading-[1.1] font-thin tracking-[-0.04em]">
-        Every agent action, governed.
-      </h2>
+    <div className="auth-showcase relative hidden flex-col items-center justify-center p-12 xl:flex">
+      {/* The stage zooms down on short viewports (see BRAND_STYLES) so the
+          fixed-size card never clips below the fold. */}
+      <div className="auth-showcase-stage flex flex-col items-center gap-5">
+        <h2 className="w-[540px] [font-family:var(--f-display)] text-[51px] leading-[1.1] font-thin tracking-[-0.04em]">
+          Every agent action, governed.
+        </h2>
 
-      <div aria-hidden="true">
-        <AgentSessionCard elapsed={elapsed} />
+        <div aria-hidden="true">
+          <AgentSessionCard elapsed={elapsed} />
+        </div>
       </div>
 
       <div className="absolute right-0 bottom-5 left-0 flex justify-center gap-7">

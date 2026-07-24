@@ -51,6 +51,16 @@ const BRAND_STYLES = `
 @media (prefers-reduced-motion: reduce) {
   .auth-live-dot { animation: none; }
 }
+/* The showcase is designed against a 900px-tall frame; on shorter viewports
+   (laptop screens minus browser chrome) zoom the stage down so the card and
+   the social links always fit above the fold. */
+@media (max-height: 860px) {
+  .auth-showcase { padding-top: 24px; padding-bottom: 48px; }
+  .auth-showcase-stage { zoom: 0.8; }
+}
+@media (max-height: 700px) {
+  .auth-showcase-stage { zoom: 0.65; }
+}
 `;
 
 function BrandLockup() {
