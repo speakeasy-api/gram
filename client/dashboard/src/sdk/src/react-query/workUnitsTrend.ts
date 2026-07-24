@@ -112,7 +112,6 @@ export function setWorkUnitsTrendData(
       to?: Date | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
-      gramChatSession?: string | undefined;
     },
   ],
   data: WorkUnitsTrendQueryData,
@@ -130,7 +129,6 @@ export function invalidateWorkUnitsTrend(
       to?: Date | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
-      gramChatSession?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

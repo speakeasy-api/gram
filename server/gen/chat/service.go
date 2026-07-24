@@ -365,9 +365,8 @@ type GenerateTitleResult struct {
 // GetWorkUnitsTrendPayload is the payload type of the chat service
 // getWorkUnitsTrend method.
 type GetWorkUnitsTrendPayload struct {
-	SessionToken      *string
-	ProjectSlugInput  *string
-	ChatSessionsToken *string
+	SessionToken     *string
+	ProjectSlugInput *string
 	// Start of the window (ISO 8601). Defaults to 30 days before `to`.
 	From *string
 	// End of the window (ISO 8601). Defaults to now.

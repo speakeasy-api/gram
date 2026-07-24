@@ -240,7 +240,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 
 // BuildGetWorkUnitsTrendPayload builds the payload for the chat
 // getWorkUnitsTrend endpoint from CLI flags.
-func BuildGetWorkUnitsTrendPayload(chatGetWorkUnitsTrendFrom string, chatGetWorkUnitsTrendTo string, chatGetWorkUnitsTrendSessionToken string, chatGetWorkUnitsTrendProjectSlugInput string, chatGetWorkUnitsTrendChatSessionsToken string) (*chat.GetWorkUnitsTrendPayload, error) {
+func BuildGetWorkUnitsTrendPayload(chatGetWorkUnitsTrendFrom string, chatGetWorkUnitsTrendTo string, chatGetWorkUnitsTrendSessionToken string, chatGetWorkUnitsTrendProjectSlugInput string) (*chat.GetWorkUnitsTrendPayload, error) {
 	var err error
 	var from *string
 	{
@@ -274,18 +274,11 @@ func BuildGetWorkUnitsTrendPayload(chatGetWorkUnitsTrendFrom string, chatGetWork
 			projectSlugInput = &chatGetWorkUnitsTrendProjectSlugInput
 		}
 	}
-	var chatSessionsToken *string
-	{
-		if chatGetWorkUnitsTrendChatSessionsToken != "" {
-			chatSessionsToken = &chatGetWorkUnitsTrendChatSessionsToken
-		}
-	}
 	v := &chat.GetWorkUnitsTrendPayload{}
 	v.From = from
 	v.To = to
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
-	v.ChatSessionsToken = chatSessionsToken
 
 	return v, nil
 }

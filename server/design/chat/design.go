@@ -100,10 +100,11 @@ var _ = Service("chat", func() {
 	Method("getWorkUnitsTrend", func() {
 		Description("Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.")
 
+		Security(security.Session, security.ProjectSlug)
+
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
-			security.ChatSessionsTokenPayload()
 			Attribute("from", String, "Start of the window (ISO 8601). Defaults to 30 days before `to`.", func() {
 				Format(FormatDateTime)
 			})
@@ -120,7 +121,6 @@ var _ = Service("chat", func() {
 			Param("to")
 			security.SessionHeader()
 			security.ProjectHeader()
-			security.ChatSessionsTokenHeader()
 			Response(StatusOK)
 		})
 

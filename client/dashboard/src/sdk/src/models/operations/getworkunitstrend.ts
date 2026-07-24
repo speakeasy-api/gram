@@ -5,18 +5,9 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type GetWorkUnitsTrendSecurityOption1 = {
-  projectSlugHeaderGramProject: string;
-  sessionHeaderGramSession: string;
-};
-
-export type GetWorkUnitsTrendSecurityOption2 = {
-  chatSessionsTokenHeaderGramChatSession: string;
-};
-
 export type GetWorkUnitsTrendSecurity = {
-  option1?: GetWorkUnitsTrendSecurityOption1 | undefined;
-  option2?: GetWorkUnitsTrendSecurityOption2 | undefined;
+  projectSlugHeaderGramProject?: string | undefined;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type GetWorkUnitsTrendRequest = {
@@ -36,80 +27,12 @@ export type GetWorkUnitsTrendRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  /**
-   * Chat Sessions token header
-   */
-  gramChatSession?: string | undefined;
 };
-
-/** @internal */
-export type GetWorkUnitsTrendSecurityOption1$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const GetWorkUnitsTrendSecurityOption1$outboundSchema: z.ZodMiniType<
-  GetWorkUnitsTrendSecurityOption1$Outbound,
-  GetWorkUnitsTrendSecurityOption1
-> = z.pipe(
-  z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-      sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-  }),
-);
-
-export function getWorkUnitsTrendSecurityOption1ToJSON(
-  getWorkUnitsTrendSecurityOption1: GetWorkUnitsTrendSecurityOption1,
-): string {
-  return JSON.stringify(
-    GetWorkUnitsTrendSecurityOption1$outboundSchema.parse(
-      getWorkUnitsTrendSecurityOption1,
-    ),
-  );
-}
-
-/** @internal */
-export type GetWorkUnitsTrendSecurityOption2$Outbound = {
-  "chat_sessions_token_header_Gram-Chat-Session": string;
-};
-
-/** @internal */
-export const GetWorkUnitsTrendSecurityOption2$outboundSchema: z.ZodMiniType<
-  GetWorkUnitsTrendSecurityOption2$Outbound,
-  GetWorkUnitsTrendSecurityOption2
-> = z.pipe(
-  z.object({
-    chatSessionsTokenHeaderGramChatSession: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      chatSessionsTokenHeaderGramChatSession:
-        "chat_sessions_token_header_Gram-Chat-Session",
-    });
-  }),
-);
-
-export function getWorkUnitsTrendSecurityOption2ToJSON(
-  getWorkUnitsTrendSecurityOption2: GetWorkUnitsTrendSecurityOption2,
-): string {
-  return JSON.stringify(
-    GetWorkUnitsTrendSecurityOption2$outboundSchema.parse(
-      getWorkUnitsTrendSecurityOption2,
-    ),
-  );
-}
 
 /** @internal */
 export type GetWorkUnitsTrendSecurity$Outbound = {
-  Option1?: GetWorkUnitsTrendSecurityOption1$Outbound | undefined;
-  Option2?: GetWorkUnitsTrendSecurityOption2$Outbound | undefined;
+  "project_slug_header_Gram-Project"?: string | undefined;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -118,17 +41,13 @@ export const GetWorkUnitsTrendSecurity$outboundSchema: z.ZodMiniType<
   GetWorkUnitsTrendSecurity
 > = z.pipe(
   z.object({
-    option1: z.optional(
-      z.lazy(() => GetWorkUnitsTrendSecurityOption1$outboundSchema),
-    ),
-    option2: z.optional(
-      z.lazy(() => GetWorkUnitsTrendSecurityOption2$outboundSchema),
-    ),
+    projectSlugHeaderGramProject: z.optional(z.string()),
+    sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      option1: "Option1",
-      option2: "Option2",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+      sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
 );
@@ -147,7 +66,6 @@ export type GetWorkUnitsTrendRequest$Outbound = {
   to?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  "Gram-Chat-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -160,13 +78,11 @@ export const GetWorkUnitsTrendRequest$outboundSchema: z.ZodMiniType<
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    gramChatSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
-      gramChatSession: "Gram-Chat-Session",
     });
   }),
 );

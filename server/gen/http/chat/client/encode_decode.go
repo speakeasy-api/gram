@@ -330,10 +330,6 @@ func EncodeGetWorkUnitsTrendRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		if p.ChatSessionsToken != nil {
-			head := *p.ChatSessionsToken
-			req.Header.Set("Gram-Chat-Session", head)
-		}
 		values := req.URL.Query()
 		if p.From != nil {
 			values.Add("from", *p.From)

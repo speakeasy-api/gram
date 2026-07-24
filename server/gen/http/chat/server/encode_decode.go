@@ -410,12 +410,11 @@ func DecodeGetWorkUnitsTrendRequest(mux goahttp.Muxer, decoder func(*http.Reques
 	return func(r *http.Request) (*chat.GetWorkUnitsTrendPayload, error) {
 		var payload *chat.GetWorkUnitsTrendPayload
 		var (
-			from              *string
-			to                *string
-			sessionToken      *string
-			projectSlugInput  *string
-			chatSessionsToken *string
-			err               error
+			from             *string
+			to               *string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
 		)
 		qp := r.URL.Query()
 		fromRaw := qp.Get("from")
@@ -440,14 +439,10 @@ func DecodeGetWorkUnitsTrendRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		chatSessionsTokenRaw := r.Header.Get("Gram-Chat-Session")
-		if chatSessionsTokenRaw != "" {
-			chatSessionsToken = &chatSessionsTokenRaw
-		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetWorkUnitsTrendPayload(from, to, sessionToken, projectSlugInput, chatSessionsToken)
+		payload = NewGetWorkUnitsTrendPayload(from, to, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -460,13 +455,6 @@ func DecodeGetWorkUnitsTrendRequest(mux goahttp.Muxer, decoder func(*http.Reques
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
-			}
-		}
-		if payload.ChatSessionsToken != nil {
-			if strings.Contains(*payload.ChatSessionsToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ChatSessionsToken, " ", 2)[1]
-				payload.ChatSessionsToken = &cred
 			}
 		}
 

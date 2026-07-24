@@ -3452,13 +3452,12 @@ func NewListChatsPayload(search *string, externalUserID *string, source *string,
 
 // NewGetWorkUnitsTrendPayload builds a chat service getWorkUnitsTrend endpoint
 // payload.
-func NewGetWorkUnitsTrendPayload(from *string, to *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.GetWorkUnitsTrendPayload {
+func NewGetWorkUnitsTrendPayload(from *string, to *string, sessionToken *string, projectSlugInput *string) *chat.GetWorkUnitsTrendPayload {
 	v := &chat.GetWorkUnitsTrendPayload{}
 	v.From = from
 	v.To = to
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
-	v.ChatSessionsToken = chatSessionsToken
 
 	return v
 }

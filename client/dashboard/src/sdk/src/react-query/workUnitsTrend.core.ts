@@ -51,7 +51,6 @@ export function buildWorkUnitsTrendQuery(
       to: request?.to,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
-      gramChatSession: request?.gramChatSession,
     }),
     queryFn: async function workUnitsTrendQueryFn(
       ctx,
@@ -83,7 +82,6 @@ export function queryKeyWorkUnitsTrend(
     to?: Date | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
-    gramChatSession?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "chat", "getWorkUnitsTrend", parameters];

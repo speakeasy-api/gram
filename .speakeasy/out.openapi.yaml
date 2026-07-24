@@ -2927,6 +2927,258 @@ paths:
       x-speakeasy-react-hook:
         name: UpsertShadowMCPInventoryPolicyBypass
         type: mutation
+  /rpc/adminChatAnalysis.getSettings:
+    get:
+      description: Get the active organization's chat analysis settings. Requires platform admin.
+      operationId: getChatAnalysisSettings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatAnalysisSettings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getSettings adminChatAnalysis
+      tags:
+        - adminChatAnalysis
+      x-speakeasy-name-override: getSettings
+      x-speakeasy-react-hook:
+        name: ChatAnalysisSettings
+  /rpc/adminChatAnalysis.triggerAnalysis:
+    post:
+      description: Wake the chat analysis coordinator for every project in the active organization, instead of waiting for the periodic sweep. Requires platform admin.
+      operationId: triggerChatAnalysis
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerAnalysisResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: triggerAnalysis adminChatAnalysis
+      tags:
+        - adminChatAnalysis
+      x-speakeasy-name-override: triggerAnalysis
+      x-speakeasy-react-hook:
+        name: TriggerChatAnalysis
+  /rpc/adminChatAnalysis.upsertWorkUnitsSettings:
+    post:
+      description: Create or replace the active organization's chat analysis settings. Requires platform admin.
+      operationId: upsertChatAnalysisSettings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertWorkUnitsSettingsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatAnalysisSettings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: upsertWorkUnitsSettings adminChatAnalysis
+      tags:
+        - adminChatAnalysis
+      x-speakeasy-name-override: upsertWorkUnitsSettings
+      x-speakeasy-react-hook:
+        name: UpsertChatAnalysisSettings
   /rpc/adminRemoteSessions.createGlobalClient:
     post:
       description: Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.
@@ -8119,13 +8371,6 @@ paths:
           schema:
             description: project header
             type: string
-        - allowEmptyValue: true
-          description: Chat Sessions token header
-          in: header
-          name: Gram-Chat-Session
-          schema:
-            description: Chat Sessions token header
-            type: string
       responses:
         "200":
           content:
@@ -8190,7 +8435,6 @@ paths:
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
-        - chat_sessions_token_header_Gram-Chat-Session: []
         - {}
       summary: getWorkUnitsTrend chat
       tags:
@@ -47116,6 +47360,30 @@ components:
         - created_at
         - updated_at
         - last_message_timestamp
+    ChatAnalysisSettings:
+      type: object
+      properties:
+        is_default:
+          type: boolean
+          description: Whether these values are platform defaults rather than stored organization settings.
+        organization_id:
+          type: string
+          description: Organization these settings apply to.
+        work_units_daily_cap:
+          type: integer
+          description: Maximum work-units evaluations reserved across the organization each UTC day. 0 disables scoring as surely as the switch.
+          format: int64
+          minimum: 0
+          maximum: 10000
+        work_units_enabled:
+          type: boolean
+          description: Whether work-units chat analysis is enabled.
+      description: Per-organization switches and budgets for chat session analysis judges.
+      required:
+        - organization_id
+        - work_units_enabled
+        - work_units_daily_cap
+        - is_default
     ChatMessage:
       type: object
       properties:
@@ -60494,26 +60762,40 @@ components:
     SkillEfficacySettings:
       type: object
       properties:
-        daily_cap:
-          type: integer
-          description: Maximum session evaluations reserved across the organization each UTC day.
-          format: int64
-          minimum: 0
-          maximum: 10000
         enabled:
           type: boolean
           description: Whether skill efficacy scoring is enabled.
         is_default:
           type: boolean
           description: Whether these values are platform defaults rather than stored organization settings.
+        new_version_burst:
+          type: integer
+          description: Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.
+          format: int64
+          minimum: 0
+          maximum: 10000
+        org_daily_cap:
+          type: integer
+          description: Maximum evaluations reserved across the organization each UTC day.
+          format: int64
+          minimum: 0
+          maximum: 10000
         organization_id:
           type: string
           description: Organization these settings apply to.
-      description: 'Per-organization settings for skill efficacy scoring. Scoring is session-grained: one evaluation covers every skill a session activated, so the cap counts sessions per day.'
+        per_skill_daily_cap:
+          type: integer
+          description: Maximum evaluations reserved per skill each UTC day.
+          format: int64
+          minimum: 0
+          maximum: 10000
+      description: Per-organization sampling settings for skill efficacy scoring.
       required:
         - organization_id
         - enabled
-        - daily_cap
+        - per_skill_daily_cap
+        - org_daily_cap
+        - new_version_burst
         - is_default
     SkillInsightMetrics:
       type: object
@@ -62561,6 +62843,16 @@ components:
         - user_id
         - user_type
         - activity_count
+    TriggerAnalysisResponseBody:
+      type: object
+      properties:
+        projects_signaled:
+          type: integer
+          description: Number of projects whose analysis coordinator was woken.
+          format: int64
+      description: How far the trigger reached.
+      required:
+        - projects_signaled
     TriggerDefinition:
       type: object
       properties:
@@ -64448,18 +64740,47 @@ components:
     UpsertSettingsRequestBody:
       type: object
       properties:
-        daily_cap:
-          type: integer
-          description: Maximum session evaluations reserved across the organization each UTC day.
-          format: int64
-          minimum: 0
-          maximum: 10000
         enabled:
           type: boolean
           description: Whether skill efficacy scoring is enabled.
+        new_version_burst:
+          type: integer
+          description: Lifetime evaluations a new skill version may reserve before the per-skill daily cap applies.
+          format: int64
+          minimum: 0
+          maximum: 10000
+        org_daily_cap:
+          type: integer
+          description: Maximum evaluations reserved across the organization each UTC day.
+          format: int64
+          minimum: 0
+          maximum: 10000
+        per_skill_daily_cap:
+          type: integer
+          description: Maximum evaluations reserved per skill each UTC day.
+          format: int64
+          minimum: 0
+          maximum: 10000
       required:
         - enabled
-        - daily_cap
+        - per_skill_daily_cap
+        - org_daily_cap
+        - new_version_burst
+    UpsertWorkUnitsSettingsRequestBody:
+      type: object
+      properties:
+        work_units_daily_cap:
+          type: integer
+          description: Maximum work-units evaluations reserved across the organization each UTC day. 0 disables scoring as surely as the switch.
+          format: int64
+          minimum: 0
+          maximum: 10000
+        work_units_enabled:
+          type: boolean
+          description: Whether work-units chat analysis is enabled.
+      required:
+        - work_units_enabled
+        - work_units_daily_cap
     UsageTiers:
       type: object
       properties:
@@ -65065,6 +65386,8 @@ tags:
     description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages
     description: Manages packages in Gram.
+  - name: adminChatAnalysis
+    description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: plugins
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features

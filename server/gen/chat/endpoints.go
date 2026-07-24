@@ -33,7 +33,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		ListChats:         NewListChatsEndpoint(s, a.APIKeyAuth, a.JWTAuth),
-		GetWorkUnitsTrend: NewGetWorkUnitsTrendEndpoint(s, a.APIKeyAuth, a.JWTAuth),
+		GetWorkUnitsTrend: NewGetWorkUnitsTrendEndpoint(s, a.APIKeyAuth),
 		LoadChat:          NewLoadChatEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		GenerateTitle:     NewGenerateTitleEndpoint(s, a.APIKeyAuth, a.JWTAuth),
 		CreditUsage:       NewCreditUsageEndpoint(s, a.APIKeyAuth),
@@ -106,7 +106,7 @@ func NewListChatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJ
 
 // NewGetWorkUnitsTrendEndpoint returns an endpoint function that calls the
 // method "getWorkUnitsTrend" of service "chat".
-func NewGetWorkUnitsTrendEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc, authJWTFn security.AuthJWTFunc) goa.Endpoint {
+func NewGetWorkUnitsTrendEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*GetWorkUnitsTrendPayload)
 		var err error
@@ -131,18 +131,6 @@ func NewGetWorkUnitsTrendEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.JWTScheme{
-				Name:           "chat_sessions_token",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var token string
-			if p.ChatSessionsToken != nil {
-				token = *p.ChatSessionsToken
-			}
-			ctx, err = authJWTFn(ctx, token, &sc)
 		}
 		if err != nil {
 			return nil, err
