@@ -5,10 +5,13 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // apiKeyCtx builds a context authenticated as a first-party project API key:
@@ -127,4 +130,101 @@ func TestLoadChat_ChatSessionTokenStillOwnerMatched(t *testing.T) {
 	got, err := ti.service.LoadChat(chatSessionTokenCtx(t, ti, "external-user-A"), loadPayload(chatID.String()))
 	require.NoError(t, err)
 	require.Len(t, got.Messages, 2)
+}
+
+// createProjectInSameOrg adds a second project to ti's organization so a single
+// org-wide key can be pointed at more than one project.
+func createProjectInSameOrg(t *testing.T, ti *chatTestInstance) uuid.UUID {
+	t.Helper()
+	p, err := projectsrepo.New(ti.conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
+		Name:           "Second Project",
+		Slug:           "chat-alt-" + uuid.NewString()[:8],
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	return p.ID
+}
+
+// seedChatInProject seeds a chat plus one message in an arbitrary project of
+// ti's org (seedChat/seedNMessages hardcode ti.projectID).
+func seedChatInProject(t *testing.T, ti *chatTestInstance, projectID uuid.UUID, title string) uuid.UUID {
+	t.Helper()
+	r := chatrepo.New(ti.conn)
+	chatID, err := r.UpsertChat(t.Context(), chatrepo.UpsertChatParams{
+		ID:             uuid.New(),
+		ProjectID:      projectID,
+		OrganizationID: ti.orgID,
+		UserID:         pgtype.Text{},
+		ExternalUserID: pgtype.Text{},
+		Title:          pgtype.Text{String: title, Valid: title != ""},
+	})
+	require.NoError(t, err)
+	_, err = r.SeedChatMessage(t.Context(), chatrepo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+	return chatID
+}
+
+// apiKeyCtxForProject builds a direct producer-API-key context resolved to a
+// specific project, mirroring what auth.checkProjectAccess sets once the
+// Gram-Project header selects the project for that request.
+func apiKeyCtxForProject(t *testing.T, ti *chatTestInstance, projectID uuid.UUID) context.Context {
+	t.Helper()
+	authCtx := &contextvalues.AuthContext{
+		APIKeyID:             uuid.NewString(),
+		APIKeyName:           "test-key",
+		APIKeyScopes:         []string{"producer"},
+		ProjectID:            &projectID,
+		ActiveOrganizationID: ti.orgID,
+	}
+	return contextvalues.SetAuthContext(t.Context(), authCtx)
+}
+
+// TestLoadChat_OrgWideAPIKey_ReadsChatsInAnyProject covers the org-wide key case
+// (api_keys.project_id NULL): such a key can read chats in every project of its
+// org. auth.checkProjectAccess lets an org-wide key resolve its context to any
+// project in the org (see auth.TestAuthorizeOrganizationWideKeyAllowsProjectSlug),
+// and chat.load then serves whichever project was selected. Here the same key
+// reads a chat in project A and a chat in project B of one org.
+func TestLoadChat_OrgWideAPIKey_ReadsChatsInAnyProject(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t) // project A == ti.projectID
+	projectB := createProjectInSameOrg(t, ti)
+
+	chatA := seedChatInProject(t, ti, ti.projectID, "project A chat")
+	chatB := seedChatInProject(t, ti, projectB, "project B chat")
+
+	// Resolved to project A it reads A's chat...
+	_, err := ti.service.LoadChat(apiKeyCtxForProject(t, ti, ti.projectID), loadPayload(chatA.String()))
+	require.NoError(t, err)
+	// ...and resolved to project B it reads B's chat. One org-wide key, both projects.
+	_, err = ti.service.LoadChat(apiKeyCtxForProject(t, ti, projectB), loadPayload(chatB.String()))
+	require.NoError(t, err)
+}
+
+// TestLoadChat_ProjectBoundAPIKey_ReadsOnlyItsProject covers the project-bound
+// key case (api_keys.project_id set): the key can only ever resolve to that one
+// project (auth.checkProjectAccess forbids sibling projects, see
+// auth.TestAuthorizeProjectBoundKeyRejectsSiblingProjectSlugWithoutRepointing),
+// so it reads its own project's chats but not another project's.
+func TestLoadChat_ProjectBoundAPIKey_ReadsOnlyItsProject(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t) // bound project A == ti.projectID
+	projectB := createProjectInSameOrg(t, ti)
+
+	chatA := seedChatInProject(t, ti, ti.projectID, "bound project chat")
+	chatB := seedChatInProject(t, ti, projectB, "other project chat")
+
+	// A key bound to project A is always resolved to A.
+	boundCtx := apiKeyCtxForProject(t, ti, ti.projectID)
+
+	// It reads its own project's chat...
+	_, err := ti.service.LoadChat(boundCtx, loadPayload(chatA.String()))
+	require.NoError(t, err)
+	// ...but not a chat in the other project — its context can never point there.
+	_, err = ti.service.LoadChat(boundCtx, loadPayload(chatB.String()))
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
