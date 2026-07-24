@@ -1,3 +1,4 @@
+import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { cn } from "@/lib/utils";
 import { memo, useEffect, useState } from "react";
 
@@ -44,12 +45,16 @@ const DECISION_STEPS: DecisionStep[] = [
 ];
 
 // Second marks at which each decision row activates, on a loop of LOOP_SECONDS.
-const STEP_STARTS = [1, 5, 9, 13, 17];
-const LOOP_SECONDS = 22;
+// The first two seconds belong to the "Connected to Speakeasy" banner.
+const STEP_STARTS = [3, 7, 11, 15, 19];
+const LOOP_SECONDS = 24;
 const TICK_MS = 100;
 const SPEED = 1.25;
 // Chip + detail fade in this long after their row activates.
 const REVEAL_DELAY_SECONDS = 1.6;
+// Connection banner brightens, then its checkmark appears.
+const CONNECT_AT_SECONDS = 0.5;
+const CONNECT_CHECK_AT_SECONDS = 1.6;
 const SESSION_COSTS = ["$0.00", "$0.85", "$1.60", "$2.75", "$3.90", "$5.00"];
 
 // The showcase pane is `hidden xl:flex`, so the ticker only runs when the
@@ -169,6 +174,25 @@ function AgentSessionCard({ elapsed }: { elapsed: number }) {
         <span className="auth-mono text-[12px] text-[var(--muted)]">Live</span>
       </div>
 
+      <div
+        className="mx-5 mt-3 rounded-md border border-[var(--edge-soft)] bg-[var(--surface)] px-3.5 py-[9px] transition-opacity duration-500"
+        style={{ opacity: elapsed >= CONNECT_AT_SECONDS ? 1 : 0.35 }}
+      >
+        <div className="flex items-center gap-2.5">
+          <img src={speakeasyIcon} alt="" className="h-4 w-4" />
+          <span className="text-[14px]">Connected to Speakeasy</span>
+          <span
+            className="text-[13px] text-[var(--moss)] transition-opacity duration-400"
+            style={{ opacity: elapsed >= CONNECT_CHECK_AT_SECONDS ? 1 : 0 }}
+          >
+            ✓
+          </span>
+        </div>
+        <div className="auth-mono-text mt-1 text-[12px] text-[var(--muted-strong)]">
+          12 MCP servers · 84 tools · 6 skills · session governed
+        </div>
+      </div>
+
       <div className="flex gap-3 px-5 pt-4 pb-1.5">
         <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[var(--navy)] text-[11px] text-white">
           S
@@ -215,7 +239,7 @@ export function AgentSessionShowcase(): JSX.Element {
   const elapsed = useSessionClock();
 
   return (
-    <div className="relative hidden flex-col items-center justify-center gap-9 p-12 xl:flex">
+    <div className="relative hidden flex-col items-center justify-center gap-5 p-12 xl:flex">
       <h2 className="w-[540px] [font-family:var(--f-display)] text-[51px] leading-[1.1] font-thin tracking-[-0.04em]">
         Every agent action, governed.
       </h2>
