@@ -1,12 +1,14 @@
 package hooks
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -533,6 +535,111 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	require.Equal(t, "unknown", evidence.ServerIdentity)
 	require.Empty(t, evidence.FullURL)
 	require.Nil(t, matched)
+}
+
+// The recorded chat tool-call id must hash to the telemetry trace id: the
+// shadow-MCP provenance lookup joins the two via
+// trace_id = hashToolCallIDToTraceID(recorded id) (DNO-604).
+func TestCodex_ToolCall_RecordedIDHashesToTelemetryTraceID(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "codex-session-provenance-join"
+	toolName := "mcp__int_linear__get_issue"
+	userEmail := "dev@example.com"
+
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"id": "ABC-123"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.Decision)
+
+	_, err = ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PostToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolOutput:    map[string]any{"ok": true},
+	})
+	require.NoError(t, err)
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    sessionIDToUUID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	var toolRequest, toolResult chatRepo.ChatMessage
+	for _, msg := range msgs {
+		switch {
+		case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
+			toolRequest = msg
+		case msg.Role == "tool":
+			toolResult = msg
+		}
+	}
+	require.NotEmpty(t, toolRequest.ID)
+	require.NotEmpty(t, toolResult.ID)
+
+	var toolCalls []struct {
+		ID       string `json:"id"`
+		Function struct {
+			Name string `json:"name"`
+		} `json:"function"`
+	}
+	require.NoError(t, json.Unmarshal(toolRequest.ToolCalls, &toolCalls))
+	require.Len(t, toolCalls, 1)
+	require.Equal(t, syntheticToolCallID(sessionID, toolName), toolCalls[0].ID)
+	require.Equal(t, toolName, toolCalls[0].Function.Name)
+	require.Equal(t, toolCalls[0].ID, toolResult.ToolCallID.String, "result rows must pair on the same id")
+
+	attrs := ti.service.buildCodexTelemetryAttributes(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+	}, &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "Codex",
+		UserEmail:   userEmail,
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	})
+	require.Equal(t, hashToolCallIDToTraceID(toolCalls[0].ID), attrs[attr.TraceIDKey])
+}
+
+// Non-tool Codex events keep the per-session trace: only tool events move to
+// the per-(session, tool) grouping that makes the provenance join possible.
+func TestBuildCodexTelemetryAttributes_NonToolEventKeepsSessionTrace(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	sessionID := "codex-session-trace-grouping"
+	email := "dev@example.com"
+	prompt := "hello"
+	attrs := ti.service.buildCodexTelemetryAttributes(t.Context(), &gen.CodexPayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		UserEmail:     &email,
+		Prompt:        &prompt,
+	}, &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "Codex",
+		UserEmail:   email,
+		GramOrgID:   "org-id",
+		ProjectID:   "project-id",
+	})
+
+	require.Equal(t, hashToolCallIDToTraceID(sessionID), attrs[attr.TraceIDKey])
 }
 
 func TestCodexSessionMetadata_CachesSessionStartEmail(t *testing.T) {
