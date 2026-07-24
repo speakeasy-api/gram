@@ -13,12 +13,12 @@ export function LoginPanel({
 
   return (
     <>
-      <div className="text-center">
+      <div className="text-center tracking-[0.0025em]">
         <p className="text-[16px]">
           Securely scale AI usage across your organization.
         </p>
-        <p className="mt-1.5 text-[14px] text-[var(--stone)]">
-          Control plane to govern Agents, MCP and Skills.
+        <p className="mt-1.5 text-[14px] text-[var(--muted-strong)]">
+          Control plane to govern Agents, MCP and Skills
         </p>
       </div>
 
@@ -26,7 +26,7 @@ export function LoginPanel({
         {AUTH_PILLARS.map((label) => (
           <span
             key={label}
-            className="auth-mono rounded-full border border-[var(--rule)] px-[11px] py-[5px] text-[11px]"
+            className="auth-mono rounded-full border border-[var(--edge)] px-[11px] py-[5px] text-[11px]"
           >
             {label}
           </span>
@@ -42,7 +42,7 @@ export function LoginPanel({
         Log in
       </button>
 
-      <p className="auth-mono-text text-center text-[11px] leading-relaxed tracking-[0.02em] text-[var(--stone)]">
+      <p className="auth-mono-text text-center text-[11px] leading-relaxed tracking-[0.02em] text-[var(--muted)]">
         Single sign-on through your identity provider.
       </p>
     </>

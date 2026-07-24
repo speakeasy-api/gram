@@ -91,9 +91,9 @@ export function RegisterPanel(): JSX.Element {
 
   return (
     <>
-      <div className="text-center">
-        <p className="text-[17px]">Create your organization.</p>
-        <p className="mt-1.5 text-[15px] text-[var(--stone)]">
+      <div className="text-center tracking-[0.0025em]">
+        <p className="text-[16px]">Create your organization.</p>
+        <p className="mt-1.5 text-[14px] text-[var(--muted-strong)]">
           Name your workspace — you can invite your team next.
         </p>
       </div>
@@ -107,7 +107,7 @@ export function RegisterPanel(): JSX.Element {
         <div className="flex w-full flex-col gap-2.5">
           <label
             htmlFor="companyName"
-            className="auth-mono text-[12px] text-[var(--stone)]"
+            className="auth-mono text-[12px] text-[var(--muted-strong)]"
           >
             Company name
           </label>
@@ -117,10 +117,10 @@ export function RegisterPanel(): JSX.Element {
             value={companyName}
             onChange={handleCompanyNameChange}
             placeholder="Acme Inc"
-            className="w-full rounded-none border border-[var(--rule)] bg-[var(--paper)] px-3.5 py-[13px] text-[16px] text-[var(--ink)] placeholder:text-[var(--stone)] placeholder:opacity-55 focus:border-[var(--ink)] focus:outline-none"
+            className="w-full rounded-md border border-[var(--input-edge)] bg-[var(--card)] px-3.5 py-[11px] text-[16px] text-black placeholder:text-[var(--muted)] placeholder:opacity-55 focus:border-[var(--focus)] focus:outline-none"
             disabled={registerMutation.isPending}
           />
-          <p className="text-[12px] text-[var(--stone)]">
+          <p className="text-[12px] text-[var(--muted)]">
             Letters, numbers, spaces, hyphens, and underscores.
           </p>
         </div>

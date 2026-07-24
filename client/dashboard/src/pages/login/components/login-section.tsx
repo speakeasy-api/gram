@@ -96,7 +96,7 @@ export function AuthLayout({
           <div className="flex flex-col gap-2 text-center text-sm dark:text-black">
             <p>Securely scale AI usage across your organization.</p>
             <p className="text-[#8B8684]">
-              Control plane to govern Agents, MCP and Skills.
+              Control plane to govern Agents, MCP and Skills
             </p>
           </div>
           <FeatureBadges />

@@ -14,32 +14,32 @@ const DECISION_STEPS: DecisionStep[] = [
   {
     label: "Connect billing-api MCP",
     chip: "Granted",
-    chipClassName: "bg-[var(--moss)] text-[var(--bone)]",
+    chipClassName: "bg-[var(--moss)] text-white",
     detail: "401 → OAuth via Okta · sarah@acme.com",
   },
   {
     label: "get_invoice INV-4821",
-    chip: "Fields masked",
-    chipClassName: "bg-[var(--ember)] text-[var(--ink)]",
-    detail: "card, email redacted for the model",
+    chip: "Fields flagged",
+    chipClassName: "bg-[var(--ember)] text-black",
+    detail: "card, email flagged for the model",
   },
   {
     label: "create_refund $1,200",
     chip: "Denied",
-    chipClassName: "bg-[var(--vermilion)] text-[var(--bone)]",
+    chipClassName: "bg-[var(--vermilion)] text-white",
     detail: "destructive · deny wins over team allow",
   },
   {
     label: "void_invoice — 3 duplicates",
     chip: "Held",
-    chipClassName: "bg-[var(--blue)] text-[var(--bone)]",
+    chipClassName: "bg-[var(--blue)] text-white",
     detail: "llm-as-judge: held for human approval",
   },
   {
     label: "Post summary to #billing-ops",
     chip: "Granted",
-    chipClassName: "bg-[var(--moss)] text-[var(--bone)]",
-    detail: "audit written · session cost $0.05",
+    chipClassName: "bg-[var(--moss)] text-white",
+    detail: "audit written · session cost $5.00",
   },
 ];
 
@@ -50,7 +50,7 @@ const TICK_MS = 100;
 const SPEED = 1.25;
 // Chip + detail fade in this long after their row activates.
 const REVEAL_DELAY_SECONDS = 1.6;
-const SESSION_COSTS = ["$0.00", "$0.01", "$0.02", "$0.02", "$0.03", "$0.05"];
+const SESSION_COSTS = ["$0.00", "$0.85", "$1.60", "$2.75", "$3.90", "$5.00"];
 
 // The showcase pane is `hidden xl:flex`, so the ticker only runs when the
 // viewport can actually see it. Must match Tailwind's `xl` breakpoint.
@@ -129,14 +129,14 @@ const DecisionRow = memo(function DecisionRow({
 }) {
   return (
     <div
-      className="border border-[var(--hairline)] px-3 py-[9px] transition-opacity duration-500"
+      className="rounded-md border border-[var(--edge-soft)] px-3 py-[9px] transition-opacity duration-500"
       style={{ opacity }}
     >
       <div className="flex items-center justify-between gap-2.5">
         <span className="text-[14px]">{step.label}</span>
         <span
           className={cn(
-            "auth-mono px-2 py-[3px] text-[10px] transition-opacity duration-400",
+            "auth-mono rounded-full px-2.5 py-[3px] text-[10px] transition-opacity duration-400",
             step.chipClassName,
           )}
           style={{ opacity: reveal }}
@@ -145,7 +145,7 @@ const DecisionRow = memo(function DecisionRow({
         </span>
       </div>
       <div
-        className="auth-mono-text mt-[5px] text-[12px] text-[var(--stone)] transition-opacity duration-400"
+        className="auth-mono-text mt-[5px] text-[12px] text-[var(--muted-strong)] transition-opacity duration-400"
         style={{ opacity: reveal }}
       >
         {step.detail}
@@ -160,20 +160,20 @@ function AgentSessionCard({ elapsed }: { elapsed: number }) {
   const progress = Math.min(100, (elapsed / (LOOP_SECONDS - 0.5)) * 100);
 
   return (
-    <div className="w-[540px] border border-[var(--hairline)] bg-[var(--paper)]">
-      <div className="flex h-11 items-center justify-between border-b border-[var(--hairline)] px-5">
+    <div className="w-[540px] overflow-hidden rounded-lg border border-[var(--edge)] bg-[var(--card)]">
+      <div className="flex h-11 items-center justify-between border-b border-[var(--edge-soft)] px-5">
         <span className="auth-mono flex items-center gap-2.5 text-[12px]">
           <i className="auth-live-dot h-[7px] w-[7px] rounded-full bg-[var(--moss)]" />
           Agent session
         </span>
-        <span className="auth-mono text-[12px] text-[var(--stone)]">Live</span>
+        <span className="auth-mono text-[12px] text-[var(--muted)]">Live</span>
       </div>
 
       <div className="flex gap-3 px-5 pt-4 pb-1.5">
-        <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[var(--navy)] text-[11px] text-[var(--bone)]">
+        <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-[var(--navy)] text-[11px] text-white">
           S
         </span>
-        <p className="mt-0.5 text-[15px] leading-normal">
+        <p className="mt-0.5 text-[15px] leading-normal tracking-[0.0025em]">
           Handle the refund request on order #4821 — verify the invoice and
           process it if valid.
         </p>
@@ -190,14 +190,14 @@ function AgentSessionCard({ elapsed }: { elapsed: number }) {
         ))}
       </div>
 
-      <div className="auth-mono-text flex justify-between px-5 pb-3.5 text-[11px] tracking-[0.04em] text-[var(--stone)]">
+      <div className="auth-mono-text flex justify-between px-5 pb-3.5 text-[11px] tracking-[0.04em] text-[var(--muted)]">
         <span>task: refund-request-4821</span>
         <span>session cost {cost}</span>
       </div>
 
-      <div className="h-[3px] bg-[var(--hairline)]">
+      <div className="h-[3px] bg-[var(--edge-soft)]">
         <div
-          className="h-full bg-[var(--ink)] transition-[width] duration-100 ease-linear"
+          className="h-full bg-[var(--cta)] transition-[width] duration-100 ease-linear"
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -216,7 +216,7 @@ export function AgentSessionShowcase(): JSX.Element {
 
   return (
     <div className="relative hidden flex-col items-center justify-center gap-9 p-12 xl:flex">
-      <h2 className="w-[540px] [font-family:var(--f-display)] text-[52px] leading-[0.92] font-thin tracking-[-0.03em]">
+      <h2 className="w-[540px] [font-family:var(--f-display)] text-[51px] leading-[1.1] font-thin tracking-[-0.04em]">
         Every agent action, governed.
       </h2>
 
@@ -231,7 +231,7 @@ export function AgentSessionShowcase(): JSX.Element {
             href={link.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="auth-mono text-[12px] tracking-[0.06em] text-[var(--stone)] transition-colors hover:text-[var(--ink)]"
+            className="auth-mono text-[12px] tracking-[0.06em] text-[var(--muted)] transition-colors hover:text-black"
           >
             {link.label}
           </a>
