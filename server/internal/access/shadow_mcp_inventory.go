@@ -402,7 +402,9 @@ func (s *Service) ResolveShadowMCPInventoryRequest(ctx context.Context, payload 
 	default:
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid shadow mcp inventory request decision")
 	}
-	policyIDs, err := shadowMCPInventoryPolicyIDs(payload.PolicyIds, decision == shadowMCPInventoryDecisionAllow)
+	// Policy ids are validated lazily: an allow decision on an allow_all
+	// policy edits the blocked list and needs no policy selection.
+	policyIDs, err := shadowMCPInventoryPolicyIDs(payload.PolicyIds, false)
 	if err != nil {
 		return nil, err
 	}
@@ -415,9 +417,27 @@ func (s *Service) ResolveShadowMCPInventoryRequest(ctx context.Context, payload 
 
 	var policyAudiences map[string][]urn.Principal
 	if decision == shadowMCPInventoryDecisionAllow {
-		policyAudiences, err = s.replaceShadowMCPInventoryURLBypassGrants(ctx, dbtx, ac.ActiveOrganizationID, projectID, inventoryURL.CanonicalURL, policyIDs)
+		blockingPolicies, err := s.shadowMCPInventoryBlockingPolicies(ctx, dbtx, projectID)
 		if err != nil {
 			return nil, err
+		}
+		if allowAllPolicy := shadowMCPInventoryAllowAllPolicy(blockingPolicies); allowAllPolicy != nil {
+			// Approval under allow_all unblocks the server for the whole
+			// project: revoke the URL's risk_policy:block grant instead of
+			// minting bypass grants, and resolve the pending requests against
+			// that policy with no granted principals.
+			if err := policybypass.RevokePolicyURL(ctx, dbtx, ac.ActiveOrganizationID, authz.ScopeRiskPolicyBlock, allowAllPolicy.ID.String(), inventoryURL.CanonicalURL); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "unblock shadow mcp server").LogError(ctx, s.logger)
+			}
+			policyIDs = []string{allowAllPolicy.ID.String()}
+		} else {
+			if len(policyIDs) == 0 {
+				return nil, oops.E(oops.CodeBadRequest, nil, "at least one policy id is required")
+			}
+			policyAudiences, err = s.replaceShadowMCPInventoryURLBypassGrants(ctx, dbtx, ac.ActiveOrganizationID, projectID, inventoryURL.CanonicalURL, policyIDs)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -600,6 +620,21 @@ func (s *Service) shadowMCPInventoryBlockingPolicies(ctx context.Context, db ris
 		policies[row.ID.String()] = row
 	}
 	return policies, nil
+}
+
+// shadowMCPInventoryAllowAllPolicy returns the allow_all blocking policy when
+// every enabled blocking policy declares the allow_all disposition. Mirrors
+// the forURL semantics: with mixed legacy data, deny-by-default wins and this
+// returns nil.
+func shadowMCPInventoryAllowAllPolicy(blockingPolicies map[string]riskrepo.RiskPolicy) *riskrepo.RiskPolicy {
+	var candidate *riskrepo.RiskPolicy
+	for _, policy := range blockingPolicies {
+		if !policy.ShadowMcpDisposition.Valid || policy.ShadowMcpDisposition.String != shadowmcp.DispositionAllowAll {
+			return nil
+		}
+		candidate = &policy
+	}
+	return candidate
 }
 
 func (s *Service) shadowMCPInventoryProjectPolicies(ctx context.Context, db riskrepo.DBTX, projectID uuid.UUID) ([]riskrepo.RiskPolicy, error) {
