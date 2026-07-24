@@ -63,6 +63,7 @@ export function AttachRemoteIdentityProviderSheet({
   userSessionIssuer,
   selectableIssuers,
   initialIssuerUrl,
+  initialScopes,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -80,6 +81,9 @@ export function AttachRemoteIdentityProviderSheet({
   // in "new" mode and runs RFC 8414 discovery against this URL to prefill the
   // upstream endpoints.
   initialIssuerUrl?: string;
+  // RFC 9728 protected-resource scopes. Some providers advertise these only
+  // on the protected resource, not in authorization-server metadata.
+  initialScopes?: string[];
 }): JSX.Element {
   const client = useSdkClient();
   const { fetch: authedFetch } = useFetcher();
@@ -435,7 +439,7 @@ export function AttachRemoteIdentityProviderSheet({
     setClientId("");
     setClientSecret("");
     setTokenEndpointAuthMethod("");
-    setScopeOverride("");
+    setScopeOverride(initialScopes?.join(", ") ?? "");
     setAudienceOverride("");
     setClientMode("select");
     setSelectedClientId("");
@@ -444,6 +448,7 @@ export function AttachRemoteIdentityProviderSheet({
     open,
     target.slug,
     initialIssuerUrl,
+    initialScopes,
     hasSelectable,
     setIssuerUrl,
     resetEndpointState,
