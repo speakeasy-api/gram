@@ -61,16 +61,22 @@ func deviceAgentEmail(ctx context.Context) string {
 
 // deviceAgentCommands returns the device-agent commands to try, in order.
 // GRAM_DEVICE_AGENT_COMMANDS (comma-separated) replaces the default set
-// entirely. The default tries a bare PATH lookup first and then the agent's
-// well-known install locations: MDM installs place speakeasyd under the
-// per-user Speakeasy directory without touching PATH (and GUI-spawned hook
+// entirely. The default order — the device agent's HOOK_IDENTITY contract —
+// is: the path the daemon advertises about itself, then a bare PATH lookup,
+// then static well-known install locations for daemons too old to advertise.
+// speakeasyd is typically NOT on PATH (MDM installs place it under the
+// per-user Speakeasy directory without touching PATH, and GUI-spawned hook
 // hosts see a minimal PATH anyway), so a bare lookup alone silently loses
 // managed identity attribution.
 func deviceAgentCommands() []string {
 	if env := strings.TrimSpace(os.Getenv("GRAM_DEVICE_AGENT_COMMANDS")); env != "" {
 		return strings.Split(env, ",")
 	}
-	commands := []string{"speakeasyd"}
+	var commands []string
+	if advertised := advertisedAgentPath(); advertised != "" {
+		commands = append(commands, advertised)
+	}
+	commands = append(commands, "speakeasyd")
 	home, _ := os.UserHomeDir()
 	var candidates []string
 	switch runtime.GOOS {
@@ -83,25 +89,64 @@ func deviceAgentCommands() []string {
 			"/Library/Application Support/Speakeasy/speakeasyd",
 		)
 	case "windows":
-		if local := os.Getenv("LOCALAPPDATA"); local != "" {
-			candidates = append(candidates, filepath.Join(local, "Speakeasy", "bin", "speakeasyd.exe"))
-		}
 		candidates = append(candidates, `C:\Program Files\Speakeasy\speakeasyd.exe`)
 	default:
 		if home != "" {
-			candidates = append(candidates,
-				filepath.Join(home, ".speakeasy", "bin", "speakeasyd"),
-				filepath.Join(home, ".local", "bin", "speakeasyd"),
-			)
+			candidates = append(candidates, filepath.Join(home, ".local", "bin", "speakeasyd"))
 		}
 		candidates = append(candidates, "/usr/local/bin/speakeasyd")
 	}
 	for _, candidate := range candidates {
-		if executableFile(candidate) {
+		if executableFile(candidate) && candidate != commands[0] {
 			commands = append(commands, candidate)
 		}
 	}
 	return commands
+}
+
+// advertisedAgentPath reads the daemon's self-advertisement: on every startup
+// speakeasyd writes its own executable path to a fixed per-OS file (the
+// device agent's core/paths.AgentPathFile — keep the locations in sync). This
+// is the only discovery mode that works regardless of where IT installed the
+// daemon, on every OS. Windows is machine-wide (%ProgramData%) because the
+// daemon runs as LocalSystem there, whose profile dirs per-user hook
+// processes can't see. Returns "" when the file is absent (older daemon),
+// unreadable, or names something that isn't an executable file.
+func advertisedAgentPath() string {
+	var file string
+	switch runtime.GOOS {
+	case "darwin":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		file = filepath.Join(home, "Library", "Application Support", "Speakeasy", "agent-path")
+	case "windows":
+		programData := os.Getenv("PROGRAMDATA")
+		if programData == "" {
+			programData = `C:\ProgramData`
+		}
+		file = filepath.Join(programData, "Speakeasy", "agent-path")
+	default:
+		stateHome := os.Getenv("XDG_STATE_HOME")
+		if stateHome == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return ""
+			}
+			stateHome = filepath.Join(home, ".local", "state")
+		}
+		file = filepath.Join(stateHome, "speakeasy", "agent-path")
+	}
+	content, err := os.ReadFile(file)
+	if err != nil {
+		return ""
+	}
+	advertised := strings.TrimSpace(string(content))
+	if !filepath.IsAbs(advertised) || !executableFile(advertised) {
+		return ""
+	}
+	return advertised
 }
 
 func executableFile(path string) bool {

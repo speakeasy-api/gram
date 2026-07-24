@@ -34,6 +34,63 @@ func TestDeviceAgentCommandsEnvOverrideIsExclusive(t *testing.T) {
 	require.Equal(t, []string{"one", "two"}, deviceAgentCommands())
 }
 
+func TestDeviceAgentEmailUsesAdvertisedPath(t *testing.T) {
+	// The daemon advertises its own executable path on startup (the device
+	// agent's HOOK_IDENTITY contract), so discovery works from an arbitrary
+	// IT-chosen install dir with nothing on PATH.
+	if runtime.GOOS == "windows" {
+		t.Skip("executable shell fixture is POSIX-only")
+	}
+	installDir := t.TempDir() // deliberately NOT a well-known location
+	agent := filepath.Join(installDir, "speakeasyd")
+	require.NoError(t, os.WriteFile(agent, []byte("#!/bin/sh\nprintf '%s' '{\"email\":\"advertised@example.com\"}'\n"), 0o700))
+
+	home := t.TempDir()
+	advertDir := filepath.Join(home, "Library", "Application Support", "Speakeasy")
+	if runtime.GOOS != "darwin" {
+		advertDir = filepath.Join(home, ".local", "state", "speakeasy")
+	}
+	require.NoError(t, os.MkdirAll(advertDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(advertDir, "agent-path"), []byte(agent+"\n"), 0o644))
+
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
+
+	require.Equal(t, agent, deviceAgentCommands()[0])
+	require.Equal(t, "advertised@example.com", deviceAgentEmail(t.Context()))
+}
+
+func TestAdvertisedAgentPathIgnoresBogusContent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture layout is POSIX-only")
+	}
+	home := t.TempDir()
+	advertDir := filepath.Join(home, "Library", "Application Support", "Speakeasy")
+	if runtime.GOOS != "darwin" {
+		advertDir = filepath.Join(home, ".local", "state", "speakeasy")
+	}
+	require.NoError(t, os.MkdirAll(advertDir, 0o755))
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", "")
+
+	advert := filepath.Join(advertDir, "agent-path")
+
+	// Relative path: refused.
+	require.NoError(t, os.WriteFile(advert, []byte("speakeasyd\n"), 0o644))
+	require.Empty(t, advertisedAgentPath())
+
+	// Absolute but nonexistent: refused.
+	require.NoError(t, os.WriteFile(advert, []byte(filepath.Join(home, "gone")+"\n"), 0o644))
+	require.Empty(t, advertisedAgentPath())
+
+	// Absent file (an older daemon): refused without error.
+	require.NoError(t, os.Remove(advert))
+	require.Empty(t, advertisedAgentPath())
+}
+
 func TestDeviceAgentEmailFindsAgentOffPATH(t *testing.T) {
 	// The MDM install layout: speakeasyd lives under the per-user Speakeasy
 	// dir and is NOT on PATH. Managed attribution must still resolve via the
