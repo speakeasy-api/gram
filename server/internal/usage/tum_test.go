@@ -178,7 +178,8 @@ func insertRetainedGramAggregateRow(t *testing.T, conn driver.Conn, projectID st
 			total_tool_calls, unique_tool_calls,
 			account_type, provider, billing_mode,
 			query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name,
-			generation, is_active, hook_hostname
+			generation, is_active, hook_hostname,
+			total_work_units, scored_cost, scored_tokens
 		)
 		SELECT
 			toUUID(?) AS gram_project_id,
@@ -228,7 +229,8 @@ func insertObservedClaudeAggregateRow(t *testing.T, conn driver.Conn, projectID 
 			total_tool_calls, unique_tool_calls,
 			account_type, provider, billing_mode,
 			query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name,
-			generation, is_active, hook_hostname
+			generation, is_active, hook_hostname,
+			total_work_units, scored_cost, scored_tokens
 		)
 		SELECT
 			toUUID(?) AS gram_project_id,

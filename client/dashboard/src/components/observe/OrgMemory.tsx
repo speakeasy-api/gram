@@ -42,7 +42,7 @@ const TREND_WINDOW_MS = TREND_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 // Buckets are UTC days, so labels must be formatted in UTC: the shared
 // formatChartLabel uses the local timezone, which shifts viewers west of UTC
 // onto the previous date.
-function formatTrendLabel(timestamp: string): string {
+function formatTrendLabel(timestamp: string | Date): string {
   return new Date(timestamp).toLocaleDateString([], {
     month: "short",
     day: "numeric",
