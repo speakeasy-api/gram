@@ -1,21 +1,20 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthenticationSectionBody } from "./AuthenticationSection";
 import type { AuthTarget } from "./authTarget";
 
-const { useProtectedResourceMetadata, useAllRemoteSessionClients } = vi.hoisted(
-  () => ({
-    useProtectedResourceMetadata: vi.fn(),
-    useAllRemoteSessionClients: vi.fn(),
-  }),
-);
+const {
+  useProtectedResourceMetadata,
+  useAllRemoteSessionClients,
+  useUserSessionIssuer,
+} = vi.hoisted(() => ({
+  useProtectedResourceMetadata: vi.fn(),
+  useAllRemoteSessionClients: vi.fn(),
+  useUserSessionIssuer: vi.fn(),
+}));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
-  useUserSessionIssuer: () => ({
-    data: { id: "user-session-issuer" },
-    isLoading: false,
-    isError: false,
-  }),
+  useUserSessionIssuer: (...args: unknown[]) => useUserSessionIssuer(...args),
 }));
 
 vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
@@ -62,6 +61,14 @@ vi.mock("./RemoteIdentityProvidersField", () => ({
   ),
 }));
 
+vi.mock("./AuthenticationSetupActions", () => ({
+  AuthenticationSetupActions: ({
+    onUseDiscovered,
+  }: {
+    onUseDiscovered: () => void;
+  }) => <button onClick={onUseDiscovered}>Use Discovered</button>,
+}));
+
 vi.mock("./DeleteRemoteIdentityProviderDialog", () => ({
   DeleteRemoteIdentityProviderDialog: () => null,
 }));
@@ -78,13 +85,21 @@ vi.mock("./McpServerSessionsPanel", () => ({
   McpServerSessionsPanel: () => null,
 }));
 
+beforeEach(() => {
+  useUserSessionIssuer.mockReturnValue({
+    data: { id: "user-session-issuer" },
+    isLoading: false,
+    isError: false,
+  });
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
 
 describe("AuthenticationSectionBody", () => {
-  it("preserves protected-resource scopes when recovering an unconfigured remote server", () => {
+  it("preserves scopes when a remote server has a session issuer but no upstream client", () => {
     useAllRemoteSessionClients.mockReturnValue({
       items: [],
       isLoading: false,
@@ -97,7 +112,9 @@ describe("AuthenticationSectionBody", () => {
       },
     });
 
-    render(<AuthenticationSectionBody target={remoteTarget} />);
+    render(
+      <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+    );
 
     expect(useProtectedResourceMetadata).toHaveBeenCalledWith(
       "remote-mcp-server",
@@ -105,6 +122,40 @@ describe("AuthenticationSectionBody", () => {
     );
 
     fireEvent.click(screen.getByText("Add provider"));
+
+    expect(
+      screen.getByText("https://auth.example.com|resource.read resource.write"),
+    ).toBeDefined();
+  });
+
+  it("preserves scopes during first-time setup without a session issuer", () => {
+    useUserSessionIssuer.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+    });
+    useAllRemoteSessionClients.mockReturnValue({
+      items: [],
+      isLoading: false,
+    });
+    useProtectedResourceMetadata.mockReturnValue({
+      status: "available",
+      metadata: {
+        authorizationServers: ["https://auth.example.com"],
+        scopesSupported: ["resource.read", "resource.write"],
+      },
+    });
+
+    render(
+      <AuthenticationSectionBody target={remoteTargetWithoutSessionIssuer} />,
+    );
+
+    expect(useProtectedResourceMetadata).toHaveBeenCalledWith(
+      "remote-mcp-server",
+      true,
+    );
+
+    fireEvent.click(screen.getByText("Use Discovered"));
 
     expect(
       screen.getByText("https://auth.example.com|resource.read resource.write"),
@@ -121,7 +172,9 @@ describe("AuthenticationSectionBody", () => {
       metadata: null,
     });
 
-    render(<AuthenticationSectionBody target={remoteTarget} />);
+    render(
+      <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+    );
 
     expect(useProtectedResourceMetadata).toHaveBeenCalledWith(
       "remote-mcp-server",
@@ -130,9 +183,14 @@ describe("AuthenticationSectionBody", () => {
   });
 });
 
-const remoteTarget: AuthTarget = {
+const remoteTargetWithSessionIssuer: AuthTarget = {
   slug: "remote-server",
   userSessionIssuerId: "user-session-issuer",
   remoteMcpServerId: "remote-mcp-server",
   invalidate: vi.fn(),
+};
+
+const remoteTargetWithoutSessionIssuer: AuthTarget = {
+  ...remoteTargetWithSessionIssuer,
+  userSessionIssuerId: null,
 };
