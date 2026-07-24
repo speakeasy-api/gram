@@ -352,6 +352,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
 		}
 		riskCount := int(row.RiskFindingsCount)
+		pinned := row.PinnedAt.Valid
 		result = append(result, &gen.ChatOverview{
 			ID:                   row.ID.String(),
 			UserID:               conv.FromPGText[string](row.UserID),
@@ -367,10 +368,15 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			RiskFindingsCount:    &riskCount,
 			AccountType:          conv.PtrEmpty(row.AccountType),
 			AccountEmail:         conv.PtrEmpty(row.AccountEmail),
-			TotalInputTokens:     nil,
-			TotalOutputTokens:    nil,
-			TotalTokens:          nil,
-			TotalCost:            nil,
+			Pinned:               &pinned,
+			// List responses omit summary text to keep pages light; loadChat /
+			// summarize return the persisted summary when present.
+			Summary:            nil,
+			SummaryGeneratedAt: nil,
+			TotalInputTokens:   nil,
+			TotalOutputTokens:  nil,
+			TotalTokens:        nil,
+			TotalCost:          nil,
 		})
 	}
 
@@ -838,6 +844,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
+	pinned := chat.PinnedAt.Valid
 	result := &gen.Chat{
 		ID:                   chat.ID.String(),
 		Title:                chat.Title.String,
@@ -853,6 +860,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		RiskFindingsCount:    nil,
 		AccountType:          conv.PtrEmpty(chat.AccountType),
 		AccountEmail:         conv.PtrEmpty(chat.AccountEmail),
+		Pinned:               &pinned,
+		Summary:              conv.FromPGText[string](chat.Summary),
+		SummaryGeneratedAt:   formatOptionalTimestamptz(chat.SummaryGeneratedAt),
 		Messages:             resultMessages,
 		Generation:           int(generation),
 		MaxGeneration:        int(maxGeneration),
@@ -1643,6 +1653,198 @@ func (s *Service) SetPinned(ctx context.Context, payload *gen.SetPinnedPayload) 
 	}
 
 	return nil
+}
+
+const (
+	// maxSummarizeTranscriptRunes bounds the transcript fed to the summarizer.
+	// Whole messages are dropped oldest-first so the end of the session is kept.
+	maxSummarizeTranscriptRunes = 100000
+	// maxSummarizeMessageRunes caps one message body in the summarize transcript.
+	maxSummarizeMessageRunes   = 4000
+	summarizeCompletionTimeout = 60 * time.Second
+)
+
+func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) (*gen.SummarizeChatResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
+	}
+
+	chat, err := s.repo.GetChat(ctx, chatID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
+	}
+
+	if chat.ProjectID != *authCtx.ProjectID {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Off-dashboard callers must match the chat owner unless they're the
+	// managed-assistant runtime (same rule as SetPinned / LoadChat).
+	if authCtx.SessionID == nil {
+		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
+			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+				return nil, oops.C(oops.CodeUnauthorized)
+			}
+		}
+	}
+
+	if chat.Summary.Valid && strings.TrimSpace(chat.Summary.String) != "" && !payload.Regenerate {
+		generatedAt := chat.SummaryGeneratedAt.Time.Format(time.RFC3339)
+		if !chat.SummaryGeneratedAt.Valid {
+			generatedAt = chat.UpdatedAt.Time.Format(time.RFC3339)
+		}
+		return &gen.SummarizeChatResult{
+			Summary:            chat.Summary.String,
+			SummaryGeneratedAt: generatedAt,
+			Cached:             true,
+		}, nil
+	}
+
+	if s.completionClient == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "summarization is unavailable").LogError(ctx, s.logger)
+	}
+
+	messages, err := s.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: chat.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list chat messages").LogError(ctx, s.logger)
+	}
+
+	transcript := buildSummarizeTranscript(messages)
+	if strings.TrimSpace(transcript) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "chat has no summarizable messages").LogError(ctx, s.logger)
+	}
+
+	summaryCtx, cancel := context.WithTimeout(ctx, summarizeCompletionTimeout)
+	defer cancel()
+
+	systemPrompt := "You summarize agent session transcripts for an operations dashboard. " +
+		"Write a concise summary in 2-4 short paragraphs covering: the user's goal, " +
+		"what the agent did (key steps and tools), the outcome, and any notable risks or blockers. " +
+		"Use plain prose only — no headings, bullets, or markdown. " +
+		"Do not invent details that are not supported by the transcript."
+
+	response, err := s.completionClient.GetCompletion(summaryCtx, openrouter.CompletionRequest{
+		OrgID:     authCtx.ActiveOrganizationID,
+		ProjectID: chat.ProjectID.String(),
+		ChatID:    uuid.Nil,
+		Messages: []or.ChatMessages{
+			openrouter.CreateMessageSystem(systemPrompt),
+			openrouter.CreateMessageUser(transcript),
+		},
+		Tools:                     nil,
+		Temperature:               nil,
+		Model:                     "",
+		Stream:                    false,
+		UsageSource:               billing.ModelUsageSourceGram,
+		KeyType:                   openrouter.KeyTypeInternal,
+		KeySlot:                   "",
+		UserID:                    "",
+		ExternalUserID:            "",
+		UserEmail:                 "",
+		HTTPMetadata:              nil,
+		APIKeyID:                  "",
+		JSONSchema:                nil,
+		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		CacheControl:              nil,
+		NormalizeOutboundMessages: false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate summary").LogError(ctx, s.logger)
+	}
+	if response == nil || response.Message == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "empty summary response").LogError(ctx, s.logger)
+	}
+
+	summary := strings.TrimSpace(openrouter.GetText(*response.Message))
+	if summary == "" {
+		return nil, oops.E(oops.CodeUnexpected, nil, "empty summary response").LogError(ctx, s.logger)
+	}
+
+	updated, err := s.repo.UpdateChatSummary(ctx, repo.UpdateChatSummaryParams{
+		Summary:   pgtype.Text{String: summary, Valid: true},
+		ID:        chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "persist chat summary").LogError(ctx, s.logger)
+	}
+
+	return &gen.SummarizeChatResult{
+		Summary:            updated.Summary.String,
+		SummaryGeneratedAt: updated.SummaryGeneratedAt.Time.Format(time.RFC3339),
+		Cached:             false,
+	}, nil
+}
+
+func formatOptionalTimestamptz(ts pgtype.Timestamptz) *string {
+	if !ts.Valid {
+		return nil
+	}
+	formatted := ts.Time.Format(time.RFC3339)
+	return &formatted
+}
+
+// buildSummarizeTranscript concatenates user/assistant message bodies into a
+// bounded string for the summarizer. Oldest messages are dropped first when the
+// budget is exceeded so the end of the session is preserved.
+func buildSummarizeTranscript(messages []repo.ChatMessage) string {
+	parts := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Role != "user" && msg.Role != "assistant" {
+			continue
+		}
+		content := strings.TrimSpace(msg.Content)
+		if content == "" {
+			continue
+		}
+		content = truncateRunes(content, maxSummarizeMessageRunes)
+		parts = append(parts, fmt.Sprintf("%s: %s", msg.Role, content))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+
+	// Drop oldest whole lines until the transcript fits the budget.
+	start := 0
+	for start < len(parts) {
+		joined := strings.Join(parts[start:], "\n")
+		if utf8.RuneCountInString(joined) <= maxSummarizeTranscriptRunes {
+			if start > 0 {
+				return fmt.Sprintf("[%d earlier messages omitted]\n%s", start, joined)
+			}
+			return joined
+		}
+		start++
+	}
+	// Hostile single-message case: keep a truncated newest line.
+	last := parts[len(parts)-1]
+	return truncateRunes(last, maxSummarizeTranscriptRunes)
+}
+
+func truncateRunes(s string, maxRunes int) string {
+	if maxRunes <= 0 || utf8.RuneCountInString(s) <= maxRunes {
+		return s
+	}
+	runes := []rune(s)
+	if maxRunes < 1 {
+		return ""
+	}
+	return string(runes[:maxRunes]) + "…"
 }
 
 func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbackPayload) (*gen.SubmitFeedbackResult, error) {

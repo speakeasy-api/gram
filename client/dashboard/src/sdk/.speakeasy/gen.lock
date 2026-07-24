@@ -120,6 +120,7 @@ trackedFiles:
   src/funcs/chatSessionsRevoke.ts: {}
   src/funcs/chatSetPinned.ts: {}
   src/funcs/chatSubmitFeedback.ts: {}
+  src/funcs/chatSummarize.ts: {}
   src/funcs/cliAuthAuthorize.ts: {}
   src/funcs/cliAuthRedeem.ts: {}
   src/funcs/collectionsAttachServer.ts: {}
@@ -1035,6 +1036,8 @@ trackedFiles:
   src/models/components/suggestcustomdetectionruleresult.ts: {}
   src/models/components/suggestexclusionrequestbody.ts: {}
   src/models/components/suggestexclusionresult.ts: {}
+  src/models/components/summarizechatresult.ts: {}
+  src/models/components/summarizerequestbody.ts: {}
   src/models/components/syncedagentuser.ts: {}
   src/models/components/telemetrylogrecord.ts: {}
   src/models/components/telemetrywindowpayload.ts: {}
@@ -1551,6 +1554,7 @@ trackedFiles:
   src/models/operations/submitriskblockfeedback.ts: {}
   src/models/operations/suggestcustomdetectionrule.ts: {}
   src/models/operations/suggestexclusion.ts: {}
+  src/models/operations/summarizechat.ts: {}
   src/models/operations/switchauthscopes.ts: {}
   src/models/operations/testdetectionrule.ts: {}
   src/models/operations/tokenexchange.ts: {}
@@ -2165,6 +2169,7 @@ trackedFiles:
   src/react-query/skillVersions.ts: {}
   src/react-query/skills.core.ts: {}
   src/react-query/skills.ts: {}
+  src/react-query/summarizeChat.ts: {}
   src/react-query/switchScopes.ts: {}
   src/react-query/syncedAgentUsers.core.ts: {}
   src/react-query/syncedAgentUsers.ts: {}
@@ -6533,6 +6538,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  summarizeChat:
+    speakeasy-default-summarize-chat:
+      requestBody:
+        application/json: {"id": "24b0dbb3-0c3e-4363-b777-ef350ac9d0eb", "regenerate": false}
+      responses:
+        "200":
+          application/json: {"cached": false, "summary": "<value>", "summary_generated_at": "2024-06-30T11:39:49.958Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   switchAuthScopes:
     speakeasy-default-switch-auth-scopes:
       responses:

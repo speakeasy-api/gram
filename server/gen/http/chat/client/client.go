@@ -41,6 +41,10 @@ type Client struct {
 	// endpoint.
 	SetPinnedDoer goahttp.Doer
 
+	// Summarize Doer is the HTTP client used to make requests to the summarize
+	// endpoint.
+	SummarizeDoer goahttp.Doer
+
 	// SubmitFeedback Doer is the HTTP client used to make requests to the
 	// submitFeedback endpoint.
 	SubmitFeedbackDoer goahttp.Doer
@@ -75,6 +79,7 @@ func NewClient(
 		CreditUsageDoer:     doer,
 		DeleteChatDoer:      doer,
 		SetPinnedDoer:       doer,
+		SummarizeDoer:       doer,
 		SubmitFeedbackDoer:  doer,
 		ListSourcesDoer:     doer,
 		RestoreResponseBody: restoreBody,
@@ -224,6 +229,30 @@ func (c *Client) SetPinned() goa.Endpoint {
 		resp, err := c.SetPinnedDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "setPinned", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Summarize returns an endpoint that makes HTTP requests to the chat service
+// summarize server.
+func (c *Client) Summarize() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSummarizeRequest(c.encoder)
+		decodeResponse = DecodeSummarizeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSummarizeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SummarizeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "summarize", err)
 		}
 		return decodeResponse(resp)
 	}

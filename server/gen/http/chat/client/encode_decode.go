@@ -1476,6 +1476,244 @@ func DecodeSetPinnedResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildSummarizeRequest instantiates a HTTP request object with method and
+// path set to call the "chat" service "summarize" endpoint
+func (c *Client) BuildSummarizeRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SummarizeChatPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("chat", "summarize", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSummarizeRequest returns an encoder for requests sent to the chat
+// summarize server.
+func EncodeSummarizeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*chat.SummarizePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("chat", "summarize", "*chat.SummarizePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSummarizeRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("chat", "summarize", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSummarizeResponse returns a decoder for responses returned by the chat
+// summarize endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeSummarizeResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSummarizeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SummarizeResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+			}
+			err = ValidateSummarizeResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "summarize", err)
+			}
+			res := NewSummarizeChatResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SummarizeUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+			}
+			err = ValidateSummarizeUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "summarize", err)
+			}
+			return nil, NewSummarizeUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SummarizeForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+			}
+			err = ValidateSummarizeForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "summarize", err)
+			}
+			return nil, NewSummarizeForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SummarizeBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+			}
+			err = ValidateSummarizeBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "summarize", err)
+			}
+			return nil, NewSummarizeBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SummarizeNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+			}
+			err = ValidateSummarizeNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "summarize", err)
+			}
+			return nil, NewSummarizeNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SummarizeConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+			}
+			err = ValidateSummarizeConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "summarize", err)
+			}
+			return nil, NewSummarizeConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SummarizeUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+			}
+			err = ValidateSummarizeUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "summarize", err)
+			}
+			return nil, NewSummarizeUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SummarizeInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+			}
+			err = ValidateSummarizeInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "summarize", err)
+			}
+			return nil, NewSummarizeInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SummarizeInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+				}
+				err = ValidateSummarizeInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "summarize", err)
+				}
+				return nil, NewSummarizeInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SummarizeUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+				}
+				err = ValidateSummarizeUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "summarize", err)
+				}
+				return nil, NewSummarizeUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "summarize", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SummarizeGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "summarize", err)
+			}
+			err = ValidateSummarizeGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "summarize", err)
+			}
+			return nil, NewSummarizeGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("chat", "summarize", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSubmitFeedbackRequest instantiates a HTTP request object with method
 // and path set to call the "chat" service "submitFeedback" endpoint
 func (c *Client) BuildSubmitFeedbackRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -1978,6 +2216,9 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		RiskFindingsCount:    v.RiskFindingsCount,
 		AccountType:          v.AccountType,
 		AccountEmail:         v.AccountEmail,
+		Pinned:               v.Pinned,
+		Summary:              v.Summary,
+		SummaryGeneratedAt:   v.SummaryGeneratedAt,
 	}
 
 	return res

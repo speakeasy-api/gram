@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Info,
   Loader2,
+  Pin,
   Search,
   Sparkles,
   SlidersHorizontal,
@@ -37,8 +38,12 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
+import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
+import { useSummarizeChatMutation } from "@gram/client/react-query/summarizeChat.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -632,6 +637,9 @@ function ChatDetailHeader({
   onRiskyOnlyChange,
   showRiskyOnly,
   searchBar,
+  pinned,
+  onTogglePinned,
+  pinPending,
   onExport,
   onDelete,
   onSetView,
@@ -652,6 +660,9 @@ function ChatDetailHeader({
   showRiskyOnly: boolean;
   /** Optional find-in-conversation bar (normal view only). */
   searchBar?: ReactNode;
+  pinned: boolean;
+  onTogglePinned: () => void;
+  pinPending: boolean;
   onExport: () => void;
   onDelete: () => void;
   onSetView: (view: ViewMode) => void;
@@ -712,6 +723,17 @@ function ChatDetailHeader({
                 onSelect={() => onSetView("tools")}
               >
                 Tool calls{toolCount > 0 ? ` (${toolCount})` : ""}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer gap-2"
+                disabled={pinPending}
+                onSelect={onTogglePinned}
+              >
+                <Pin
+                  className={cn("size-3.5", pinned && "fill-current")}
+                  aria-hidden
+                />
+                {pinned ? "Unpin session" : "Pin session"}
               </DropdownMenuItem>
               {canManageChat && (
                 <>
@@ -775,6 +797,108 @@ function SubViewBar({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
+function SessionSummarySection({
+  chatId,
+  summary,
+  summaryGeneratedAt,
+  onSummaryChange,
+}: {
+  chatId: string;
+  summary?: string;
+  summaryGeneratedAt?: Date;
+  onSummaryChange: (summary: string, generatedAt: Date) => void;
+}) {
+  const queryClient = useQueryClient();
+  const summarize = useSummarizeChatMutation();
+  const [expanded, setExpanded] = useState(true);
+  const hasSummary = Boolean(summary?.trim());
+
+  const runSummarize = (regenerate: boolean) => {
+    summarize.mutate(
+      {
+        request: {
+          summarizeRequestBody: { id: chatId, regenerate },
+        },
+      },
+      {
+        onSuccess: (result) => {
+          onSummaryChange(result.summary, result.summaryGeneratedAt);
+          void queryClient.invalidateQueries({
+            queryKey: ["chat", chatId, "transcript"],
+          });
+          void invalidateAllListChats(queryClient);
+        },
+        onError: (error) => {
+          toast.error(error.message || "Failed to summarize session");
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="border-b px-4 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="text-foreground inline-flex items-center gap-1.5 text-sm font-medium"
+        >
+          <Sparkles className="size-3.5" aria-hidden />
+          Summary
+          {expanded ? (
+            <ChevronUp className="text-muted-foreground size-3.5" />
+          ) : (
+            <ChevronDown className="text-muted-foreground size-3.5" />
+          )}
+        </button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={summarize.isPending}
+          onClick={() => runSummarize(hasSummary)}
+        >
+          <Button.LeftIcon>
+            {summarize.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="size-3.5" />
+            )}
+          </Button.LeftIcon>
+          <Button.Text>
+            {summarize.isPending
+              ? "Summarizing…"
+              : hasSummary
+                ? "Regenerate"
+                : "Summarize"}
+          </Button.Text>
+        </Button>
+      </div>
+      {expanded && (
+        <div className="mt-2">
+          {hasSummary ? (
+            <>
+              <p className="text-foreground/90 text-sm leading-relaxed whitespace-pre-wrap">
+                {summary}
+              </p>
+              {summaryGeneratedAt && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Generated{" "}
+                  {formatDistanceToNow(summaryGeneratedAt, { addSuffix: true })}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              No summary yet. Generate one to get a concise overview of this
+              session.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ChatDetailPanel({
   chatId,
   onClose,
@@ -818,10 +942,20 @@ function ChatDetailPanel({
     null,
   );
   const [scrollNonce, setScrollNonce] = useState(0);
+  const [localSummary, setLocalSummary] = useState<string | undefined>();
+  const [localSummaryGeneratedAt, setLocalSummaryGeneratedAt] = useState<
+    Date | undefined
+  >();
+  const queryClient = useQueryClient();
+  const setPinnedMutation = useChatSetPinnedMutation();
   useEffect(() => {
     const handle = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
     return () => clearTimeout(handle);
   }, [searchInput]);
+  useEffect(() => {
+    setLocalSummary(undefined);
+    setLocalSummaryGeneratedAt(undefined);
+  }, [chatId]);
 
   // Risk-review contexts — explicit risk focus, or opened from the has-risk
   // filter — load the server-windowed risk transcript so findings load no matter
@@ -930,7 +1064,6 @@ function ChatDetailPanel({
   );
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
-  const queryClient = useQueryClient();
   const { data: riskData } = useRiskListResults({ chatId });
   const riskResults = useMemo(() => {
     const all = riskData?.results ?? [];
@@ -1248,6 +1381,10 @@ function ChatDetailPanel({
   }
 
   const error = logsError as Error | null;
+  const pinned = Boolean(chat.pinned);
+  const summary = localSummary ?? chat.summary;
+  const summaryGeneratedAt =
+    localSummaryGeneratedAt ?? chat.summaryGeneratedAt;
 
   return (
     <div className="bg-background flex h-full flex-col">
@@ -1278,6 +1415,28 @@ function ChatDetailPanel({
             />
           )
         }
+        pinned={pinned}
+        pinPending={setPinnedMutation.isPending}
+        onTogglePinned={() => {
+          setPinnedMutation.mutate(
+            {
+              request: {
+                setPinnedRequestBody: { id: chatId, pinned: !pinned },
+              },
+            },
+            {
+              onSettled: () => {
+                void invalidateAllListChats(queryClient);
+                void queryClient.invalidateQueries({
+                  queryKey: ["chat", chatId, "transcript"],
+                });
+              },
+              onError: (err) => {
+                toast.error(err.message || "Failed to update pin");
+              },
+            },
+          );
+        }}
         onExport={() => {
           // Fetches the complete transcript server-side — the export must not
           // depend on which messages the panel happens to have loaded.
@@ -1293,6 +1452,16 @@ function ChatDetailPanel({
         onDelete={() => setShowDeleteConfirm(true)}
         onSetView={setView}
         onClose={onClose}
+      />
+
+      <SessionSummarySection
+        chatId={chatId}
+        summary={summary}
+        summaryGeneratedAt={summaryGeneratedAt}
+        onSummaryChange={(nextSummary, generatedAt) => {
+          setLocalSummary(nextSummary);
+          setLocalSummaryGeneratedAt(generatedAt);
+        }}
       />
 
       {chatLoadHasErrors && (

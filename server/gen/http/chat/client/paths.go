@@ -37,6 +37,11 @@ func SetPinnedChatPath() string {
 	return "/rpc/chat.setPinned"
 }
 
+// SummarizeChatPath returns the URL path to the chat service summarize HTTP endpoint.
+func SummarizeChatPath() string {
+	return "/rpc/chat.summarize"
+}
+
 // SubmitFeedbackChatPath returns the URL path to the chat service submitFeedback HTTP endpoint.
 func SubmitFeedbackChatPath() string {
 	return "/rpc/chat.submitFeedback"

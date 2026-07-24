@@ -9,10 +9,15 @@ import { cn } from "@/lib/utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
+import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { useCallback, useState } from "react";
+import { Pin } from "lucide-react";
+import { useCallback, useState, type MouseEvent, type KeyboardEvent } from "react";
+import { toast } from "sonner";
 
 interface ChatLogsTableProps {
   chats: ChatOverview[];
@@ -69,6 +74,58 @@ function formatDuration(chat: ChatOverview): string {
   return remainingSeconds > 0
     ? `${minutes}m ${remainingSeconds}s`
     : `${minutes}m`;
+}
+
+function SessionPinButton({
+  chatId,
+  pinned,
+}: {
+  chatId: string;
+  pinned: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const setPinned = useChatSetPinnedMutation();
+
+  const toggle = (e: MouseEvent | KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPinned.mutate(
+      {
+        request: { setPinnedRequestBody: { id: chatId, pinned: !pinned } },
+      },
+      {
+        onSettled: () => void invalidateAllListChats(queryClient),
+        onError: (err) => {
+          toast.error(err.message || "Failed to update pin");
+        },
+      },
+    );
+  };
+
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label={pinned ? "Unpin session" : "Pin session"}
+      title={pinned ? "Unpin session" : "Pin session"}
+      aria-disabled={setPinned.isPending}
+      onClick={toggle}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          toggle(e);
+        }
+      }}
+      className={cn(
+        "hover:bg-muted text-muted-foreground hover:text-foreground rounded-md p-1 transition-all",
+        pinned
+          ? "text-foreground opacity-100"
+          : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+        setPinned.isPending && "pointer-events-none opacity-50",
+      )}
+    >
+      <Pin className={cn("size-4", pinned && "fill-current")} aria-hidden />
+    </span>
+  );
 }
 
 // Subtle copy button - always visible
@@ -299,8 +356,12 @@ export function ChatLogsTable({
                     </div>
                   </div>
 
-                  {/* Right: Delete + Chevron */}
+                  {/* Right: Pin + Delete + Chevron */}
                   <div className="flex shrink-0 items-center gap-1 pt-2">
+                    <SessionPinButton
+                      chatId={chat.id}
+                      pinned={Boolean(chat.pinned)}
+                    />
                     <span
                       role="button"
                       tabIndex={0}
