@@ -7,6 +7,7 @@ package repo
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/spendrules/money"
 )
 
 type SpendRule struct {
@@ -16,7 +17,7 @@ type SpendRule struct {
 	Slug           string
 	Description    string
 	TargetExpr     string
-	LimitUsdCents  int64
+	LimitUsdCents  money.Cents
 	RuleExpr       string
 	WindowKind     string
 	WarnAtPct      int32

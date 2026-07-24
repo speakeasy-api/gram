@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/spendrules/money"
 )
 
 const archiveSpendRule = `-- name: ArchiveSpendRule :one
@@ -94,7 +95,7 @@ type CreateSpendRuleParams struct {
 	Description    string
 	TargetExpr     string
 	RuleExpr       string
-	LimitUsdCents  int64
+	LimitUsdCents  money.Cents
 	WindowKind     string
 	WarnAtPct      int32
 	Action         string
@@ -304,8 +305,8 @@ type InsertSpendRuleEventParams struct {
 	UserID         pgtype.Text
 	Email          string
 	DisplayName    pgtype.Text
-	SpendUsdCents  int64
-	LimitUsdCents  int64
+	SpendUsdCents  money.Cents
+	LimitUsdCents  money.Cents
 	WindowStart    pgtype.Timestamptz
 	WindowEnd      pgtype.Timestamptz
 }
@@ -540,8 +541,8 @@ type ListSpendRuleEventsRow struct {
 	UserID         pgtype.Text
 	Email          string
 	DisplayName    pgtype.Text
-	SpendUsdCents  int64
-	LimitUsdCents  int64
+	SpendUsdCents  money.Cents
+	LimitUsdCents  money.Cents
 	WindowStart    pgtype.Timestamptz
 	WindowEnd      pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz

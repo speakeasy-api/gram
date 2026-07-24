@@ -34,6 +34,7 @@ import (
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	chrepo "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/spendrules/money"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -128,7 +129,7 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 	if payload.LimitUsd <= 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be greater than zero")
 	}
-	limitUSDCents, err := USDToCents(payload.LimitUsd)
+	limitUSDCents, err := money.FromUSD(payload.LimitUsd)
 	if err != nil || limitUSDCents <= 0 {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid limit")
 	}
@@ -279,9 +280,9 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 	if payload.LimitUsd != nil && *payload.LimitUsd <= 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be greater than zero")
 	}
-	var suppliedLimitUSDCents int64
+	var suppliedLimitUSDCents money.Cents
 	if payload.LimitUsd != nil {
-		suppliedLimitUSDCents, err = USDToCents(*payload.LimitUsd)
+		suppliedLimitUSDCents, err = money.FromUSD(*payload.LimitUsd)
 		if err != nil || suppliedLimitUSDCents <= 0 {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid limit")
 		}
@@ -619,8 +620,8 @@ func (s *Service) ListSpendRuleEvents(ctx context.Context, payload *gen.ListSpen
 			UserID:      conv.FromPGText[string](row.UserID),
 			Email:       row.Email,
 			DisplayName: conv.FromPGText[string](row.DisplayName),
-			SpendUsd:    CentsToUSD(row.SpendUsdCents),
-			LimitUsd:    CentsToUSD(row.LimitUsdCents),
+			SpendUsd:    row.SpendUsdCents.USD(),
+			LimitUsd:    row.LimitUsdCents.USD(),
 			WindowStart: row.WindowStart.Time.UTC().Format(time.RFC3339),
 			WindowEnd:   row.WindowEnd.Time.UTC().Format(time.RFC3339),
 			CreatedAt:   row.CreatedAt.Time.UTC().Format(time.RFC3339),
@@ -691,7 +692,7 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 	breachedEmails := map[string]struct{}{}
 
 	for _, rule := range rules {
-		limitUSD := CentsToUSD(rule.LimitUsdCents)
+		limitUSD := rule.LimitUsdCents.USD()
 		matched, err := MatchActors(s.celEng, rule.TargetExpr, actors)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "match spend rule actors", attr.SlogError(err), attr.SlogOrganizationID(rule.OrganizationID))
@@ -956,7 +957,7 @@ func buildSpendRuleView(row repo.SpendRule) *types.SpendRule {
 		Target:         targetConditionFromExpr(row.TargetExpr),
 		TargetExpr:     row.TargetExpr,
 		RuleExpr:       row.RuleExpr,
-		LimitUsd:       CentsToUSD(row.LimitUsdCents),
+		LimitUsd:       row.LimitUsdCents.USD(),
 		WindowKind:     row.WindowKind,
 		WarnAtPct:      int(row.WarnAtPct),
 		Action:         row.Action,
