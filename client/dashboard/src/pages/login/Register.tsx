@@ -1,7 +1,7 @@
 import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
-import { JourneyDemo } from "./components/journey-demo";
-import { RegisterSection } from "./components/login-section";
+import { AuthShell } from "./components/auth-shell";
+import { RegisterPanel } from "./components/register-panel";
 import { Navigate, useSearchParams } from "react-router";
 
 export default function Register(): JSX.Element {
@@ -29,9 +29,8 @@ export default function Register(): JSX.Element {
   }
 
   return (
-    <main className="flex min-h-screen flex-col md:flex-row">
-      <JourneyDemo />
-      <RegisterSection />
-    </main>
+    <AuthShell page="Register">
+      <RegisterPanel />
+    </AuthShell>
   );
 }
