@@ -35,11 +35,12 @@ export interface WorkUnitsChatFields {
   totalOutputTokens?: number | undefined;
 }
 
+// Absent covers null too: the server marshals empty Go slices as JSON null.
 function isOptionalArrayOf(
   value: unknown,
   ok: (item: unknown) => boolean,
 ): boolean {
-  return value === undefined || (Array.isArray(value) && value.every(ok));
+  return value == null || (Array.isArray(value) && value.every(ok));
 }
 
 export function parseWorkUnitsReport(json: string): WorkUnitsVerdict | null {
@@ -52,7 +53,8 @@ export function parseWorkUnitsReport(json: string): WorkUnitsVerdict | null {
     if (
       !isOptionalArrayOf(
         candidate["tasks"],
-        (task) => task !== null && typeof task === "object",
+        (task) =>
+          task !== null && typeof task === "object" && !Array.isArray(task),
       ) ||
       !isOptionalArrayOf(candidate["flags"], (flag) => typeof flag === "string")
     ) {
