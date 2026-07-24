@@ -101,7 +101,9 @@ func TestDeviceAgentEmailFindsAgentOffPATH(t *testing.T) {
 	home := t.TempDir()
 	binDir := filepath.Join(home, "Library", "Application Support", "Speakeasy", "bin")
 	if runtime.GOOS != "darwin" {
-		binDir = filepath.Join(home, ".local", "bin")
+		// The supported legacy dotdir location — regression coverage for
+		// keeping it in the candidate list.
+		binDir = filepath.Join(home, ".speakeasy", "bin")
 	}
 	require.NoError(t, os.MkdirAll(binDir, 0o755))
 	agent := filepath.Join(binDir, "speakeasyd")

@@ -92,7 +92,14 @@ func deviceAgentCommands() []string {
 		candidates = append(candidates, `C:\Program Files\Speakeasy\speakeasyd.exe`)
 	default:
 		if home != "" {
-			candidates = append(candidates, filepath.Join(home, ".local", "bin", "speakeasyd"))
+			candidates = append(candidates,
+				// ~/.speakeasy is the agent's conventional dotdir on Linux
+				// (its IPC socket lives there); kept as a supported install
+				// location by maintainer decision even though no packaged
+				// rollout writes it today.
+				filepath.Join(home, ".speakeasy", "bin", "speakeasyd"),
+				filepath.Join(home, ".local", "bin", "speakeasyd"),
+			)
 		}
 		candidates = append(candidates, "/usr/local/bin/speakeasyd")
 	}
