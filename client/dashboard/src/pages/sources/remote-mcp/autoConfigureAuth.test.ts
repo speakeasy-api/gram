@@ -110,7 +110,6 @@ describe("autoConfigureRemoteMcpAuth", () => {
     expect(client.userSessionIssuers.create).not.toHaveBeenCalled();
     expect(proxyRegisterMock).toHaveBeenCalledWith(expect.any(Function), {
       registrationEndpoint: "https://idp.example.com/register",
-      flow: "remote_session",
       scope: "resource.read resource.write",
       tokenEndpointAuthMethod: "client_secret_post",
     });

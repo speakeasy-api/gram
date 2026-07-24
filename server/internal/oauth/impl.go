@@ -886,48 +886,10 @@ func (s *Service) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, to
 	return token, nil
 }
 
-// Proxy-register flows. Each flow uses a different callback at authorize
-// time, so scoping the registered redirect_uris to the flow keeps DCR working
-// against IdPs that strictly allowlist redirect URIs (e.g. Cloudflare Access
-// rejects the whole registration when any requested URI is not allowlisted).
-const (
-	// ProxyRegisterFlowRemoteSession registers a client for the remote-session
-	// login flow, which always redirects through /mcp/remote_login_callback —
-	// including on the /x/mcp custom-domain surface (see
-	// remotesessions.canonicalCallbackRouteBase).
-	ProxyRegisterFlowRemoteSession = "remote_session"
-	// ProxyRegisterFlowOAuthProxy registers a client for the OAuth proxy flow
-	// (oauth_proxy_providers), which redirects through /oauth/callback.
-	ProxyRegisterFlowOAuthProxy = "oauth_proxy"
-)
-
 type ProxyRegisterRequest struct {
 	RegistrationEndpoint    string  `json:"registration_endpoint"`
 	Scope                   *string `json:"scope,omitempty"`
 	TokenEndpointAuthMethod *string `json:"token_endpoint_auth_method,omitempty"`
-	// Flow selects which redirect_uris get registered. Empty keeps the legacy
-	// behavior of registering the superset of all callback URIs.
-	Flow string `json:"flow,omitempty"`
-}
-
-// proxyRegisterRedirectURIs maps a proxy-register flow to the redirect_uris
-// to include in the DCR request. An empty flow returns the full superset for
-// callers that predate flow scoping.
-func proxyRegisterRedirectURIs(serverURL string, flow string) ([]string, error) {
-	switch flow {
-	case ProxyRegisterFlowRemoteSession:
-		return []string{fmt.Sprintf("%s/mcp/remote_login_callback", serverURL)}, nil
-	case ProxyRegisterFlowOAuthProxy:
-		return []string{fmt.Sprintf("%s/oauth/callback", serverURL)}, nil
-	case "":
-		return []string{
-			fmt.Sprintf("%s/oauth/callback", serverURL),
-			fmt.Sprintf("%s/mcp/remote_login_callback", serverURL),
-			fmt.Sprintf("%s/x/mcp/remote_login_callback", serverURL),
-		}, nil
-	default:
-		return nil, fmt.Errorf("unknown flow %q", flow)
-	}
 }
 
 type ProxyRegisterResponse struct {
@@ -942,9 +904,7 @@ type ProxyRegisterResponse struct {
 // upstream's registration_endpoint from the browser (CORS). The handler
 // forwards the caller's `scope` and `token_endpoint_auth_method` verbatim
 // when supplied and omits them otherwise — interpreting RFC 7591 spec
-// defaults is the upstream's job, not Gram's. The caller's `flow` scopes the
-// registered redirect_uris to the callback that flow actually uses (see
-// proxyRegisterRedirectURIs). SSRF is gated by guardianPolicy.
+// defaults is the upstream's job, not Gram's. SSRF is gated by guardianPolicy.
 func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
@@ -983,9 +943,14 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	}
 
 	serverURL := s.serverURL.String()
-	redirectURIs, err := proxyRegisterRedirectURIs(serverURL, req.Flow)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid flow").LogError(ctx, s.logger)
+	// Register only the canonical remote-login callback. Every login flow —
+	// including the /x/mcp custom-domain surface — redirects through it (see
+	// remotesessions.canonicalCallbackRouteBase), and some IdPs (e.g.
+	// Cloudflare Access) strictly allowlist redirect URIs and reject the whole
+	// registration when any requested URI is not allowlisted, so registering
+	// unused callbacks makes DCR needlessly fail against them.
+	redirectURIs := []string{
+		fmt.Sprintf("%s/mcp/remote_login_callback", serverURL),
 	}
 
 	dcrReq := DCRRequest{

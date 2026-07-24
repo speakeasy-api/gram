@@ -258,7 +258,6 @@ function createMigrationServicesImpl(
             {
               registrationEndpoint:
                 input.remoteSessionIssuer.registrationEndpoint,
-              flow: "remote_session",
             },
             { signal },
           );
