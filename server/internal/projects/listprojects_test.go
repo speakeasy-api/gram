@@ -12,7 +12,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
-func TestProjectsService_ListProjects_SkipsRBACWhenDisabled(t *testing.T) {
+func TestProjectsService_ListProjects_BootstrapsRBACWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t, false)
@@ -38,7 +38,7 @@ func TestProjectsService_ListProjects_SkipsRBACWhenDisabled(t *testing.T) {
 	for _, p := range result.Projects {
 		projectIDs = append(projectIDs, p.ID)
 	}
-	require.Contains(t, projectIDs, ungrantedProject.ID.String())
+	require.NotContains(t, projectIDs, ungrantedProject.ID.String())
 }
 
 func TestProjectsService_ListProjects_FiltersByBuildReadGrant(t *testing.T) {

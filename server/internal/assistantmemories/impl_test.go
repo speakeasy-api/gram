@@ -87,7 +87,7 @@ func newTestHarness(t *testing.T) (*testHarness, context.Context) {
 		ProjectID:             &projectID,
 		OrganizationSlug:      orgID,
 		Email:                 nil,
-		AccountType:           "enterprise",
+		AccountType:           "pro",
 		HasActiveSubscription: false,
 		Whitelisted:           false,
 		ProjectSlug:           &projectSlug,

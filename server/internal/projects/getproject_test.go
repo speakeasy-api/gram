@@ -43,7 +43,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 		assert.NotEmpty(t, result.Project.UpdatedAt)
 	})
 
-	t.Run("it skips RBAC when feature is disabled", func(t *testing.T) {
+	t.Run("it bootstraps RBAC when feature is disabled", func(t *testing.T) {
 		t.Parallel()
 
 		ctx, ti := newTestProjectsService(t, false)

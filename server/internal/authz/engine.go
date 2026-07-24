@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"golang.org/x/sync/singleflight"
 )
 
 type IsRBACEnabled func(ctx context.Context, organizationID string) (bool, error)
@@ -45,6 +47,8 @@ type Engine struct {
 	isDev                   bool
 	membership              MembershipFetcher
 	rbacEnabler             RBACEnabler
+	rbacEnableGroup         singleflight.Group
+	bootstrappedOrgs        sync.Map
 }
 
 func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, challengeLogging ChallengeLoggingEnabled, membership MembershipFetcher, opts ...EngineOpts) *Engine {
@@ -66,6 +70,8 @@ func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEn
 		isDev:                   devMode,
 		membership:              membership,
 		rbacEnabler:             rbacEnabler,
+		rbacEnableGroup:         singleflight.Group{},
+		bootstrappedOrgs:        sync.Map{},
 	}
 }
 
@@ -625,6 +631,10 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
+	if _, bootstrapped := e.bootstrappedOrgs.Load(authCtx.ActiveOrganizationID); bootstrapped {
+		return true, nil
+	}
+
 	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").LogError(ctx, e.logger)
@@ -638,7 +648,24 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return false, oops.E(oops.CodeUnexpected, nil, "RBAC is not enabled for this organization").LogError(ctx, e.logger)
 	}
 
-	if err := e.rbacEnabler.EnableRBAC(ctx, authCtx.ActiveOrganizationID); err != nil {
+	organizationID := authCtx.ActiveOrganizationID
+	_, err, _ = e.rbacEnableGroup.Do(organizationID, func() (any, error) {
+		// The feature may have been enabled while this request waited for
+		// another bootstrap attempt.
+		enabled, err := e.isEnabled(ctx, organizationID)
+		if err != nil {
+			return nil, fmt.Errorf("recheck RBAC feature: %w", err)
+		}
+		if !enabled {
+			if err := e.rbacEnabler.EnableRBAC(ctx, organizationID); err != nil {
+				return nil, err
+			}
+		}
+
+		e.bootstrappedOrgs.Store(organizationID, struct{}{})
+		return nil, nil
+	})
+	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "enable RBAC for organization").LogError(ctx, e.logger)
 	}
 

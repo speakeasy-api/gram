@@ -91,6 +91,7 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	require.NoError(t, err)
 
 	auditLogger := audit.NewLogger()
+	rbacState := authztest.NewRBACState(enableRBAC)
 
 	svc := projects.NewService(
 		logger,
@@ -101,11 +102,13 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 			logger,
 			conn,
 			chConn,
-			func(context.Context, string) (bool, error) {
-				return enableRBAC, nil
-			},
+			rbacState.IsEnabled,
 			authztest.ChallengeLoggingAlwaysDisabled,
 			workos.NewStubClient(),
+			authz.EngineOpts{
+				DevMode:     false,
+				RBACEnabler: rbacState,
+			},
 		),
 		auditLogger,
 		nil,

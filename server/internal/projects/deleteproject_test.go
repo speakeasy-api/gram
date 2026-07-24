@@ -88,7 +88,7 @@ func TestProjectsService_DeleteProject_ForbiddenWithoutOrgAdminGrant(t *testing.
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestProjectsService_DeleteProject_SkipsRBACWhenDisabled(t *testing.T) {
+func TestProjectsService_DeleteProject_BootstrapsRBACWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t, false)
@@ -98,7 +98,9 @@ func TestProjectsService_DeleteProject_SkipsRBACWhenDisabled(t *testing.T) {
 	err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
 		ID: project.ID.String(),
 	})
-	require.NoError(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func createProjectForDeletion(t *testing.T, ctx context.Context, ti *testInstance, name string) projectsrepo.Project {

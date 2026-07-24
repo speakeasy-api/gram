@@ -2,6 +2,7 @@ package authztest
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -9,6 +10,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
+
+// RBACState is a concurrency-safe feature checker and enabler for tests.
+type RBACState struct {
+	enabled atomic.Bool
+}
+
+// NewRBACState creates test RBAC state with the requested initial value.
+func NewRBACState(enabled bool) *RBACState {
+	state := &RBACState{}
+	state.enabled.Store(enabled)
+	return state
+}
+
+// IsEnabled reports the current test RBAC state.
+func (s *RBACState) IsEnabled(context.Context, string) (bool, error) {
+	return s.enabled.Load(), nil
+}
+
+// EnableRBAC changes the test RBAC state to enabled.
+func (s *RBACState) EnableRBAC(context.Context, string) error {
+	s.enabled.Store(true)
+	return nil
+}
 
 // WithExactGrants marks the context as enterprise and loads the given grants
 // directly into the context. Pass no grants to simulate RBAC active with no permissions.

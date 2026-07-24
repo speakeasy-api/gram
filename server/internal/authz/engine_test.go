@@ -3,6 +3,8 @@ package authz
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -103,6 +105,46 @@ func TestEngineRequire_failsClosedWhenRBACCannotBeEnabled(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 	require.ErrorContains(t, err, "RBAC is not enabled for this organization")
+}
+
+func TestEngineRequire_coalescesConcurrentRBACBootstrap(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	var enableCalls atomic.Int32
+	engine := NewEngine(
+		testenv.NewLogger(t),
+		nil,
+		chConn,
+		staticRBAC(false),
+		staticChallengeLogging(true),
+		workos.NewStubClient(),
+		EngineOpts{
+			DevMode: false,
+			RBACEnabler: rbacEnablerFunc(func(context.Context, string) error {
+				enableCalls.Add(1)
+				return nil
+			}),
+		},
+	)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeOrgAdmin, "org_123")})
+
+	const requestCount = 20
+	errs := make(chan error, requestCount)
+	var wg sync.WaitGroup
+	for range requestCount {
+		wg.Go(func() {
+			errs <- engine.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"})
+		})
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	require.EqualValues(t, 1, enableCalls.Load())
 }
 
 func TestEngineRequire_mapsDeniedToForbidden(t *testing.T) {

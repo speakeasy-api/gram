@@ -208,7 +208,7 @@ func TestSetLogo_ForbiddenWithoutBuildWriteGrant(t *testing.T) {
 	assert.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestSetLogo_SkipsRBACWhenDisabled(t *testing.T) {
+func TestSetLogo_BootstrapsRBACWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t, false)
@@ -221,11 +221,10 @@ func TestSetLogo_SkipsRBACWhenDisabled(t *testing.T) {
 		SessionToken:     nil,
 		AssetID:          assetID.String(),
 	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotNil(t, result.Project)
-	require.NotNil(t, result.Project.LogoAssetID)
-	require.Equal(t, assetID.String(), *result.Project.LogoAssetID)
+	require.Nil(t, result)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestSetLogo_UnauthorizedNoAuthContext(t *testing.T) {

@@ -91,7 +91,7 @@ func TestProjectsService_CreateProject_ForbiddenWithoutOrgAdminGrant(t *testing.
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestProjectsService_CreateProject_SkipsRBACWhenDisabled(t *testing.T) {
+func TestProjectsService_CreateProject_BootstrapsRBACWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t, false)
@@ -103,9 +103,10 @@ func TestProjectsService_CreateProject_SkipsRBACWhenDisabled(t *testing.T) {
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Name:           "rbac-disabled-" + uuid.NewString()[:8],
 	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotNil(t, result.Project)
+	require.Nil(t, result)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestProjectsService_CreateProject_AuditLogRecord(t *testing.T) {
