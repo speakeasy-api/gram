@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -39,9 +40,8 @@ func resolveUserEmail(ctx context.Context, typed any) string {
 }
 
 func deviceAgentEmail(ctx context.Context) string {
-	commands := strings.Split(firstNonEmpty(os.Getenv("GRAM_DEVICE_AGENT_COMMANDS"), "speakeasyd"), ",")
 	timeout := tenthsDuration("GRAM_DEVICE_AGENT_TIMEOUT_TENTHS", 15)
-	for _, name := range commands {
+	for _, name := range deviceAgentCommands() {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
@@ -57,6 +57,59 @@ func deviceAgentEmail(ctx context.Context) string {
 		}
 	}
 	return ""
+}
+
+// deviceAgentCommands returns the device-agent commands to try, in order.
+// GRAM_DEVICE_AGENT_COMMANDS (comma-separated) replaces the default set
+// entirely. The default tries a bare PATH lookup first and then the agent's
+// well-known install locations: MDM installs place speakeasyd under the
+// per-user Speakeasy directory without touching PATH (and GUI-spawned hook
+// hosts see a minimal PATH anyway), so a bare lookup alone silently loses
+// managed identity attribution.
+func deviceAgentCommands() []string {
+	if env := strings.TrimSpace(os.Getenv("GRAM_DEVICE_AGENT_COMMANDS")); env != "" {
+		return strings.Split(env, ",")
+	}
+	commands := []string{"speakeasyd"}
+	home, _ := os.UserHomeDir()
+	var candidates []string
+	switch runtime.GOOS {
+	case "darwin":
+		if home != "" {
+			candidates = append(candidates, filepath.Join(home, "Library", "Application Support", "Speakeasy", "bin", "speakeasyd"))
+		}
+		candidates = append(candidates,
+			"/usr/local/bin/speakeasyd",
+			"/Library/Application Support/Speakeasy/speakeasyd",
+		)
+	case "windows":
+		if local := os.Getenv("LOCALAPPDATA"); local != "" {
+			candidates = append(candidates, filepath.Join(local, "Speakeasy", "bin", "speakeasyd.exe"))
+		}
+		candidates = append(candidates, `C:\Program Files\Speakeasy\speakeasyd.exe`)
+	default:
+		if home != "" {
+			candidates = append(candidates,
+				filepath.Join(home, ".speakeasy", "bin", "speakeasyd"),
+				filepath.Join(home, ".local", "bin", "speakeasyd"),
+			)
+		}
+		candidates = append(candidates, "/usr/local/bin/speakeasyd")
+	}
+	for _, candidate := range candidates {
+		if executableFile(candidate) {
+			commands = append(commands, candidate)
+		}
+	}
+	return commands
+}
+
+func executableFile(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	return runtime.GOOS == "windows" || info.Mode()&0o111 != 0
 }
 
 func identityOutputEmail(output []byte) string {

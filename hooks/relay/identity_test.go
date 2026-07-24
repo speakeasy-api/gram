@@ -29,6 +29,36 @@ func TestDeviceAgentEmail(t *testing.T) {
 	require.Equal(t, "device@example.com", deviceAgentEmail(t.Context()))
 }
 
+func TestDeviceAgentCommandsEnvOverrideIsExclusive(t *testing.T) {
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "one,two")
+	require.Equal(t, []string{"one", "two"}, deviceAgentCommands())
+}
+
+func TestDeviceAgentEmailFindsAgentOffPATH(t *testing.T) {
+	// The MDM install layout: speakeasyd lives under the per-user Speakeasy
+	// dir and is NOT on PATH. Managed attribution must still resolve via the
+	// well-known install locations.
+	if runtime.GOOS == "windows" {
+		t.Skip("executable shell fixture is POSIX-only")
+	}
+	home := t.TempDir()
+	binDir := filepath.Join(home, "Library", "Application Support", "Speakeasy", "bin")
+	if runtime.GOOS != "darwin" {
+		binDir = filepath.Join(home, ".speakeasy", "bin")
+	}
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	agent := filepath.Join(binDir, "speakeasyd")
+	require.NoError(t, os.WriteFile(agent, []byte("#!/bin/sh\nprintf '%s' '{\"email\":\"managed@example.com\"}'\n"), 0o700))
+
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", t.TempDir()) // bare "speakeasyd" resolves nowhere
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
+
+	require.Contains(t, deviceAgentCommands(), agent)
+	require.Equal(t, "managed@example.com", deviceAgentEmail(t.Context()))
+}
+
 func TestTopLevelPayloadEmailIgnoresNestedValues(t *testing.T) {
 	require.Equal(t, "cursor@example.com", topLevelPayloadEmail([]byte(`{"user_email":"cursor@example.com","tool_input":{"user_email":"nested@example.com"}}`)))
 	require.Empty(t, topLevelPayloadEmail([]byte(`{"tool_input":{"user_email":"nested@example.com"}}`)))
