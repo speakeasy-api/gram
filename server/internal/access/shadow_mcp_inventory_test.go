@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -1034,6 +1035,8 @@ type shadowMCPInventoryPolicyInput struct {
 	ProjectID      string
 	Name           string
 	Action         string
+	Disposition    string
+	BlockedURLs    []string
 }
 
 type shadowMCPInventoryBypassRequestInput struct {
@@ -1065,17 +1068,28 @@ func createShadowMCPInventoryPolicyWithEnabled(t *testing.T, ctx context.Context
 	require.NoError(t, err)
 
 	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID:             uuid.New(),
-		ProjectID:      projectID,
-		OrganizationID: input.OrganizationID,
-		Name:           input.Name,
-		Sources:        []string{"shadow_mcp"},
-		Enabled:        enabled,
-		Action:         input.Action,
-		AudienceType:   "everyone",
-		AutoName:       false,
+		ID:                   uuid.New(),
+		ProjectID:            projectID,
+		OrganizationID:       input.OrganizationID,
+		Name:                 input.Name,
+		Sources:              []string{"shadow_mcp"},
+		Enabled:              enabled,
+		Action:               input.Action,
+		AudienceType:         "everyone",
+		ShadowMcpDisposition: conv.ToPGTextEmpty(input.Disposition),
+		AutoName:             false,
 	})
 	require.NoError(t, err)
+
+	if len(input.BlockedURLs) > 0 {
+		require.NoError(t, policybypass.ReconcilePolicyURLs(ctx, ti.conn, policybypass.ReconcilePolicyURLsInput{
+			OrganizationID: input.OrganizationID,
+			PolicyID:       policy.ID.String(),
+			Scope:          authz.ScopeRiskPolicyBlock,
+			DesiredURLs:    input.BlockedURLs,
+			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
+		}))
+	}
 
 	return policy
 }
@@ -1254,4 +1268,152 @@ func shadowMCPInventoryServerByURL(servers []*gen.ShadowMCPInventoryServer, cano
 		}
 	}
 	return nil
+}
+
+func TestService_ListShadowMCPInventory_AllowAllDispositionUsesBlockedList(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	ch := telemetryRepo.New(ti.chConn)
+	now := time.Now().UTC()
+	require.NoError(t, ch.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://sketchy.example.com/mcp",
+			URLHost:            "sketchy.example.com",
+			ServerName:         "Sketchy",
+			SeenAt:             now.Add(-2 * time.Hour),
+			FirstSeen:          now.Add(-2 * time.Hour),
+			LastSeen:           now.Add(-2 * time.Hour),
+			UpdatedAt:          now.Add(-2 * time.Hour),
+		},
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://fine.example.com/mcp",
+			URLHost:            "fine.example.com",
+			ServerName:         "Fine",
+			SeenAt:             now.Add(-1 * time.Hour),
+			FirstSeen:          now.Add(-1 * time.Hour),
+			LastSeen:           now.Add(-1 * time.Hour),
+			UpdatedAt:          now.Add(-1 * time.Hour),
+		},
+	}))
+
+	_ = createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Allow All Shadow MCP",
+		Action:         "block",
+		Disposition:    "allow_all",
+		BlockedURLs:    []string{"https://sketchy.example.com/mcp"},
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 2)
+
+	sketchy := shadowMCPInventoryServerByURL(result.Servers, "https://sketchy.example.com/mcp")
+	require.NotNil(t, sketchy)
+	require.Equal(t, shadowMCPInventoryAccessBlocked, sketchy.Access)
+	require.Empty(t, sketchy.AllowedPolicyIds)
+
+	fine := shadowMCPInventoryServerByURL(result.Servers, "https://fine.example.com/mcp")
+	require.NotNil(t, fine)
+	// Under allow_all the default state reads as allowed, without any per-URL
+	// grant backing it.
+	require.Equal(t, shadowMCPInventoryAccessAllowed, fine.Access)
+	require.Empty(t, fine.AllowedPolicyIds)
+	require.Empty(t, fine.BlockedPolicyIds)
+}
+
+func TestService_BlockAndUnblockShadowMCPInventoryServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Allow All Shadow MCP",
+		Action:         "block",
+		Disposition:    "allow_all",
+		BlockedURLs:    nil,
+	})
+
+	state, err := ti.service.BlockShadowMCPInventoryServer(ctx, &gen.BlockShadowMCPInventoryServerPayload{
+		ProjectID: projectID,
+		ServerURL: "https://sketchy.example.com/mcp",
+		PolicyID:  policy.ID.String(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessBlocked, state.Access)
+	require.Equal(t, []string{policy.ID.String()}, state.BlockedPolicyIds)
+
+	// The block rule is a project-wide risk_policy:block grant held by the
+	// all-users principal.
+	grants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyBlock,
+		ResourceID:     policy.ID.String(),
+	})
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.Equal(t, authz.AllUsersPrincipal().String(), grants[0].PrincipalUrn)
+	require.Equal(t, "https://sketchy.example.com/mcp", grants[0].Selector[authz.SelectorKeyServerURL])
+
+	state, err = ti.service.UnblockShadowMCPInventoryServer(ctx, &gen.UnblockShadowMCPInventoryServerPayload{
+		ProjectID: projectID,
+		ServerURL: "https://sketchy.example.com/mcp",
+		PolicyID:  policy.ID.String(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, state.Access)
+	require.Empty(t, state.BlockedPolicyIds)
+
+	grants, err = authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyBlock,
+		ResourceID:     policy.ID.String(),
+	})
+	require.NoError(t, err)
+	require.Empty(t, grants)
+}
+
+func TestService_BlockShadowMCPInventoryServer_RejectsBlockAllPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block All Shadow MCP",
+		Action:         "block",
+		Disposition:    "",
+		BlockedURLs:    nil,
+	})
+
+	_, err := ti.service.BlockShadowMCPInventoryServer(ctx, &gen.BlockShadowMCPInventoryServerPayload{
+		ProjectID: projectID,
+		ServerURL: "https://sketchy.example.com/mcp",
+		PolicyID:  policy.ID.String(),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
