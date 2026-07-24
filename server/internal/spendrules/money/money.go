@@ -22,11 +22,12 @@ func FromUSD(amount float64) (Cents, error) {
 	if math.IsNaN(amount) || math.IsInf(amount, 0) {
 		return 0, fmt.Errorf("invalid USD amount %v", amount)
 	}
-	// Strict >=: float64(math.MaxInt64) rounds up past MaxInt64, so an amount
-	// equal to maxUSD would still overflow the int64 conversion below and wrap
-	// negative.
+	// Asymmetric bounds: float64(math.MaxInt64) rounds up to 2^63, so an amount
+	// equal to maxUSD converts to 2^63 and overflows int64 (reject with >=). On
+	// the low end, -maxUSD converts to exactly math.MinInt64 (-2^63), which is
+	// representable, so only amounts strictly below it overflow (reject with <).
 	maxUSD := float64(math.MaxInt64) / centsPerUSD
-	if amount >= maxUSD || amount <= -maxUSD {
+	if amount >= maxUSD || amount < -maxUSD {
 		return 0, fmt.Errorf("USD amount %v is outside cents range", amount)
 	}
 	return Cents(math.Round(amount * centsPerUSD)), nil

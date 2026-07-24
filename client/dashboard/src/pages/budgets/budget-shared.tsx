@@ -30,14 +30,21 @@ export function TabEmptyState({
   title,
   description,
   action,
+  role,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
   action?: ReactNode;
+  // Set role="alert" when the state represents a failure, so screen readers
+  // announce it rather than treating it as a passive empty state.
+  role?: "alert";
 }): JSX.Element {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+    <div
+      role={role}
+      className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16"
+    >
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon className="text-muted-foreground h-6 w-6" />
       </div>

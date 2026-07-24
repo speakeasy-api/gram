@@ -38,8 +38,14 @@ func TestFromUSDRejectsCentOverflow(t *testing.T) {
 	_, err := money.FromUSD(maxUSD)
 	require.Error(t, err)
 
-	_, err = money.FromUSD(-maxUSD)
+	// -maxUSD converts to exactly math.MinInt64 and is representable; only
+	// amounts strictly below it overflow.
+	_, err = money.FromUSD(math.Nextafter(-maxUSD, math.Inf(-1)))
 	require.Error(t, err)
+
+	minCents, err := money.FromUSD(-maxUSD)
+	require.NoError(t, err)
+	require.Equal(t, money.Cents(math.MinInt64), minCents)
 
 	cents, err := money.FromUSD(math.Nextafter(maxUSD, 0))
 	require.NoError(t, err)

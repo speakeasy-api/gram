@@ -331,6 +331,7 @@ function RulesTab({
   if (error) {
     return (
       <TabEmptyState
+        role="alert"
         icon={TriangleAlert}
         title="Couldn't load budget rules"
         description="Something went wrong while loading your budget rules. Retry, or refresh the page if the problem persists."
@@ -612,6 +613,7 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
   if (isError && events.length === 0) {
     return (
       <TabEmptyState
+        role="alert"
         icon={TriangleAlert}
         title="Couldn't load budget events"
         description="Something went wrong while loading the event history. Retry, or refresh the page if the problem persists."

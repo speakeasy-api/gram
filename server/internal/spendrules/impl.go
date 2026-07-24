@@ -459,16 +459,24 @@ func (s *Service) ArchiveSpendRule(ctx context.Context, payload *gen.ArchiveSpen
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Archive is delete-like and must be retry-safe: a retry after a
-		// timed-out request finds the row already archived. Treat that as
-		// success (without a second audit event) and only 404 when the rule
-		// truly never existed.
-		if _, lookupErr := repo.New(dbtx).GetArchivedSpendRule(ctx, repo.GetArchivedSpendRuleParams{
+		// timed-out request finds the row already archived. Distinguish the
+		// three cases so a transient DB error is never masked as a 404:
+		//   - lookup succeeds -> already archived, treat as success (no second
+		//     audit event);
+		//   - lookup returns ErrNoRows -> the rule never existed, 404;
+		//   - lookup fails otherwise -> surface the real (retryable) error.
+		_, lookupErr := repo.New(dbtx).GetArchivedSpendRule(ctx, repo.GetArchivedSpendRuleParams{
 			ID:             id,
 			OrganizationID: authCtx.ActiveOrganizationID,
-		}); lookupErr == nil {
+		})
+		switch {
+		case lookupErr == nil:
 			return nil
+		case errors.Is(lookupErr, pgx.ErrNoRows):
+			return oops.E(oops.CodeNotFound, err, "spend rule not found")
+		default:
+			return oops.E(oops.CodeUnexpected, lookupErr, "look up archived spend rule").LogError(ctx, s.logger)
 		}
-		return oops.E(oops.CodeNotFound, err, "spend rule not found")
 	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "archive spend rule").LogError(ctx, s.logger)
