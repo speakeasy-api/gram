@@ -54024,6 +54024,11 @@ components:
                     items:
                         type: string
                     description: Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.
+                shadow_mcp_blocked_urls:
+                    type: array
+                    items:
+                        type: string
+                    description: 'For allow_all policies: complete desired canonical URL block set. Omit or send empty to block nothing. Only valid when shadow_mcp_disposition is allow_all.'
                 shadow_mcp_disposition:
                     type: string
                     description: 'Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.'
@@ -59021,6 +59026,7 @@ components:
                         - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
+                        - risk_policy:block
                         - chat:read
                 selectors:
                     type: array
@@ -59056,6 +59062,7 @@ components:
                             - skill:blocked_write
                             - risk_policy:evaluate
                             - risk_policy:bypass
+                            - risk_policy:block
                             - chat:read
                     description: The inherited scopes the primary scope grants.
             required:
@@ -63749,7 +63756,7 @@ components:
                     maximum: 10
                 shadow_mcp_disposition:
                     type: string
-                    description: 'Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless it appears on the blocked-URL list. Immutable after create. Only present on policies with the shadow_mcp source and block action.'
+                    description: 'Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.'
                     enum:
                         - block_all
                         - allow_all
@@ -64371,6 +64378,7 @@ components:
                         - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
+                        - risk_policy:block
                         - chat:read
                 selectors:
                     type: array
@@ -64532,6 +64540,7 @@ components:
                         - skill:blocked_write
                         - risk_policy:evaluate
                         - risk_policy:bypass
+                        - risk_policy:block
                         - chat:read
                 visibility:
                     type: string
@@ -65755,6 +65764,11 @@ components:
                     type: array
                     items:
                         type: string
+                blocked_policy_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
                 canonical_server_url:
                     type: string
                 first_seen:
@@ -65799,6 +65813,7 @@ components:
                 - access
                 - request_count
                 - allowed_policy_ids
+                - blocked_policy_ids
         ShadowMCPInventoryURLState:
             type: object
             properties:
@@ -65808,6 +65823,11 @@ components:
                     type: array
                     items:
                         type: string
+                blocked_policy_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
                 latest_request:
                     $ref: '#/components/schemas/ShadowMCPInventoryRequestSummary'
                 request_count:
@@ -65817,6 +65837,7 @@ components:
                 - access
                 - request_count
                 - allowed_policy_ids
+                - blocked_policy_ids
         ShadowMCPInventoryUser:
             type: object
             properties:
@@ -70345,6 +70366,11 @@ components:
                     items:
                         type: string
                     description: Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
+                shadow_mcp_blocked_urls:
+                    type: array
+                    items:
+                        type: string
+                    description: 'For allow_all policies: complete desired canonical URL block set. Omit to preserve; send empty to clear.'
                 shadow_mcp_disposition:
                     type: string
                     description: 'The policy''s shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.'

@@ -239,6 +239,9 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	RequestCount       int                                           `form:"request_count" json:"request_count" xml:"request_count"`
 	LatestRequest      *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
 	AllowedPolicyIds   []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	// Enabled blocking policies that block this server via a risk_policy:block
+	// grant (allow_all policies only).
+	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
 }
 
 // ListShadowMCPInventoryUsersResponseBody is the type of the "access" service
@@ -256,6 +259,9 @@ type UpsertShadowMCPInventoryPolicyBypassResponseBody struct {
 	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
 	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
 	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	// Enabled blocking policies that block this server via a risk_policy:block
+	// grant (allow_all policies only).
+	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
 }
 
 // DeleteShadowMCPInventoryPolicyBypassResponseBody is the type of the "access"
@@ -265,6 +271,9 @@ type DeleteShadowMCPInventoryPolicyBypassResponseBody struct {
 	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
 	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
 	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	// Enabled blocking policies that block this server via a risk_policy:block
+	// grant (allow_all policies only).
+	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
 }
 
 // ResolveShadowMCPInventoryRequestResponseBody is the type of the "access"
@@ -274,6 +283,9 @@ type ResolveShadowMCPInventoryRequestResponseBody struct {
 	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
 	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
 	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	// Enabled blocking policies that block this server via a risk_policy:block
+	// grant (allow_all policies only).
+	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
 }
 
 // GetRBACStatusResponseBody is the type of the "access" service
@@ -4465,6 +4477,9 @@ type ShadowMCPInventoryServerResponseBody struct {
 	RequestCount       int                                           `form:"request_count" json:"request_count" xml:"request_count"`
 	LatestRequest      *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
 	AllowedPolicyIds   []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	// Enabled blocking policies that block this server via a risk_policy:block
+	// grant (allow_all policies only).
+	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
 }
 
 // ShadowMCPInventoryRequestSummaryResponseBody is used to define fields on
@@ -4872,6 +4887,14 @@ func NewGetShadowMCPInventoryServerResponseBody(res *access.ShadowMCPInventorySe
 	} else {
 		body.AllowedPolicyIds = []string{}
 	}
+	if res.BlockedPolicyIds != nil {
+		body.BlockedPolicyIds = make([]string, len(res.BlockedPolicyIds))
+		for i, val := range res.BlockedPolicyIds {
+			body.BlockedPolicyIds[i] = val
+		}
+	} else {
+		body.BlockedPolicyIds = []string{}
+	}
 	return body
 }
 
@@ -4916,6 +4939,14 @@ func NewUpsertShadowMCPInventoryPolicyBypassResponseBody(res *access.ShadowMCPIn
 	} else {
 		body.AllowedPolicyIds = []string{}
 	}
+	if res.BlockedPolicyIds != nil {
+		body.BlockedPolicyIds = make([]string, len(res.BlockedPolicyIds))
+		for i, val := range res.BlockedPolicyIds {
+			body.BlockedPolicyIds[i] = val
+		}
+	} else {
+		body.BlockedPolicyIds = []string{}
+	}
 	return body
 }
 
@@ -4938,6 +4969,14 @@ func NewDeleteShadowMCPInventoryPolicyBypassResponseBody(res *access.ShadowMCPIn
 	} else {
 		body.AllowedPolicyIds = []string{}
 	}
+	if res.BlockedPolicyIds != nil {
+		body.BlockedPolicyIds = make([]string, len(res.BlockedPolicyIds))
+		for i, val := range res.BlockedPolicyIds {
+			body.BlockedPolicyIds[i] = val
+		}
+	} else {
+		body.BlockedPolicyIds = []string{}
+	}
 	return body
 }
 
@@ -4959,6 +4998,14 @@ func NewResolveShadowMCPInventoryRequestResponseBody(res *access.ShadowMCPInvent
 		}
 	} else {
 		body.AllowedPolicyIds = []string{}
+	}
+	if res.BlockedPolicyIds != nil {
+		body.BlockedPolicyIds = make([]string, len(res.BlockedPolicyIds))
+		for i, val := range res.BlockedPolicyIds {
+			body.BlockedPolicyIds[i] = val
+		}
+	} else {
+		body.BlockedPolicyIds = []string{}
 	}
 	return body
 }
@@ -8677,8 +8724,8 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "chat:read") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read"}))
 		}
 	}
 	for _, e := range body.Selectors {

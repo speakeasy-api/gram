@@ -5417,6 +5417,10 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 	for i, val := range v.AllowedPolicyIds {
 		res.AllowedPolicyIds[i] = val
 	}
+	res.BlockedPolicyIds = make([]string, len(v.BlockedPolicyIds))
+	for i, val := range v.BlockedPolicyIds {
+		res.BlockedPolicyIds[i] = val
+	}
 
 	return res
 }

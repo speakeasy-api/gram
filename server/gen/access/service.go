@@ -592,6 +592,9 @@ type ShadowMCPInventoryServer struct {
 	RequestCount       int
 	LatestRequest      *ShadowMCPInventoryRequestSummary
 	AllowedPolicyIds   []string
+	// Enabled blocking policies that block this server via a risk_policy:block
+	// grant (allow_all policies only).
+	BlockedPolicyIds []string
 }
 
 // ShadowMCPInventoryURLState is the result type of the access service
@@ -601,6 +604,9 @@ type ShadowMCPInventoryURLState struct {
 	RequestCount     int
 	LatestRequest    *ShadowMCPInventoryRequestSummary
 	AllowedPolicyIds []string
+	// Enabled blocking policies that block this server via a risk_policy:block
+	// grant (allow_all policies only).
+	BlockedPolicyIds []string
 }
 
 type ShadowMCPInventoryUser struct {

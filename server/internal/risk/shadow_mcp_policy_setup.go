@@ -57,6 +57,21 @@ func shadowMCPPolicyAutoName(sources []string, action string, existingNames []st
 	return name
 }
 
+// validateShadowMCPBlockedURLs canonicalizes the blocked-URL set of an
+// allow_all policy. Unlike the allow list there is no inventory-observed
+// requirement: blocking a server that has not been seen yet is deliberate,
+// proactive defense. A non-empty list is only valid on an allow_all policy.
+func validateShadowMCPBlockedURLs(disposition string, rawURLs []string) ([]string, error) {
+	canonicalURLs, err := policybypass.CanonicalizeURLs(rawURLs)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid shadow mcp blocked urls")
+	}
+	if len(canonicalURLs) > 0 && disposition != ShadowMCPDispositionAllowAll {
+		return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp blocked urls require an allow_all shadow mcp policy")
+	}
+	return canonicalURLs, nil
+}
+
 // effectiveShadowMCPDisposition resolves the stored disposition column for a
 // policy: block_all when unset on a blocking shadow MCP policy (rows created
 // before the column existed), empty for policies where a disposition does not
@@ -93,6 +108,7 @@ func validateShadowMCPAllowedURLs(
 	enabled bool,
 	sources []string,
 	action string,
+	disposition string,
 	rawURLs []string,
 ) ([]string, error) {
 	canonicalURLs, err := policybypass.CanonicalizeURLs(rawURLs)
@@ -101,6 +117,9 @@ func validateShadowMCPAllowedURLs(
 	}
 	if len(canonicalURLs) > 0 && (!enabled || action != "block" || !slices.Contains(sources, "shadow_mcp")) {
 		return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp allowed urls require an enabled blocking shadow mcp policy")
+	}
+	if len(canonicalURLs) > 0 && disposition == ShadowMCPDispositionAllowAll {
+		return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp allowed urls do not apply to allow_all policies; use shadow_mcp_blocked_urls")
 	}
 	if len(canonicalURLs) == 0 {
 		return canonicalURLs, nil
