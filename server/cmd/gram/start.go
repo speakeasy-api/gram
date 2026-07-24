@@ -116,6 +116,7 @@ import (
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/templates"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -1151,7 +1152,7 @@ func newStartCommand() *cli.Command {
 			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
-			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, gcpauth.NewResolver()))
 			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
