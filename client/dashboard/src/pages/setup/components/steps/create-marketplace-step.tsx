@@ -28,7 +28,7 @@ export function CreateMarketplaceStep({
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
       setDialogOpen(false);
-      void invalidateAllPublishStatus(queryClient);
+      void invalidateAllPublishStatus(queryClient, { refetchType: "all" });
       toast.success(
         dialogMode === "manage"
           ? "Collaborators added"
