@@ -2,7 +2,6 @@ import { Input } from "@/components/ui/input";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
-import { useDisableRBACMutation } from "@gram/client/react-query/disableRBAC.js";
 import { useEnableRBACMutation } from "@gram/client/react-query/enableRBAC.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
 import { invalidateAllGrants } from "@gram/client/react-query/grants.js";
@@ -142,9 +141,7 @@ function FeatureToggle({
 
 function RBACManagementSection(): ReactElement {
   const queryClient = useQueryClient();
-  const [confirmAction, setConfirmAction] = useState<
-    "enable" | "disable" | null
-  >(null);
+  const [confirmEnable, setConfirmEnable] = useState(false);
 
   const { data: status, isLoading, error } = useRbacStatus();
 
@@ -152,20 +149,9 @@ function RBACManagementSection(): ReactElement {
     onSuccess: () => {
       void invalidateAllRbacStatus(queryClient);
       void invalidateAllGrants(queryClient);
-      setConfirmAction(null);
+      setConfirmEnable(false);
     },
   });
-
-  const disableMutation = useDisableRBACMutation({
-    onSuccess: () => {
-      void invalidateAllRbacStatus(queryClient);
-      void invalidateAllGrants(queryClient);
-      setConfirmAction(null);
-    },
-  });
-
-  const toggleMutation =
-    confirmAction === "enable" ? enableMutation : disableMutation;
 
   if (isLoading) {
     return (
@@ -188,51 +174,46 @@ function RBACManagementSection(): ReactElement {
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <StatusPill enabled={status.rbacEnabled} />
-        {confirmAction === null && (
+        {!status.rbacEnabled && !confirmEnable ? (
           <ActionButton
-            onClick={() =>
-              setConfirmAction(status.rbacEnabled ? "disable" : "enable")
-            }
-            destructive={status.rbacEnabled}
+            onClick={() => setConfirmEnable(true)}
           >
-            {status.rbacEnabled ? "Disable RBAC" : "Enable RBAC"}
+            Enable RBAC
           </ActionButton>
-        )}
+        ) : null}
       </div>
 
-      {confirmAction !== null && (
+      {confirmEnable ? (
         // Inline confirmation instead of a modal: the platform-admin-toolbar collapses on
         // outside clicks, which would tear down a portalled dialog mid-flow.
         <div className="border-border bg-muted/40 rounded-md border p-2">
           <p className="text-foreground mb-2 text-[11px] leading-snug">
-            {confirmAction === "enable"
-              ? "Seed default grants for system roles and enforce access control for this organization?"
-              : "Disable access control enforcement? All members will have unrestricted access."}
+            Seed default grants for system roles and enforce access control for
+            this organization?
           </p>
           <div className="flex items-center gap-2">
             <ActionButton
-              onClick={() => toggleMutation.mutate({})}
-              pending={toggleMutation.isPending}
-              destructive={confirmAction === "disable"}
+              onClick={() => enableMutation.mutate({})}
+              pending={enableMutation.isPending}
             >
-              {confirmAction === "enable" ? "Enable" : "Disable"}
+              Enable
             </ActionButton>
             <button
               type="button"
-              onClick={() => setConfirmAction(null)}
+              onClick={() => setConfirmEnable(false)}
               className="text-muted-foreground hover:text-foreground text-[11px]"
             >
               Cancel
             </button>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {toggleMutation.error && (
+      {enableMutation.error ? (
         <p className="text-destructive text-[11px]">
-          {toggleMutation.error.message}
+          {enableMutation.error.message}
         </p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -289,7 +270,7 @@ function ProductFeaturesSection(): ReactElement {
       <Section
         icon={ShieldCheck}
         title="RBAC"
-        description="Role-based access control enforcement. Ensure all members have roles assigned before enabling."
+        description="Role-based access control is required for enterprise organizations and cannot be disabled."
       >
         <RBACManagementSection />
       </Section>

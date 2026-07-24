@@ -78,7 +78,7 @@ type Service interface {
 	// Enable RBAC for the current organization. Seeds default grants for system
 	// roles.
 	EnableRBAC(context.Context, *EnableRBACPayload) (err error)
-	// Disable RBAC enforcement for the current organization.
+	// Legacy compatibility endpoint. RBAC cannot be disabled.
 	DisableRBAC(context.Context, *DisableRBACPayload) (err error)
 	// List authz challenge events from ClickHouse, enriched with resolution state
 	// from PostgreSQL.

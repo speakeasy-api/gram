@@ -700,7 +700,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("disableRBAC", func() {
-		Description("Disable RBAC enforcement for the current organization.")
+		Description("Legacy compatibility endpoint. RBAC cannot be disabled.")
 		Security(security.Session)
 
 		Payload(func() {

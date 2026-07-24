@@ -332,7 +332,7 @@ export class Access extends ClientSDK {
    * disableRBAC access
    *
    * @remarks
-   * Disable RBAC enforcement for the current organization.
+   * Legacy compatibility endpoint. RBAC cannot be disabled.
    */
   async disableRBAC(
     request?: DisableRBACRequest | undefined,

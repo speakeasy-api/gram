@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * disableRBAC access
  *
  * @remarks
- * Disable RBAC enforcement for the current organization.
+ * Legacy compatibility endpoint. RBAC cannot be disabled.
  */
 export function accessDisableRBAC(
   client: GramCore,

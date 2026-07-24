@@ -53,7 +53,7 @@ export type DisableRBACMutationError =
  * disableRBAC access
  *
  * @remarks
- * Disable RBAC enforcement for the current organization.
+ * Legacy compatibility endpoint. RBAC cannot be disabled.
  */
 export function useDisableRBACMutation(
   options?: MutationHookOptions<

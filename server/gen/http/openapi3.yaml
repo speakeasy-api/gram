@@ -1507,7 +1507,7 @@ paths:
                 type: mutation
     /rpc/access.disableRBAC:
         post:
-            description: Disable RBAC enforcement for the current organization.
+            description: Legacy compatibility endpoint. RBAC cannot be disabled.
             operationId: disableRBAC
             parameters:
                 - allowEmptyValue: true
