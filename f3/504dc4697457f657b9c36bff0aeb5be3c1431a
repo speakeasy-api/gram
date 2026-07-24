@@ -1,0 +1,27 @@
+server/migrations/20260724111202_chat-messages-prompt-attachments.sql
+  s_d6640a57723ec2::t_7938cd359f3f9b 1-2
+server/database/schema.sql
+  s_d6640a57723ec2::t_7938cd359f3f9b 1912,1914-1916
+server/internal/database/models.go
+  s_d6640a57723ec2::t_7938cd359f3f9b 362,364-366
+server/internal/chat/repo/models.go
+  s_d6640a57723ec2::t_7938cd359f3f9b 23,25-27
+server/migrations/atlas.sum
+  s_d6640a57723ec2::t_7938cd359f3f9b 1,297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "f3504dc4697457f657b9c36bff0aeb5be3c1431a",
+  "prompts": {},
+  "sessions": {
+    "s_d6640a57723ec2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "810056d0-e1a2-422d-a2f9-5b0394666020",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
