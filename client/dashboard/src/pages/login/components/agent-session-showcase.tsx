@@ -214,9 +214,11 @@ function AgentSessionCard({ elapsed }: { elapsed: number }) {
         ))}
       </div>
 
-      <div className="auth-mono-text flex justify-between px-5 pb-3.5 text-[11px] tracking-[0.04em] text-[var(--muted)]">
+      <div className="auth-mono-text flex items-center justify-between px-5 pb-3.5 text-[11px] tracking-[0.04em] text-[var(--muted)]">
         <span>task: refund-request-4821</span>
-        <span>session cost {cost}</span>
+        <span className="text-[13px] text-[var(--muted-strong)]">
+          session cost {cost}
+        </span>
       </div>
 
       <div className="h-[3px] bg-[var(--edge-soft)]">
