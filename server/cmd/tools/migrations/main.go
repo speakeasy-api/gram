@@ -67,6 +67,7 @@ type config struct {
 	batchSize     int
 	bufferSize    int
 	dryRun        bool
+	liftPartGuard bool
 }
 
 func main() {
@@ -116,7 +117,7 @@ func run() int {
 
 	source := riskfindings.NewSource(pool)
 	transformer := riskfindings.NewTransformer(fingerprinter)
-	sink := riskfindings.NewSink(chConn, cfg.bufferSize, cfg.batchSize, cfg.dryRun)
+	sink := riskfindings.NewSink(chConn, cfg.bufferSize, cfg.batchSize, cfg.dryRun, cfg.liftPartGuard)
 
 	runErr := pipeline.Run[riskfindings.SourceRow, riskfindings.FindingRow](
 		ctx, source, transformer, sink, cfg.criteria(), cfg.bufferSize,
@@ -214,6 +215,7 @@ func parseFlags() (config, error) {
 		batchSize         = flag.Int("batch-size", riskfindings.DefaultBatchSize, "rows per source page and sink batch")
 		bufferSize        = flag.Int("buffer", riskfindings.DefaultBatchSize, "channel buffer between pipeline stages")
 		dryRun            = flag.Bool("dry-run", true, "when true (default) read and transform but do not write; pass -dry-run=false to insert")
+		liftPartGuard     = flag.Bool("lift-partition-guard", true, "set max_partitions_per_insert_block=0 on inserts; pass -lift-partition-guard=false when the ClickHouse settings profile constrains that setting (code 452)")
 	)
 	flag.Parse()
 
@@ -244,6 +246,7 @@ func parseFlags() (config, error) {
 		batchSize:     *batchSize,
 		bufferSize:    *bufferSize,
 		dryRun:        *dryRun,
+		liftPartGuard: *liftPartGuard,
 	}
 
 	if cfg.dbURL == "" {
