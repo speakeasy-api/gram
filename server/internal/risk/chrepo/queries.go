@@ -19,27 +19,39 @@ var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 // string, and one-way fingerprints. See internal/risk/finding_ch.go for how it
 // is populated and internal/risk/fingerprint.go for the fingerprint scheme.
 type RiskFindingRow struct {
-	ID                       uuid.UUID `ch:"id"`
-	CreatedAt                time.Time `ch:"created_at"`
-	OrganizationID           string    `ch:"organization_id"`
-	ProjectID                string    `ch:"project_id"`
-	RequestID                string    `ch:"request_id"`
-	ChatMessageID            string    `ch:"chat_message_id"`
-	RiskPolicyID             string    `ch:"risk_policy_id"`
-	RiskPolicyVersion        int64     `ch:"risk_policy_version"`
-	RuleID                   string    `ch:"rule_id"`
-	Description              string    `ch:"description"`
-	Source                   string    `ch:"source"`
-	Confidence               float64   `ch:"confidence"`
-	Tags                     []string  `ch:"tags"`
-	StartPos                 int32     `ch:"start_pos"`
-	EndPos                   int32     `ch:"end_pos"`
-	DeadLetterReason         string    `ch:"dead_letter_reason"`
-	MatchLen                 uint32    `ch:"match_len"`
-	MatchRedacted            string    `ch:"match_redacted"`
-	FingerprintPepperVersion string    `ch:"fingerprint_pepper_version"`
-	FingerprintGlobalHS256   string    `ch:"fingerprint_global_hs256"`
-	FingerprintTenantHS256   string    `ch:"fingerprint_tenant_hs256"`
+	ID                uuid.UUID `ch:"id"`
+	CreatedAt         time.Time `ch:"created_at"`
+	OrganizationID    string    `ch:"organization_id"`
+	ProjectID         string    `ch:"project_id"`
+	RequestID         string    `ch:"request_id"`
+	ChatMessageID     string    `ch:"chat_message_id"`
+	RiskPolicyID      string    `ch:"risk_policy_id"`
+	RiskPolicyVersion int64     `ch:"risk_policy_version"`
+	RuleID            string    `ch:"rule_id"`
+	Description       string    `ch:"description"`
+	Source            string    `ch:"source"`
+	Confidence        float64   `ch:"confidence"`
+	Tags              []string  `ch:"tags"`
+	StartPos          int32     `ch:"start_pos"`
+	EndPos            int32     `ch:"end_pos"`
+	DeadLetterReason  string    `ch:"dead_letter_reason"`
+
+	// Denormalized attribution, resolved from Postgres at ingest so
+	// session-level and per-user rollups never need a cross-store join. All
+	// empty when unresolved (missing message, deleted chat, lookup failure).
+	ChatID         string `ch:"chat_id"`
+	UserID         string `ch:"user_id"`
+	ExternalUserID string `ch:"external_user_id"`
+
+	// Category is the canonical risk category for (source, rule_id), computed
+	// via internal/risk/categories at ingest. Empty for dead-letter sentinels.
+	Category string `ch:"category"`
+
+	MatchLen                 uint32 `ch:"match_len"`
+	MatchRedacted            string `ch:"match_redacted"`
+	FingerprintPepperVersion string `ch:"fingerprint_pepper_version"`
+	FingerprintGlobalHS256   string `ch:"fingerprint_global_hs256"`
+	FingerprintTenantHS256   string `ch:"fingerprint_tenant_hs256"`
 
 	// Exclusion annotation: set when a going-forward exclusion suppressed the
 	// finding. Both nil when the finding is not excluded (maps to the Nullable
@@ -92,6 +104,10 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"start_pos",
 			"end_pos",
 			"dead_letter_reason",
+			"chat_id",
+			"user_id",
+			"external_user_id",
+			"category",
 			"match_len",
 			"match_redacted",
 			"fingerprint_pepper_version",
@@ -119,6 +135,10 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			row.StartPos,
 			row.EndPos,
 			row.DeadLetterReason,
+			row.ChatID,
+			row.UserID,
+			row.ExternalUserID,
+			row.Category,
 			row.MatchLen,
 			row.MatchRedacted,
 			row.FingerprintPepperVersion,

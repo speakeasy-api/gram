@@ -440,6 +440,58 @@ func (q *Queries) CountTotalMessages(ctx context.Context, projectID uuid.NullUUI
 	return column_1, err
 }
 
+const createChatForTest = `-- name: CreateChatForTest :one
+INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateChatForTestParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+}
+
+func (q *Queries) CreateChatForTest(ctx context.Context, arg CreateChatForTestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createChatForTest,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.ExternalUserID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createChatMessageForTest = `-- name: CreateChatMessageForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, user_id, external_user_id)
+VALUES ($1, $2, 'user', $3, $4, $5)
+RETURNING id
+`
+
+type CreateChatMessageForTestParams struct {
+	ChatID         uuid.UUID
+	ProjectID      uuid.NullUUID
+	Content        string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+}
+
+func (q *Queries) CreateChatMessageForTest(ctx context.Context, arg CreateChatMessageForTestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createChatMessageForTest,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Content,
+		arg.UserID,
+		arg.ExternalUserID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createCustomDetectionRule = `-- name: CreateCustomDetectionRule :one
 INSERT INTO risk_custom_detection_rules (
     project_id
@@ -1022,6 +1074,54 @@ func (q *Queries) GetBatchChatIdentities(ctx context.Context, arg GetBatchChatId
 			&i.AccountType,
 			&i.Email,
 			&i.FlaggedRuleIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getChatMessageAttribution = `-- name: GetChatMessageAttribution :many
+SELECT
+    cm.id
+  , cm.chat_id
+  , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
+  , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+FROM chat_messages cm
+LEFT JOIN chats c
+  ON c.id = cm.chat_id
+  AND c.deleted IS FALSE
+WHERE cm.id = ANY($1::uuid[])
+`
+
+type GetChatMessageAttributionRow struct {
+	ID             uuid.UUID
+	ChatID         uuid.UUID
+	UserID         string
+	ExternalUserID string
+}
+
+// Resolves the denormalized attribution (chat id, user ids) the ClickHouse
+// finding writer stamps on risk_findings rows at ingest. Message-level ids win
+// over chat-level ids; both empty and NULL collapse to ”.
+func (q *Queries) GetChatMessageAttribution(ctx context.Context, ids []uuid.UUID) ([]GetChatMessageAttributionRow, error) {
+	rows, err := q.db.Query(ctx, getChatMessageAttribution, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetChatMessageAttributionRow
+	for rows.Next() {
+		var i GetChatMessageAttributionRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.UserID,
+			&i.ExternalUserID,
 		); err != nil {
 			return nil, err
 		}

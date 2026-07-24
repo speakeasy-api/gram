@@ -1543,6 +1543,31 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: GetChatMessageAttribution :many
+-- Resolves the denormalized attribution (chat id, user ids) the ClickHouse
+-- finding writer stamps on risk_findings rows at ingest. Message-level ids win
+-- over chat-level ids; both empty and NULL collapse to ''.
+SELECT
+    cm.id
+  , cm.chat_id
+  , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
+  , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+FROM chat_messages cm
+LEFT JOIN chats c
+  ON c.id = cm.chat_id
+  AND c.deleted IS FALSE
+WHERE cm.id = ANY(@ids::uuid[]);
+
+-- name: CreateChatForTest :one
+INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
+VALUES (@project_id, @organization_id, @user_id, @external_user_id)
+RETURNING id;
+
+-- name: CreateChatMessageForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, user_id, external_user_id)
+VALUES (@chat_id, @project_id, 'user', @content, @user_id, @external_user_id)
+RETURNING id;
+
 -- name: SetRiskResultExcludedForTest :exec
 UPDATE risk_results
 SET excluded_at = clock_timestamp()
