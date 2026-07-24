@@ -181,11 +181,30 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 		return nil, fmt.Errorf("check existing default plugin server: %w", err)
 	}
 
+	// A different attached server (a same-named toolset row, or a stale row
+	// from a deleted server) may already hold the display name, which the
+	// (plugin_id, display_name) unique index spans across backends. Blocking
+	// the attach — and with it the triggering action, e.g. enabling a server —
+	// over a marketplace display name is disproportionate, so uniquify with a
+	// backend-id suffix instead, mirroring the mcpservers slug convention.
+	displayName := params.DisplayName
+	taken, err := q.PluginServerDisplayNameExists(ctx, repo.PluginServerDisplayNameExistsParams{
+		PluginID:    ensured.Plugin.ID,
+		ProjectID:   params.ProjectID,
+		DisplayName: displayName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("check default plugin display name availability: %w", err)
+	}
+	if taken {
+		displayName = fmt.Sprintf("%s (%s)", params.DisplayName, backendIDSuffix(params))
+	}
+
 	server, err := q.AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    ensured.Plugin.ID,
 		ToolsetID:   params.ToolsetID,
 		McpServerID: params.McpServerID,
-		DisplayName: params.DisplayName,
+		DisplayName: displayName,
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -201,10 +220,10 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 				// check and no-ops cleanly.
 				return nil, nil
 			default:
-				// display_name collision with a different, already-attached
-				// server (or a manually-added one) is a real conflict, not
-				// "already attached" — surface it instead of silently
-				// dropping the server from the Default plugin.
+				// display_name still collided after the availability check —
+				// a concurrent attach of a same-named server won the race.
+				// The failed insert aborts the surrounding transaction; a
+				// retry sees the winner via the check above and uniquifies.
 			}
 		}
 		return nil, fmt.Errorf("attach server to default plugin: %w", err)
@@ -217,6 +236,19 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 		PluginCreated: ensured.Created,
 		Server:        server,
 	}, nil
+}
+
+// backendIDSuffix returns the last hex characters of the backend id (the
+// toolset or mcp_server, exactly one of which is set) used to uniquify a
+// colliding display name — the same suffix mcpservers bakes into server slugs,
+// so the two stay recognizable as the same server.
+func backendIDSuffix(params AttachToDefaultPluginParams) string {
+	id := params.McpServerID.UUID
+	if params.ToolsetID.Valid {
+		id = params.ToolsetID.UUID
+	}
+	s := id.String()
+	return s[len(s)-4:]
 }
 
 // AttachToDefaultPluginAudited runs AttachToDefaultPlugin and records the
