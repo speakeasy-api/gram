@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
@@ -23,9 +24,17 @@ import (
 const EvaluationInterval = 5 * time.Minute
 
 // spendGateSnapshotTTL bounds how long a gate snapshot survives without the
-// evaluator rewriting it: roughly two evaluation cycles, so a stalled
-// evaluator fails open instead of blocking users on stale data forever.
-const spendGateSnapshotTTL = 2 * EvaluationInterval
+// evaluator rewriting it. It must comfortably exceed one scheduled sweep
+// (SpendRuleEvaluationWorkflow's run timeout) so a slow-but-progressing sweep
+// does not let snapshots expire and enforcement fail open between cycles.
+const spendGateSnapshotTTL = 4 * EvaluationInterval
+
+// maxGatePrograms bounds the compiled-CEL cache. Rule edits mint new target
+// and rule expressions over a long-lived gate process, so the cache is flushed
+// wholesale once it grows past this cap rather than retaining every historical
+// expression forever. Recompilation after a flush is cheap next to the
+// hot-path cache hit.
+const maxGatePrograms = 1024
 
 // Block describes why an actor is currently blocked by a spend rule.
 type Block struct {
@@ -82,22 +91,30 @@ func spendGateActorKey(organizationID, email string) string {
 // resolves to "not blocked" (fail-open) so a cache outage never denies
 // traffic.
 type Gate struct {
-	logger   *slog.Logger
-	cache    cache.Cache
-	celEng   *celenv.Engine
-	programs sync.Map
+	logger       *slog.Logger
+	cache        cache.Cache
+	celEng       *celenv.Engine
+	programs     sync.Map
+	programCount atomic.Int64
 }
 
 func NewGate(logger *slog.Logger, cacheImpl cache.Cache, celEng *celenv.Engine) (*Gate, error) {
 	if celEng == nil {
 		return nil, fmt.Errorf("spend gate CEL engine is required")
 	}
+	if cacheImpl == nil {
+		// The hot-path CheckBlocked dereferences the cache on every call;
+		// a nil cache would panic there rather than failing open, so reject
+		// it at construction.
+		return nil, fmt.Errorf("spend gate cache is required")
+	}
 
 	return &Gate{
-		logger:   logger.With(attr.SlogComponent("spendrules_gate")),
-		cache:    cacheImpl,
-		celEng:   celEng,
-		programs: sync.Map{},
+		logger:       logger.With(attr.SlogComponent("spendrules_gate")),
+		cache:        cacheImpl,
+		celEng:       celEng,
+		programs:     sync.Map{},
+		programCount: atomic.Int64{},
 	}, nil
 }
 
@@ -213,7 +230,15 @@ func (g *Gate) compile(expr string) (cel.Program, error) {
 	if err != nil {
 		return nil, fmt.Errorf("compile spend gate expression: %w", err)
 	}
-	actual, _ := g.programs.LoadOrStore(expr, prg)
+	actual, loaded := g.programs.LoadOrStore(expr, prg)
+	if !loaded && g.programCount.Add(1) > maxGatePrograms {
+		// Soft bound: flush wholesale once the cache outgrows the cap so
+		// repeated rule edits cannot grow program memory without limit. The
+		// count can drift slightly under concurrency; that only affects when
+		// the next flush happens, not correctness.
+		g.programs.Clear()
+		g.programCount.Store(0)
+	}
 	typed, ok := actual.(cel.Program)
 	if !ok {
 		return nil, fmt.Errorf("cached spend gate program has unexpected type %T", actual)

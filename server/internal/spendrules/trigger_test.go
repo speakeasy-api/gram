@@ -85,6 +85,11 @@ func TestUsageTriggerSignalsOrgWithGateSnapshot(t *testing.T) {
 		usageRow("org_123", "claude-code:otel:logs"),
 	})
 
+	// The leading-edge signal fires on a detached goroutine (signalAsync), so
+	// poll rather than assert synchronously.
+	require.Eventually(t, func() bool {
+		return len(sig.Calls()) == 1
+	}, 2*time.Second, 5*time.Millisecond)
 	require.Equal(t, []string{"org_123"}, sig.Calls())
 }
 
@@ -145,6 +150,10 @@ func TestUsageTriggerDedupesOrgsWithinBatch(t *testing.T) {
 		usageRow("org_b", "cursor:usage:metrics"),
 	})
 
+	// Both leading-edge signals fire on detached goroutines; wait for both.
+	require.Eventually(t, func() bool {
+		return len(sig.Calls()) == 2
+	}, 2*time.Second, 5*time.Millisecond)
 	require.ElementsMatch(t, []string{"org_a", "org_b"}, sig.Calls())
 }
 
@@ -158,10 +167,13 @@ func TestUsageTriggerThrottlesAndFlushesTrailingEdge(t *testing.T) {
 	sig := &usageSignalerStub{}
 	trigger := spendrules.NewUsageTrigger(testenv.NewLogger(t), cacheImpl, sig, time.Hour)
 
-	// Leading edge signals immediately; the second batch inside the cooldown
-	// is suppressed and left pending.
+	// Leading edge signals immediately (on a detached goroutine); the second
+	// batch inside the cooldown is suppressed and left pending.
 	trigger.OnTelemetryLogsWritten(ctx, []telemetry.LogParams{usageRow("org_123", "claude-code:otel:logs")})
 	trigger.OnTelemetryLogsWritten(ctx, []telemetry.LogParams{usageRow("org_123", "claude-code:otel:logs")})
+	require.Eventually(t, func() bool {
+		return len(sig.Calls()) == 1
+	}, 2*time.Second, 5*time.Millisecond)
 	require.Equal(t, []string{"org_123"}, sig.Calls())
 
 	// Shutdown flushes the pending trailing signal while Temporal would

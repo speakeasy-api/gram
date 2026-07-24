@@ -6,6 +6,7 @@ package spend_rules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -146,6 +147,14 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 		projectIDs = append(projectIDs, p.ID.String())
 	}
 
+	// The worker may be started without a ClickHouse connection (see
+	// NewActivities); fail the activity loudly rather than dereferencing a nil
+	// repo, so the scheduled sweep surfaces the misconfiguration instead of
+	// panicking the worker.
+	if a.chQueries == nil {
+		return fmt.Errorf("spend rule evaluation requires a ClickHouse connection")
+	}
+
 	now := time.Now().UTC()
 	actorWindowSpend, err := chrepo.LoadActorWindowSpend(ctx, a.chQueries, projectIDs, now)
 	if err != nil {
@@ -157,16 +166,25 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 		gateState.SetActorWindowSpend(args.OrganizationID, actor, actorWindowSpend[conv.NormalizeEmail(actor.Email)])
 	}
 
+	// evaluateRule logs and skips per-rule logic errors (a bad expression must
+	// not stall the org's other rules or permanently fail the activity); the
+	// only errors it returns are transient event-write failures.
+	var eventWriteErrs []error
 	for _, rule := range rules {
 		if err := a.evaluateRule(ctx, logger, queries, rule, actors, actorWindowSpend, now, &gateState); err != nil {
-			// One broken rule (e.g. an expression that no longer compiles)
-			// must not stall evaluation of the org's other rules.
-			logger.ErrorContext(ctx, "evaluate spend rule", attr.SlogError(err))
+			eventWriteErrs = append(eventWriteErrs, err)
 		}
 	}
 
 	if err := spendrules.WriteGateState(ctx, a.cacheImpl, args.OrganizationID, gateState); err != nil {
 		return fmt.Errorf("write spend gate snapshot: %w", err)
+	}
+
+	// A transient failure recording warning/breach events must fail the
+	// activity so Temporal retries it. The snapshot is already written and
+	// events dedupe on the unique index, so the retry is idempotent.
+	if len(eventWriteErrs) > 0 {
+		return fmt.Errorf("record spend rule events: %w", errors.Join(eventWriteErrs...))
 	}
 
 	return nil
@@ -175,10 +193,12 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 // budgetsEnabled reports whether the Budgets rollout flag is on for the
 // organization. The flag is targeted by PostHog organization group (org
 // slug), the same way the dashboard evaluates it, so the org slug is
-// forwarded as the group key. A nil provider or a failed lookup degrades to
-// disabled — enforcement stays off rather than blocking users on an
-// unresolved flag. (The PostHog provider itself returns enabled when PostHog
-// is disabled outright, e.g. in local development.)
+// forwarded as the group key. Every unresolved state degrades to disabled —
+// a nil provider, a failed lookup, or PostHog being disabled outright (the
+// provider returns false in that mode). This is deliberate for a blocking
+// feature: enforcement stays off until its rollout flag is affirmatively on,
+// rather than starting to block users on an unconfirmed flag. Local dev opts
+// in by enabling the flag (e.g. via the seed task), not implicitly.
 func (a *EvaluateOrg) budgetsEnabled(ctx context.Context, logger *slog.Logger, organizationID string) bool {
 	if a.flags == nil {
 		return false
@@ -215,14 +235,16 @@ func (a *EvaluateOrg) evaluateRule(
 ) error {
 	windowStart, windowEnd, err := spendrules.WindowBounds(rule.WindowKind, now)
 	if err != nil {
-		return fmt.Errorf("window bounds for rule %s: %w", rule.ID, err)
+		logger.ErrorContext(ctx, "window bounds for rule", attr.SlogError(err), attr.SlogSpendRuleID(rule.ID.String()))
+		return nil
 	}
 	ruleURN := urn.NewSpendRule(rule.Slug, rule.Version)
 	limitUSD := rule.LimitUsdCents.USD()
 
 	matched, err := spendrules.MatchActors(a.celEng, rule.TargetExpr, actors)
 	if err != nil {
-		return fmt.Errorf("match actors for rule %s: %w", rule.ID, err)
+		logger.ErrorContext(ctx, "match actors for rule", attr.SlogError(err), attr.SlogSpendRuleID(rule.ID.String()))
+		return nil
 	}
 
 	gateState.Rules = append(gateState.Rules, spendrules.GateRule{
@@ -242,14 +264,17 @@ func (a *EvaluateOrg) evaluateRule(
 
 	usages, err := spendrules.BuildActorWindowUsages(matched, actorWindowSpend, rule.WindowKind, limitUSD)
 	if err != nil {
-		return fmt.Errorf("select actor spend for rule %s: %w", rule.ID, err)
+		logger.ErrorContext(ctx, "select actor spend for rule", attr.SlogError(err), attr.SlogSpendRuleID(rule.ID.String()))
+		return nil
 	}
 
 	usages, err = spendrules.EvalRuleUsages(a.celEng, rule.RuleExpr, rule.WarnAtPct, usages)
 	if err != nil {
-		return fmt.Errorf("evaluate rule expression for rule %s: %w", rule.ID, err)
+		logger.ErrorContext(ctx, "evaluate rule expression for rule", attr.SlogError(err), attr.SlogSpendRuleID(rule.ID.String()))
+		return nil
 	}
 
+	var writeErrs []error
 	for _, usage := range usages {
 		breached := usage.Breached
 		warned := !breached && usage.UsedPct >= float64(rule.WarnAtPct)
@@ -264,7 +289,10 @@ func (a *EvaluateOrg) evaluateRule(
 		}
 		spendUSDCents, err := money.FromUSD(usage.SpendUSD)
 		if err != nil {
-			return fmt.Errorf("convert spend to cents for rule %s: %w", rule.ID, err)
+			// A single actor's unconvertible spend (e.g. non-finite) must not
+			// drop the other actors' events; log and skip this one.
+			logger.ErrorContext(ctx, "convert spend to cents", attr.SlogError(err), attr.SlogSpendRuleID(rule.ID.String()))
+			continue
 		}
 		limitUSDCents := rule.LimitUsdCents
 
@@ -281,10 +309,11 @@ func (a *EvaluateOrg) evaluateRule(
 			WindowStart:    conv.ToPGTimestamptz(windowStart),
 			WindowEnd:      conv.ToPGTimestamptz(windowEnd),
 		}); err != nil {
-			logger.ErrorContext(ctx, "record spend rule event", attr.SlogError(err))
+			// Surface transient write failures so the activity retries rather
+			// than silently succeeding without the event recorded.
+			writeErrs = append(writeErrs, fmt.Errorf("record %s event for rule %s: %w", eventType, rule.ID, err))
 		}
-
 	}
 
-	return nil
+	return errors.Join(writeErrs...)
 }

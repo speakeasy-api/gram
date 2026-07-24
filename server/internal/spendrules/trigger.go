@@ -15,6 +15,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/throttle"
 )
 
+// usageSignalTimeout bounds one signal attempt (a Redis snapshot read plus a
+// Temporal SignalWithStart). It caps how long a fired signal can run so a slow
+// dependency cannot pin a leading-edge goroutine or hold graceful shutdown open
+// while trailing signals flush.
+const usageSignalTimeout = 10 * time.Second
+
 // UsageSignalCooldown is the per-organization throttle window for
 // usage-triggered evaluation signals. The first spend-relevant telemetry
 // write for an org signals immediately (leading edge); writes inside the
@@ -61,8 +67,11 @@ func NewUsageTrigger(logger *slog.Logger, cacheImpl cache.Cache, signaler Evalua
 		return organizationID
 	}, func(organizationID string) error {
 		// Trailing edge fires from a timer goroutine after the request
-		// context that suppressed it is gone.
-		t.signal(context.Background(), organizationID)
+		// context that suppressed it is gone. Bound it so a stuck Redis or
+		// Temporal call cannot outlive the graceful-shutdown flush.
+		bctx, cancel := context.WithTimeout(context.Background(), usageSignalTimeout)
+		defer cancel()
+		t.signal(bctx, organizationID)
 		return nil
 	})
 	return t
@@ -80,9 +89,25 @@ func (t *UsageTrigger) OnTelemetryLogsWritten(ctx context.Context, params []tele
 		}
 		seen[organizationID] = struct{}{}
 		if t.throttle.Do(organizationID) {
-			t.signal(ctx, organizationID)
+			t.signalAsync(ctx, organizationID)
 		}
 	}
+}
+
+// signalAsync fires a leading-edge signal off the telemetry write path. The
+// observer runs inside LogBulk (and inside poll activities whose context is
+// canceled the instant they return), so the signal must not block the caller
+// and must survive that cancellation: it detaches the context, keeps only its
+// values, and bounds the work with usageSignalTimeout. A completed ClickHouse
+// write therefore still wakes enforcement even when the request/activity that
+// produced it is already gone.
+func (t *UsageTrigger) signalAsync(ctx context.Context, organizationID string) {
+	detached := context.WithoutCancel(ctx)
+	go func() {
+		bctx, cancel := context.WithTimeout(detached, usageSignalTimeout)
+		defer cancel()
+		t.signal(bctx, organizationID)
+	}()
 }
 
 func (t *UsageTrigger) signal(ctx context.Context, organizationID string) {
