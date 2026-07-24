@@ -70,6 +70,52 @@ describe("convertGramMessagePartsToUIMessageParts", () => {
     expect(toolParts[0]).toMatchObject({ toolCallId: "tc_2" });
     expect(seen.has("tc_2")).toBe(true);
   });
+
+  // Regression coverage for the AI SDK v7 `FileUIPart` shape
+  // (`{ type: "file", url, mediaType }` — see `FileUIPart` in
+  // node_modules/ai/dist/index.d.ts). This function is the one place in
+  // messageConverter.ts that actually produces `ai`-typed `UIMessage["parts"]`;
+  // it must never regress to the deprecated `{ type: "image", image }` shape.
+  it("converts an image_url content part to a v7 file part", () => {
+    const msg = makeMsg({
+      role: "user",
+      content: [
+        {
+          type: "image_url",
+          image_url: { url: "https://example.com/cat.png" },
+        },
+      ],
+    } as Partial<GramChatMessage> & { role: string });
+
+    const parts = convertGramMessagePartsToUIMessageParts(msg, new Map());
+
+    expect(parts).toContainEqual({
+      type: "file",
+      url: "https://example.com/cat.png",
+      mediaType: "unknown/unknown",
+    });
+  });
+
+  it("converts a data: image_url content part with mediaType detected from the data URL", () => {
+    const dataUrl = "data:image/png;base64,AAAA";
+    const msg = makeMsg({
+      role: "user",
+      content: [
+        {
+          type: "image_url",
+          image_url: { url: dataUrl },
+        },
+      ],
+    } as Partial<GramChatMessage> & { role: string });
+
+    const parts = convertGramMessagePartsToUIMessageParts(msg, new Map());
+
+    expect(parts).toContainEqual({
+      type: "file",
+      url: dataUrl,
+      mediaType: "image/png",
+    });
+  });
 });
 
 describe("convertGramMessagesToUIMessages - tool call deduplication", () => {

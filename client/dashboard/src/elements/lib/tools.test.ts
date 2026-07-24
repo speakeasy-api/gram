@@ -5,8 +5,9 @@ import {
   jsonSchema,
   lastAssistantMessageIsCompleteWithToolCalls,
   readUIMessageStream,
-  stepCountIs,
+  isStepCount,
   streamText,
+  toUIMessageStream,
   type ToolSet,
   type UIMessage,
   type UIMessagePart,
@@ -142,10 +143,15 @@ async function streamToolCallOnly(toolCallId: string): Promise<UIMessage[]> {
     model,
     messages: [{ role: "user", content: "Set up Slack" }],
     tools: toolsNoExecute,
-    stopWhen: stepCountIs(5),
+    stopWhen: isStepCount(5),
   });
   return collectUIMessages(
-    readUIMessageStream({ stream: result.toUIMessageStream() }),
+    readUIMessageStream({
+      stream: toUIMessageStream({
+        stream: result.stream,
+        tools: toolsNoExecute,
+      }),
+    }),
   );
 }
 
