@@ -91,6 +91,7 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 		return r.onObserve(ctx, e)
 	})
 	runner.OnOther("ConfigChange", func(ctx context.Context, e *agenthooks.Event) error {
+		r.maybeSpawnMCPInventory(e)
 		return r.onObserve(ctx, e)
 	})
 	// Cursor is the only provider whose rendered config subscribes
@@ -176,10 +177,11 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	}
 	base := agenthooks.EventOf(typed)
 	ctx = withHarnessInfo(ctx, base)
-	if base.Provider == agenthooks.ProviderClaudeCode &&
-		(base.Kind == agenthooks.KindSessionStart || base.NativeName == "ConfigChange") {
-		attachMCPInventory(&payload, collectClaudeMCPInventory(ctx, base.Session.CWD))
-	}
+	// The Claude MCP inventory is collected out of band: `claude mcp list`
+	// probes every configured server and can take 10s+, so blocking session
+	// start on it (DNO-607) added that latency to every session. onSessionStart
+	// and the ConfigChange handler spawn a detached collector instead, which
+	// relays the inventory as its own event when it finishes.
 	if email := resolveUserEmail(ctx, typed); email != "" {
 		payload.Source.UserEmail = new(email)
 	}
@@ -411,8 +413,27 @@ func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEv
 	if r.cfg.BrowserLogin && strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY")) == "" && !cached {
 		r.login.tryInteractive(ctx)
 	}
+	r.maybeSpawnMCPInventory(agenthooks.EventOf(e))
 	r.deliver(ctx, e)
 	return agenthooks.ContinueSession(), nil
+}
+
+// maybeSpawnMCPInventory launches the detached `claude mcp list` collector for
+// Claude Code session-start and config-change events. Collection is slow enough
+// (it probes every configured MCP server) that keeping it on the hook's path
+// added seconds to every session start; the detached worker relays the
+// inventory out of band instead. Best-effort: a spawn failure just means this
+// session reports no inventory snapshot.
+func (r *Relay) maybeSpawnMCPInventory(base *agenthooks.Event) {
+	if base.Provider != agenthooks.ProviderClaudeCode {
+		return
+	}
+	if base.Kind != agenthooks.KindSessionStart && base.NativeName != "ConfigChange" {
+		return
+	}
+	if err := spawnMCPInventory(r.cfg, base.Session.CWD, base.Session.ID); err != nil {
+		r.debugf("mcp-inventory spawn failed: %v", err)
+	}
 }
 
 func (r *Relay) onObserve(ctx context.Context, typed any) error {
