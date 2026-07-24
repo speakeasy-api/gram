@@ -324,6 +324,7 @@ export function AttachRemoteIdentityProviderSheet({
         if (clientType === "dcr") {
           const registered = await proxyRegisterUpstreamClient(authedFetch, {
             registrationEndpoint: resolvedIssuer?.registrationEndpoint ?? "",
+            flow: "remote_session",
             // RFC 7591 §2: scope is a space-separated string at registration
             // time. Only forward if the operator typed an override.
             scope: parsedScopes.length > 0 ? parsedScopes.join(" ") : undefined,

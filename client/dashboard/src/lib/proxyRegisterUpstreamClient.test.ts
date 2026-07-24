@@ -24,12 +24,30 @@ describe("proxyRegisterUpstreamClient", () => {
 
     const result = await proxyRegisterUpstreamClient(authedFetch, {
       registrationEndpoint: "https://idp.example/register",
+      flow: "remote_session",
     });
 
     expect(result).toEqual({
       clientId: "abc",
       clientSecret: "shh",
       tokenEndpointAuthMethod: "client_secret_basic",
+    });
+  });
+
+  it("sends the flow so the backend scopes the registered redirect URIs", async () => {
+    const authedFetch: AuthedFetch = vi.fn(async () =>
+      jsonResponse({ client_id: "abc" }),
+    );
+
+    await proxyRegisterUpstreamClient(authedFetch, {
+      registrationEndpoint: "https://idp.example/register",
+      flow: "oauth_proxy",
+    });
+
+    const [, opts] = vi.mocked(authedFetch).mock.calls[0]!;
+    expect(JSON.parse(opts.body as string)).toEqual({
+      registration_endpoint: "https://idp.example/register",
+      flow: "oauth_proxy",
     });
   });
 
@@ -47,6 +65,7 @@ describe("proxyRegisterUpstreamClient", () => {
 
     const result = proxyRegisterUpstreamClient(authedFetch, {
       registrationEndpoint: "https://idp.example/register",
+      flow: "remote_session",
     });
 
     await expect(result).rejects.toBeInstanceOf(ProxyRegistrationError);
@@ -68,6 +87,7 @@ describe("proxyRegisterUpstreamClient", () => {
     await expect(
       proxyRegisterUpstreamClient(authedFetch, {
         registrationEndpoint: "https://idp.example/register",
+        flow: "remote_session",
       }),
     ).rejects.toThrow("scope not supported");
   });
@@ -79,6 +99,7 @@ describe("proxyRegisterUpstreamClient", () => {
 
     const result = proxyRegisterUpstreamClient(authedFetch, {
       registrationEndpoint: "https://idp.example/register",
+      flow: "remote_session",
     });
 
     await expect(result).rejects.toMatchObject({

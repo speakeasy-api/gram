@@ -200,6 +200,7 @@ export function createWizardServices(
         authedFetch,
         {
           registrationEndpoint: input.registrationEndpoint,
+          flow: "oauth_proxy",
           tokenEndpointAuthMethod: authMethod || undefined,
         },
         { signal },

@@ -190,6 +190,7 @@ export function CreateRemoteSessionClientSheet({
       if (clientType === "dcr") {
         const registered = await proxyRegisterUpstreamClient(authedFetch, {
           registrationEndpoint,
+          flow: "remote_session",
           // RFC 7591 §2: scope is a space-separated string at registration time.
           scope: parsedScopes.length > 0 ? parsedScopes.join(" ") : undefined,
           tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,

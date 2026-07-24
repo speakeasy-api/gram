@@ -170,6 +170,7 @@ export async function autoConfigureRemoteMcpAuth({
   try {
     registered = await proxyRegisterUpstreamClient(authedFetch, {
       registrationEndpoint: draft.registrationEndpoint,
+      flow: "remote_session",
       scope: scopes.length > 0 ? scopes.join(" ") : undefined,
       tokenEndpointAuthMethod: preferredAuthMethod,
     });
