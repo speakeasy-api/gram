@@ -433,7 +433,11 @@ func (p *Publisher) loadScoreEventFacts(ctx context.Context, projectID uuid.UUID
 	}
 
 	now := time.Now().UTC()
-	facts, err := p.scores.GetChatSessionFactsByChatIDs(ctx, telemetryrepo.GetChatSessionFactsByChatIDsParams{
+	// Bound the preflight read so a stalled ClickHouse query cannot hold the
+	// batch lease: this call runs outside the per-evaluation timeout.
+	factsCtx, cancel := context.WithTimeout(ctx, p.evaluationTimeout)
+	defer cancel()
+	facts, err := p.scores.GetChatSessionFactsByChatIDs(factsCtx, telemetryrepo.GetChatSessionFactsByChatIDsParams{
 		ProjectID: projectID.String(),
 		ChatIDs:   chatIDs,
 		From:      now.Add(-scoreEventFactsWindow),

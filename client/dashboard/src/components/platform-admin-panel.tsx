@@ -516,7 +516,8 @@ function WorkUnitsAnalysisSection(): ReactElement {
           </ActionButton>
         </div>
       </div>
-      {settings.workUnitsEnabled && (
+      {/* A zero cap disables the judge server-side, so "Run now" would no-op. */}
+      {settings.workUnitsEnabled && settings.workUnitsDailyCap > 0 && (
         <div className="mt-2 flex items-center justify-between gap-2">
           <p className="text-muted-foreground text-[11px]">
             Wake every project's analysis coordinator now instead of waiting for

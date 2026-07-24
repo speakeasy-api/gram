@@ -11,10 +11,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
-	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -479,6 +479,9 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	}
 	if len(verdicts) == 0 {
 		return result, nil
+	}
+	if len(verdicts) == workUnitsTrendMaxVerdicts {
+		s.logger.WarnContext(ctx, "work units trend window hit verdict cap; buckets may be truncated", attr.SlogTelemetryCHRowCount(len(verdicts)))
 	}
 	result.ScoresAvailable = true
 

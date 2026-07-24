@@ -26,7 +26,10 @@ function WorkMetric({
 }): JSX.Element {
   return (
     <SimpleTooltip tooltip={tooltip}>
-      <span className="flex items-center gap-1 tabular-nums">
+      <span
+        className="flex items-center gap-1 tabular-nums"
+        aria-label={tooltip}
+      >
         <Icon name={icon} className="size-4 opacity-60" />
         {value}
       </span>
@@ -243,7 +246,9 @@ export function WorkUnitsHeaderMetrics({
             {report?.tasks && report.tasks.length > 0 ? (
               report.tasks.map((task, index) => (
                 <WorkUnitsTaskRow
-                  key={task.id ?? index}
+                  // The judge can emit duplicate task ids, so suffix the index
+                  // to keep keys unique; the list is static and never reordered.
+                  key={`${task.id ?? "task"}-${index}`}
                   task={task}
                   index={index}
                 />

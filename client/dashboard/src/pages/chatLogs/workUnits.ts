@@ -35,10 +35,29 @@ export interface WorkUnitsChatFields {
   totalOutputTokens?: number | undefined;
 }
 
+function isOptionalArrayOf(
+  value: unknown,
+  ok: (item: unknown) => boolean,
+): boolean {
+  return value === undefined || (Array.isArray(value) && value.every(ok));
+}
+
 export function parseWorkUnitsReport(json: string): WorkUnitsVerdict | null {
   try {
     const parsed = JSON.parse(json) as unknown;
     if (parsed === null || typeof parsed !== "object") return null;
+    const candidate = parsed as Record<string, unknown>;
+    // Lightweight shape check so malformed-but-valid JSON falls back to the
+    // raw-text display instead of crashing the consumers that .map() these.
+    if (
+      !isOptionalArrayOf(
+        candidate["tasks"],
+        (task) => task !== null && typeof task === "object",
+      ) ||
+      !isOptionalArrayOf(candidate["flags"], (flag) => typeof flag === "string")
+    ) {
+      return null;
+    }
     return parsed as WorkUnitsVerdict;
   } catch {
     return null;

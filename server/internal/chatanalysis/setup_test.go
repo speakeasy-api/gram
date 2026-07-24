@@ -105,8 +105,11 @@ func withAdmin(t *testing.T, ctx context.Context) context.Context {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.IsAdmin = true
-	return contextvalues.SetAuthContext(ctx, authCtx)
+	// Copy the struct so flipping the flag never mutates the shared auth
+	// context still referenced by the source ctx.
+	authCtxCopy := *authCtx
+	authCtxCopy.IsAdmin = true
+	return contextvalues.SetAuthContext(ctx, &authCtxCopy)
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

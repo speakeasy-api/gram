@@ -205,10 +205,21 @@ func (s *Service) TriggerAnalysis(ctx context.Context, _ *gen.TriggerAnalysisPay
 		return nil, oops.E(oops.CodeUnexpected, err, "list organization projects").LogError(ctx, logger)
 	}
 
+	// Continue through failures so one bad project doesn't starve the rest of
+	// the organization of its signal.
+	var signalErrs []error
 	for _, projectID := range projectIDs {
 		if err := s.signaler.Signal(ctx, projectID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "signal chat analysis coordinator").LogError(ctx, logger)
+			logger.ErrorContext(ctx, "failed to signal chat analysis coordinator", attr.SlogProjectID(projectID.String()), attr.SlogError(err))
+			signalErrs = append(signalErrs, err)
 		}
+	}
+	if len(signalErrs) > 0 {
+		return nil, oops.E(
+			oops.CodeUnexpected,
+			errors.Join(signalErrs...),
+			"failed to signal chat analysis coordinator for %d of %d projects", len(signalErrs), len(projectIDs),
+		).LogError(ctx, logger)
 	}
 
 	return &gen.TriggerAnalysisResult{ProjectsSignaled: len(projectIDs)}, nil

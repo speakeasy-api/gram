@@ -92,8 +92,8 @@ function buildEfficiencyCsv(
     "Work Delivered",
     "% Share",
     "Cost Efficiency",
-    "Token Efficiency",
     "Sessions",
+    "Token Efficiency",
     "Total Cost",
   ];
   const body = rows.map((r) => {
@@ -106,8 +106,8 @@ function buildEfficiencyCsv(
         ? ((units / totalUnits) * 100).toFixed(1)
         : "0.0",
       scored ? ((r.measures.scoredCost ?? 0) / units).toFixed(2) : "",
-      scored ? Math.round((r.measures.scoredTokens ?? 0) / units) : "",
       r.measures.totalChats ?? 0,
+      scored ? Math.round((r.measures.scoredTokens ?? 0) / units) : "",
       (r.measures.totalCost ?? 0).toFixed(2),
     ];
   });

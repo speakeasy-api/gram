@@ -230,9 +230,12 @@ func (c *captureSink) ListExistingChatAnalysisScoreIDs(ctx context.Context, arg 
 func (c *captureSink) GetChatSessionFactsByChatIDs(ctx context.Context, arg telemetryrepo.GetChatSessionFactsByChatIDsParams) (map[string]telemetryrepo.ChatSessionFacts, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make(map[string]telemetryrepo.ChatSessionFacts, len(c.facts))
-	for chatID, facts := range c.facts {
-		out[chatID] = facts
+	// Mirror the real sink: only chat IDs the caller asked for come back.
+	out := make(map[string]telemetryrepo.ChatSessionFacts, len(arg.ChatIDs))
+	for _, chatID := range arg.ChatIDs {
+		if facts, ok := c.facts[chatID]; ok {
+			out[chatID] = facts
+		}
 	}
 	return out, nil
 }

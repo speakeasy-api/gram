@@ -985,11 +985,13 @@ export function CostsExplorer(): JSX.Element {
     // chains (e.g. the same user/agent twice). The pivot list already hides
     // filtered dims; this guards the mix-card + fallback-chain paths too.
     if (path.some((c) => c.dim === dim)) return;
-    // Drilling from `all` into an attribution cut (e.g. a "Spend by MCP server"
-    // mix-card row) promotes the view into that dataset. Within a dataset the
-    // drill never switches datasets — undefined preserves the current one.
+    // Drilling from a full-spend dataset (`all`, `efficiency`) into an
+    // attribution cut (e.g. a "Spend by MCP server" mix-card row) promotes the
+    // view into that dataset — their pivots exclude attribution dims. Within an
+    // attribution dataset the drill never switches datasets — undefined
+    // preserves the current one.
     const ds =
-      dataset === "all" && isAttributionDim(dim)
+      isFullSpendDataset(dataset) && isAttributionDim(dim)
         ? datasetForDim(dim)
         : undefined;
     // Agent/Model are leaves: drilling a row shows that slice's individual

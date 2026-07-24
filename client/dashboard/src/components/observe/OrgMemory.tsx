@@ -1,5 +1,5 @@
 import { ChartCard } from "@/components/chart/ChartCard";
-import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
+import { smoothData } from "@/components/chart/chartUtils";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -39,6 +39,17 @@ ChartJS.register(
 const TREND_WINDOW_DAYS = 30;
 const TREND_WINDOW_MS = TREND_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
+// Buckets are UTC days, so labels must be formatted in UTC: the shared
+// formatChartLabel uses the local timezone, which shifts viewers west of UTC
+// onto the previous date.
+function formatTrendLabel(timestamp: string): string {
+  return new Date(timestamp).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 function WorkDoneChart({
   buckets,
   loading,
@@ -60,9 +71,7 @@ function WorkDoneChart({
       ChartDataset<"bar", number[]> | ChartDataset<"line", number[]>
     >;
   }>(() => {
-    const labels = buckets.map((b) =>
-      formatChartLabel(b.timestamp, TREND_WINDOW_MS),
-    );
+    const labels = buckets.map((b) => formatTrendLabel(b.timestamp));
     const bars: ChartDataset<"bar", number[]> = {
       label: "Work delivered",
       data: buckets.map((b) => b.workUnits),
@@ -180,9 +189,7 @@ function EfficiencyChart({
     labels: string[];
     datasets: Array<ChartDataset<"line", Array<number | null>>>;
   }>(() => {
-    const labels = buckets.map((b) =>
-      formatChartLabel(b.timestamp, TREND_WINDOW_MS),
-    );
+    const labels = buckets.map((b) => formatTrendLabel(b.timestamp));
     return {
       labels,
       datasets: [
@@ -315,6 +322,8 @@ export default function OrgMemory(): JSX.Element {
     undefined,
     {
       throwOnError: false,
+      // Don't fire the fetch for users the redirect below is about to bounce.
+      enabled: telemetry.isFeatureEnabled("org-memory") !== false,
     },
   );
 
