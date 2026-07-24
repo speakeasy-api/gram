@@ -185,19 +185,10 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 	// from a deleted server) may already hold the display name, which the
 	// (plugin_id, display_name) unique index spans across backends. Blocking
 	// the attach — and with it the triggering action, e.g. enabling a server —
-	// over a marketplace display name is disproportionate, so uniquify with a
-	// backend-id suffix instead, mirroring the mcpservers slug convention.
-	displayName := params.DisplayName
-	taken, err := q.PluginServerDisplayNameExists(ctx, repo.PluginServerDisplayNameExistsParams{
-		PluginID:    ensured.Plugin.ID,
-		ProjectID:   params.ProjectID,
-		DisplayName: displayName,
-	})
+	// over a marketplace display name is disproportionate, so uniquify instead.
+	displayName, err := availableDisplayName(ctx, q, ensured.Plugin.ID, params)
 	if err != nil {
-		return nil, fmt.Errorf("check default plugin display name availability: %w", err)
-	}
-	if taken {
-		displayName = fmt.Sprintf("%s (%s)", params.DisplayName, backendIDSuffix(params))
+		return nil, err
 	}
 
 	server, err := q.AddPluginServer(ctx, repo.AddPluginServerParams{
@@ -236,6 +227,46 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 		PluginCreated: ensured.Created,
 		Server:        server,
 	}, nil
+}
+
+// displayNameCandidates bounds how many names availableDisplayName probes
+// before giving up. Reaching the bound needs every candidate to be occupied,
+// which takes deliberately crafted names: the first suffixed candidate is
+// already specific to this backend.
+const displayNameCandidates = 8
+
+// availableDisplayName returns the first display name free on the plugin,
+// starting from the requested one. Display names are unique per plugin across
+// backends and are user-editable (UpdatePluginServer), so neither the
+// requested name nor any single derived candidate is guaranteed free —
+// probing a deterministic ladder keeps a marketplace label from failing the
+// caller's triggering action, e.g. enabling a server.
+func availableDisplayName(ctx context.Context, q *repo.Queries, pluginID uuid.UUID, params AttachToDefaultPluginParams) (string, error) {
+	suffix := backendIDSuffix(params)
+
+	for attempt := range displayNameCandidates {
+		candidate := params.DisplayName
+		switch {
+		case attempt == 1:
+			candidate = fmt.Sprintf("%s (%s)", params.DisplayName, suffix)
+		case attempt > 1:
+			candidate = fmt.Sprintf("%s (%s %d)", params.DisplayName, suffix, attempt)
+		}
+
+		taken, err := q.PluginServerDisplayNameExists(ctx, repo.PluginServerDisplayNameExistsParams{
+			PluginID:    pluginID,
+			ProjectID:   params.ProjectID,
+			DisplayName: candidate,
+		})
+		if err != nil {
+			return "", fmt.Errorf("check default plugin display name availability: %w", err)
+		}
+		if !taken {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("no available display name derived from %q on plugin %s after %d candidates", params.DisplayName, pluginID, displayNameCandidates)
 }
 
 // backendIDSuffix returns the last hex characters of the backend id (the
