@@ -682,7 +682,10 @@ func newStartCommand() *cli.Command {
 				rbacEnabled,
 				challengeLoggingEnabled,
 				roleClient,
-				authz.EngineOpts{DevMode: c.String("environment") == "local"},
+				authz.EngineOpts{
+					DevMode:     c.String("environment") == "local",
+					RBACEnabler: productFeatures,
+				},
 			)
 
 			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)

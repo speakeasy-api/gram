@@ -548,7 +548,10 @@ func newWorkerCommand() *cli.Command {
 				rbacEnabled,
 				challengeLoggingEnabled,
 				workos.NewStubClient(),
-				authz.EngineOpts{DevMode: c.String("environment") == "local"},
+				authz.EngineOpts{
+					DevMode:     c.String("environment") == "local",
+					RBACEnabler: productFeatures,
+				},
 			)
 
 			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)

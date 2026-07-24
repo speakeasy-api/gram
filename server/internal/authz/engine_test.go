@@ -34,6 +34,12 @@ func failingRBAC(err error) IsRBACEnabled {
 	}
 }
 
+type rbacEnablerFunc func(context.Context, string) error
+
+func (f rbacEnablerFunc) EnableRBAC(ctx context.Context, organizationID string) error {
+	return f(ctx, organizationID)
+}
+
 func TestEngineRequire_requiresAuthContext(t *testing.T) {
 	t.Parallel()
 
@@ -47,15 +53,56 @@ func TestEngineRequire_requiresAuthContext(t *testing.T) {
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
 
-func TestEngineRequire_skipsWhenRBACFeatureDisabled(t *testing.T) {
+func TestEngineRequire_enablesRBACBeforeAuthorizing(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	enabled := false
+	enableCalls := 0
+	engine := NewEngine(
+		testenv.NewLogger(t),
+		nil,
+		chConn,
+		func(context.Context, string) (bool, error) { return enabled, nil },
+		staticChallengeLogging(true),
+		workos.NewStubClient(),
+		EngineOpts{
+			DevMode: false,
+			RBACEnabler: rbacEnablerFunc(func(_ context.Context, organizationID string) error {
+				require.Equal(t, "org_test", organizationID)
+				enabled = true
+				enableCalls++
+				return nil
+			}),
+		},
+	)
+
+	memberCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeOrgRead, "org_test")})
+	err = engine.Require(memberCtx, Check{Scope: ScopeOrgAdmin, ResourceID: "org_test"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Equal(t, 1, enableCalls)
+
+	adminCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeOrgAdmin, "org_test")})
+	err = engine.Require(adminCtx, Check{Scope: ScopeOrgAdmin, ResourceID: "org_test"})
+	require.NoError(t, err)
+	require.Equal(t, 1, enableCalls)
+}
+
+func TestEngineRequire_failsClosedWhenRBACCannotBeEnabled(t *testing.T) {
 	t.Parallel()
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient())
 
-	err = engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
-	require.NoError(t, err)
+	err = engine.Require(enterpriseSessionCtx(t), Check{Scope: ScopeOrgAdmin, ResourceID: "org_test"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	require.ErrorContains(t, err, "RBAC is not enabled for this organization")
 }
 
 func TestEngineRequire_mapsDeniedToForbidden(t *testing.T) {
@@ -1172,7 +1219,7 @@ func TestCanUseOverride_devPlusAdmin(t *testing.T) {
 	t.Parallel()
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient(), EngineOpts{DevMode: true})
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient(), EngineOpts{DevMode: true, RBACEnabler: nil})
 	ctx := scopeOverrideCtx(t, true, "pro")
 
 	enforce, err := engine.ShouldEnforce(ctx)
@@ -1184,7 +1231,7 @@ func TestCanUseOverride_devPlusNonAdmin(t *testing.T) {
 	t.Parallel()
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient(), EngineOpts{DevMode: true})
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient(), EngineOpts{DevMode: true, RBACEnabler: nil})
 	ctx := scopeOverrideCtx(t, false, "pro")
 
 	enforce, err := engine.ShouldEnforce(ctx)

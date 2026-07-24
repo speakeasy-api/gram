@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -40,6 +41,64 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 	_, ok = GrantsFromContext(ctx)
 	require.True(t, ok)
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_123"}))
+}
+
+func TestPrepareContext_enablesRBACForLegacyOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	seedOrganization(t, ctx, conn, authCtx.ActiveOrganizationID)
+	require.NoError(t, SeedSystemRoleGrants(ctx, conn, authCtx.ActiveOrganizationID))
+	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
+	seedRoleAssignmentForUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, SystemRoleMember)
+
+	memberRole, err := accessrepo.New(conn).GetGlobalRoleBySlug(ctx, SystemRoleMember)
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+memberRole.ID.String()),
+	})
+	require.NoError(t, err)
+
+	enabled := false
+	enableCalls := 0
+	engine := NewEngine(
+		testenv.NewLogger(t),
+		conn,
+		chConn,
+		func(context.Context, string) (bool, error) { return enabled, nil },
+		challengeLoggingAlwaysEnabled,
+		workos.NewStubClient(),
+		EngineOpts{
+			DevMode: false,
+			RBACEnabler: rbacEnablerFunc(func(enableCtx context.Context, organizationID string) error {
+				enableCalls++
+				if err := SeedSystemRoleGrants(enableCtx, conn, organizationID); err != nil {
+					return err
+				}
+				enabled = true
+				return nil
+			}),
+		},
+	)
+
+	ctx, err = engine.PrepareContext(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, enableCalls)
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgRead, ResourceID: authCtx.ActiveOrganizationID}))
+
+	err = engine.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestPrepareContext_rejectsInvalidUserPrincipal(t *testing.T) {

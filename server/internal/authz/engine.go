@@ -22,8 +22,14 @@ type MembershipFetcher interface {
 	GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*workos.Member, error)
 }
 
+// RBACEnabler provisions the built-in role grants and enables RBAC for an organization.
+type RBACEnabler interface {
+	EnableRBAC(ctx context.Context, organizationID string) error
+}
+
 type EngineOpts struct {
-	DevMode bool
+	DevMode     bool
+	RBACEnabler RBACEnabler
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
@@ -38,12 +44,15 @@ type Engine struct {
 	challengeLoggingEnabled ChallengeLoggingEnabled
 	isDev                   bool
 	membership              MembershipFetcher
+	rbacEnabler             RBACEnabler
 }
 
 func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, challengeLogging ChallengeLoggingEnabled, membership MembershipFetcher, opts ...EngineOpts) *Engine {
 	var devMode bool
+	var rbacEnabler RBACEnabler
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
+		rbacEnabler = opts[0].RBACEnabler
 	}
 
 	authzLogger := logger.With(attr.SlogComponent("authz"))
@@ -56,6 +65,7 @@ func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEn
 		challengeLoggingEnabled: challengeLogging,
 		isDev:                   devMode,
 		membership:              membership,
+		rbacEnabler:             rbacEnabler,
 	}
 }
 
@@ -101,19 +111,11 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return GrantsToContext(ctx, GrantsFromOverrides(overrides)), nil
 	}
 
-	if authCtx.AccountType != "enterprise" {
-		return ctx, nil
-	}
-
-	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)
+	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
-		e.logger.WarnContext(ctx, "failed to check RBAC feature flag, skipping grant loading",
-			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-			attr.SlogError(err),
-		)
-		return ctx, nil
+		return ctx, err
 	}
-	if !enabled {
+	if !enforce {
 		return ctx, nil
 	}
 
@@ -628,7 +630,19 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").LogError(ctx, e.logger)
 	}
 
-	return enabled, nil
+	if enabled {
+		return true, nil
+	}
+
+	if e.rbacEnabler == nil {
+		return false, oops.E(oops.CodeUnexpected, nil, "RBAC is not enabled for this organization").LogError(ctx, e.logger)
+	}
+
+	if err := e.rbacEnabler.EnableRBAC(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "enable RBAC for organization").LogError(ctx, e.logger)
+	}
+
+	return true, nil
 }
 
 func validateInput(c Check) error {
