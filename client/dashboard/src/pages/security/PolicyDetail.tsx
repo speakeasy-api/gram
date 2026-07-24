@@ -1,7 +1,9 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { ShadowMCPDispositionPicker } from "@/components/shadow-mcp/ShadowMCPDispositionPicker";
 import { ShadowMCPPolicyServerSelector } from "@/components/shadow-mcp/ShadowMCPPolicyServerSelector";
 import {
+  initialShadowMCPBlockedPolicyURLs,
   initialShadowMCPPolicyURLs,
   invalidateShadowMCPPolicyInventory,
   useShadowMCPPolicyInventory,
@@ -83,9 +85,11 @@ import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
+  shadowMCPBlockedURLsForMutation,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
+  type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
 import { type Step } from "@/pages/setup/components/onboarding-stepper";
 import {
@@ -3500,11 +3504,19 @@ export function StandardPolicyEditor({
   const [action, setAction] = useState<PolicyAction>(
     (policy?.action as PolicyAction) ?? "flag",
   );
+  // Under block_all the URL set holds allowed servers; under allow_all it
+  // holds blocked servers. The disposition is immutable after create, so the
+  // meaning never flips for an existing policy.
   const [selectedShadowMCPURLs, setSelectedShadowMCPURLs] = useState<
     Set<string>
   >(() => new Set());
   const [originalShadowMCPURLs, setOriginalShadowMCPURLs] =
     useState<Set<string> | null>(null);
+  const [shadowMCPDisposition, setShadowMCPDisposition] =
+    useState<ShadowMCPDisposition>(
+      () =>
+        (policy?.shadowMcpDisposition as ShadowMCPDisposition) ?? "block_all",
+    );
   const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
@@ -3554,10 +3566,16 @@ export function StandardPolicyEditor({
       return;
     }
 
-    const initialURLs =
-      policyID && originalHasShadowMCPBlockConfiguration
-        ? initialShadowMCPPolicyURLs(inventoryQuery.data, policyID)
-        : new Set<string>();
+    let initialURLs: ReadonlySet<string> = new Set<string>();
+    if (policyID && originalHasShadowMCPBlockConfiguration) {
+      // Both dispositions derive their URL set from per-URL grants surfaced
+      // on the inventory: bypass grants (allowed) for block_all policies,
+      // block grants (blocked) for allow_all policies.
+      initialURLs =
+        policy?.shadowMcpDisposition === "allow_all"
+          ? initialShadowMCPBlockedPolicyURLs(inventoryQuery.data, policyID)
+          : initialShadowMCPPolicyURLs(inventoryQuery.data, policyID);
+    }
     setSelectedShadowMCPURLs(new Set(initialURLs));
     setOriginalShadowMCPURLs(new Set(initialURLs));
     setInitializedInventoryForPolicy(editorIdentity);
@@ -3566,6 +3584,7 @@ export function StandardPolicyEditor({
     initializedInventoryForPolicy,
     inventoryQuery.data,
     originalHasShadowMCPBlockConfiguration,
+    policy,
     policyID,
     targetIsShadowMCPBlock,
   ]);
@@ -3714,9 +3733,18 @@ export function StandardPolicyEditor({
       selectedCategories,
       selectedURLs: selectedShadowMCPURLs,
       originalPolicy: policy,
+      disposition: shadowMCPDisposition,
     });
-    const setupFields =
-      shadowMcpAllowedUrls === undefined ? {} : { shadowMcpAllowedUrls };
+    const shadowMcpBlockedUrls = shadowMCPBlockedURLsForMutation({
+      action: resolvedAction,
+      selectedCategories,
+      selectedURLs: selectedShadowMCPURLs,
+      disposition: shadowMCPDisposition,
+    });
+    const setupFields = {
+      ...(shadowMcpAllowedUrls === undefined ? {} : { shadowMcpAllowedUrls }),
+      ...(shadowMcpBlockedUrls === undefined ? {} : { shadowMcpBlockedUrls }),
+    };
 
     if (policy) {
       updateMutation.mutate({
@@ -3771,6 +3799,11 @@ export function StandardPolicyEditor({
               ? { presidioScoreThreshold: presidioThreshold }
               : {}),
             ...setupFields,
+            // The disposition only exists on blocking shadow MCP policies and
+            // is immutable after create, so it is never sent on update.
+            ...(isBlockingShadowMCPPolicy(true, sources, resolvedAction)
+              ? { shadowMcpDisposition: shadowMCPDisposition }
+              : {}),
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3896,15 +3929,36 @@ export function StandardPolicyEditor({
             flagOnlySelected={flagOnlySelected}
             shadowMCPAllowedServers={
               targetIsShadowMCPBlock ? (
-                <ShadowMCPPolicyServerSelector
-                  servers={inventoryQuery.data ?? []}
-                  originalURLs={originalShadowMCPURLs ?? EMPTY_SHADOW_MCP_URLS}
-                  selectedURLs={selectedShadowMCPURLs}
-                  onSelectionChange={setSelectedShadowMCPURLs}
-                  isLoading={inventoryQuery.isPending}
-                  error={inventoryQuery.error}
-                  onRetry={() => void inventoryQuery.refetch()}
-                />
+                <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
+                  <ShadowMCPDispositionPicker
+                    value={shadowMCPDisposition}
+                    onChange={(next) => {
+                      if (next === shadowMCPDisposition) return;
+                      // The URL set's meaning flips with the disposition
+                      // (allowed vs blocked servers), so a stale selection
+                      // must not carry across.
+                      setShadowMCPDisposition(next);
+                      setSelectedShadowMCPURLs(new Set());
+                    }}
+                    readOnly={policy !== null}
+                  />
+                  <div className="lg:col-span-2">
+                    <ShadowMCPPolicyServerSelector
+                      servers={inventoryQuery.data ?? []}
+                      originalURLs={
+                        originalShadowMCPURLs ?? EMPTY_SHADOW_MCP_URLS
+                      }
+                      selectedURLs={selectedShadowMCPURLs}
+                      onSelectionChange={setSelectedShadowMCPURLs}
+                      isLoading={inventoryQuery.isPending}
+                      error={inventoryQuery.error}
+                      onRetry={() => void inventoryQuery.refetch()}
+                      mode={
+                        shadowMCPDisposition === "allow_all" ? "block" : "allow"
+                      }
+                    />
+                  </div>
+                </div>
               ) : undefined
             }
           />
