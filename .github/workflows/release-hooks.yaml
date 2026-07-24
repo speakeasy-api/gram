@@ -12,6 +12,11 @@ on:
     paths:
       - "hooks/**"
       - ".goreleaser.hooks.yaml"
+      # The binary links the root module's dependencies, so a bump there can
+      # change it without touching hooks/. The gate job below decides whether
+      # the bump reached the binary.
+      - "go.mod"
+      - "go.sum"
   workflow_dispatch:
     inputs:
       bump:
@@ -28,8 +33,73 @@ concurrency:
   group: release-hooks
 
 jobs:
+  gate:
+    # Most root dependency bumps never reach the binary: they land in packages
+    # only the server imports. Releasing on every one of them would spend a
+    # version, a signed build, and a pin pull request on an identical binary,
+    # so the closure decides.
+    name: Decide whether to release
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.decide.outputs.release }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: "go.mod"
+          # Reference: https://github.com/actions/setup-go/issues/495
+          cache: false
+      - name: Decide
+        id: decide
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" != "push" ]; then
+            echo "Manual dispatch; releasing."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A force-push or a first push leaves no usable before-sha.
+          base="${BEFORE}"
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="${GITHUB_SHA}^"
+          fi
+          changed=$(git diff --name-only "$base" "$GITHUB_SHA")
+
+          if printf '%s\n' "$changed" | grep -qE '^(hooks/|\.goreleaser\.hooks\.yaml$)'; then
+            echo "The hooks sources changed; releasing."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Only the module files changed. Intersecting the bumped module paths
+          # with the binary's own dependency closure also discards the non-module
+          # tokens the diff carries (require, go, the block parens).
+          go list -deps -f '{{if .Module}}{{.Module.Path}}{{end}}' ./hooks/... | sort -u > "${RUNNER_TEMP}/linked-modules.txt"
+          git diff "$base" "$GITHUB_SHA" -- go.mod \
+            | sed -n 's/^[+-]\([^+-].*\)$/\1/p' \
+            | awk '{print $1}' | sort -u > "${RUNNER_TEMP}/bumped-modules.txt"
+          bumped=$(comm -12 "${RUNNER_TEMP}/bumped-modules.txt" "${RUNNER_TEMP}/linked-modules.txt")
+
+          if [ -z "$bumped" ]; then
+            echo "No bumped module is linked into the hooks binary; skipping the release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Linked modules bumped:"
+          printf '%s\n' "$bumped"
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
   release:
     name: Release Speakeasy Hooks
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write # to push tags
