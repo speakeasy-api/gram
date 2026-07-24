@@ -13,7 +13,7 @@ export type ProxyRegisteredClient = {
 // the redirect_uris it registers to the callback that flow actually uses, so
 // IdPs that strictly allowlist redirect URIs only need the one URI the flow
 // redirects through.
-export type ProxyRegisterFlow = "remote_session" | "oauth_proxy";
+type ProxyRegisterFlow = "remote_session" | "oauth_proxy";
 
 export type ProxyRegisterUpstreamClientInput = {
   registrationEndpoint: string;
