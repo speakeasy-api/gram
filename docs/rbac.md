@@ -545,7 +545,7 @@ Handlers do not query grants directly. Their job is to describe the access they 
 
 ### When RBAC is enforced
 
-`authz.Engine.ShouldEnforce` decides whether checks should actually be applied. RBAC is enforced for authenticated enterprise requests as long as the request is not using an API key. The request also needs a session, except for assistant-token requests, which are allowed through this path. If an enterprise organization does not yet have the RBAC feature enabled, the engine atomically seeds its built-in Admin and Member grants and enables RBAC before evaluating the request. If that bootstrap fails, authorization fails closed.
+`authz.Engine.ShouldEnforce` decides whether checks should actually be applied. RBAC is enforced for authenticated enterprise requests as long as the request is not using an API key. The request also needs a session, except for assistant-token requests, which are allowed through this path. If an enterprise organization does not yet have the RBAC feature enabled, the engine atomically seeds its built-in Admin and Member grants and enables RBAC before evaluating the request. If that bootstrap fails, authorization fails closed. RBAC cannot be disabled for enterprise organizations.
 
 Scope overrides are a special case. In local development, authenticated users can use override headers. In production, only platform admins can. When valid overrides are present, RBAC is enforced so the overridden grant set is what the request experiences.
 

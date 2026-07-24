@@ -43,11 +43,9 @@ import (
 var errConnectedUserNotFound = errors.New("connected user not found")
 
 // ProductFeatures is the subset of *productfeatures.Client the access service
-// needs: enabling RBAC for an org (seed grants + flag, atomically) and keeping
-// the feature cache consistent after a direct DB write.
+// needs to enable RBAC for an organization atomically.
 type ProductFeatures interface {
 	EnableRBAC(ctx context.Context, organizationID string) error
-	UpdateFeatureCache(ctx context.Context, organizationID string, feature productfeatures.Feature, enabled bool)
 }
 
 type Service struct {
@@ -618,25 +616,12 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 }
 
 func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) error {
-	ac, err := s.requirePlatformAdmin(ctx)
+	_, err := s.requirePlatformAdmin(ctx)
 	if err != nil {
 		return err
 	}
-	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
 
-	if _, err := pfRepo.New(s.db).DeleteFeature(ctx, pfRepo.DeleteFeatureParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureRBAC),
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			// Already disabled — no active feature row to soft-delete.
-			return nil
-		}
-		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").LogError(ctx, logger)
-	}
-
-	s.productFeatures.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, false)
-	return nil
+	return oops.E(oops.CodeBadRequest, nil, "RBAC cannot be disabled")
 }
 
 // requirePlatformAdmin returns the auth context and an error if the caller is not

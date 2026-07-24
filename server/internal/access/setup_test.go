@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -40,9 +39,6 @@ var (
 type noopProductFeatures struct{}
 
 func (noopProductFeatures) EnableRBAC(context.Context, string) error { return nil }
-
-func (noopProductFeatures) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {
-}
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
