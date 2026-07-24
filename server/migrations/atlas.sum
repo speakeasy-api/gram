@@ -1,4 +1,4 @@
-h1:AExqIDCuL7m2RyWXPBCE46uz9J7CCpIoZP5MFojP7z0=
+h1:1bcUsV6Da0lN7Ol/OsXHVXSly2r0Wwo6p4XrkLmKIk4=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -296,5 +296,5 @@ h1:AExqIDCuL7m2RyWXPBCE46uz9J7CCpIoZP5MFojP7z0=
 20260723190651_chat-analysis-pipeline.sql h1:5ICmWs0+H88nBTjTh5CkgWE2gYcSe1oGbEiakhaToCI=
 20260724165656_spend-rules.sql h1:JolKgUjLUpWw1E4/lG/u8OfG178/wMP2TMPo46HOxdY=
 20260724173649_directory_users_lower_email_idx.sql h1:OphnMDp0OG2qCzr2mVYapCGGExOOfL8/lW3H0NIrjI8=
-20260724233307_device-integration-tables.sql h1:/zDIL2CuAWKjdm1w9s1Ro80XbV8OtFWZUUVF5IGZWLY=
-20260724233317_device-agent-syncs-lower-email-idx.sql h1:ZYFdgZ7Yp+RI7wlzuSMOIPWalKtNOU8iFy5d1OZybCU=
+20260725034642_device-integration-tables.sql h1:o+19nQHCY2mI9LGvQKUk3PJKMumlcgdYFbwZGP9hjS8=
+20260725034652_device-agent-syncs-lower-email-idx.sql h1:urAc/QJ/+FEZ9Ns78eOecXI7QragHngctbWFZhtTKaw=

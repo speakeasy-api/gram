@@ -560,6 +560,7 @@ type DeviceIntegrationSync struct {
 	LastPollFailedAt            pgtype.Timestamptz
 	LastPollError               pgtype.Text
 	ConsecutiveFailures         int32
+	ConsecutiveAuthRejections   int32
 	LastPushDigest              pgtype.Text
 	AutoPausedAt                pgtype.Timestamptz
 	CreatedAt                   pgtype.Timestamptz

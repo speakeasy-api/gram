@@ -13,6 +13,8 @@ CREATE TABLE "device_integration_configs" (
   PRIMARY KEY ("id"),
   CONSTRAINT "device_integration_configs_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
+-- Create index "device_integration_configs_organization_id_id_key" to table: "device_integration_configs"
+CREATE UNIQUE INDEX "device_integration_configs_organization_id_id_key" ON "device_integration_configs" ("organization_id", "id");
 -- Create index "device_integration_configs_organization_id_idx" to table: "device_integration_configs"
 CREATE INDEX "device_integration_configs_organization_id_idx" ON "device_integration_configs" ("organization_id");
 -- Create index "device_integration_configs_organization_id_provider_key" to table: "device_integration_configs"
@@ -40,6 +42,7 @@ CREATE TABLE "device_integration_syncs" (
   "last_poll_failed_at" timestamptz NULL,
   "last_poll_error" text NULL,
   "consecutive_failures" integer NOT NULL DEFAULT 0,
+  "consecutive_auth_rejections" integer NOT NULL DEFAULT 0,
   "last_push_digest" text NULL,
   "auto_paused_at" timestamptz NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -71,7 +74,7 @@ CREATE TABLE "mdm_devices" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "mdm_devices_device_integration_config_id_fkey" FOREIGN KEY ("device_integration_config_id") REFERENCES "device_integration_configs" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "mdm_devices_organization_id_device_integration_config_id_fkey" FOREIGN KEY ("organization_id", "device_integration_config_id") REFERENCES "device_integration_configs" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "mdm_devices_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "mdm_devices_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE SET NULL
 );

@@ -4875,6 +4875,13 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS device_integration_configs_organization_id_idx
 ON device_integration_configs (organization_id);
 
+-- Non-partial (organization_id, id) key serving as the composite FK target
+-- that tenant-pins child rows (mdm_devices) to their config's organization —
+-- same pattern as spend_rules. Declared as a unique index rather than a
+-- table constraint so Atlas creates it concurrently.
+CREATE UNIQUE INDEX IF NOT EXISTS device_integration_configs_organization_id_id_key
+ON device_integration_configs (organization_id, id);
+
 -- Device integration schedules: user-owned intent, one row per (config,
 -- schedule). Declares which of the provider's sync pipelines run for this
 -- integration and whether the user has paused one. Deliberately separate
@@ -4917,15 +4924,21 @@ CREATE TABLE IF NOT EXISTS device_integration_syncs (
 
   device_integration_schedule_id uuid NOT NULL,
 
-  -- Completion time of the last fully completed snapshot. Inventory pulls
-  -- use this as the mark-missing cutoff; it advances only when a snapshot
-  -- completes, never on a partial pull.
+  -- Start time (database clock) of the last fully completed inventory
+  -- snapshot; advances only when a snapshot completes, never on a partial
+  -- pull. Bookkeeping only today: the mark-missing cutoff is the running
+  -- sync's own start time, not this stored value.
   poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_poll_success_at timestamptz,
   last_poll_failed_at timestamptz,
   last_poll_error TEXT,
   consecutive_failures integer NOT NULL DEFAULT 0,
+  -- Consecutive credential-rejection (401/403-class) failures, tracked
+  -- separately from consecutive_failures so transient vendor errors cannot
+  -- contribute to the auto-pause threshold: only a pure streak of
+  -- credential rejections pauses a schedule.
+  consecutive_auth_rejections integer NOT NULL DEFAULT 0,
   -- Digest of the last successfully pushed evidence snapshot. Evidence sinks
   -- compare the current snapshot's digest against this and skip the push
   -- when coverage hasn't changed. NULL for inventory schedules and before
@@ -5003,17 +5016,21 @@ CREATE TABLE IF NOT EXISTS mdm_devices (
 
   first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  -- Set when the device was absent from the latest fully completed snapshot;
-  -- cleared when it reappears. Only ever written in the same transaction
-  -- that records a completed snapshot, never by a partial pull.
+  -- Set when the device was absent from the latest fully completed
+  -- snapshot — SETTING it happens only in the transaction that records the
+  -- completed snapshot, never by a partial pull. CLEARING it happens on
+  -- reappearance, by the per-page inventory upsert.
   missing_since timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT mdm_devices_pkey PRIMARY KEY (id),
-  CONSTRAINT mdm_devices_device_integration_config_id_fkey FOREIGN KEY (device_integration_config_id) REFERENCES device_integration_configs (id) ON DELETE CASCADE,
   CONSTRAINT mdm_devices_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite FK tenant-pins each device to its config's organization: the
+  -- denormalized organization_id cannot disagree with the config it hangs
+  -- off (two independent FKs would allow that).
+  CONSTRAINT mdm_devices_organization_id_device_integration_config_id_fkey FOREIGN KEY (organization_id, device_integration_config_id) REFERENCES device_integration_configs (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT mdm_devices_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 );
 
