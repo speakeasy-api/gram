@@ -78,6 +78,33 @@ function WorkUnitsMetricBadge({ children }: { children: React.ReactNode }) {
   );
 }
 
+function WorkAnalysisHeadlineMetric({
+  icon,
+  label,
+  value,
+  description,
+}: {
+  icon: IconName;
+  label: string;
+  value: string;
+  description: string;
+}): JSX.Element {
+  return (
+    <div className="border-border bg-muted/30 rounded-lg border p-4">
+      <dt className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
+        <Icon name={icon} className="size-3.5" />
+        {label}
+      </dt>
+      <dd className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
+        {value}
+      </dd>
+      <dd className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
+        {description}
+      </dd>
+    </div>
+  );
+}
+
 function WorkUnitsFlagBadges({ flags }: { flags: string[] }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -185,7 +212,30 @@ export function WorkUnitsHeaderMetrics({
               session, task by task.
             </Dialog.Description>
           </Dialog.Header>
-          <div className="flex flex-wrap items-center gap-2">{badges}</div>
+          <dl className="grid gap-3 sm:grid-cols-3">
+            <WorkAnalysisHeadlineMetric
+              icon="hammer"
+              label="Work delivered"
+              value={formatWorkUnits(chat.workUnits)}
+              description="Estimated meaningful work completed, based on task scope and completion."
+            />
+            {costPerUnit !== null && (
+              <WorkAnalysisHeadlineMetric
+                icon="circle-dollar-sign"
+                label="Cost efficiency"
+                value={formatUsageCost(costPerUnit)}
+                description="Cost spent per work unit delivered. Lower is more efficient."
+              />
+            )}
+            {tokensPerUnit !== null && (
+              <WorkAnalysisHeadlineMetric
+                icon="binary"
+                label="Token efficiency"
+                value={formatTokenCount(tokensPerUnit)}
+                description="Tokens used per work unit delivered. Lower is more efficient."
+              />
+            )}
+          </dl>
           {report?.flags && report.flags.length > 0 && (
             <WorkUnitsFlagBadges flags={report.flags} />
           )}
