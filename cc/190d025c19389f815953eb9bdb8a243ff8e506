@@ -1,0 +1,29 @@
+server/database/schema.sql
+  s_d6640a57723ec2::t_7938cd359f3f9b 1912,1914-1916
+server/migrations/atlas.sum
+  s_d6640a57723ec2::t_7938cd359f3f9b 1,297
+server/internal/database/models.go
+  s_d6640a57723ec2::t_7938cd359f3f9b 362,364-366
+server/migrations/20260724111202_chat-messages-prompt-attachments.sql
+  s_d6640a57723ec2::t_7938cd359f3f9b 1-2
+server/internal/chat/repo/models.go
+  s_d6640a57723ec2::t_7938cd359f3f9b 23,25-27
+server/internal/chat/repo/queries.sql.go
+  s_d6640a57723ec2::t_153baca83db812 960,985,987-989,1213,1245,1247-1249,1284,1349,1351-1353,1388,1458,1460-1462,1497,1532,1534-1536,2110,2142,2144-2146,2183,2207,2234,2236-2238,2299,2301-2303,2343,2360,2389,2391-2393,2457,2459-2461
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "cc190d025c19389f815953eb9bdb8a243ff8e506",
+  "prompts": {},
+  "sessions": {
+    "s_d6640a57723ec2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "810056d0-e1a2-422d-a2f9-5b0394666020",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    }
+  }
+}
