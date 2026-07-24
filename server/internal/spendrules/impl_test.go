@@ -323,8 +323,15 @@ func TestArchiveSpendRule(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, archived.SupersededBy.Valid)
 
-	// Re-archiving reports not found.
-	err = ti.service.ArchiveSpendRule(ctx, &gen.ArchiveSpendRulePayload{ID: created.ID})
+	// Archive is delete-like and retry-safe: re-archiving an already-archived
+	// rule succeeds without recording a second audit event.
+	require.NoError(t, ti.service.ArchiveSpendRule(ctx, &gen.ArchiveSpendRulePayload{ID: created.ID}))
+	afterReArchive, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSpendRuleArchive)
+	require.NoError(t, err)
+	require.Equal(t, after, afterReArchive)
+
+	// A genuinely unknown rule still reports not found.
+	err = ti.service.ArchiveSpendRule(ctx, &gen.ArchiveSpendRulePayload{ID: uuid.NewString()})
 	require.Error(t, err)
 }
 

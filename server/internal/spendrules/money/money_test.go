@@ -27,3 +27,21 @@ func TestFromUSDRejectsInvalidAmounts(t *testing.T) {
 	_, err = money.FromUSD(math.Inf(1))
 	require.Error(t, err)
 }
+
+func TestFromUSDRejectsCentOverflow(t *testing.T) {
+	t.Parallel()
+
+	// float64(math.MaxInt64) rounds up past MaxInt64, so amounts at the
+	// boundary must be rejected or the cents conversion would wrap negative.
+	maxUSD := float64(math.MaxInt64) / 100
+
+	_, err := money.FromUSD(maxUSD)
+	require.Error(t, err)
+
+	_, err = money.FromUSD(-maxUSD)
+	require.Error(t, err)
+
+	cents, err := money.FromUSD(math.Nextafter(maxUSD, 0))
+	require.NoError(t, err)
+	require.Positive(t, cents)
+}

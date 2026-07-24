@@ -458,6 +458,16 @@ func (s *Service) ArchiveSpendRule(ctx context.Context, payload *gen.ArchiveSpen
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
+		// Archive is delete-like and must be retry-safe: a retry after a
+		// timed-out request finds the row already archived. Treat that as
+		// success (without a second audit event) and only 404 when the rule
+		// truly never existed.
+		if _, lookupErr := repo.New(dbtx).GetArchivedSpendRule(ctx, repo.GetArchivedSpendRuleParams{
+			ID:             id,
+			OrganizationID: authCtx.ActiveOrganizationID,
+		}); lookupErr == nil {
+			return nil
+		}
 		return oops.E(oops.CodeNotFound, err, "spend rule not found")
 	}
 	if err != nil {

@@ -19,7 +19,7 @@ import { useSpendRulesOverview } from "@gram/client/react-query/spendRulesOvervi
 import { useSpendRulesUpdateRuleMutation } from "@gram/client/react-query/spendRulesUpdateRule.js";
 import { Table, type Column } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Inbox, Plus, SearchX, Wallet } from "lucide-react";
+import { Inbox, Plus, SearchX, TriangleAlert, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
 import { RuleDetailSheet } from "./RuleDetailSheet";
@@ -60,7 +60,12 @@ export function BudgetsContent(): JSX.Element {
   const [viewing, setViewing] = useState<SpendRule | null>(null);
   const [editing, setEditing] = useState<SpendRule | null>(null);
 
-  const { data: rulesData, isLoading: rulesLoading } = useSpendRulesListRules();
+  const {
+    data: rulesData,
+    isLoading: rulesLoading,
+    isError: rulesError,
+    refetch: refetchRules,
+  } = useSpendRulesListRules();
   const { data: overview } = useSpendRulesOverview();
   const rules = useMemo(() => rulesData?.rules ?? [], [rulesData]);
   const usageMap = useMemo(() => usageByRuleId(overview?.rules), [overview]);
@@ -161,6 +166,8 @@ export function BudgetsContent(): JSX.Element {
                 <RulesTab
                   rules={rules}
                   loading={rulesLoading}
+                  error={rulesError}
+                  onRetry={() => void refetchRules()}
                   usageMap={usageMap}
                   onNew={() => setCreateOpen(true)}
                   onView={setViewing}
@@ -276,6 +283,8 @@ function StatusSummaryCards({
 function RulesTab({
   rules,
   loading,
+  error,
+  onRetry,
   usageMap,
   onNew,
   onView,
@@ -283,6 +292,8 @@ function RulesTab({
 }: {
   rules: SpendRule[];
   loading: boolean;
+  error: boolean;
+  onRetry: () => void;
   usageMap: Map<string, SpendRuleUsage>;
   onNew: () => void;
   onView: (rule: SpendRule) => void;
@@ -313,6 +324,23 @@ function RulesTab({
 
   if (loading) {
     return <SkeletonTable />;
+  }
+
+  // A failed query has no rules to show — but that's an outage, not an empty
+  // account, so never present it as the "create your first rule" card.
+  if (error) {
+    return (
+      <TabEmptyState
+        icon={TriangleAlert}
+        title="Couldn't load budget rules"
+        description="Something went wrong while loading your budget rules. Retry, or refresh the page if the problem persists."
+        action={
+          <Button variant="outline" onClick={onRetry}>
+            Retry
+          </Button>
+        }
+      />
+    );
   }
 
   if (rules.length === 0) {
@@ -496,11 +524,12 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
   // instead of replacing it.
   const [loaded, setLoaded] = useState<SpendRuleEvent[]>([]);
 
-  const { data, isLoading, isFetching } = useSpendRulesListEvents({
-    eventType: filter === "all" ? undefined : filter,
-    cursor,
-    limit: EVENTS_PAGE_LIMIT,
-  });
+  const { data, isLoading, isFetching, isError, refetch } =
+    useSpendRulesListEvents({
+      eventType: filter === "all" ? undefined : filter,
+      cursor,
+      limit: EVENTS_PAGE_LIMIT,
+    });
 
   // Changing the filter restarts pagination from the first page.
   useEffect(() => {
@@ -576,6 +605,23 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
 
   if (isLoading) {
     return <SkeletonTable />;
+  }
+
+  // A failed fetch with nothing accumulated is an outage, not an empty
+  // history — offer a retry instead of the "no events" card.
+  if (isError && events.length === 0) {
+    return (
+      <TabEmptyState
+        icon={TriangleAlert}
+        title="Couldn't load budget events"
+        description="Something went wrong while loading the event history. Retry, or refresh the page if the problem persists."
+        action={
+          <Button variant="outline" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        }
+      />
+    );
   }
 
   // A truly empty history (the "All" filter) gets the full empty-state card on

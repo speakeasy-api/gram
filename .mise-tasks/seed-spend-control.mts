@@ -330,9 +330,12 @@ async function main(): Promise<void> {
   }
   const info = (await infoResponse.json()) as {
     active_organization_id?: string;
+    user_id?: string;
   };
   const orgId = info.active_organization_id;
   if (!orgId) throw new Error("No active organization on session");
+  const sessionUserId = info.user_id;
+  if (!sessionUserId) throw new Error("No user id on session");
   log.info(`Active org: ${orgId}`);
 
   /* ---------------------------- Postgres ---------------------------- */
@@ -381,10 +384,12 @@ async function main(): Promise<void> {
     `INSERT INTO directory_groups (organization_id, workos_directory_group_id, name, workos_created_at, workos_updated_at) VALUES\n${groupValues}\nON CONFLICT (workos_directory_group_id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL, workos_deleted_at = NULL;`,
   );
 
-  // Real (non-seeded) org members — typically just you. They get the same
-  // directory treatment so rules can target them.
+  // The logged-in dev account — and only that account — gets the same
+  // directory treatment so rules can target you. Other real org members are
+  // deliberately left alone: the seed must never rewrite their directory
+  // attributes, add them to seeded groups, or inject usage for them.
   const selfRows = await psql(
-    `SELECT u.id, COALESCE(NULLIF(du.email, ''), u.email), COALESCE(u.workos_id, ''), COALESCE(du.workos_directory_user_id, '') FROM organization_user_relationships our JOIN users u ON u.id = our.user_id LEFT JOIN LATERAL (SELECT d.email, d.workos_directory_user_id FROM directory_users d WHERE d.organization_id = our.organization_id AND d.user_id = u.id AND d.deleted IS FALSE AND d.workos_deleted IS FALSE ORDER BY d.created_at DESC LIMIT 1) du ON TRUE WHERE our.organization_id = ${sqlString(orgId)} AND our.deleted IS FALSE AND u.id NOT LIKE 'usr_spend_%' AND u.id NOT LIKE 'usr_seed_%';`,
+    `SELECT u.id, COALESCE(NULLIF(du.email, ''), u.email), COALESCE(u.workos_id, ''), COALESCE(du.workos_directory_user_id, '') FROM organization_user_relationships our JOIN users u ON u.id = our.user_id LEFT JOIN LATERAL (SELECT d.email, d.workos_directory_user_id FROM directory_users d WHERE d.organization_id = our.organization_id AND d.user_id = u.id AND d.deleted IS FALSE AND d.workos_deleted IS FALSE ORDER BY d.created_at DESC LIMIT 1) du ON TRUE WHERE our.organization_id = ${sqlString(orgId)} AND our.deleted IS FALSE AND u.id = ${sqlString(sessionUserId)} AND u.id NOT LIKE 'usr_spend_%' AND u.id NOT LIKE 'usr_seed_%';`,
   );
   const selfMembers = selfRows
     .split("\n")
@@ -444,13 +449,20 @@ async function main(): Promise<void> {
   );
 
   // Role assignments resolve global role ids by slug, mirroring how WorkOS
-  // sync writes them ('role:global:<uuid>').
-  const roleValues = members
-    .map(
+  // sync writes them ('role:global:<uuid>'). The logged-in account is granted
+  // admin too, so the advertised '"admin" in roles' demo rule selects it —
+  // actor resolution matches on user_id, so the workos_user_id fallback (used
+  // when the dev user has no workos id) is only there to satisfy NOT NULL.
+  const roleValues = [
+    ...members.map(
       (m) =>
         `(${sqlString(m.workosId)}, ${sqlString(m.userId)}, ${sqlString(m.role)})`,
-    )
-    .join(",\n");
+    ),
+    ...selfMembers.map(
+      (m) =>
+        `(${sqlString(m.workosId || `spend_workos_self_${hash(orgId + m.userId)}`)}, ${sqlString(m.userId)}, 'admin')`,
+    ),
+  ].join(",\n");
   await psql(
     `INSERT INTO organization_role_assignments (organization_id, workos_user_id, user_id, role_urn, workos_updated_at)\nSELECT ${sqlString(orgId)}, assignment.workos_user_id, assignment.user_id, 'role:global:' || gr.id::text, now()\nFROM (VALUES\n${roleValues}\n) AS assignment (workos_user_id, user_id, role_slug)\nJOIN global_roles gr ON gr.workos_slug = assignment.role_slug AND gr.deleted IS FALSE\nON CONFLICT DO NOTHING;`,
   );

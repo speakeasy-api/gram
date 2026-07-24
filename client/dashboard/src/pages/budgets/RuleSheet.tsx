@@ -156,7 +156,12 @@ function useRulePreview(
   const { mutate } = previewMutation;
 
   useEffect(() => {
-    if (draft.limitUsd <= 0 || draft.target.value.trim() === "") return;
+    if (draft.limitUsd <= 0 || draft.target.value.trim() === "") {
+      // No preview request will be issued for an invalid draft — drop any
+      // previous result so a stale usage/breach preview isn't shown for it.
+      setPreview(null);
+      return;
+    }
     const timer = setTimeout(() => {
       mutate(
         {

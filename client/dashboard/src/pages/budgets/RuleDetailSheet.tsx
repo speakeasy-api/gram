@@ -307,6 +307,7 @@ function PeopleSection({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search people"
+            aria-label="Search people"
             className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-md border bg-transparent pr-3 pl-8 text-xs outline-none focus-visible:ring-[3px]"
           />
         </div>
