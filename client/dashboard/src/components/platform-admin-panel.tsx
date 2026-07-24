@@ -175,9 +175,7 @@ function RBACManagementSection(): ReactElement {
       <div className="flex items-center justify-between gap-2">
         <StatusPill enabled={status.rbacEnabled} />
         {!status.rbacEnabled && !confirmEnable ? (
-          <ActionButton
-            onClick={() => setConfirmEnable(true)}
-          >
+          <ActionButton onClick={() => setConfirmEnable(true)}>
             Enable RBAC
           </ActionButton>
         ) : null}
