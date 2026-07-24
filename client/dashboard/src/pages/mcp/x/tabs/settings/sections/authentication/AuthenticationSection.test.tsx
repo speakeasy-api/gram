@@ -25,6 +25,10 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
   }),
 }));
 
+vi.mock("./authTarget", () => ({
+  useMcpServerAuthTarget: vi.fn(),
+}));
+
 vi.mock("./useAllRemoteSessionClients", () => ({
   useAllRemoteSessionClients: (...args: unknown[]) =>
     useAllRemoteSessionClients(...args),
