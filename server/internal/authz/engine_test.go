@@ -70,7 +70,7 @@ func TestEngineRequire_enablesRBACBeforeAuthorizing(t *testing.T) {
 		EngineOpts{
 			DevMode: false,
 			RBACEnabler: rbacEnablerFunc(func(_ context.Context, organizationID string) error {
-				require.Equal(t, "org_test", organizationID)
+				require.Equal(t, "org_123", organizationID)
 				enabled = true
 				enableCalls++
 				return nil
@@ -983,14 +983,19 @@ func TestEngineEvaluate_falseWhenUnsatisfied(t *testing.T) {
 	require.False(t, allowed)
 }
 
-func TestEngineEvaluate_trueWhenRBACDisabled(t *testing.T) {
+func TestEngineEvaluate_trueForNonEnterpriseRequest(t *testing.T) {
 	t.Parallel()
 
 	chConn, err := newClickhouseClient(t)
 	require.NoError(t, err)
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := enterpriseSessionCtx(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.AccountType = "pro"
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	allowed, err := engine.Evaluate(enterpriseSessionCtx(t), ChatReadCheck("proj_123"))
+	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
 	require.NoError(t, err)
 	require.True(t, allowed)
 }

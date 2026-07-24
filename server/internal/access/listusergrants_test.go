@@ -195,7 +195,7 @@ func TestService_ListGrants_NonEnterpriseReturnsFullAccess(t *testing.T) {
 	}
 }
 
-func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
+func TestService_ListGrants_RBACDisabledFailsClosedWithoutEnabler(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -210,19 +210,10 @@ func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
 	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, ti.roles)
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
-	require.NoError(t, err)
-	require.Len(t, result.Grants, len(expectedFullAccessScopes))
-
-	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
-	for _, grant := range result.Grants {
-		byScope[grant.Scope] = grant
-	}
-
-	for _, scope := range expectedFullAccessScopes {
-		grant, ok := byScope[scope]
-		require.True(t, ok)
-		require.Nil(t, grant.Selectors)
-	}
+	require.Nil(t, result)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 }
 
 func TestService_ListGrants_EnterpriseWithoutSessionReturnsFullAccess(t *testing.T) {
