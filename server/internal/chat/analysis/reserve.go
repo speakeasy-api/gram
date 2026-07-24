@@ -47,13 +47,6 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, judges *Judges, projectID uu
 		return nil, fromHead, fmt.Errorf("reserve chat analysis evaluations: batch size %d exceeds the %d the claim lease covers", batchSize, MaxReservedClaimBatch)
 	}
 
-	now := time.Now().UTC()
-	reservedOn := pgtype.Date{
-		Time:             time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC),
-		InfinityModifier: pgtype.Finite,
-		Valid:            true,
-	}
-
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return nil, fromHead, fmt.Errorf("begin chat analysis reservation: %w", err)
@@ -63,6 +56,16 @@ func Reserve(ctx context.Context, db *pgxpool.Pool, judges *Judges, projectID uu
 	queries := repo.New(tx)
 	if err := queries.LockProjectOrganizationChatAnalysisBudget(ctx, projectID); err != nil {
 		return nil, fromHead, fmt.Errorf("lock chat analysis budget: %w", err)
+	}
+
+	// The day is derived only after the advisory lock is held: a lock wait that
+	// crosses UTC midnight would otherwise stamp and count the batch against
+	// yesterday's spend.
+	now := time.Now().UTC()
+	reservedOn := pgtype.Date{
+		Time:             time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC),
+		InfinityModifier: pgtype.Finite,
+		Valid:            true,
 	}
 
 	settings, err := settingsForProject(ctx, queries, judges, projectID)

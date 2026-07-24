@@ -4,6 +4,7 @@
 
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
+import { AdminChatAnalysis } from "./adminchatanalysis.js";
 import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
 import { AiIntegrations } from "./aiintegrations.js";
@@ -67,6 +68,11 @@ export class Gram extends ClientSDK {
   private _access?: Access;
   get access(): Access {
     return (this._access ??= new Access(this._options));
+  }
+
+  private _adminChatAnalysis?: AdminChatAnalysis;
+  get adminChatAnalysis(): AdminChatAnalysis {
+    return (this._adminChatAnalysis ??= new AdminChatAnalysis(this._options));
   }
 
   private _adminRemoteSessions?: AdminRemoteSessions;

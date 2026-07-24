@@ -51,6 +51,17 @@ type ListChatsResponseBody struct {
 	Total *int `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
 }
 
+// GetWorkUnitsTrendResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body.
+type GetWorkUnitsTrendResponseBody struct {
+	// Whether any work-units scores exist in the window. False for organizations
+	// without work-units analysis.
+	ScoresAvailable *bool `form:"scores_available,omitempty" json:"scores_available,omitempty" xml:"scores_available,omitempty"`
+	// One bucket per UTC day in the window, oldest first, zero-filled for days
+	// without scores.
+	Buckets []*WorkUnitsTrendBucketResponseBody `form:"buckets,omitempty" json:"buckets,omitempty" xml:"buckets,omitempty"`
+}
+
 // LoadChatResponseBody is the type of the "chat" service "loadChat" endpoint
 // HTTP response body.
 type LoadChatResponseBody struct {
@@ -85,6 +96,9 @@ type LoadChatResponseBody struct {
 	// messages are paginated, callers must use these (not the length of
 	// `messages`) to render filter-bar counts.
 	Totals *ChatTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
+	// Full work-units analysis verdict as JSON (per-task breakdown, rationales,
+	// and flags). Present only when `work_units` is present.
+	WorkUnitsReport *string `form:"work_units_report,omitempty" json:"work_units_report,omitempty" xml:"work_units_report,omitempty"`
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The title of the chat
@@ -120,6 +134,10 @@ type LoadChatResponseBody struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
+	// Work units of value delivered in this chat as judged by the work-units
+	// analysis. Absent unless the organization has work-units analysis enabled and
+	// this chat has been scored.
+	WorkUnits *float64 `form:"work_units,omitempty" json:"work_units,omitempty" xml:"work_units,omitempty"`
 	// Account type that produced the chat ('team', 'personal', or empty), resolved
 	// from the linked AI account.
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
@@ -324,6 +342,189 @@ type ListChatsUnexpectedResponseBody struct {
 // ListChatsGatewayErrorResponseBody is the type of the "chat" service
 // "listChats" endpoint HTTP response body for the "gateway_error" error.
 type ListChatsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkUnitsTrendUnauthorizedResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "unauthorized" error.
+type GetWorkUnitsTrendUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkUnitsTrendForbiddenResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "forbidden" error.
+type GetWorkUnitsTrendForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkUnitsTrendBadRequestResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "bad_request" error.
+type GetWorkUnitsTrendBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkUnitsTrendNotFoundResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "not_found" error.
+type GetWorkUnitsTrendNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkUnitsTrendConflictResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "conflict" error.
+type GetWorkUnitsTrendConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkUnitsTrendUnsupportedMediaResponseBody is the type of the "chat"
+// service "getWorkUnitsTrend" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetWorkUnitsTrendUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkUnitsTrendInvalidResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "invalid" error.
+type GetWorkUnitsTrendInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkUnitsTrendInvariantViolationResponseBody is the type of the "chat"
+// service "getWorkUnitsTrend" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetWorkUnitsTrendInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkUnitsTrendUnexpectedResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "unexpected" error.
+type GetWorkUnitsTrendUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetWorkUnitsTrendGatewayErrorResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetWorkUnitsTrendGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1642,12 +1843,37 @@ type ChatOverviewResponseBody struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
+	// Work units of value delivered in this chat as judged by the work-units
+	// analysis. Absent unless the organization has work-units analysis enabled and
+	// this chat has been scored.
+	WorkUnits *float64 `form:"work_units,omitempty" json:"work_units,omitempty" xml:"work_units,omitempty"`
 	// Account type that produced the chat ('team', 'personal', or empty), resolved
 	// from the linked AI account.
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 	// Email of the AI account that produced the chat, resolved from the linked AI
 	// account. May differ from the employee's work email (e.g. a personal account).
 	AccountEmail *string `form:"account_email,omitempty" json:"account_email,omitempty" xml:"account_email,omitempty"`
+}
+
+// WorkUnitsTrendBucketResponseBody is used to define fields on response body
+// types.
+type WorkUnitsTrendBucketResponseBody struct {
+	// Start of the UTC day this bucket covers.
+	Timestamp *string `form:"timestamp,omitempty" json:"timestamp,omitempty" xml:"timestamp,omitempty"`
+	// Number of chat sessions scored by the work-units analysis in this bucket.
+	ScoredSessions *int `form:"scored_sessions,omitempty" json:"scored_sessions,omitempty" xml:"scored_sessions,omitempty"`
+	// Total work units delivered across the bucket's scored sessions.
+	WorkUnits *float64 `form:"work_units,omitempty" json:"work_units,omitempty" xml:"work_units,omitempty"`
+	// Total cost in USD across the bucket's scored sessions.
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
+	// Total tokens across the bucket's scored sessions.
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Cost per unit of work. Absent when the bucket has no positive work or no
+	// cost telemetry.
+	CostPerUnit *float64 `form:"cost_per_unit,omitempty" json:"cost_per_unit,omitempty" xml:"cost_per_unit,omitempty"`
+	// Tokens per unit of work. Absent when the bucket has no positive work or no
+	// token telemetry.
+	TokensPerUnit *float64 `form:"tokens_per_unit,omitempty" json:"tokens_per_unit,omitempty" xml:"tokens_per_unit,omitempty"`
 }
 
 // ChatMessageResponseBody is used to define fields on response body types.
@@ -1976,6 +2202,174 @@ func NewListChatsGatewayError(body *ListChatsGatewayErrorResponseBody) *goa.Serv
 	return v
 }
 
+// NewGetWorkUnitsTrendWorkUnitsTrendResultOK builds a "chat" service
+// "getWorkUnitsTrend" endpoint result from a HTTP "OK" response.
+func NewGetWorkUnitsTrendWorkUnitsTrendResultOK(body *GetWorkUnitsTrendResponseBody) *chat.WorkUnitsTrendResult {
+	v := &chat.WorkUnitsTrendResult{
+		ScoresAvailable: *body.ScoresAvailable,
+	}
+	v.Buckets = make([]*chat.WorkUnitsTrendBucket, len(body.Buckets))
+	for i, val := range body.Buckets {
+		if val == nil {
+			v.Buckets[i] = nil
+			continue
+		}
+		v.Buckets[i] = unmarshalWorkUnitsTrendBucketResponseBodyToChatWorkUnitsTrendBucket(val)
+	}
+
+	return v
+}
+
+// NewGetWorkUnitsTrendUnauthorized builds a chat service getWorkUnitsTrend
+// endpoint unauthorized error.
+func NewGetWorkUnitsTrendUnauthorized(body *GetWorkUnitsTrendUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkUnitsTrendForbidden builds a chat service getWorkUnitsTrend
+// endpoint forbidden error.
+func NewGetWorkUnitsTrendForbidden(body *GetWorkUnitsTrendForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkUnitsTrendBadRequest builds a chat service getWorkUnitsTrend
+// endpoint bad_request error.
+func NewGetWorkUnitsTrendBadRequest(body *GetWorkUnitsTrendBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkUnitsTrendNotFound builds a chat service getWorkUnitsTrend
+// endpoint not_found error.
+func NewGetWorkUnitsTrendNotFound(body *GetWorkUnitsTrendNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkUnitsTrendConflict builds a chat service getWorkUnitsTrend
+// endpoint conflict error.
+func NewGetWorkUnitsTrendConflict(body *GetWorkUnitsTrendConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkUnitsTrendUnsupportedMedia builds a chat service getWorkUnitsTrend
+// endpoint unsupported_media error.
+func NewGetWorkUnitsTrendUnsupportedMedia(body *GetWorkUnitsTrendUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkUnitsTrendInvalid builds a chat service getWorkUnitsTrend endpoint
+// invalid error.
+func NewGetWorkUnitsTrendInvalid(body *GetWorkUnitsTrendInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkUnitsTrendInvariantViolation builds a chat service
+// getWorkUnitsTrend endpoint invariant_violation error.
+func NewGetWorkUnitsTrendInvariantViolation(body *GetWorkUnitsTrendInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkUnitsTrendUnexpected builds a chat service getWorkUnitsTrend
+// endpoint unexpected error.
+func NewGetWorkUnitsTrendUnexpected(body *GetWorkUnitsTrendUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetWorkUnitsTrendGatewayError builds a chat service getWorkUnitsTrend
+// endpoint gateway_error error.
+func NewGetWorkUnitsTrendGatewayError(body *GetWorkUnitsTrendGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewLoadChatChatOK builds a "chat" service "loadChat" endpoint result from a
 // HTTP "OK" response.
 func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
@@ -1984,6 +2378,7 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		MaxGeneration:        *body.MaxGeneration,
 		HasMoreBefore:        *body.HasMoreBefore,
 		HasMoreAfter:         *body.HasMoreAfter,
+		WorkUnitsReport:      body.WorkUnitsReport,
 		ID:                   *body.ID,
 		Title:                *body.Title,
 		UserID:               body.UserID,
@@ -2000,6 +2395,7 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		TotalCost:            body.TotalCost,
 		LastMessageTimestamp: *body.LastMessageTimestamp,
 		RiskFindingsCount:    body.RiskFindingsCount,
+		WorkUnits:            body.WorkUnits,
 		AccountType:          body.AccountType,
 		AccountEmail:         body.AccountEmail,
 	}
@@ -3146,6 +3542,25 @@ func ValidateListChatsResponseBody(body *ListChatsResponseBody) (err error) {
 	return
 }
 
+// ValidateGetWorkUnitsTrendResponseBody runs the validations defined on
+// GetWorkUnitsTrendResponseBody
+func ValidateGetWorkUnitsTrendResponseBody(body *GetWorkUnitsTrendResponseBody) (err error) {
+	if body.ScoresAvailable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scores_available", "body"))
+	}
+	if body.Buckets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("buckets", "body"))
+	}
+	for _, e := range body.Buckets {
+		if e != nil {
+			if err2 := ValidateWorkUnitsTrendBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateLoadChatResponseBody runs the validations defined on
 // LoadChatResponseBody
 func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
@@ -3483,6 +3898,246 @@ func ValidateListChatsUnexpectedResponseBody(body *ListChatsUnexpectedResponseBo
 // ValidateListChatsGatewayErrorResponseBody runs the validations defined on
 // listChats_gateway_error_response_body
 func ValidateListChatsGatewayErrorResponseBody(body *ListChatsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkUnitsTrendUnauthorizedResponseBody runs the validations
+// defined on getWorkUnitsTrend_unauthorized_response_body
+func ValidateGetWorkUnitsTrendUnauthorizedResponseBody(body *GetWorkUnitsTrendUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkUnitsTrendForbiddenResponseBody runs the validations defined
+// on getWorkUnitsTrend_forbidden_response_body
+func ValidateGetWorkUnitsTrendForbiddenResponseBody(body *GetWorkUnitsTrendForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkUnitsTrendBadRequestResponseBody runs the validations defined
+// on getWorkUnitsTrend_bad_request_response_body
+func ValidateGetWorkUnitsTrendBadRequestResponseBody(body *GetWorkUnitsTrendBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkUnitsTrendNotFoundResponseBody runs the validations defined
+// on getWorkUnitsTrend_not_found_response_body
+func ValidateGetWorkUnitsTrendNotFoundResponseBody(body *GetWorkUnitsTrendNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkUnitsTrendConflictResponseBody runs the validations defined
+// on getWorkUnitsTrend_conflict_response_body
+func ValidateGetWorkUnitsTrendConflictResponseBody(body *GetWorkUnitsTrendConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkUnitsTrendUnsupportedMediaResponseBody runs the validations
+// defined on getWorkUnitsTrend_unsupported_media_response_body
+func ValidateGetWorkUnitsTrendUnsupportedMediaResponseBody(body *GetWorkUnitsTrendUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkUnitsTrendInvalidResponseBody runs the validations defined on
+// getWorkUnitsTrend_invalid_response_body
+func ValidateGetWorkUnitsTrendInvalidResponseBody(body *GetWorkUnitsTrendInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkUnitsTrendInvariantViolationResponseBody runs the validations
+// defined on getWorkUnitsTrend_invariant_violation_response_body
+func ValidateGetWorkUnitsTrendInvariantViolationResponseBody(body *GetWorkUnitsTrendInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkUnitsTrendUnexpectedResponseBody runs the validations defined
+// on getWorkUnitsTrend_unexpected_response_body
+func ValidateGetWorkUnitsTrendUnexpectedResponseBody(body *GetWorkUnitsTrendUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetWorkUnitsTrendGatewayErrorResponseBody runs the validations
+// defined on getWorkUnitsTrend_gateway_error_response_body
+func ValidateGetWorkUnitsTrendGatewayErrorResponseBody(body *GetWorkUnitsTrendGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5213,6 +5868,30 @@ func ValidateChatOverviewResponseBody(body *ChatOverviewResponseBody) (err error
 	}
 	if body.LastMessageTimestamp != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_message_timestamp", *body.LastMessageTimestamp, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateWorkUnitsTrendBucketResponseBody runs the validations defined on
+// WorkUnitsTrendBucketResponseBody
+func ValidateWorkUnitsTrendBucketResponseBody(body *WorkUnitsTrendBucketResponseBody) (err error) {
+	if body.Timestamp == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timestamp", "body"))
+	}
+	if body.ScoredSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scored_sessions", "body"))
+	}
+	if body.WorkUnits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("work_units", "body"))
+	}
+	if body.TotalCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_cost", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.Timestamp != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.timestamp", *body.Timestamp, goa.FormatDateTime))
 	}
 	return
 }

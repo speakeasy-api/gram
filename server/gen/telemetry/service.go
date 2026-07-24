@@ -1164,6 +1164,15 @@ type QueryMeasures struct {
 	TotalToolCalls int64
 	// Number of distinct chat sessions
 	TotalChats int64
+	// Total work units delivered by scored sessions (work-units analysis)
+	TotalWorkUnits float64
+	// Total cost in USD of the sessions that carry a work-units score. Divide by
+	// total_work_units for cost per unit; using total_cost would overstate it
+	// whenever analysis coverage is partial.
+	ScoredCost float64
+	// Total tokens of the sessions that carry a work-units score. Divide by
+	// total_work_units for tokens per unit.
+	ScoredTokens int64
 }
 
 // QueryPayload is the payload type of the telemetry service query method.

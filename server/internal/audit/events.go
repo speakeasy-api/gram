@@ -19,6 +19,7 @@ const (
 	subjectTypeAwsIamCredential         subjectType = "aws_iam_credential"
 	subjectTypeAwsKmsKey                subjectType = "aws_kms_key"
 	subjectTypeBillingMetadata          subjectType = "billing_metadata"
+	subjectTypeChatAnalysisSettings     subjectType = "chat_analysis_settings"
 	subjectTypeChatSession              subjectType = "chat_session"
 	subjectTypeCustomDomain             subjectType = "custom_domain"
 	subjectTypeDeployment               subjectType = "deployment"

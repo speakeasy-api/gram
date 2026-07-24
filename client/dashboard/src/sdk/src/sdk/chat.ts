@@ -5,6 +5,7 @@
 import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
 import { chatDelete } from "../funcs/chatDelete.js";
 import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
+import { chatGetWorkUnitsTrend } from "../funcs/chatGetWorkUnitsTrend.js";
 import { chatList } from "../funcs/chatList.js";
 import { chatListSources } from "../funcs/chatListSources.js";
 import { chatLoad } from "../funcs/chatLoad.js";
@@ -17,6 +18,7 @@ import { CreditUsageResponseBody } from "../models/components/creditusagerespons
 import { GenerateTitleResponseBody } from "../models/components/generatetitleresponsebody.js";
 import { ListChatsResult } from "../models/components/listchatsresult.js";
 import { ListSourcesResult } from "../models/components/listsourcesresult.js";
+import { WorkUnitsTrendResult } from "../models/components/workunitstrendresult.js";
 import {
   CreditUsageRequest,
   CreditUsageSecurity,
@@ -29,6 +31,10 @@ import {
   GenerateTitleRequest,
   GenerateTitleSecurity,
 } from "../models/operations/generatetitle.js";
+import {
+  GetWorkUnitsTrendRequest,
+  GetWorkUnitsTrendSecurity,
+} from "../models/operations/getworkunitstrend.js";
 import {
   ListChatsRequest,
   ListChatsSecurity,
@@ -102,6 +108,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GenerateTitleResponseBody> {
     return unwrapAsync(chatGenerateTitle(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getWorkUnitsTrend chat
+   *
+   * @remarks
+   * Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.
+   */
+  async getWorkUnitsTrend(
+    request?: GetWorkUnitsTrendRequest | undefined,
+    security?: GetWorkUnitsTrendSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkUnitsTrendResult> {
+    return unwrapAsync(chatGetWorkUnitsTrend(
       this,
       request,
       security,
