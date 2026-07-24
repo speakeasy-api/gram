@@ -1,4 +1,4 @@
-h1:j/Ho3mzo8wgmAu7rq9FO20KFHEOcEXGDUHItJfT4DC4=
+h1:dbPQPyKeb3qJinn5wIIMKoEH4k23LcniaaY81UF/oMo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -294,3 +294,4 @@ h1:j/Ho3mzo8wgmAu7rq9FO20KFHEOcEXGDUHItJfT4DC4=
 20260722220532_skill-efficacy-reservation-recovery.sql h1:iSc/QDP1ySptfvBBw0GnH7DKOeMx3bCG6YlrmbbzO4o=
 20260723042033_skill-share-links.sql h1:IM3Yk3pO7qHVuxYd6ANArxKcvciakiqJ5NZVwkZSftc=
 20260723190651_chat-analysis-pipeline.sql h1:5ICmWs0+H88nBTjTh5CkgWE2gYcSe1oGbEiakhaToCI=
+20260724014043_chats-add-summary.sql h1:TDSuzxE36qMT4Sds37p5CdTkFkRhQdvNiLPwcvV9okc=
