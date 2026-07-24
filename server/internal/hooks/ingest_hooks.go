@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/agenthooks"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -518,15 +517,16 @@ func isReservedAssistantAdapter(adapter string) bool {
 // (block-page URL / access-request link already appended by the stage that
 // denied). Event types the adapter does not map never gate.
 //
-// Outcome mapping, switching on the winning decision's Kind:
+// Outcome mapping is the decision's Blocks() classification, not a kind
+// enumeration:
 //
-//   - Deny / BlockPrompt -> deny with the stage's reasons. An unacknowledged
-//     risk warn (challenge) denies here too, with the challenge framing and
-//     the ack link (see riskScanToolDecision).
-//   - Allow / AcceptPrompt / NoDecision -> allow. Acknowledged warns stay
-//     neutral in the stages, so evaluation falls through to the remaining
-//     checks exactly as the inline code fell through.
-//   - Anything else has no ingest mapping and allows with a log line.
+//   - a blocking decision (deny / block-prompt today, plus any blocking
+//     kind the library adds later) -> deny with the stage's reasons. An
+//     unacknowledged risk warn (challenge) denies here too, with the
+//     challenge framing and the ack link (see riskScanToolDecision);
+//   - everything else -> allow. Acknowledged warns stay neutral in the
+//     stages, so evaluation falls through to the remaining checks exactly
+//     as the inline code fell through.
 //
 // A pipeline error also allows: no registered stage returns an error — the
 // enforcement primitives swallow their failures internally (log + fail open)
@@ -552,20 +552,10 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 		)
 		return "", ""
 	}
-	switch decision.Kind() {
-	case agenthooks.DecisionDeny, agenthooks.DecisionBlockPrompt:
+	if decision.Blocks() {
 		return decision.Reason(), decision.SystemMessage()
-	case agenthooks.DecisionAllow, agenthooks.DecisionAcceptPrompt,
-		agenthooks.DecisionNoDecision:
-		return "", ""
-	default:
-		s.logger.WarnContext(ctx, "hook policy decision has no ingest mapping; allowing",
-			attr.SlogValueAny(decision.Kind().String()),
-			attr.SlogHookSource(strings.TrimSpace(payload.Source.Adapter)),
-			attr.SlogHookEvent(strings.TrimSpace(payload.Event.Type)),
-		)
-		return "", ""
 	}
+	return "", ""
 }
 
 // canonicalIsMCPToolRequest is the ingest path's MCP predicate: the payload
