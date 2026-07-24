@@ -1644,6 +1644,7 @@ type RiskPolicy struct {
 	ScopeExempt          pgtype.Text
 	Action               string
 	AudienceType         string
+	ShadowMcpDisposition pgtype.Text
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
