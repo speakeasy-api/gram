@@ -262,7 +262,7 @@ function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
           }
         />
       </Page.Header>
-      <Page.Body>
+      <Page.Body className="min-h-full">
         {isLoading || !policy ? (
           <div className="flex items-center justify-center py-24">
             <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
@@ -287,7 +287,7 @@ export function PolicyNew(): JSX.Element {
         <Page.Header>
           <Page.Header.Breadcrumbs />
         </Page.Header>
-        <Page.Body>
+        <Page.Body className="min-h-full">
           <StandardPolicyEditor policy={null} />
         </Page.Body>
       </Page>
@@ -299,7 +299,7 @@ export function PolicyNew(): JSX.Element {
         <Page.Header>
           <Page.Header.Breadcrumbs />
         </Page.Header>
-        <Page.Body>
+        <Page.Body className="min-h-full">
           <PromptPolicyEditor policy={null} />
         </Page.Body>
       </Page>
@@ -436,13 +436,18 @@ function StepperShell({
 }): JSX.Element {
   return (
     // Full width — Page.Body already centers content at max-w-7xl (the app's
-    // standard page width).
-    <Stack gap={6} className="w-full">
+    // standard page width). flex-1 (paired with min-h-full on Page.Body) lets
+    // the content area grow so the Back/Continue footer keeps a stable
+    // position instead of jumping as each step's content height changes.
+    <Stack gap={6} className="w-full flex-1">
       {header}
       <div className="bg-muted/20 rounded-lg border px-4 py-3">
         <HorizontalStepper steps={steps} current={current} onStep={onStep} />
       </div>
-      <Stack gap={6}>{children}</Stack>
+      <Stack gap={6} className="flex-1">
+        {children}
+      </Stack>
+      <StepNav step={current} count={steps.length} onStep={onStep} />
     </Stack>
   );
 }
@@ -941,8 +946,6 @@ function PromptPolicyEditor({
           }}
         />
       )}
-
-      <StepNav step={step} count={PROMPT_STEPS.length} onStep={handleStep} />
     </StepperShell>
   );
 }
@@ -3935,8 +3938,6 @@ export function StandardPolicyEditor({
             audiencePrincipalCount={audiencePrincipalUrns.size}
           />
         )}
-
-        <StepNav step={step} count={STANDARD_STEPS.length} onStep={setStep} />
       </StepperShell>
 
       {customizeCategory && (
