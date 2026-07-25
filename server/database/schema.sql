@@ -406,6 +406,10 @@ ON skill_edit_suggestions (project_id, id);
 CREATE INDEX IF NOT EXISTS skill_edit_suggestions_project_id_skill_id_created_at_idx
 ON skill_edit_suggestions (project_id, skill_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS skill_edit_suggestions_project_id_created_at_id_open_idx
+ON skill_edit_suggestions (project_id, created_at DESC, id DESC)
+WHERE status = 'open';
+
 -- Evidence linking each suggestion to the feedback rows it was generated from.
 CREATE TABLE IF NOT EXISTS skill_edit_suggestion_changes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
