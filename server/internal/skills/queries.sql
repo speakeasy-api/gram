@@ -4,6 +4,57 @@ SELECT pg_advisory_xact_lock(hashtextextended('skill:' || (@project_id::uuid)::t
 -- name: LockSkillObservationReconciliation :exec
 SELECT pg_advisory_xact_lock(hashtextextended('skill-observations:' || (@project_id::uuid)::text, 0));
 
+-- name: CreateSkillFeedback :one
+INSERT INTO skill_feedback (
+  project_id,
+  skill_id,
+  skill_version_id,
+  skill_name,
+  source,
+  outcome,
+  note,
+  session_id,
+  user_id,
+  user_email
+) VALUES (
+  @project_id,
+  sqlc.narg(skill_id)::uuid,
+  sqlc.narg(skill_version_id)::uuid,
+  @skill_name,
+  @source,
+  @outcome,
+  sqlc.narg(note)::text,
+  sqlc.narg(session_id)::text,
+  sqlc.narg(user_id)::text,
+  sqlc.narg(user_email)::text
+)
+RETURNING *;
+
+-- name: ListRecentSkillFeedback :many
+SELECT *
+FROM skill_feedback
+WHERE project_id = @project_id
+  AND skill_name = @skill_name
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
+
+-- name: ListUnreviewedSkillFeedback :many
+SELECT *
+FROM skill_feedback
+WHERE project_id = @project_id
+  AND skill_name = @skill_name
+  AND reviewed_at IS NULL
+ORDER BY created_at, id
+LIMIT @page_limit;
+
+-- name: MarkSkillFeedbackReviewed :execrows
+UPDATE skill_feedback
+SET reviewed_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND skill_name = @skill_name
+  AND id = ANY(@ids::uuid[])
+  AND reviewed_at IS NULL;
+
 -- name: GetSkillByNameForUpdate :one
 SELECT *
 FROM skills
