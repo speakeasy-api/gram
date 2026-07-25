@@ -2,6 +2,7 @@ package suggest
 
 import (
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -50,7 +51,7 @@ func (c Config) validate() error {
 	switch {
 	case c.MinUnreviewedFeedback <= 0:
 		return fmt.Errorf("minimum unreviewed feedback must be positive")
-	case c.RegressionAbsoluteDelta <= 0 || c.RegressionAbsoluteDelta > 1:
+	case math.IsNaN(c.RegressionAbsoluteDelta) || math.IsInf(c.RegressionAbsoluteDelta, 0) || c.RegressionAbsoluteDelta <= 0 || c.RegressionAbsoluteDelta > 1:
 		return fmt.Errorf("regression delta must be between zero and one")
 	case c.MinRegressionScoredSessions == 0:
 		return fmt.Errorf("minimum regression sessions must be positive")

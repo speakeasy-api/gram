@@ -22,7 +22,7 @@ import (
 const (
 	defaultSkillSuggestionStartDelay = 5 * time.Minute
 	skillSuggestionActivityTimeout   = 10 * time.Minute
-	skillSuggestionWorkflowTimeout   = 30 * time.Minute
+	skillSuggestionWorkflowTimeout   = 40 * time.Minute
 	skillSuggestionSweepInterval     = 24 * time.Hour
 	skillSuggestionSweepTimeout      = 2 * time.Hour
 	skillSuggestionProjectPageSize   = 100

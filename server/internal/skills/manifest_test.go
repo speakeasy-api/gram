@@ -851,6 +851,7 @@ func TestValidateSkillSuggestionRejectsInvalidManifest(t *testing.T) {
 
 	_, err = ValidateSkillSuggestion("---\nname: suggested-skill\n---\n", "suggested-skill", base.CanonicalSHA256)
 	require.ErrorContains(t, err, "not spec-valid")
+	require.ErrorContains(t, err, `field="description" code="required" message="description is required"`)
 }
 
 func TestValidateSkillSuggestionRejectsWrongName(t *testing.T) {

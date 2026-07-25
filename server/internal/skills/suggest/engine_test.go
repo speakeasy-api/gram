@@ -3,6 +3,7 @@ package suggest
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +35,16 @@ func TestDefaultConfig(t *testing.T) {
 	require.Equal(t, int32(50), config.MaxFeedback)
 	require.Equal(t, Model, config.Model)
 	require.Equal(t, 120*time.Second, config.Timeout)
+}
+
+func TestConfigRejectsInvalidRegressionDelta(t *testing.T) {
+	t.Parallel()
+
+	for _, delta := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), -0.1, 0, 1.1} {
+		config := DefaultConfig()
+		config.RegressionAbsoluteDelta = delta
+		require.ErrorContains(t, config.validate(), "regression delta must be between zero and one")
+	}
 }
 
 func TestFeedbackWakeCountsAllOutcomes(t *testing.T) {
@@ -112,6 +123,50 @@ func TestDismissedRegressionRequiresStricterScoredAdvance(t *testing.T) {
 	})
 	require.True(t, wake)
 	require.Equal(t, "regression", reason)
+}
+
+func TestDismissedWeeklyFloorRejectsSubthresholdFeedback(t *testing.T) {
+	t.Parallel()
+
+	config := DefaultConfig()
+	baseID := uuid.New()
+	latest := suggestionWatermark(baseID, string(skills.EditSuggestionStatusDismissed), 20, policyNow.Add(-config.SuggestionFloor))
+	for _, feedbackCount := range []int64{1, 4} {
+		wake, reason := shouldWake(config, wakeEvidence{
+			now: policyNow, lastSeenAt: policyNow, floorReferenceAt: policyNow, baseVersionID: baseID, latest: latest,
+			unreviewedCount: feedbackCount, newScoredSessions: 0, trend: trend{CurrentCount: 20},
+		})
+		require.False(t, wake, "feedback count %d", feedbackCount)
+		require.Equal(t, "no_new_evidence", reason, "feedback count %d", feedbackCount)
+	}
+}
+
+func TestDismissedFeedbackThresholdWakesImmediately(t *testing.T) {
+	t.Parallel()
+
+	config := DefaultConfig()
+	baseID := uuid.New()
+	wake, reason := shouldWake(config, wakeEvidence{
+		now: policyNow, lastSeenAt: policyNow, floorReferenceAt: policyNow, baseVersionID: baseID,
+		latest:          suggestionWatermark(baseID, string(skills.EditSuggestionStatusDismissed), 20, policyNow),
+		unreviewedCount: 5, newScoredSessions: 0, trend: trend{CurrentCount: 20},
+	})
+	require.True(t, wake)
+	require.Equal(t, "feedback", reason)
+}
+
+func TestDismissedWeeklyFloorWakesAfterScoredAdvance(t *testing.T) {
+	t.Parallel()
+
+	config := DefaultConfig()
+	baseID := uuid.New()
+	wake, reason := shouldWake(config, wakeEvidence{
+		now: policyNow, lastSeenAt: policyNow, floorReferenceAt: policyNow, baseVersionID: baseID,
+		latest:          suggestionWatermark(baseID, string(skills.EditSuggestionStatusDismissed), 20, policyNow.Add(-config.SuggestionFloor)),
+		unreviewedCount: 0, newScoredSessions: 10, trend: trend{CurrentCount: 30},
+	})
+	require.True(t, wake)
+	require.Equal(t, "weekly_floor", reason)
 }
 
 func TestWeeklyFloorRequiresElapsedTimeAndNewEvidence(t *testing.T) {
@@ -246,6 +301,39 @@ func TestBuildPromptRejectsOversizedBaseWithoutCallingModel(t *testing.T) {
 		Feedback: nil, Trend: trend{}, Transcripts: nil, ValidationError: "",
 	})
 	require.ErrorIs(t, err, ErrModelFailure)
+}
+
+func TestValidateGenerationRejectsEmptyRationale(t *testing.T) {
+	t.Parallel()
+
+	generation := Generation{Decision: DecisionDecline, ProposedSkillMD: "", Rationale: "  "}
+	err := validateGeneration(&generation)
+	require.ErrorIs(t, err, ErrModelFailure)
+	require.ErrorContains(t, err, "rationale is empty")
+}
+
+func TestValidateGenerationRejectsMissingEvidenceLabels(t *testing.T) {
+	t.Parallel()
+
+	for _, rationale := range []string{
+		"Transcripts: none. Trend: stable.",
+		"Feedback: mixed. Trend: stable.",
+		"Feedback: mixed. Transcripts: none.",
+		"Feedbackless evidence, transcripted sessions, and trending scores.",
+	} {
+		generation := Generation{Decision: DecisionPropose, ProposedSkillMD: "proposal", Rationale: rationale}
+		err := validateGeneration(&generation)
+		require.ErrorIs(t, err, ErrModelFailure, rationale)
+		require.ErrorContains(t, err, "evidence label", rationale)
+	}
+}
+
+func TestValidateGenerationAcceptsCaseInsensitiveEvidenceLabels(t *testing.T) {
+	t.Parallel()
+
+	generation := Generation{Decision: DecisionDecline, ProposedSkillMD: "ignored", Rationale: "feedback: mixed. TRANSCRIPTS: none. trend: stable."}
+	require.NoError(t, validateGeneration(&generation))
+	require.Empty(t, generation.ProposedSkillMD)
 }
 
 func suggestionWatermark(baseID uuid.UUID, status string, scored int64, updated time.Time) *repo.SkillEditSuggestion {

@@ -436,6 +436,9 @@ func NewTemporalWorker(
 		temporalWorker.RegisterActivity(activities.skillSuggestionAnalyzer.ListRecentlyActiveSuggestionSkills)
 		temporalWorker.RegisterActivity(activities.skillSuggestionAnalyzer.SignalSkillSuggestions)
 		skillEfficacyWorker.RegisterActivity(activities.skillSuggestionAnalyzer.AnalyzeSkillSuggestion)
+		temporalWorker.RegisterWorkflow(SkillSuggestionWorkflow)
+		temporalWorker.RegisterWorkflow(SkillSuggestionAnalysisWorkflow)
+		temporalWorker.RegisterWorkflow(SkillSuggestionSweepWorkflow)
 	}
 
 	// AI integration usage syncing runs on its own worker and task queue.
@@ -512,10 +515,6 @@ func NewTemporalWorker(
 	// Chat analysis workflows
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
-	temporalWorker.RegisterWorkflow(SkillSuggestionWorkflow)
-	temporalWorker.RegisterWorkflow(SkillSuggestionAnalysisWorkflow)
-	temporalWorker.RegisterWorkflow(SkillSuggestionSweepWorkflow)
-
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))

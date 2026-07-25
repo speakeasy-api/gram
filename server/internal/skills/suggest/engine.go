@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -30,6 +31,7 @@ type InsightsReader interface {
 
 type Engine struct {
 	config    Config
+	logger    *slog.Logger
 	db        *pgxpool.Pool
 	insights  InsightsReader
 	chats     efficacy.TranscriptSource
@@ -45,6 +47,7 @@ func NewEngine(config Config, logger *slog.Logger, db *pgxpool.Pool, insights In
 	}
 	return &Engine{
 		config:    config,
+		logger:    logger,
 		db:        db,
 		insights:  insights,
 		chats:     chats,
@@ -267,6 +270,7 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 			if generation.Decision == DecisionPropose {
 				validated, validationErr = skills.ValidateSkillSuggestion(generation.ProposedSkillMD, skill.Name, base.BaseCanonicalSha256)
 				if validationErr != nil {
+					e.logger.WarnContext(ctx, "discarding invalid corrected skill suggestion", attr.SlogError(validationErr), attr.SlogProjectID(in.ProjectID.String()), attr.SlogResourceID(in.SkillID.String()))
 					generation = Generation{Decision: DecisionDecline, ProposedSkillMD: "", Rationale: "The proposed edit remained invalid after one correction attempt."}
 				} else {
 					generation.ProposedSkillMD = validated.Content
@@ -344,7 +348,7 @@ func shouldWake(config Config, evidence wakeEvidence) (bool, string) {
 	if evidence.trend.Regression && scoredEvidence {
 		return true, "regression"
 	}
-	if !scoredEvidence && evidence.unreviewedCount == 0 {
+	if !scoredEvidence && (dismissed || evidence.unreviewedCount == 0) {
 		return false, "no_new_evidence"
 	}
 	if evidence.now.Sub(latest.UpdatedAt.Time) < config.SuggestionFloor {

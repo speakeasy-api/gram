@@ -207,16 +207,43 @@ func (g *modelGenerator) Generate(ctx context.Context, in GenerateInput) (Genera
 	if err := json.Unmarshal([]byte(raw), &generation); err != nil {
 		return Generation{}, fmt.Errorf("decode skill suggestion response: %w: %w", ErrModelFailure, err)
 	}
+	if err := validateGeneration(&generation); err != nil {
+		return Generation{}, err
+	}
+	return generation, nil
+}
+
+func validateGeneration(generation *Generation) error {
 	if generation.Decision != DecisionPropose && generation.Decision != DecisionDecline {
-		return Generation{}, fmt.Errorf("invalid skill suggestion decision %q: %w", generation.Decision, ErrModelFailure)
+		return fmt.Errorf("invalid skill suggestion decision %q: %w", generation.Decision, ErrModelFailure)
 	}
 	if generation.Decision == DecisionPropose && strings.TrimSpace(generation.ProposedSkillMD) == "" {
-		return Generation{}, fmt.Errorf("proposed skill suggestion is empty: %w", ErrModelFailure)
+		return fmt.Errorf("proposed skill suggestion is empty: %w", ErrModelFailure)
+	}
+	rationale := strings.TrimSpace(generation.Rationale)
+	if rationale == "" {
+		return fmt.Errorf("skill suggestion rationale is empty: %w", ErrModelFailure)
+	}
+	for _, label := range []string{"Feedback", "Transcripts", "Trend"} {
+		if !hasEvidenceLabel(rationale, label) {
+			return fmt.Errorf("skill suggestion rationale is missing %s evidence label: %w", label, ErrModelFailure)
+		}
 	}
 	if generation.Decision == DecisionDecline {
 		generation.ProposedSkillMD = ""
 	}
-	return generation, nil
+	return nil
+}
+
+func hasEvidenceLabel(rationale, label string) bool {
+	for _, word := range strings.FieldsFunc(rationale, func(r rune) bool {
+		return (r < 'A' || r > 'Z') && (r < 'a' || r > 'z')
+	}) {
+		if strings.EqualFold(word, label) {
+			return true
+		}
+	}
+	return false
 }
 
 func generationSchema() map[string]any {

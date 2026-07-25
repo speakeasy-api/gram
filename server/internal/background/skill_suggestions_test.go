@@ -24,6 +24,7 @@ func TestSkillSuggestionWorkflowIdentityIsPerSkill(t *testing.T) {
 	require.Equal(t, "v1:skill-suggestion:"+skillID.String()+"/signal", skillSuggestionSignal(params))
 	require.NotEqual(t, skillSuggestionWorkflowID(uuid.New()), skillSuggestionWorkflowID(skillID))
 	require.Equal(t, 5*time.Minute, defaultSkillSuggestionStartDelay)
+	require.Equal(t, 40*time.Minute, skillSuggestionWorkflowTimeout)
 }
 
 func TestSkillSuggestionWorkflowCompletesSkippedPass(t *testing.T) {

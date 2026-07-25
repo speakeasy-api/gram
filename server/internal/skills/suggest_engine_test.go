@@ -339,7 +339,7 @@ func TestSuggestionEngineCountsNewScoredSessionsOutsideRollingTrend(t *testing.T
 	config.ActivityWindow = 30 * 24 * time.Hour
 	now := latest.UpdatedAt.Time.Add(config.SuggestionFloor)
 	activateSuggestionSkill(t, ctx, ti, created.Skill.Name, now)
-	completion := &suggestionCompletionStub{responses: []string{`{"decision":"decline","proposed_skill_md":"","rationale":"New sessions replaced expired sessions in the rolling trend."}`}}
+	completion := &suggestionCompletionStub{responses: []string{`{"decision":"decline","proposed_skill_md":"","rationale":"Feedback: none. Transcripts: none. Trend: new sessions replaced expired sessions in the rolling trend."}`}}
 	insights := &suggestionInsightsStub{rows: []telemetryrepo.SkillInsightBucket{{SkillVersionID: baseID.String(), ScoredSessions: 20, ScoreSum: 16}}}
 	engine := newSuggestionEngine(t, ti, config, insights, completion)
 

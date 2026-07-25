@@ -20,6 +20,8 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const (
@@ -71,7 +73,7 @@ func ValidateSkillSuggestion(content, expectedName, baseCanonicalSHA256 string) 
 		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: %w", err)
 	}
 	if !proposed.SpecValid {
-		return ValidatedSkillSuggestion{}, errors.New("validate proposed skill manifest: manifest is not spec-valid")
+		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: manifest is not spec-valid: %s", formatSkillValidationErrors(proposed.ValidationErrors))
 	}
 	if proposed.Name != expectedName {
 		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: name %q does not match skill %q", proposed.Name, expectedName)
@@ -85,6 +87,23 @@ func ValidateSkillSuggestion(content, expectedName, baseCanonicalSHA256 string) 
 		Content:         proposed.RawContent,
 		CanonicalSHA256: proposed.CanonicalSHA256,
 	}, nil
+}
+
+func formatSkillValidationErrors(validationErrors []validationError) string {
+	const maxDetails = 3
+
+	details := make([]string, 0, min(len(validationErrors), maxDetails))
+	for _, validationErr := range validationErrors[:min(len(validationErrors), maxDetails)] {
+		details = append(details, fmt.Sprintf("field=%q code=%q message=%q",
+			conv.TruncateString(validationErr.Field, 80),
+			conv.TruncateString(validationErr.Code, 40),
+			conv.TruncateString(validationErr.Message, 200),
+		))
+	}
+	if omitted := len(validationErrors) - len(details); omitted > 0 {
+		details = append(details, fmt.Sprintf("%d more", omitted))
+	}
+	return strings.Join(details, "; ")
 }
 
 func parseSkillManifest(content string) (parsedSkillManifest, error) {
