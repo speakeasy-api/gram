@@ -28,6 +28,9 @@ func (s *Service) ListSuggestions(ctx context.Context, payload *gen.ListSuggesti
 	if err != nil {
 		return nil, err
 	}
+	if payload.Limit < 1 || payload.Limit > 50 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill suggestion limit must be between 1 and 50")
+	}
 
 	skillID, err := conv.PtrToNullUUID(payload.SkillID)
 	if err != nil {

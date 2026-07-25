@@ -100,6 +100,17 @@ func TestSkillsListSuggestionsOpenOnlyPaginationCountAndFilter(t *testing.T) {
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	_, err = ti.service.ListSuggestions(ctx, &gen.ListSuggestionsPayload{
+		SkillID: nil, Cursor: nil, Limit: 0,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = ti.service.ListSuggestions(ctx, &gen.ListSuggestionsPayload{
+		SkillID: nil, Cursor: nil, Limit: 51,
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestSkillsApproveSuggestionHappyEditedAndAuditPrivacy(t *testing.T) {
