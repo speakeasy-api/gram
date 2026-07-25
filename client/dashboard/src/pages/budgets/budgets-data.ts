@@ -323,7 +323,7 @@ export function targetSummary(target: RuleTargetLike): string {
 
 /** Title-case an attribute name for display, e.g. department_name → Department
  *  Name. Kept local so summaries render without the fetched attribute catalog. */
-export function targetAttributeLabel(name: string): string {
+function targetAttributeLabel(name: string): string {
   return name
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
