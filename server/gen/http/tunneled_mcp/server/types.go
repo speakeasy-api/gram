@@ -27,9 +27,6 @@ type UpdateServerRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Human-readable display name for the tunneled MCP server
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Consent to serve this source through a public, anonymous MCP endpoint.
-	// Disabling revokes all live anonymous sessions. Omit to leave unchanged.
-	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
 }
 
 // RotateServerKeyRequestBody is the type of the "tunneledMcp" service
@@ -68,9 +65,6 @@ type GetServerResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 	// Derived connection status
 	ConnectionStatus string `form:"connection_status" json:"connection_status" xml:"connection_status"`
-	// Whether the owner has consented to serving this source through a public,
-	// anonymous MCP endpoint
-	AllowPublic bool `form:"allow_public" json:"allow_public" xml:"allow_public"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// Most recent persisted heartbeat timestamp
@@ -111,9 +105,6 @@ type UpdateServerResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 	// Derived connection status
 	ConnectionStatus string `form:"connection_status" json:"connection_status" xml:"connection_status"`
-	// Whether the owner has consented to serving this source through a public,
-	// anonymous MCP endpoint
-	AllowPublic bool `form:"allow_public" json:"allow_public" xml:"allow_public"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// Most recent persisted heartbeat timestamp
@@ -1444,9 +1435,6 @@ type TunneledMcpServerResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 	// Derived connection status
 	ConnectionStatus string `form:"connection_status" json:"connection_status" xml:"connection_status"`
-	// Whether the owner has consented to serving this source through a public,
-	// anonymous MCP endpoint
-	AllowPublic bool `form:"allow_public" json:"allow_public" xml:"allow_public"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// Most recent persisted heartbeat timestamp
@@ -1525,7 +1513,6 @@ func NewGetServerResponseBody(res *types.TunneledMcpServer) *GetServerResponseBo
 		KeyPrefix:                  res.KeyPrefix,
 		Status:                     string(res.Status),
 		ConnectionStatus:           string(res.ConnectionStatus),
-		AllowPublic:                res.AllowPublic,
 		AgentVersion:               res.AgentVersion,
 		LastSeenAt:                 res.LastSeenAt,
 		ActiveConnectionCount:      res.ActiveConnectionCount,
@@ -1568,7 +1555,6 @@ func NewUpdateServerResponseBody(res *types.TunneledMcpServer) *UpdateServerResp
 		KeyPrefix:                  res.KeyPrefix,
 		Status:                     string(res.Status),
 		ConnectionStatus:           string(res.ConnectionStatus),
-		AllowPublic:                res.AllowPublic,
 		AgentVersion:               res.AgentVersion,
 		LastSeenAt:                 res.LastSeenAt,
 		ActiveConnectionCount:      res.ActiveConnectionCount,
@@ -2636,9 +2622,8 @@ func NewListServerConnectionsPayload(id string, sessionToken *string, apikeyToke
 // payload.
 func NewUpdateServerPayload(body *UpdateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.UpdateServerPayload {
 	v := &tunneledmcp.UpdateServerPayload{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		AllowPublic: body.AllowPublic,
+		ID:   *body.ID,
+		Name: *body.Name,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

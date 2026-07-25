@@ -27,9 +27,6 @@ type UpdateServerRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Human-readable display name for the tunneled MCP server
 	Name string `form:"name" json:"name" xml:"name"`
-	// Consent to serve this source through a public, anonymous MCP endpoint.
-	// Disabling revokes all live anonymous sessions. Omit to leave unchanged.
-	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
 }
 
 // RotateServerKeyRequestBody is the type of the "tunneledMcp" service
@@ -68,9 +65,6 @@ type GetServerResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Derived connection status
 	ConnectionStatus *string `form:"connection_status,omitempty" json:"connection_status,omitempty" xml:"connection_status,omitempty"`
-	// Whether the owner has consented to serving this source through a public,
-	// anonymous MCP endpoint
-	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// Most recent persisted heartbeat timestamp
@@ -111,9 +105,6 @@ type UpdateServerResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Derived connection status
 	ConnectionStatus *string `form:"connection_status,omitempty" json:"connection_status,omitempty" xml:"connection_status,omitempty"`
-	// Whether the owner has consented to serving this source through a public,
-	// anonymous MCP endpoint
-	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// Most recent persisted heartbeat timestamp
@@ -1444,9 +1435,6 @@ type TunneledMcpServerResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Derived connection status
 	ConnectionStatus *string `form:"connection_status,omitempty" json:"connection_status,omitempty" xml:"connection_status,omitempty"`
-	// Whether the owner has consented to serving this source through a public,
-	// anonymous MCP endpoint
-	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// Most recent persisted heartbeat timestamp
@@ -1497,9 +1485,8 @@ func NewCreateServerRequestBody(p *tunneledmcp.CreateServerPayload) *CreateServe
 // the "updateServer" endpoint of the "tunneledMcp" service.
 func NewUpdateServerRequestBody(p *tunneledmcp.UpdateServerPayload) *UpdateServerRequestBody {
 	body := &UpdateServerRequestBody{
-		ID:          p.ID,
-		Name:        p.Name,
-		AllowPublic: p.AllowPublic,
+		ID:   p.ID,
+		Name: p.Name,
 	}
 	return body
 }
@@ -1850,7 +1837,6 @@ func NewGetServerTunneledMcpServerOK(body *GetServerResponseBody) *types.Tunnele
 		KeyPrefix:                  *body.KeyPrefix,
 		Status:                     types.TunneledMcpLifecycleStatus(*body.Status),
 		ConnectionStatus:           types.TunneledMcpConnectionStatus(*body.ConnectionStatus),
-		AllowPublic:                *body.AllowPublic,
 		AgentVersion:               body.AgentVersion,
 		LastSeenAt:                 body.LastSeenAt,
 		ActiveConnectionCount:      *body.ActiveConnectionCount,
@@ -2192,7 +2178,6 @@ func NewUpdateServerTunneledMcpServerOK(body *UpdateServerResponseBody) *types.T
 		KeyPrefix:                  *body.KeyPrefix,
 		Status:                     types.TunneledMcpLifecycleStatus(*body.Status),
 		ConnectionStatus:           types.TunneledMcpConnectionStatus(*body.ConnectionStatus),
-		AllowPublic:                *body.AllowPublic,
 		AgentVersion:               body.AgentVersion,
 		LastSeenAt:                 body.LastSeenAt,
 		ActiveConnectionCount:      *body.ActiveConnectionCount,
@@ -2719,9 +2704,6 @@ func ValidateGetServerResponseBody(body *GetServerResponseBody) (err error) {
 	if body.ConnectionStatus == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_status", "body"))
 	}
-	if body.AllowPublic == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("allow_public", "body"))
-	}
 	if body.ActiveConnectionCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_connection_count", "body"))
 	}
@@ -2804,9 +2786,6 @@ func ValidateUpdateServerResponseBody(body *UpdateServerResponseBody) (err error
 	}
 	if body.ConnectionStatus == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_status", "body"))
-	}
-	if body.AllowPublic == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("allow_public", "body"))
 	}
 	if body.ActiveConnectionCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_connection_count", "body"))
@@ -4566,9 +4545,6 @@ func ValidateTunneledMcpServerResponseBody(body *TunneledMcpServerResponseBody) 
 	}
 	if body.ConnectionStatus == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("connection_status", "body"))
-	}
-	if body.AllowPublic == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("allow_public", "body"))
 	}
 	if body.ActiveConnectionCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_connection_count", "body"))

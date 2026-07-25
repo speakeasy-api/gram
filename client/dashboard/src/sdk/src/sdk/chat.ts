@@ -11,7 +11,6 @@ import { chatListSources } from "../funcs/chatListSources.js";
 import { chatLoad } from "../funcs/chatLoad.js";
 import { chatSetPinned } from "../funcs/chatSetPinned.js";
 import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
-import { chatSummarize } from "../funcs/chatSummarize.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { Chat as Chat$Model } from "../models/components/chat.js";
@@ -19,7 +18,6 @@ import { CreditUsageResponseBody } from "../models/components/creditusagerespons
 import { GenerateTitleResponseBody } from "../models/components/generatetitleresponsebody.js";
 import { ListChatsResult } from "../models/components/listchatsresult.js";
 import { ListSourcesResult } from "../models/components/listsourcesresult.js";
-import { SummarizeChatResult } from "../models/components/summarizechatresult.js";
 import { WorkUnitsTrendResult } from "../models/components/workunitstrendresult.js";
 import {
   CreditUsageRequest,
@@ -57,10 +55,6 @@ import {
   SubmitFeedbackRequest,
   SubmitFeedbackSecurity,
 } from "../models/operations/submitfeedback.js";
-import {
-  SummarizeChatRequest,
-  SummarizeChatSecurity,
-} from "../models/operations/summarizechat.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Chat extends ClientSDK {
@@ -228,25 +222,6 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CaptureEventResult> {
     return unwrapAsync(chatSubmitFeedback(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * summarize chat
-   *
-   * @remarks
-   * Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.
-   */
-  async summarize(
-    request: SummarizeChatRequest,
-    security?: SummarizeChatSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<SummarizeChatResult> {
-    return unwrapAsync(chatSummarize(
       this,
       request,
       security,

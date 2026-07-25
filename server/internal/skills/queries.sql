@@ -124,6 +124,120 @@ WHERE suggestion.project_id = @project_id
   AND suggestion.status = 'open'
   AND s.archived_at IS NULL;
 
+-- name: ListOpenSkillEditSuggestions :many
+SELECT
+  sqlc.embed(suggestion),
+  s.name AS skill_name,
+  s.display_name AS skill_display_name
+FROM skill_edit_suggestions suggestion
+JOIN skills s
+  ON s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+WHERE suggestion.project_id = @project_id
+  AND suggestion.status = 'open'
+  AND s.archived_at IS NULL
+  AND (sqlc.narg(skill_id)::uuid IS NULL OR suggestion.skill_id = sqlc.narg(skill_id)::uuid)
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (suggestion.created_at, suggestion.id) < (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY suggestion.created_at DESC, suggestion.id DESC
+LIMIT @page_limit;
+
+-- name: CountOpenSkillEditSuggestions :one
+SELECT COUNT(*)
+FROM skill_edit_suggestions suggestion
+JOIN skills s
+  ON s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+WHERE suggestion.project_id = @project_id
+  AND suggestion.status = 'open'
+  AND s.archived_at IS NULL
+  AND (sqlc.narg(skill_id)::uuid IS NULL OR suggestion.skill_id = sqlc.narg(skill_id)::uuid);
+
+-- name: ListOpenSkillEditSuggestionsForApproval :many
+SELECT
+  suggestion.id,
+  suggestion.skill_id,
+  s.name AS skill_name,
+  s.display_name AS skill_display_name
+FROM skill_edit_suggestions suggestion
+JOIN skills s
+  ON s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+WHERE suggestion.project_id = @project_id
+  AND suggestion.status = 'open'
+  AND s.archived_at IS NULL
+ORDER BY suggestion.created_at DESC, suggestion.id DESC;
+
+-- name: GetSkillEditSuggestionDetails :one
+SELECT
+  sqlc.embed(suggestion),
+  s.name AS skill_name,
+  s.display_name AS skill_display_name
+FROM skill_edit_suggestions suggestion
+JOIN skills s
+  ON s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+WHERE suggestion.project_id = @project_id
+  AND suggestion.id = @id
+  AND s.archived_at IS NULL;
+
+-- name: GetSkillEditSuggestionForUpdate :one
+SELECT suggestion.*
+FROM skill_edit_suggestions suggestion
+JOIN skills s
+  ON s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+WHERE suggestion.project_id = @project_id
+  AND suggestion.id = @id
+  AND s.archived_at IS NULL
+FOR UPDATE OF suggestion;
+
+-- name: ApproveOpenSkillEditSuggestion :one
+UPDATE skill_edit_suggestions suggestion
+SET status = 'approved',
+    approved_by_user_id = @approved_by_user_id,
+    approved_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE suggestion.project_id = @project_id
+  AND suggestion.skill_id = @skill_id
+  AND suggestion.id = @id
+  AND suggestion.status = 'open'
+  AND s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+  AND s.archived_at IS NULL
+RETURNING suggestion.*;
+
+-- name: LinkApprovedSkillEditSuggestionVersion :one
+UPDATE skill_edit_suggestions
+SET resulting_version_id = @resulting_version_id,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND id = @id
+  AND status = 'approved'
+  AND resulting_version_id IS NULL
+RETURNING *;
+
+-- name: SupersedeOpenSkillEditSuggestionByID :one
+UPDATE skill_edit_suggestions suggestion
+SET status = 'superseded',
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE suggestion.project_id = @project_id
+  AND suggestion.skill_id = @skill_id
+  AND suggestion.id = @id
+  AND suggestion.status = 'open'
+  AND s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+  AND s.archived_at IS NULL
+RETURNING suggestion.*;
+
 -- name: GetLatestSkillEditSuggestion :one
 SELECT suggestion.*
 FROM skill_edit_suggestions suggestion

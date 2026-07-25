@@ -22,6 +22,8 @@ const (
 	ActionSkillUndistribute       Action = "skill:undistribute"
 	ActionSkillShareLinkCreate    Action = "skill:share_link_create"
 	ActionSkillShareLinkRevoke    Action = "skill:share_link_revoke"
+	ActionSkillSuggestionApprove  Action = "skill:suggestion_approve"
+	ActionSkillSuggestionDismiss  Action = "skill:suggestion_dismiss"
 )
 
 // SkillSnapshot captures content-free parent state for skill audit events. It
@@ -145,6 +147,69 @@ func (l *Logger) LogSkillAddVersion(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.SkillV1})
+}
+
+type LogSkillSuggestionEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	SkillURN           urn.Skill
+	SkillName          string
+	SkillDisplayName   string
+	SuggestionMetadata SkillSuggestionMetadata
+}
+
+type SkillSuggestionMetadata struct {
+	SuggestionID       uuid.UUID
+	BaseVersionID      uuid.UUID
+	ResultingVersionID uuid.NullUUID
+	Edited             bool
+}
+
+func (l *Logger) logSkillSuggestion(ctx context.Context, dbtx repo.DBTX, action Action, event LogSkillSuggestionEvent) error {
+	metadataValues := map[string]any{
+		"suggestion_id":   event.SuggestionMetadata.SuggestionID.String(),
+		"base_version_id": event.SuggestionMetadata.BaseVersionID.String(),
+	}
+	if event.SuggestionMetadata.ResultingVersionID.Valid {
+		metadataValues["resulting_version_id"] = event.SuggestionMetadata.ResultingVersionID.UUID.String()
+		metadataValues["edited"] = event.SuggestionMetadata.Edited
+	}
+	metadata, err := marshalAuditPayload(metadataValues)
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+		ActorID:            event.Actor.ID,
+		ActorType:          string(event.Actor.Type),
+		ActorDisplayName:   conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:          conv.PtrToPGTextEmpty(event.ActorSlug),
+		Action:             string(action),
+		SubjectID:          event.SkillURN.ID.String(),
+		SubjectType:        string(subjectTypeSkill),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.SkillDisplayName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.SkillName),
+		BeforeSnapshot:     nil,
+		AfterSnapshot:      nil,
+		Metadata:           metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.SkillV1})
+}
+
+func (l *Logger) LogSkillSuggestionApprove(ctx context.Context, dbtx repo.DBTX, event LogSkillSuggestionEvent) error {
+	return l.logSkillSuggestion(ctx, dbtx, ActionSkillSuggestionApprove, event)
+}
+
+func (l *Logger) LogSkillSuggestionDismiss(ctx context.Context, dbtx repo.DBTX, event LogSkillSuggestionEvent) error {
+	return l.logSkillSuggestion(ctx, dbtx, ActionSkillSuggestionDismiss, event)
 }
 
 type LogSkillUpdateEvent struct {

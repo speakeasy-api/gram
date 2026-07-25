@@ -22,9 +22,9 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  ListExternalKeysQueryParamProvider,
   ListExternalKeysRequest,
   ListExternalKeysSecurity,
+  QueryParamProvider,
 } from "../models/operations/listexternalkeys.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -115,7 +115,7 @@ export function setListExternalKeysData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      provider?: ListExternalKeysQueryParamProvider | undefined;
+      provider?: QueryParamProvider | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -130,7 +130,7 @@ export function invalidateListExternalKeys(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      provider?: ListExternalKeysQueryParamProvider | undefined;
+      provider?: QueryParamProvider | undefined;
       gramSession?: string | undefined;
     }]
   >,

@@ -17,7 +17,6 @@ import (
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
 	adminchatanalysisc "github.com/speakeasy-api/gram/server/gen/http/admin_chat_analysis/client"
-	adminexternalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/admin_external_credentials/client"
 	adminremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/admin_remote_sessions/client"
 	agentc "github.com/speakeasy-api/gram/server/gen/http/agent/client"
 	aiintegrationsc "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/client"
@@ -31,7 +30,6 @@ import (
 	cliauthc "github.com/speakeasy-api/gram/server/gen/http/cli_auth/client"
 	collectionsc "github.com/speakeasy-api/gram/server/gen/http/collections/client"
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
-	deviceintegrationsc "github.com/speakeasy-api/gram/server/gen/http/device_integrations/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
 	externalc "github.com/speakeasy-api/gram/server/gen/http/external/client"
@@ -99,12 +97,11 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
-		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|submit-feedback|list-sources)",
+		"chat (list-chats|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|submit-feedback|list-sources)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
-		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage)",
-		"domains (get-domain|create-domain|update-domain|check-health|delete-domain|list-mcp-endpoints)",
+		"domains (get-domain|create-domain|update-domain|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|delete-aws-iam-credential|delete-gcp-iam-credential)",
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
@@ -112,7 +109,7 @@ func UsageCommands() []string {
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
-		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
+		"hooks (claude|cursor|codex|ingest|upload-skill-content|logs|metrics)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
@@ -124,16 +121,15 @@ func UsageCommands() []string {
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|trigger-analysis)",
-		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|clone-client-fromoauth-proxy-provider|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
-		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
-		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
-		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client)",
+		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer)",
+		"remote-session-issuers (discover-remote-session-issuer|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
+		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
@@ -667,11 +663,6 @@ func ParseEndpoint(
 		chatSetPinnedSessionTokenFlag     = chatSetPinnedFlags.String("session-token", "", "")
 		chatSetPinnedProjectSlugInputFlag = chatSetPinnedFlags.String("project-slug-input", "", "")
 
-		chatSummarizeFlags                = flag.NewFlagSet("summarize", flag.ExitOnError)
-		chatSummarizeBodyFlag             = chatSummarizeFlags.String("body", "REQUIRED", "")
-		chatSummarizeSessionTokenFlag     = chatSummarizeFlags.String("session-token", "", "")
-		chatSummarizeProjectSlugInputFlag = chatSummarizeFlags.String("project-slug-input", "", "")
-
 		chatSubmitFeedbackFlags                 = flag.NewFlagSet("submit-feedback", flag.ExitOnError)
 		chatSubmitFeedbackBodyFlag              = chatSubmitFeedbackFlags.String("body", "REQUIRED", "")
 		chatSubmitFeedbackSessionTokenFlag      = chatSubmitFeedbackFlags.String("session-token", "", "")
@@ -756,60 +747,6 @@ func ParseEndpoint(
 		deploymentsGetDeploymentLogsSessionTokenFlag     = deploymentsGetDeploymentLogsFlags.String("session-token", "", "")
 		deploymentsGetDeploymentLogsProjectSlugInputFlag = deploymentsGetDeploymentLogsFlags.String("project-slug-input", "", "")
 
-		deviceIntegrationsFlags = flag.NewFlagSet("device-integrations", flag.ContinueOnError)
-
-		deviceIntegrationsListProvidersFlags            = flag.NewFlagSet("list-providers", flag.ExitOnError)
-		deviceIntegrationsListProvidersApikeyTokenFlag  = deviceIntegrationsListProvidersFlags.String("apikey-token", "", "")
-		deviceIntegrationsListProvidersSessionTokenFlag = deviceIntegrationsListProvidersFlags.String("session-token", "", "")
-
-		deviceIntegrationsGetConfigFlags            = flag.NewFlagSet("get-config", flag.ExitOnError)
-		deviceIntegrationsGetConfigProviderFlag     = deviceIntegrationsGetConfigFlags.String("provider", "REQUIRED", "")
-		deviceIntegrationsGetConfigApikeyTokenFlag  = deviceIntegrationsGetConfigFlags.String("apikey-token", "", "")
-		deviceIntegrationsGetConfigSessionTokenFlag = deviceIntegrationsGetConfigFlags.String("session-token", "", "")
-
-		deviceIntegrationsUpsertConfigFlags            = flag.NewFlagSet("upsert-config", flag.ExitOnError)
-		deviceIntegrationsUpsertConfigBodyFlag         = deviceIntegrationsUpsertConfigFlags.String("body", "REQUIRED", "")
-		deviceIntegrationsUpsertConfigApikeyTokenFlag  = deviceIntegrationsUpsertConfigFlags.String("apikey-token", "", "")
-		deviceIntegrationsUpsertConfigSessionTokenFlag = deviceIntegrationsUpsertConfigFlags.String("session-token", "", "")
-
-		deviceIntegrationsDeleteConfigFlags            = flag.NewFlagSet("delete-config", flag.ExitOnError)
-		deviceIntegrationsDeleteConfigBodyFlag         = deviceIntegrationsDeleteConfigFlags.String("body", "REQUIRED", "")
-		deviceIntegrationsDeleteConfigApikeyTokenFlag  = deviceIntegrationsDeleteConfigFlags.String("apikey-token", "", "")
-		deviceIntegrationsDeleteConfigSessionTokenFlag = deviceIntegrationsDeleteConfigFlags.String("session-token", "", "")
-
-		deviceIntegrationsTestConnectionFlags            = flag.NewFlagSet("test-connection", flag.ExitOnError)
-		deviceIntegrationsTestConnectionBodyFlag         = deviceIntegrationsTestConnectionFlags.String("body", "REQUIRED", "")
-		deviceIntegrationsTestConnectionApikeyTokenFlag  = deviceIntegrationsTestConnectionFlags.String("apikey-token", "", "")
-		deviceIntegrationsTestConnectionSessionTokenFlag = deviceIntegrationsTestConnectionFlags.String("session-token", "", "")
-
-		deviceIntegrationsListSchedulesFlags            = flag.NewFlagSet("list-schedules", flag.ExitOnError)
-		deviceIntegrationsListSchedulesProviderFlag     = deviceIntegrationsListSchedulesFlags.String("provider", "REQUIRED", "")
-		deviceIntegrationsListSchedulesApikeyTokenFlag  = deviceIntegrationsListSchedulesFlags.String("apikey-token", "", "")
-		deviceIntegrationsListSchedulesSessionTokenFlag = deviceIntegrationsListSchedulesFlags.String("session-token", "", "")
-
-		deviceIntegrationsSetScheduleEnabledFlags            = flag.NewFlagSet("set-schedule-enabled", flag.ExitOnError)
-		deviceIntegrationsSetScheduleEnabledBodyFlag         = deviceIntegrationsSetScheduleEnabledFlags.String("body", "REQUIRED", "")
-		deviceIntegrationsSetScheduleEnabledApikeyTokenFlag  = deviceIntegrationsSetScheduleEnabledFlags.String("apikey-token", "", "")
-		deviceIntegrationsSetScheduleEnabledSessionTokenFlag = deviceIntegrationsSetScheduleEnabledFlags.String("session-token", "", "")
-
-		deviceIntegrationsRetryScheduleFlags            = flag.NewFlagSet("retry-schedule", flag.ExitOnError)
-		deviceIntegrationsRetryScheduleBodyFlag         = deviceIntegrationsRetryScheduleFlags.String("body", "REQUIRED", "")
-		deviceIntegrationsRetryScheduleApikeyTokenFlag  = deviceIntegrationsRetryScheduleFlags.String("apikey-token", "", "")
-		deviceIntegrationsRetryScheduleSessionTokenFlag = deviceIntegrationsRetryScheduleFlags.String("session-token", "", "")
-
-		deviceIntegrationsListManagedDevicesFlags              = flag.NewFlagSet("list-managed-devices", flag.ExitOnError)
-		deviceIntegrationsListManagedDevicesProviderFlag       = deviceIntegrationsListManagedDevicesFlags.String("provider", "", "")
-		deviceIntegrationsListManagedDevicesCoverageBucketFlag = deviceIntegrationsListManagedDevicesFlags.String("coverage-bucket", "", "")
-		deviceIntegrationsListManagedDevicesCursorFlag         = deviceIntegrationsListManagedDevicesFlags.String("cursor", "", "")
-		deviceIntegrationsListManagedDevicesLimitFlag          = deviceIntegrationsListManagedDevicesFlags.String("limit", "50", "")
-		deviceIntegrationsListManagedDevicesApikeyTokenFlag    = deviceIntegrationsListManagedDevicesFlags.String("apikey-token", "", "")
-		deviceIntegrationsListManagedDevicesSessionTokenFlag   = deviceIntegrationsListManagedDevicesFlags.String("session-token", "", "")
-
-		deviceIntegrationsGetCoverageFlags            = flag.NewFlagSet("get-coverage", flag.ExitOnError)
-		deviceIntegrationsGetCoverageProviderFlag     = deviceIntegrationsGetCoverageFlags.String("provider", "", "")
-		deviceIntegrationsGetCoverageApikeyTokenFlag  = deviceIntegrationsGetCoverageFlags.String("apikey-token", "", "")
-		deviceIntegrationsGetCoverageSessionTokenFlag = deviceIntegrationsGetCoverageFlags.String("session-token", "", "")
-
 		domainsFlags = flag.NewFlagSet("domains", flag.ContinueOnError)
 
 		domainsGetDomainFlags            = flag.NewFlagSet("get-domain", flag.ExitOnError)
@@ -822,9 +759,6 @@ func ParseEndpoint(
 		domainsUpdateDomainFlags            = flag.NewFlagSet("update-domain", flag.ExitOnError)
 		domainsUpdateDomainBodyFlag         = domainsUpdateDomainFlags.String("body", "REQUIRED", "")
 		domainsUpdateDomainSessionTokenFlag = domainsUpdateDomainFlags.String("session-token", "", "")
-
-		domainsCheckHealthFlags            = flag.NewFlagSet("check-health", flag.ExitOnError)
-		domainsCheckHealthSessionTokenFlag = domainsCheckHealthFlags.String("session-token", "", "")
 
 		domainsDeleteDomainFlags            = flag.NewFlagSet("delete-domain", flag.ExitOnError)
 		domainsDeleteDomainSessionTokenFlag = domainsDeleteDomainFlags.String("session-token", "", "")
@@ -1103,11 +1037,6 @@ func ParseEndpoint(
 		hooksUploadSkillContentBodyFlag             = hooksUploadSkillContentFlags.String("body", "REQUIRED", "")
 		hooksUploadSkillContentApikeyTokenFlag      = hooksUploadSkillContentFlags.String("apikey-token", "", "")
 		hooksUploadSkillContentProjectSlugInputFlag = hooksUploadSkillContentFlags.String("project-slug-input", "", "")
-
-		hooksSkillFeedbackFlags                = flag.NewFlagSet("skill-feedback", flag.ExitOnError)
-		hooksSkillFeedbackBodyFlag             = hooksSkillFeedbackFlags.String("body", "REQUIRED", "")
-		hooksSkillFeedbackApikeyTokenFlag      = hooksSkillFeedbackFlags.String("apikey-token", "", "")
-		hooksSkillFeedbackProjectSlugInputFlag = hooksSkillFeedbackFlags.String("project-slug-input", "", "")
 
 		hooksLogsFlags                = flag.NewFlagSet("logs", flag.ExitOnError)
 		hooksLogsBodyFlag             = hooksLogsFlags.String("body", "REQUIRED", "")
@@ -1429,32 +1358,6 @@ func ParseEndpoint(
 
 		adminChatAnalysisTriggerAnalysisFlags            = flag.NewFlagSet("trigger-analysis", flag.ExitOnError)
 		adminChatAnalysisTriggerAnalysisSessionTokenFlag = adminChatAnalysisTriggerAnalysisFlags.String("session-token", "", "")
-
-		adminExternalCredentialsFlags = flag.NewFlagSet("admin-external-credentials", flag.ContinueOnError)
-
-		adminExternalCredentialsCreateGcpIamPlatformCredentialFlags            = flag.NewFlagSet("create-gcp-iam-platform-credential", flag.ExitOnError)
-		adminExternalCredentialsCreateGcpIamPlatformCredentialBodyFlag         = adminExternalCredentialsCreateGcpIamPlatformCredentialFlags.String("body", "REQUIRED", "")
-		adminExternalCredentialsCreateGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsCreateGcpIamPlatformCredentialFlags.String("session-token", "", "")
-
-		adminExternalCredentialsListPlatformExternalCredentialsFlags            = flag.NewFlagSet("list-platform-external-credentials", flag.ExitOnError)
-		adminExternalCredentialsListPlatformExternalCredentialsProviderFlag     = adminExternalCredentialsListPlatformExternalCredentialsFlags.String("provider", "", "")
-		adminExternalCredentialsListPlatformExternalCredentialsSessionTokenFlag = adminExternalCredentialsListPlatformExternalCredentialsFlags.String("session-token", "", "")
-
-		adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags            = flag.NewFlagSet("update-gcp-iam-platform-credential", flag.ExitOnError)
-		adminExternalCredentialsUpdateGcpIamPlatformCredentialBodyFlag         = adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags.String("body", "REQUIRED", "")
-		adminExternalCredentialsUpdateGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags.String("session-token", "", "")
-
-		adminExternalCredentialsGetGcpIamPlatformCredentialFlags            = flag.NewFlagSet("get-gcp-iam-platform-credential", flag.ExitOnError)
-		adminExternalCredentialsGetGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsGetGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
-		adminExternalCredentialsGetGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsGetGcpIamPlatformCredentialFlags.String("session-token", "", "")
-
-		adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags            = flag.NewFlagSet("verify-gcp-iam-platform-credential", flag.ExitOnError)
-		adminExternalCredentialsVerifyGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
-		adminExternalCredentialsVerifyGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.String("session-token", "", "")
-
-		adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags            = flag.NewFlagSet("delete-gcp-iam-platform-credential", flag.ExitOnError)
-		adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
-		adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("session-token", "", "")
 
 		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
 
@@ -1819,29 +1722,13 @@ func ParseEndpoint(
 		organizationRemoteSessionIssuersMigrateIssuerSessionTokenFlag = organizationRemoteSessionIssuersMigrateIssuerFlags.String("session-token", "", "")
 		organizationRemoteSessionIssuersMigrateIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersMigrateIssuerFlags.String("apikey-token", "", "")
 
-		organizationRemoteSessionIssuersFetchIssuerMetadataFlags            = flag.NewFlagSet("fetch-issuer-metadata", flag.ExitOnError)
-		organizationRemoteSessionIssuersFetchIssuerMetadataBodyFlag         = organizationRemoteSessionIssuersFetchIssuerMetadataFlags.String("body", "REQUIRED", "")
-		organizationRemoteSessionIssuersFetchIssuerMetadataSessionTokenFlag = organizationRemoteSessionIssuersFetchIssuerMetadataFlags.String("session-token", "", "")
-		organizationRemoteSessionIssuersFetchIssuerMetadataApikeyTokenFlag  = organizationRemoteSessionIssuersFetchIssuerMetadataFlags.String("apikey-token", "", "")
-
-		organizationRemoteSessionIssuersRefreshIssuerMetadataFlags            = flag.NewFlagSet("refresh-issuer-metadata", flag.ExitOnError)
-		organizationRemoteSessionIssuersRefreshIssuerMetadataBodyFlag         = organizationRemoteSessionIssuersRefreshIssuerMetadataFlags.String("body", "REQUIRED", "")
-		organizationRemoteSessionIssuersRefreshIssuerMetadataSessionTokenFlag = organizationRemoteSessionIssuersRefreshIssuerMetadataFlags.String("session-token", "", "")
-		organizationRemoteSessionIssuersRefreshIssuerMetadataApikeyTokenFlag  = organizationRemoteSessionIssuersRefreshIssuerMetadataFlags.String("apikey-token", "", "")
-
 		remoteSessionIssuersFlags = flag.NewFlagSet("remote-session-issuers", flag.ContinueOnError)
 
-		remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags                = flag.NewFlagSet("fetch-remote-session-issuer-metadata", flag.ExitOnError)
-		remoteSessionIssuersFetchRemoteSessionIssuerMetadataBodyFlag             = remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags.String("body", "REQUIRED", "")
-		remoteSessionIssuersFetchRemoteSessionIssuerMetadataSessionTokenFlag     = remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags.String("session-token", "", "")
-		remoteSessionIssuersFetchRemoteSessionIssuerMetadataApikeyTokenFlag      = remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags.String("apikey-token", "", "")
-		remoteSessionIssuersFetchRemoteSessionIssuerMetadataProjectSlugInputFlag = remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags.String("project-slug-input", "", "")
-
-		remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags                = flag.NewFlagSet("refresh-remote-session-issuer-metadata", flag.ExitOnError)
-		remoteSessionIssuersRefreshRemoteSessionIssuerMetadataBodyFlag             = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags.String("body", "REQUIRED", "")
-		remoteSessionIssuersRefreshRemoteSessionIssuerMetadataSessionTokenFlag     = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags.String("session-token", "", "")
-		remoteSessionIssuersRefreshRemoteSessionIssuerMetadataApikeyTokenFlag      = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags.String("apikey-token", "", "")
-		remoteSessionIssuersRefreshRemoteSessionIssuerMetadataProjectSlugInputFlag = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags.String("project-slug-input", "", "")
+		remoteSessionIssuersDiscoverRemoteSessionIssuerFlags                = flag.NewFlagSet("discover-remote-session-issuer", flag.ExitOnError)
+		remoteSessionIssuersDiscoverRemoteSessionIssuerBodyFlag             = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
+		remoteSessionIssuersDiscoverRemoteSessionIssuerSessionTokenFlag     = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("session-token", "", "")
+		remoteSessionIssuersDiscoverRemoteSessionIssuerApikeyTokenFlag      = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("apikey-token", "", "")
+		remoteSessionIssuersDiscoverRemoteSessionIssuerProjectSlugInputFlag = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.String("project-slug-input", "", "")
 
 		remoteSessionIssuersCreateRemoteSessionIssuerFlags                = flag.NewFlagSet("create-remote-session-issuer", flag.ExitOnError)
 		remoteSessionIssuersCreateRemoteSessionIssuerBodyFlag             = remoteSessionIssuersCreateRemoteSessionIssuerFlags.String("body", "REQUIRED", "")
@@ -1897,14 +1784,6 @@ func ParseEndpoint(
 		adminRemoteSessionsDeleteGlobalIssuerFlags            = flag.NewFlagSet("delete-global-issuer", flag.ExitOnError)
 		adminRemoteSessionsDeleteGlobalIssuerIDFlag           = adminRemoteSessionsDeleteGlobalIssuerFlags.String("id", "REQUIRED", "")
 		adminRemoteSessionsDeleteGlobalIssuerSessionTokenFlag = adminRemoteSessionsDeleteGlobalIssuerFlags.String("session-token", "", "")
-
-		adminRemoteSessionsFetchGlobalIssuerMetadataFlags            = flag.NewFlagSet("fetch-global-issuer-metadata", flag.ExitOnError)
-		adminRemoteSessionsFetchGlobalIssuerMetadataBodyFlag         = adminRemoteSessionsFetchGlobalIssuerMetadataFlags.String("body", "REQUIRED", "")
-		adminRemoteSessionsFetchGlobalIssuerMetadataSessionTokenFlag = adminRemoteSessionsFetchGlobalIssuerMetadataFlags.String("session-token", "", "")
-
-		adminRemoteSessionsRefreshGlobalIssuerMetadataFlags            = flag.NewFlagSet("refresh-global-issuer-metadata", flag.ExitOnError)
-		adminRemoteSessionsRefreshGlobalIssuerMetadataBodyFlag         = adminRemoteSessionsRefreshGlobalIssuerMetadataFlags.String("body", "REQUIRED", "")
-		adminRemoteSessionsRefreshGlobalIssuerMetadataSessionTokenFlag = adminRemoteSessionsRefreshGlobalIssuerMetadataFlags.String("session-token", "", "")
 
 		adminRemoteSessionsCreateGlobalClientFlags            = flag.NewFlagSet("create-global-client", flag.ExitOnError)
 		adminRemoteSessionsCreateGlobalClientBodyFlag         = adminRemoteSessionsCreateGlobalClientFlags.String("body", "REQUIRED", "")
@@ -3095,7 +2974,6 @@ func ParseEndpoint(
 	chatCreditUsageFlags.Usage = chatCreditUsageUsage
 	chatDeleteChatFlags.Usage = chatDeleteChatUsage
 	chatSetPinnedFlags.Usage = chatSetPinnedUsage
-	chatSummarizeFlags.Usage = chatSummarizeUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
 	chatListSourcesFlags.Usage = chatListSourcesUsage
 
@@ -3117,23 +2995,10 @@ func ParseEndpoint(
 	deploymentsListDeploymentsFlags.Usage = deploymentsListDeploymentsUsage
 	deploymentsGetDeploymentLogsFlags.Usage = deploymentsGetDeploymentLogsUsage
 
-	deviceIntegrationsFlags.Usage = deviceIntegrationsUsage
-	deviceIntegrationsListProvidersFlags.Usage = deviceIntegrationsListProvidersUsage
-	deviceIntegrationsGetConfigFlags.Usage = deviceIntegrationsGetConfigUsage
-	deviceIntegrationsUpsertConfigFlags.Usage = deviceIntegrationsUpsertConfigUsage
-	deviceIntegrationsDeleteConfigFlags.Usage = deviceIntegrationsDeleteConfigUsage
-	deviceIntegrationsTestConnectionFlags.Usage = deviceIntegrationsTestConnectionUsage
-	deviceIntegrationsListSchedulesFlags.Usage = deviceIntegrationsListSchedulesUsage
-	deviceIntegrationsSetScheduleEnabledFlags.Usage = deviceIntegrationsSetScheduleEnabledUsage
-	deviceIntegrationsRetryScheduleFlags.Usage = deviceIntegrationsRetryScheduleUsage
-	deviceIntegrationsListManagedDevicesFlags.Usage = deviceIntegrationsListManagedDevicesUsage
-	deviceIntegrationsGetCoverageFlags.Usage = deviceIntegrationsGetCoverageUsage
-
 	domainsFlags.Usage = domainsUsage
 	domainsGetDomainFlags.Usage = domainsGetDomainUsage
 	domainsCreateDomainFlags.Usage = domainsCreateDomainUsage
 	domainsUpdateDomainFlags.Usage = domainsUpdateDomainUsage
-	domainsCheckHealthFlags.Usage = domainsCheckHealthUsage
 	domainsDeleteDomainFlags.Usage = domainsDeleteDomainUsage
 	domainsListMcpEndpointsFlags.Usage = domainsListMcpEndpointsUsage
 
@@ -3205,7 +3070,6 @@ func ParseEndpoint(
 	hooksCodexFlags.Usage = hooksCodexUsage
 	hooksIngestFlags.Usage = hooksIngestUsage
 	hooksUploadSkillContentFlags.Usage = hooksUploadSkillContentUsage
-	hooksSkillFeedbackFlags.Usage = hooksSkillFeedbackUsage
 	hooksLogsFlags.Usage = hooksLogsUsage
 	hooksMetricsFlags.Usage = hooksMetricsUsage
 
@@ -3288,14 +3152,6 @@ func ParseEndpoint(
 	adminChatAnalysisUpsertWorkUnitsSettingsFlags.Usage = adminChatAnalysisUpsertWorkUnitsSettingsUsage
 	adminChatAnalysisTriggerAnalysisFlags.Usage = adminChatAnalysisTriggerAnalysisUsage
 
-	adminExternalCredentialsFlags.Usage = adminExternalCredentialsUsage
-	adminExternalCredentialsCreateGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsCreateGcpIamPlatformCredentialUsage
-	adminExternalCredentialsListPlatformExternalCredentialsFlags.Usage = adminExternalCredentialsListPlatformExternalCredentialsUsage
-	adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsUpdateGcpIamPlatformCredentialUsage
-	adminExternalCredentialsGetGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsGetGcpIamPlatformCredentialUsage
-	adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsVerifyGcpIamPlatformCredentialUsage
-	adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage
-
 	pluginsFlags.Usage = pluginsUsage
 	pluginsListPluginsFlags.Usage = pluginsListPluginsUsage
 	pluginsGetPluginFlags.Usage = pluginsGetPluginUsage
@@ -3374,12 +3230,9 @@ func ParseEndpoint(
 	organizationRemoteSessionIssuersMoveIssuerFlags.Usage = organizationRemoteSessionIssuersMoveIssuerUsage
 	organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.Usage = organizationRemoteSessionIssuersGetIssuerMigratePreflightUsage
 	organizationRemoteSessionIssuersMigrateIssuerFlags.Usage = organizationRemoteSessionIssuersMigrateIssuerUsage
-	organizationRemoteSessionIssuersFetchIssuerMetadataFlags.Usage = organizationRemoteSessionIssuersFetchIssuerMetadataUsage
-	organizationRemoteSessionIssuersRefreshIssuerMetadataFlags.Usage = organizationRemoteSessionIssuersRefreshIssuerMetadataUsage
 
 	remoteSessionIssuersFlags.Usage = remoteSessionIssuersUsage
-	remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags.Usage = remoteSessionIssuersFetchRemoteSessionIssuerMetadataUsage
-	remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags.Usage = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataUsage
+	remoteSessionIssuersDiscoverRemoteSessionIssuerFlags.Usage = remoteSessionIssuersDiscoverRemoteSessionIssuerUsage
 	remoteSessionIssuersCreateRemoteSessionIssuerFlags.Usage = remoteSessionIssuersCreateRemoteSessionIssuerUsage
 	remoteSessionIssuersUpdateRemoteSessionIssuerFlags.Usage = remoteSessionIssuersUpdateRemoteSessionIssuerUsage
 	remoteSessionIssuersListRemoteSessionIssuersFlags.Usage = remoteSessionIssuersListRemoteSessionIssuersUsage
@@ -3392,8 +3245,6 @@ func ParseEndpoint(
 	adminRemoteSessionsGetGlobalIssuerFlags.Usage = adminRemoteSessionsGetGlobalIssuerUsage
 	adminRemoteSessionsUpdateGlobalIssuerFlags.Usage = adminRemoteSessionsUpdateGlobalIssuerUsage
 	adminRemoteSessionsDeleteGlobalIssuerFlags.Usage = adminRemoteSessionsDeleteGlobalIssuerUsage
-	adminRemoteSessionsFetchGlobalIssuerMetadataFlags.Usage = adminRemoteSessionsFetchGlobalIssuerMetadataUsage
-	adminRemoteSessionsRefreshGlobalIssuerMetadataFlags.Usage = adminRemoteSessionsRefreshGlobalIssuerMetadataUsage
 	adminRemoteSessionsCreateGlobalClientFlags.Usage = adminRemoteSessionsCreateGlobalClientUsage
 	adminRemoteSessionsListGlobalClientsFlags.Usage = adminRemoteSessionsListGlobalClientsUsage
 	adminRemoteSessionsGetGlobalClientFlags.Usage = adminRemoteSessionsGetGlobalClientUsage
@@ -3655,8 +3506,6 @@ func ParseEndpoint(
 			svcf = cliAuthFlags
 		case "deployments":
 			svcf = deploymentsFlags
-		case "device-integrations":
-			svcf = deviceIntegrationsFlags
 		case "domains":
 			svcf = domainsFlags
 		case "environments":
@@ -3697,8 +3546,6 @@ func ParseEndpoint(
 			svcf = packagesFlags
 		case "admin-chat-analysis":
 			svcf = adminChatAnalysisFlags
-		case "admin-external-credentials":
-			svcf = adminExternalCredentialsFlags
 		case "plugins":
 			svcf = pluginsFlags
 		case "features":
@@ -4079,9 +3926,6 @@ func ParseEndpoint(
 			case "set-pinned":
 				epf = chatSetPinnedFlags
 
-			case "summarize":
-				epf = chatSummarizeFlags
-
 			case "submit-feedback":
 				epf = chatSubmitFeedbackFlags
 
@@ -4138,40 +3982,6 @@ func ParseEndpoint(
 
 			}
 
-		case "device-integrations":
-			switch epn {
-			case "list-providers":
-				epf = deviceIntegrationsListProvidersFlags
-
-			case "get-config":
-				epf = deviceIntegrationsGetConfigFlags
-
-			case "upsert-config":
-				epf = deviceIntegrationsUpsertConfigFlags
-
-			case "delete-config":
-				epf = deviceIntegrationsDeleteConfigFlags
-
-			case "test-connection":
-				epf = deviceIntegrationsTestConnectionFlags
-
-			case "list-schedules":
-				epf = deviceIntegrationsListSchedulesFlags
-
-			case "set-schedule-enabled":
-				epf = deviceIntegrationsSetScheduleEnabledFlags
-
-			case "retry-schedule":
-				epf = deviceIntegrationsRetryScheduleFlags
-
-			case "list-managed-devices":
-				epf = deviceIntegrationsListManagedDevicesFlags
-
-			case "get-coverage":
-				epf = deviceIntegrationsGetCoverageFlags
-
-			}
-
 		case "domains":
 			switch epn {
 			case "get-domain":
@@ -4182,9 +3992,6 @@ func ParseEndpoint(
 
 			case "update-domain":
 				epf = domainsUpdateDomainFlags
-
-			case "check-health":
-				epf = domainsCheckHealthFlags
 
 			case "delete-domain":
 				epf = domainsDeleteDomainFlags
@@ -4382,9 +4189,6 @@ func ParseEndpoint(
 
 			case "upload-skill-content":
 				epf = hooksUploadSkillContentFlags
-
-			case "skill-feedback":
-				epf = hooksSkillFeedbackFlags
 
 			case "logs":
 				epf = hooksLogsFlags
@@ -4609,28 +4413,6 @@ func ParseEndpoint(
 
 			}
 
-		case "admin-external-credentials":
-			switch epn {
-			case "create-gcp-iam-platform-credential":
-				epf = adminExternalCredentialsCreateGcpIamPlatformCredentialFlags
-
-			case "list-platform-external-credentials":
-				epf = adminExternalCredentialsListPlatformExternalCredentialsFlags
-
-			case "update-gcp-iam-platform-credential":
-				epf = adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags
-
-			case "get-gcp-iam-platform-credential":
-				epf = adminExternalCredentialsGetGcpIamPlatformCredentialFlags
-
-			case "verify-gcp-iam-platform-credential":
-				epf = adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags
-
-			case "delete-gcp-iam-platform-credential":
-				epf = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags
-
-			}
-
 		case "plugins":
 			switch epn {
 			case "list-plugins":
@@ -4852,21 +4634,12 @@ func ParseEndpoint(
 			case "migrate-issuer":
 				epf = organizationRemoteSessionIssuersMigrateIssuerFlags
 
-			case "fetch-issuer-metadata":
-				epf = organizationRemoteSessionIssuersFetchIssuerMetadataFlags
-
-			case "refresh-issuer-metadata":
-				epf = organizationRemoteSessionIssuersRefreshIssuerMetadataFlags
-
 			}
 
 		case "remote-session-issuers":
 			switch epn {
-			case "fetch-remote-session-issuer-metadata":
-				epf = remoteSessionIssuersFetchRemoteSessionIssuerMetadataFlags
-
-			case "refresh-remote-session-issuer-metadata":
-				epf = remoteSessionIssuersRefreshRemoteSessionIssuerMetadataFlags
+			case "discover-remote-session-issuer":
+				epf = remoteSessionIssuersDiscoverRemoteSessionIssuerFlags
 
 			case "create-remote-session-issuer":
 				epf = remoteSessionIssuersCreateRemoteSessionIssuerFlags
@@ -4901,12 +4674,6 @@ func ParseEndpoint(
 
 			case "delete-global-issuer":
 				epf = adminRemoteSessionsDeleteGlobalIssuerFlags
-
-			case "fetch-global-issuer-metadata":
-				epf = adminRemoteSessionsFetchGlobalIssuerMetadataFlags
-
-			case "refresh-global-issuer-metadata":
-				epf = adminRemoteSessionsRefreshGlobalIssuerMetadataFlags
 
 			case "create-global-client":
 				epf = adminRemoteSessionsCreateGlobalClientFlags
@@ -5857,9 +5624,6 @@ func ParseEndpoint(
 			case "set-pinned":
 				endpoint = c.SetPinned()
 				data, err = chatc.BuildSetPinnedPayload(*chatSetPinnedBodyFlag, *chatSetPinnedSessionTokenFlag, *chatSetPinnedProjectSlugInputFlag)
-			case "summarize":
-				endpoint = c.Summarize()
-				data, err = chatc.BuildSummarizePayload(*chatSummarizeBodyFlag, *chatSummarizeSessionTokenFlag, *chatSummarizeProjectSlugInputFlag)
 			case "submit-feedback":
 				endpoint = c.SubmitFeedback()
 				data, err = chatc.BuildSubmitFeedbackPayload(*chatSubmitFeedbackBodyFlag, *chatSubmitFeedbackSessionTokenFlag, *chatSubmitFeedbackProjectSlugInputFlag, *chatSubmitFeedbackChatSessionsTokenFlag)
@@ -5915,40 +5679,6 @@ func ParseEndpoint(
 				endpoint = c.GetDeploymentLogs()
 				data, err = deploymentsc.BuildGetDeploymentLogsPayload(*deploymentsGetDeploymentLogsDeploymentIDFlag, *deploymentsGetDeploymentLogsCursorFlag, *deploymentsGetDeploymentLogsApikeyTokenFlag, *deploymentsGetDeploymentLogsSessionTokenFlag, *deploymentsGetDeploymentLogsProjectSlugInputFlag)
 			}
-		case "device-integrations":
-			c := deviceintegrationsc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "list-providers":
-				endpoint = c.ListProviders()
-				data, err = deviceintegrationsc.BuildListProvidersPayload(*deviceIntegrationsListProvidersApikeyTokenFlag, *deviceIntegrationsListProvidersSessionTokenFlag)
-			case "get-config":
-				endpoint = c.GetConfig()
-				data, err = deviceintegrationsc.BuildGetConfigPayload(*deviceIntegrationsGetConfigProviderFlag, *deviceIntegrationsGetConfigApikeyTokenFlag, *deviceIntegrationsGetConfigSessionTokenFlag)
-			case "upsert-config":
-				endpoint = c.UpsertConfig()
-				data, err = deviceintegrationsc.BuildUpsertConfigPayload(*deviceIntegrationsUpsertConfigBodyFlag, *deviceIntegrationsUpsertConfigApikeyTokenFlag, *deviceIntegrationsUpsertConfigSessionTokenFlag)
-			case "delete-config":
-				endpoint = c.DeleteConfig()
-				data, err = deviceintegrationsc.BuildDeleteConfigPayload(*deviceIntegrationsDeleteConfigBodyFlag, *deviceIntegrationsDeleteConfigApikeyTokenFlag, *deviceIntegrationsDeleteConfigSessionTokenFlag)
-			case "test-connection":
-				endpoint = c.TestConnection()
-				data, err = deviceintegrationsc.BuildTestConnectionPayload(*deviceIntegrationsTestConnectionBodyFlag, *deviceIntegrationsTestConnectionApikeyTokenFlag, *deviceIntegrationsTestConnectionSessionTokenFlag)
-			case "list-schedules":
-				endpoint = c.ListSchedules()
-				data, err = deviceintegrationsc.BuildListSchedulesPayload(*deviceIntegrationsListSchedulesProviderFlag, *deviceIntegrationsListSchedulesApikeyTokenFlag, *deviceIntegrationsListSchedulesSessionTokenFlag)
-			case "set-schedule-enabled":
-				endpoint = c.SetScheduleEnabled()
-				data, err = deviceintegrationsc.BuildSetScheduleEnabledPayload(*deviceIntegrationsSetScheduleEnabledBodyFlag, *deviceIntegrationsSetScheduleEnabledApikeyTokenFlag, *deviceIntegrationsSetScheduleEnabledSessionTokenFlag)
-			case "retry-schedule":
-				endpoint = c.RetrySchedule()
-				data, err = deviceintegrationsc.BuildRetrySchedulePayload(*deviceIntegrationsRetryScheduleBodyFlag, *deviceIntegrationsRetryScheduleApikeyTokenFlag, *deviceIntegrationsRetryScheduleSessionTokenFlag)
-			case "list-managed-devices":
-				endpoint = c.ListManagedDevices()
-				data, err = deviceintegrationsc.BuildListManagedDevicesPayload(*deviceIntegrationsListManagedDevicesProviderFlag, *deviceIntegrationsListManagedDevicesCoverageBucketFlag, *deviceIntegrationsListManagedDevicesCursorFlag, *deviceIntegrationsListManagedDevicesLimitFlag, *deviceIntegrationsListManagedDevicesApikeyTokenFlag, *deviceIntegrationsListManagedDevicesSessionTokenFlag)
-			case "get-coverage":
-				endpoint = c.GetCoverage()
-				data, err = deviceintegrationsc.BuildGetCoveragePayload(*deviceIntegrationsGetCoverageProviderFlag, *deviceIntegrationsGetCoverageApikeyTokenFlag, *deviceIntegrationsGetCoverageSessionTokenFlag)
-			}
 		case "domains":
 			c := domainsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -5961,9 +5691,6 @@ func ParseEndpoint(
 			case "update-domain":
 				endpoint = c.UpdateDomain()
 				data, err = domainsc.BuildUpdateDomainPayload(*domainsUpdateDomainBodyFlag, *domainsUpdateDomainSessionTokenFlag)
-			case "check-health":
-				endpoint = c.CheckHealth()
-				data, err = domainsc.BuildCheckHealthPayload(*domainsCheckHealthSessionTokenFlag)
 			case "delete-domain":
 				endpoint = c.DeleteDomain()
 				data, err = domainsc.BuildDeleteDomainPayload(*domainsDeleteDomainSessionTokenFlag)
@@ -6161,9 +5888,6 @@ func ParseEndpoint(
 			case "upload-skill-content":
 				endpoint = c.UploadSkillContent()
 				data, err = hooksc.BuildUploadSkillContentPayload(*hooksUploadSkillContentBodyFlag, *hooksUploadSkillContentApikeyTokenFlag, *hooksUploadSkillContentProjectSlugInputFlag)
-			case "skill-feedback":
-				endpoint = c.SkillFeedback()
-				data, err = hooksc.BuildSkillFeedbackPayload(*hooksSkillFeedbackBodyFlag, *hooksSkillFeedbackApikeyTokenFlag, *hooksSkillFeedbackProjectSlugInputFlag)
 			case "logs":
 				endpoint = c.Logs()
 				data, err = hooksc.BuildLogsPayload(*hooksLogsBodyFlag, *hooksLogsApikeyTokenFlag, *hooksLogsProjectSlugInputFlag)
@@ -6385,28 +6109,6 @@ func ParseEndpoint(
 			case "trigger-analysis":
 				endpoint = c.TriggerAnalysis()
 				data, err = adminchatanalysisc.BuildTriggerAnalysisPayload(*adminChatAnalysisTriggerAnalysisSessionTokenFlag)
-			}
-		case "admin-external-credentials":
-			c := adminexternalcredentialsc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "create-gcp-iam-platform-credential":
-				endpoint = c.CreateGcpIamPlatformCredential()
-				data, err = adminexternalcredentialsc.BuildCreateGcpIamPlatformCredentialPayload(*adminExternalCredentialsCreateGcpIamPlatformCredentialBodyFlag, *adminExternalCredentialsCreateGcpIamPlatformCredentialSessionTokenFlag)
-			case "list-platform-external-credentials":
-				endpoint = c.ListPlatformExternalCredentials()
-				data, err = adminexternalcredentialsc.BuildListPlatformExternalCredentialsPayload(*adminExternalCredentialsListPlatformExternalCredentialsProviderFlag, *adminExternalCredentialsListPlatformExternalCredentialsSessionTokenFlag)
-			case "update-gcp-iam-platform-credential":
-				endpoint = c.UpdateGcpIamPlatformCredential()
-				data, err = adminexternalcredentialsc.BuildUpdateGcpIamPlatformCredentialPayload(*adminExternalCredentialsUpdateGcpIamPlatformCredentialBodyFlag, *adminExternalCredentialsUpdateGcpIamPlatformCredentialSessionTokenFlag)
-			case "get-gcp-iam-platform-credential":
-				endpoint = c.GetGcpIamPlatformCredential()
-				data, err = adminexternalcredentialsc.BuildGetGcpIamPlatformCredentialPayload(*adminExternalCredentialsGetGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsGetGcpIamPlatformCredentialSessionTokenFlag)
-			case "verify-gcp-iam-platform-credential":
-				endpoint = c.VerifyGcpIamPlatformCredential()
-				data, err = adminexternalcredentialsc.BuildVerifyGcpIamPlatformCredentialPayload(*adminExternalCredentialsVerifyGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsVerifyGcpIamPlatformCredentialSessionTokenFlag)
-			case "delete-gcp-iam-platform-credential":
-				endpoint = c.DeleteGcpIamPlatformCredential()
-				data, err = adminexternalcredentialsc.BuildDeleteGcpIamPlatformCredentialPayload(*adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag)
 			}
 		case "plugins":
 			c := pluginsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6630,22 +6332,13 @@ func ParseEndpoint(
 			case "migrate-issuer":
 				endpoint = c.MigrateIssuer()
 				data, err = organizationremotesessionissuersc.BuildMigrateIssuerPayload(*organizationRemoteSessionIssuersMigrateIssuerBodyFlag, *organizationRemoteSessionIssuersMigrateIssuerSessionTokenFlag, *organizationRemoteSessionIssuersMigrateIssuerApikeyTokenFlag)
-			case "fetch-issuer-metadata":
-				endpoint = c.FetchIssuerMetadata()
-				data, err = organizationremotesessionissuersc.BuildFetchIssuerMetadataPayload(*organizationRemoteSessionIssuersFetchIssuerMetadataBodyFlag, *organizationRemoteSessionIssuersFetchIssuerMetadataSessionTokenFlag, *organizationRemoteSessionIssuersFetchIssuerMetadataApikeyTokenFlag)
-			case "refresh-issuer-metadata":
-				endpoint = c.RefreshIssuerMetadata()
-				data, err = organizationremotesessionissuersc.BuildRefreshIssuerMetadataPayload(*organizationRemoteSessionIssuersRefreshIssuerMetadataBodyFlag, *organizationRemoteSessionIssuersRefreshIssuerMetadataSessionTokenFlag, *organizationRemoteSessionIssuersRefreshIssuerMetadataApikeyTokenFlag)
 			}
 		case "remote-session-issuers":
 			c := remotesessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "fetch-remote-session-issuer-metadata":
-				endpoint = c.FetchRemoteSessionIssuerMetadata()
-				data, err = remotesessionissuersc.BuildFetchRemoteSessionIssuerMetadataPayload(*remoteSessionIssuersFetchRemoteSessionIssuerMetadataBodyFlag, *remoteSessionIssuersFetchRemoteSessionIssuerMetadataSessionTokenFlag, *remoteSessionIssuersFetchRemoteSessionIssuerMetadataApikeyTokenFlag, *remoteSessionIssuersFetchRemoteSessionIssuerMetadataProjectSlugInputFlag)
-			case "refresh-remote-session-issuer-metadata":
-				endpoint = c.RefreshRemoteSessionIssuerMetadata()
-				data, err = remotesessionissuersc.BuildRefreshRemoteSessionIssuerMetadataPayload(*remoteSessionIssuersRefreshRemoteSessionIssuerMetadataBodyFlag, *remoteSessionIssuersRefreshRemoteSessionIssuerMetadataSessionTokenFlag, *remoteSessionIssuersRefreshRemoteSessionIssuerMetadataApikeyTokenFlag, *remoteSessionIssuersRefreshRemoteSessionIssuerMetadataProjectSlugInputFlag)
+			case "discover-remote-session-issuer":
+				endpoint = c.DiscoverRemoteSessionIssuer()
+				data, err = remotesessionissuersc.BuildDiscoverRemoteSessionIssuerPayload(*remoteSessionIssuersDiscoverRemoteSessionIssuerBodyFlag, *remoteSessionIssuersDiscoverRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersDiscoverRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersDiscoverRemoteSessionIssuerProjectSlugInputFlag)
 			case "create-remote-session-issuer":
 				endpoint = c.CreateRemoteSessionIssuer()
 				data, err = remotesessionissuersc.BuildCreateRemoteSessionIssuerPayload(*remoteSessionIssuersCreateRemoteSessionIssuerBodyFlag, *remoteSessionIssuersCreateRemoteSessionIssuerSessionTokenFlag, *remoteSessionIssuersCreateRemoteSessionIssuerApikeyTokenFlag, *remoteSessionIssuersCreateRemoteSessionIssuerProjectSlugInputFlag)
@@ -6680,12 +6373,6 @@ func ParseEndpoint(
 			case "delete-global-issuer":
 				endpoint = c.DeleteGlobalIssuer()
 				data, err = adminremotesessionsc.BuildDeleteGlobalIssuerPayload(*adminRemoteSessionsDeleteGlobalIssuerIDFlag, *adminRemoteSessionsDeleteGlobalIssuerSessionTokenFlag)
-			case "fetch-global-issuer-metadata":
-				endpoint = c.FetchGlobalIssuerMetadata()
-				data, err = adminremotesessionsc.BuildFetchGlobalIssuerMetadataPayload(*adminRemoteSessionsFetchGlobalIssuerMetadataBodyFlag, *adminRemoteSessionsFetchGlobalIssuerMetadataSessionTokenFlag)
-			case "refresh-global-issuer-metadata":
-				endpoint = c.RefreshGlobalIssuerMetadata()
-				data, err = adminremotesessionsc.BuildRefreshGlobalIssuerMetadataPayload(*adminRemoteSessionsRefreshGlobalIssuerMetadataBodyFlag, *adminRemoteSessionsRefreshGlobalIssuerMetadataSessionTokenFlag)
 			case "create-global-client":
 				endpoint = c.CreateGlobalClient()
 				data, err = adminremotesessionsc.BuildCreateGlobalClientPayload(*adminRemoteSessionsCreateGlobalClientBodyFlag, *adminRemoteSessionsCreateGlobalClientSessionTokenFlag)
@@ -9267,7 +8954,6 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
 	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    set-pinned: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.`)
-	fmt.Fprintln(os.Stderr, `    summarize: Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
 	fmt.Fprintln(os.Stderr, `    list-sources: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.`)
 	fmt.Fprintln(os.Stderr)
@@ -9476,28 +9162,6 @@ func chatSetPinnedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat set-pinned --body '{\n      \"id\": \"abc123\",\n      \"pinned\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func chatSummarizeUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] chat summarize", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat summarize --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regenerate\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func chatSubmitFeedbackUsage() {
@@ -9865,250 +9529,6 @@ func deploymentsGetDeploymentLogsUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments get-deployment-logs --deployment-id \"abc123\" --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-// deviceIntegrationsUsage displays the usage of the device-integrations
-// command and its subcommands.
-func deviceIntegrationsUsage() {
-	fmt.Fprintln(os.Stderr, `Manage organization-level device integrations: MDM inventory sources and compliance evidence sinks.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] device-integrations COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-providers: List the providers the device integrations framework supports, including the credential fields each needs.`)
-	fmt.Fprintln(os.Stderr, `    get-config: Get the org-wide device integration config for a provider. Returns an empty config (enabled=false, has_credentials=false) when none is set.`)
-	fmt.Fprintln(os.Stderr, `    upsert-config: Create or update the org-wide device integration config for a provider. Omit credentials to keep the stored secrets; supplying credentials rotates them in place and resets the schedules' sync state. Settings merge per key: an omitted key keeps its stored value, a supplied key overwrites it.`)
-	fmt.Fprintln(os.Stderr, `    delete-config: Disconnect the org-wide device integration for a provider. Synced inventory becomes invisible to coverage; reconnecting starts fresh.`)
-	fmt.Fprintln(os.Stderr, `    test-connection: Probe the provider with the stored credentials to verify they work. Save the config first; this tests what is stored, so secrets never round-trip.`)
-	fmt.Fprintln(os.Stderr, `    list-schedules: List the sync schedules and their state for a provider's org-wide device integration config. Returns an empty list when no config is set.`)
-	fmt.Fprintln(os.Stderr, `    set-schedule-enabled: Enable or disable one sync schedule of a provider's device integration. Disabling records user intent on the schedule; only re-enabling clears it — config saves do not.`)
-	fmt.Fprintln(os.Stderr, `    retry-schedule: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak.`)
-	fmt.Fprintln(os.Stderr, `    list-managed-devices: Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.`)
-	fmt.Fprintln(os.Stderr, `    get-coverage: Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s device-integrations COMMAND --help\n", os.Args[0])
-}
-func deviceIntegrationsListProvidersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations list-providers", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the providers the device integrations framework supports, including the credential fields each needs.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-providers --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func deviceIntegrationsGetConfigUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations get-config", os.Args[0])
-	fmt.Fprint(os.Stderr, " -provider STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the org-wide device integration config for a provider. Returns an empty config (enabled=false, has_credentials=false) when none is set.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations get-config --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func deviceIntegrationsUpsertConfigUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations upsert-config", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create or update the org-wide device integration config for a provider. Omit credentials to keep the stored secrets; supplying credentials rotates them in place and resets the schedules' sync state. Settings merge per key: an omitted key keeps its stored value, a supplied key overwrites it.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations upsert-config --body '{\n      \"credentials\": {\n         \"abc123\": \"abc123\"\n      },\n      \"enabled\": false,\n      \"provider\": \"abc123\",\n      \"settings\": {\n         \"abc123\": \"abc123\"\n      }\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func deviceIntegrationsDeleteConfigUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations delete-config", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Disconnect the org-wide device integration for a provider. Synced inventory becomes invisible to coverage; reconnecting starts fresh.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations delete-config --body '{\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func deviceIntegrationsTestConnectionUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations test-connection", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Probe the provider with the stored credentials to verify they work. Save the config first; this tests what is stored, so secrets never round-trip.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations test-connection --body '{\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func deviceIntegrationsListSchedulesUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations list-schedules", os.Args[0])
-	fmt.Fprint(os.Stderr, " -provider STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the sync schedules and their state for a provider's org-wide device integration config. Returns an empty list when no config is set.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-schedules --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func deviceIntegrationsSetScheduleEnabledUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations set-schedule-enabled", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Enable or disable one sync schedule of a provider's device integration. Disabling records user intent on the schedule; only re-enabling clears it — config saves do not.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations set-schedule-enabled --body '{\n      \"enabled\": false,\n      \"provider\": \"abc123\",\n      \"schedule\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func deviceIntegrationsRetryScheduleUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations retry-schedule", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations retry-schedule --body '{\n      \"provider\": \"abc123\",\n      \"schedule\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func deviceIntegrationsListManagedDevicesUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations list-managed-devices", os.Args[0])
-	fmt.Fprint(os.Stderr, " -provider STRING")
-	fmt.Fprint(os.Stderr, " -coverage-bucket STRING")
-	fmt.Fprint(os.Stderr, " -cursor STRING")
-	fmt.Fprint(os.Stderr, " -limit INT")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
-	fmt.Fprintln(os.Stderr, `    -coverage-bucket STRING: `)
-	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-managed-devices --provider \"abc123\" --coverage-bucket \"agent_stale\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func deviceIntegrationsGetCoverageUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations get-coverage", os.Args[0])
-	fmt.Fprint(os.Stderr, " -provider STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations get-coverage --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
 // domainsUsage displays the usage of the domains command and its subcommands.
 func domainsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage custom domains for gram.`)
@@ -10117,7 +9537,6 @@ func domainsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-domain: Get the custom domain for an organization`)
 	fmt.Fprintln(os.Stderr, `    create-domain: Create a custom domain for an organization`)
 	fmt.Fprintln(os.Stderr, `    update-domain: Update the IP allowlist for the organization's custom domain`)
-	fmt.Fprintln(os.Stderr, `    check-health: Check the routing and certificate health of the organization's custom domain`)
 	fmt.Fprintln(os.Stderr, `    delete-domain: Delete a custom domain`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-endpoints: List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.`)
 	fmt.Fprintln(os.Stderr)
@@ -10180,24 +9599,6 @@ func domainsUpdateDomainUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains update-domain --body '{\n      \"ip_allowlist\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
-}
-
-func domainsCheckHealthUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] domains check-health", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Check the routing and certificate health of the organization's custom domain`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains check-health --session-token \"abc123\"")
 }
 
 func domainsDeleteDomainUsage() {
@@ -11386,7 +10787,6 @@ func hooksUsage() {
 	fmt.Fprintln(os.Stderr, `    codex: Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.`)
 	fmt.Fprintln(os.Stderr, `    ingest: Feature-first unified endpoint for hook events from supported coding assistants.`)
 	fmt.Fprintln(os.Stderr, `    upload-skill-content: Uploads skill manifest content requested by the unified hook ingest endpoint.`)
-	fmt.Fprintln(os.Stderr, `    skill-feedback: Records agent-volunteered feedback about a distributed skill.`)
 	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr, `    metrics: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr)
@@ -11517,28 +10917,6 @@ func hooksUploadSkillContentUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks upload-skill-content --body '{\n      \"content\": \"abc123\",\n      \"raw_sha256\": \"1111111111111111111111111111111111111111111111111111111111111111\",\n      \"schema_version\": \"hook.skill-content.v1\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func hooksSkillFeedbackUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] hooks skill-feedback", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Records agent-volunteered feedback about a distributed skill.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks skill-feedback --body '{\n      \"note\": \"aaa\",\n      \"outcome\": \"partially_helped\",\n      \"schema_version\": \"hook.skill-feedback.v1\",\n      \"skill\": \"aa\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func hooksLogsUsage() {
@@ -13012,142 +12390,6 @@ func adminChatAnalysisTriggerAnalysisUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-chat-analysis trigger-analysis --session-token \"abc123\"")
 }
 
-// adminExternalCredentialsUsage displays the usage of the
-// admin-external-credentials command and its subcommands.
-func adminExternalCredentialsUsage() {
-	fmt.Fprintln(os.Stderr, `Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-external-credentials COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    create-gcp-iam-platform-credential: Create a platform GCP IAM external credential (organization_id NULL, project_id NULL). Requires platform admin.`)
-	fmt.Fprintln(os.Stderr, `    list-platform-external-credentials: List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.`)
-	fmt.Fprintln(os.Stderr, `    update-gcp-iam-platform-credential: Replace a platform GCP IAM external credential's configuration. Requires platform admin.`)
-	fmt.Fprintln(os.Stderr, `    get-gcp-iam-platform-credential: Get a platform GCP IAM external credential by ID. Requires platform admin.`)
-	fmt.Fprintln(os.Stderr, `    verify-gcp-iam-platform-credential: Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Ephemeral: nothing is persisted. Requires platform admin.`)
-	fmt.Fprintln(os.Stderr, `    delete-gcp-iam-platform-credential: Soft-delete a platform GCP IAM external credential by ID. Requires platform admin.`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s admin-external-credentials COMMAND --help\n", os.Args[0])
-}
-func adminExternalCredentialsCreateGcpIamPlatformCredentialUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials create-gcp-iam-platform-credential", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a platform GCP IAM external credential (organization_id NULL, project_id NULL). Requires platform admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials create-gcp-iam-platform-credential --body '{\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }' --session-token \"abc123\"")
-}
-
-func adminExternalCredentialsListPlatformExternalCredentialsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials list-platform-external-credentials", os.Args[0])
-	fmt.Fprint(os.Stderr, " -provider STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials list-platform-external-credentials --provider \"gcp_iam\" --session-token \"abc123\"")
-}
-
-func adminExternalCredentialsUpdateGcpIamPlatformCredentialUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials update-gcp-iam-platform-credential", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace a platform GCP IAM external credential's configuration. Requires platform admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials update-gcp-iam-platform-credential --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }' --session-token \"abc123\"")
-}
-
-func adminExternalCredentialsGetGcpIamPlatformCredentialUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials get-gcp-iam-platform-credential", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get a platform GCP IAM external credential by ID. Requires platform admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials get-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
-}
-
-func adminExternalCredentialsVerifyGcpIamPlatformCredentialUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials verify-gcp-iam-platform-credential", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Ephemeral: nothing is persisted. Requires platform admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials verify-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
-}
-
-func adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials delete-gcp-iam-platform-credential", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Soft-delete a platform GCP IAM external credential by ID. Requires platform admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials delete-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
-}
-
 // pluginsUsage displays the usage of the plugins command and its subcommands.
 func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage distributable plugin bundles of MCP servers and hooks.`)
@@ -14552,8 +13794,6 @@ func organizationRemoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-migrate-preflight: Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    fetch-issuer-metadata: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    refresh-issuer-metadata: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s organization-remote-session-issuers COMMAND --help\n", os.Args[0])
@@ -14760,58 +14000,13 @@ func organizationRemoteSessionIssuersMigrateIssuerUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers migrate-issuer --body '{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
-func organizationRemoteSessionIssuersFetchIssuerMetadataUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers fetch-issuer-metadata", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers fetch-issuer-metadata --body '{\n      \"issuer\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
-}
-
-func organizationRemoteSessionIssuersRefreshIssuerMetadataUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers refresh-issuer-metadata", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers refresh-issuer-metadata --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
-}
-
 // remoteSessionIssuersUsage displays the usage of the remote-session-issuers
 // command and its subcommands.
 func remoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-session-issuers COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    fetch-remote-session-issuer-metadata: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Use refreshMetadata to re-discover and persist against an existing issuer.`)
-	fmt.Fprintln(os.Stderr, `    refresh-remote-session-issuer-metadata: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.`)
+	fmt.Fprintln(os.Stderr, `    discover-remote-session-issuer: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.`)
 	fmt.Fprintln(os.Stderr, `    create-remote-session-issuer: Create a new remote_session_issuer.`)
 	fmt.Fprintln(os.Stderr, `    update-remote-session-issuer: Update fields on an existing remote_session_issuer.`)
 	fmt.Fprintln(os.Stderr, `    list-remote-session-issuers: List remote_session_issuers in the caller's project.`)
@@ -14821,9 +14016,9 @@ func remoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s remote-session-issuers COMMAND --help\n", os.Args[0])
 }
-func remoteSessionIssuersFetchRemoteSessionIssuerMetadataUsage() {
+func remoteSessionIssuersDiscoverRemoteSessionIssuerUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers fetch-remote-session-issuer-metadata", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers discover-remote-session-issuer", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -14832,7 +14027,7 @@ func remoteSessionIssuersFetchRemoteSessionIssuerMetadataUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Use refreshMetadata to re-discover and persist against an existing issuer.`)
+	fmt.Fprintln(os.Stderr, `Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -14842,31 +14037,7 @@ func remoteSessionIssuersFetchRemoteSessionIssuerMetadataUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers fetch-remote-session-issuer-metadata --body '{\n      \"issuer\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func remoteSessionIssuersRefreshRemoteSessionIssuerMetadataUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-issuers refresh-remote-session-issuer-metadata", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers refresh-remote-session-issuer-metadata --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers discover-remote-session-issuer --body '{\n      \"issuer\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersCreateRemoteSessionIssuerUsage() {
@@ -15004,8 +14175,6 @@ func adminRemoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-global-issuer: Get a global remote_session_issuer by id. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    update-global-issuer: Update a global remote_session_issuer. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-global-issuer: Soft-delete a global remote_session_issuer. Blocked when any global remote_session_clients still reference it. Requires platform admin.`)
-	fmt.Fprintln(os.Stderr, `    fetch-global-issuer-metadata: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.`)
-	fmt.Fprintln(os.Stderr, `    refresh-global-issuer-metadata: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    create-global-client: Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    list-global-clients: List the global remote_session_clients registered with a global remote_session_issuer. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    get-global-client: Get a global remote_session_client by id. Requires platform admin.`)
@@ -15115,46 +14284,6 @@ func adminRemoteSessionsDeleteGlobalIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions delete-global-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
-}
-
-func adminRemoteSessionsFetchGlobalIssuerMetadataUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions fetch-global-issuer-metadata", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions fetch-global-issuer-metadata --body '{\n      \"issuer\": \"abc123\"\n   }' --session-token \"abc123\"")
-}
-
-func adminRemoteSessionsRefreshGlobalIssuerMetadataUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions refresh-global-issuer-metadata", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions refresh-global-issuer-metadata --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func adminRemoteSessionsCreateGlobalClientUsage() {
@@ -18940,7 +18069,7 @@ func tunneledMcpUpdateServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp update-server --body '{\n      \"allow_public\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp update-server --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func tunneledMcpRotateServerKeyUsage() {

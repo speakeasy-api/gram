@@ -20,14 +20,14 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
-// BuildFetchRemoteSessionIssuerMetadataRequest instantiates a HTTP request
-// object with method and path set to call the "remoteSessionIssuers" service
-// "fetchRemoteSessionIssuerMetadata" endpoint
-func (c *Client) BuildFetchRemoteSessionIssuerMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FetchRemoteSessionIssuerMetadataRemoteSessionIssuersPath()}
+// BuildDiscoverRemoteSessionIssuerRequest instantiates a HTTP request object
+// with method and path set to call the "remoteSessionIssuers" service
+// "discoverRemoteSessionIssuer" endpoint
+func (c *Client) BuildDiscoverRemoteSessionIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DiscoverRemoteSessionIssuerRemoteSessionIssuersPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("remoteSessionIssuers", "discoverRemoteSessionIssuer", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -36,14 +36,13 @@ func (c *Client) BuildFetchRemoteSessionIssuerMetadataRequest(ctx context.Contex
 	return req, nil
 }
 
-// EncodeFetchRemoteSessionIssuerMetadataRequest returns an encoder for
-// requests sent to the remoteSessionIssuers fetchRemoteSessionIssuerMetadata
-// server.
-func EncodeFetchRemoteSessionIssuerMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeDiscoverRemoteSessionIssuerRequest returns an encoder for requests
+// sent to the remoteSessionIssuers discoverRemoteSessionIssuer server.
+func EncodeDiscoverRemoteSessionIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*remotesessionissuers.FetchRemoteSessionIssuerMetadataPayload)
+		p, ok := v.(*remotesessionissuers.DiscoverRemoteSessionIssuerPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", "*remotesessionissuers.FetchRemoteSessionIssuerMetadataPayload", v)
+			return goahttp.ErrInvalidType("remoteSessionIssuers", "discoverRemoteSessionIssuer", "*remotesessionissuers.DiscoverRemoteSessionIssuerPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -57,20 +56,19 @@ func EncodeFetchRemoteSessionIssuerMetadataRequest(encoder func(*http.Request) g
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		body := NewFetchRemoteSessionIssuerMetadataRequestBody(p)
+		body := NewDiscoverRemoteSessionIssuerRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+			return goahttp.ErrEncodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 		}
 		return nil
 	}
 }
 
-// DecodeFetchRemoteSessionIssuerMetadataResponse returns a decoder for
-// responses returned by the remoteSessionIssuers
-// fetchRemoteSessionIssuerMetadata endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-// DecodeFetchRemoteSessionIssuerMetadataResponse may return the following
-// errors:
+// DecodeDiscoverRemoteSessionIssuerResponse returns a decoder for responses
+// returned by the remoteSessionIssuers discoverRemoteSessionIssuer endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeDiscoverRemoteSessionIssuerResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -82,7 +80,7 @@ func EncodeFetchRemoteSessionIssuerMetadataRequest(encoder func(*http.Request) g
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeFetchRemoteSessionIssuerMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeDiscoverRemoteSessionIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -99,415 +97,169 @@ func DecodeFetchRemoteSessionIssuerMetadataResponse(decoder func(*http.Response)
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body FetchRemoteSessionIssuerMetadataResponseBody
+				body DiscoverRemoteSessionIssuerResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			err = ValidateFetchRemoteSessionIssuerMetadataResponseBody(&body)
+			err = ValidateDiscoverRemoteSessionIssuerResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			res := NewFetchRemoteSessionIssuerMetadataRemoteSessionIssuerDraftOK(&body)
+			res := NewDiscoverRemoteSessionIssuerRemoteSessionIssuerDraftOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body FetchRemoteSessionIssuerMetadataUnauthorizedResponseBody
+				body DiscoverRemoteSessionIssuerUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			err = ValidateFetchRemoteSessionIssuerMetadataUnauthorizedResponseBody(&body)
+			err = ValidateDiscoverRemoteSessionIssuerUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			return nil, NewFetchRemoteSessionIssuerMetadataUnauthorized(&body)
+			return nil, NewDiscoverRemoteSessionIssuerUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body FetchRemoteSessionIssuerMetadataForbiddenResponseBody
+				body DiscoverRemoteSessionIssuerForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			err = ValidateFetchRemoteSessionIssuerMetadataForbiddenResponseBody(&body)
+			err = ValidateDiscoverRemoteSessionIssuerForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			return nil, NewFetchRemoteSessionIssuerMetadataForbidden(&body)
+			return nil, NewDiscoverRemoteSessionIssuerForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body FetchRemoteSessionIssuerMetadataBadRequestResponseBody
+				body DiscoverRemoteSessionIssuerBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			err = ValidateFetchRemoteSessionIssuerMetadataBadRequestResponseBody(&body)
+			err = ValidateDiscoverRemoteSessionIssuerBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			return nil, NewFetchRemoteSessionIssuerMetadataBadRequest(&body)
+			return nil, NewDiscoverRemoteSessionIssuerBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body FetchRemoteSessionIssuerMetadataNotFoundResponseBody
+				body DiscoverRemoteSessionIssuerNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			err = ValidateFetchRemoteSessionIssuerMetadataNotFoundResponseBody(&body)
+			err = ValidateDiscoverRemoteSessionIssuerNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			return nil, NewFetchRemoteSessionIssuerMetadataNotFound(&body)
+			return nil, NewDiscoverRemoteSessionIssuerNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body FetchRemoteSessionIssuerMetadataConflictResponseBody
+				body DiscoverRemoteSessionIssuerConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			err = ValidateFetchRemoteSessionIssuerMetadataConflictResponseBody(&body)
+			err = ValidateDiscoverRemoteSessionIssuerConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			return nil, NewFetchRemoteSessionIssuerMetadataConflict(&body)
+			return nil, NewDiscoverRemoteSessionIssuerConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body FetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody
+				body DiscoverRemoteSessionIssuerUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			err = ValidateFetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody(&body)
+			err = ValidateDiscoverRemoteSessionIssuerUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			return nil, NewFetchRemoteSessionIssuerMetadataUnsupportedMedia(&body)
+			return nil, NewDiscoverRemoteSessionIssuerUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body FetchRemoteSessionIssuerMetadataInvalidResponseBody
+				body DiscoverRemoteSessionIssuerInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			err = ValidateFetchRemoteSessionIssuerMetadataInvalidResponseBody(&body)
+			err = ValidateDiscoverRemoteSessionIssuerInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			return nil, NewFetchRemoteSessionIssuerMetadataInvalid(&body)
+			return nil, NewDiscoverRemoteSessionIssuerInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body FetchRemoteSessionIssuerMetadataInvariantViolationResponseBody
+					body DiscoverRemoteSessionIssuerInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+					return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 				}
-				err = ValidateFetchRemoteSessionIssuerMetadataInvariantViolationResponseBody(&body)
+				err = ValidateDiscoverRemoteSessionIssuerInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+					return nil, goahttp.ErrValidationError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 				}
-				return nil, NewFetchRemoteSessionIssuerMetadataInvariantViolation(&body)
+				return nil, NewDiscoverRemoteSessionIssuerInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body FetchRemoteSessionIssuerMetadataUnexpectedResponseBody
+					body DiscoverRemoteSessionIssuerUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+					return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 				}
-				err = ValidateFetchRemoteSessionIssuerMetadataUnexpectedResponseBody(&body)
+				err = ValidateDiscoverRemoteSessionIssuerUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+					return nil, goahttp.ErrValidationError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 				}
-				return nil, NewFetchRemoteSessionIssuerMetadataUnexpected(&body)
+				return nil, NewDiscoverRemoteSessionIssuerUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("remoteSessionIssuers", "discoverRemoteSessionIssuer", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body FetchRemoteSessionIssuerMetadataGatewayErrorResponseBody
+				body DiscoverRemoteSessionIssuerGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			err = ValidateFetchRemoteSessionIssuerMetadataGatewayErrorResponseBody(&body)
+			err = ValidateDiscoverRemoteSessionIssuerGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
 			}
-			return nil, NewFetchRemoteSessionIssuerMetadataGatewayError(&body)
+			return nil, NewDiscoverRemoteSessionIssuerGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", resp.StatusCode, string(body))
-		}
-	}
-}
-
-// BuildRefreshRemoteSessionIssuerMetadataRequest instantiates a HTTP request
-// object with method and path set to call the "remoteSessionIssuers" service
-// "refreshRemoteSessionIssuerMetadata" endpoint
-func (c *Client) BuildRefreshRemoteSessionIssuerMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RefreshRemoteSessionIssuerMetadataRemoteSessionIssuersPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeRefreshRemoteSessionIssuerMetadataRequest returns an encoder for
-// requests sent to the remoteSessionIssuers refreshRemoteSessionIssuerMetadata
-// server.
-func EncodeRefreshRemoteSessionIssuerMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*remotesessionissuers.RefreshRemoteSessionIssuerMetadataPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", "*remotesessionissuers.RefreshRemoteSessionIssuerMetadataPayload", v)
-		}
-		if p.SessionToken != nil {
-			head := *p.SessionToken
-			req.Header.Set("Gram-Session", head)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
-		body := NewRefreshRemoteSessionIssuerMetadataRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-		}
-		return nil
-	}
-}
-
-// DecodeRefreshRemoteSessionIssuerMetadataResponse returns a decoder for
-// responses returned by the remoteSessionIssuers
-// refreshRemoteSessionIssuerMetadata endpoint. restoreBody controls whether
-// the response body should be restored after having been read.
-// DecodeRefreshRemoteSessionIssuerMetadataResponse may return the following
-// errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeRefreshRemoteSessionIssuerMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body RefreshRemoteSessionIssuerMetadataResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			err = ValidateRefreshRemoteSessionIssuerMetadataResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			res := NewRefreshRemoteSessionIssuerMetadataRemoteSessionIssuerRefreshOK(&body)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body RefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			err = ValidateRefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			return nil, NewRefreshRemoteSessionIssuerMetadataUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body RefreshRemoteSessionIssuerMetadataForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			err = ValidateRefreshRemoteSessionIssuerMetadataForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			return nil, NewRefreshRemoteSessionIssuerMetadataForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body RefreshRemoteSessionIssuerMetadataBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			err = ValidateRefreshRemoteSessionIssuerMetadataBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			return nil, NewRefreshRemoteSessionIssuerMetadataBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body RefreshRemoteSessionIssuerMetadataNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			err = ValidateRefreshRemoteSessionIssuerMetadataNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			return nil, NewRefreshRemoteSessionIssuerMetadataNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body RefreshRemoteSessionIssuerMetadataConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			err = ValidateRefreshRemoteSessionIssuerMetadataConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			return nil, NewRefreshRemoteSessionIssuerMetadataConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body RefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			err = ValidateRefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			return nil, NewRefreshRemoteSessionIssuerMetadataUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body RefreshRemoteSessionIssuerMetadataInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			err = ValidateRefreshRemoteSessionIssuerMetadataInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			return nil, NewRefreshRemoteSessionIssuerMetadataInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body RefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-				}
-				err = ValidateRefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-				}
-				return nil, NewRefreshRemoteSessionIssuerMetadataInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body RefreshRemoteSessionIssuerMetadataUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-				}
-				err = ValidateRefreshRemoteSessionIssuerMetadataUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-				}
-				return nil, NewRefreshRemoteSessionIssuerMetadataUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body RefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			err = ValidateRefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
-			}
-			return nil, NewRefreshRemoteSessionIssuerMetadataGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("remoteSessionIssuers", "discoverRemoteSessionIssuer", resp.StatusCode, string(body))
 		}
 	}
 }

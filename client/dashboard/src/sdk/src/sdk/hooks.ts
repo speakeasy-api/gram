@@ -8,7 +8,6 @@ import { hooksHooksNumberCursor } from "../funcs/hooksHooksNumberCursor.js";
 import { hooksHooksNumberLogs } from "../funcs/hooksHooksNumberLogs.js";
 import { hooksHooksNumberMetrics } from "../funcs/hooksHooksNumberMetrics.js";
 import { hooksIngest } from "../funcs/hooksIngest.js";
-import { hooksSkillFeedback } from "../funcs/hooksSkillFeedback.js";
 import { hooksUploadSkillContent } from "../funcs/hooksUploadSkillContent.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ClaudeHookResult } from "../models/components/claudehookresult.js";
@@ -33,10 +32,6 @@ import {
   HooksNumberMetricsSecurity,
 } from "../models/operations/hooksnumbermetrics.js";
 import { IngestHookEventRequest } from "../models/operations/ingesthookevent.js";
-import {
-  SkillFeedbackRequest,
-  SkillFeedbackSecurity,
-} from "../models/operations/skillfeedback.js";
 import {
   UploadSkillContentRequest,
   UploadSkillContentSecurity,
@@ -147,25 +142,6 @@ export class Hooks extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksHooksNumberMetrics(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * skillFeedback hooks
-   *
-   * @remarks
-   * Records agent-volunteered feedback about a distributed skill.
-   */
-  async skillFeedback(
-    request: SkillFeedbackRequest,
-    security?: SkillFeedbackSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<void> {
-    return unwrapAsync(hooksSkillFeedback(
       this,
       request,
       security,

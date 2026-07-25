@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"unicode/utf8"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goa "goa.design/goa/v3/pkg"
@@ -365,62 +364,6 @@ func BuildUploadSkillContentPayload(hooksUploadSkillContentBody string, hooksUpl
 		SchemaVersion: body.SchemaVersion,
 		RawSha256:     body.RawSha256,
 		Content:       body.Content,
-	}
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildSkillFeedbackPayload builds the payload for the hooks skillFeedback
-// endpoint from CLI flags.
-func BuildSkillFeedbackPayload(hooksSkillFeedbackBody string, hooksSkillFeedbackApikeyToken string, hooksSkillFeedbackProjectSlugInput string) (*hooks.SkillFeedbackPayload, error) {
-	var err error
-	var body SkillFeedbackRequestBody
-	{
-		err = json.Unmarshal([]byte(hooksSkillFeedbackBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"note\": \"aaa\",\n      \"outcome\": \"partially_helped\",\n      \"schema_version\": \"hook.skill-feedback.v1\",\n      \"skill\": \"aa\"\n   }'")
-		}
-		if !(body.SchemaVersion == "hook.skill-feedback.v1") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.schema_version", body.SchemaVersion, []any{"hook.skill-feedback.v1"}))
-		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.skill", body.Skill, "^[a-z0-9]+(?:-[a-z0-9]+)*$"))
-		if utf8.RuneCountInString(body.Skill) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.skill", body.Skill, utf8.RuneCountInString(body.Skill), 1, true))
-		}
-		if utf8.RuneCountInString(body.Skill) > 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.skill", body.Skill, utf8.RuneCountInString(body.Skill), 64, false))
-		}
-		if !(body.Outcome == "helped" || body.Outcome == "partially_helped" || body.Outcome == "did_not_help" || body.Outcome == "misleading" || body.Outcome == "harmful") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", body.Outcome, []any{"helped", "partially_helped", "did_not_help", "misleading", "harmful"}))
-		}
-		if body.Note != nil {
-			if utf8.RuneCountInString(*body.Note) > 4000 {
-				err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", *body.Note, utf8.RuneCountInString(*body.Note), 4000, false))
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var apikeyToken *string
-	{
-		if hooksSkillFeedbackApikeyToken != "" {
-			apikeyToken = &hooksSkillFeedbackApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if hooksSkillFeedbackProjectSlugInput != "" {
-			projectSlugInput = &hooksSkillFeedbackProjectSlugInput
-		}
-	}
-	v := &hooks.SkillFeedbackPayload{
-		SchemaVersion: body.SchemaVersion,
-		Skill:         body.Skill,
-		Outcome:       body.Outcome,
-		Note:          body.Note,
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

@@ -12,14 +12,16 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * The cloud provider of the credential.
  */
-export const Provider = {
+export const GcpIamCredentialProvider = {
   AwsIam: "aws_iam",
   GcpIam: "gcp_iam",
 } as const;
 /**
  * The cloud provider of the credential.
  */
-export type Provider = ClosedEnum<typeof Provider>;
+export type GcpIamCredentialProvider = ClosedEnum<
+  typeof GcpIamCredentialProvider
+>;
 
 /**
  * A GCP IAM external credential.
@@ -48,7 +50,7 @@ export type GcpIamCredential = {
   /**
    * The cloud provider of the credential.
    */
-  provider: Provider;
+  provider: GcpIamCredentialProvider;
   /**
    * When the credential was last updated.
    */
@@ -68,9 +70,9 @@ export type GcpIamCredential = {
 };
 
 /** @internal */
-export const Provider$inboundSchema: z.ZodMiniEnum<typeof Provider> = z.enum(
-  Provider,
-);
+export const GcpIamCredentialProvider$inboundSchema: z.ZodMiniEnum<
+  typeof GcpIamCredentialProvider
+> = z.enum(GcpIamCredentialProvider);
 
 /** @internal */
 export const GcpIamCredential$inboundSchema: z.ZodMiniType<
@@ -86,7 +88,7 @@ export const GcpIamCredential$inboundSchema: z.ZodMiniType<
     impersonate_service_account: z.optional(z.string()),
     name: z.string(),
     organization_id: z.string(),
-    provider: Provider$inboundSchema,
+    provider: GcpIamCredentialProvider$inboundSchema,
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

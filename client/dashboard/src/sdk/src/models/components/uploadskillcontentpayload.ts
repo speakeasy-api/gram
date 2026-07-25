@@ -9,15 +9,13 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * Contract version.
  */
-export const UploadSkillContentPayloadSchemaVersion = {
+export const SchemaVersion = {
   HookSkillContentV1: "hook.skill-content.v1",
 } as const;
 /**
  * Contract version.
  */
-export type UploadSkillContentPayloadSchemaVersion = ClosedEnum<
-  typeof UploadSkillContentPayloadSchemaVersion
->;
+export type SchemaVersion = ClosedEnum<typeof SchemaVersion>;
 
 /**
  * Content for a skill manifest requested by a prior hook ingest response.
@@ -34,14 +32,12 @@ export type UploadSkillContentPayload = {
   /**
    * Contract version.
    */
-  schemaVersion: UploadSkillContentPayloadSchemaVersion;
+  schemaVersion: SchemaVersion;
 };
 
 /** @internal */
-export const UploadSkillContentPayloadSchemaVersion$outboundSchema:
-  z.ZodMiniEnum<typeof UploadSkillContentPayloadSchemaVersion> = z.enum(
-    UploadSkillContentPayloadSchemaVersion,
-  );
+export const SchemaVersion$outboundSchema: z.ZodMiniEnum<typeof SchemaVersion> =
+  z.enum(SchemaVersion);
 
 /** @internal */
 export type UploadSkillContentPayload$Outbound = {
@@ -58,7 +54,7 @@ export const UploadSkillContentPayload$outboundSchema: z.ZodMiniType<
   z.object({
     content: z.string(),
     rawSha256: z.string(),
-    schemaVersion: UploadSkillContentPayloadSchemaVersion$outboundSchema,
+    schemaVersion: SchemaVersion$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

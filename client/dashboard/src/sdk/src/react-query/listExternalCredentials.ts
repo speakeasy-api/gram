@@ -24,7 +24,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListExternalCredentialsRequest,
   ListExternalCredentialsSecurity,
-  QueryParamProvider,
+  Provider,
 } from "../models/operations/listexternalcredentials.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -118,7 +118,7 @@ export function setListExternalCredentialsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      provider?: QueryParamProvider | undefined;
+      provider?: Provider | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -133,7 +133,7 @@ export function invalidateListExternalCredentials(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      provider?: QueryParamProvider | undefined;
+      provider?: Provider | undefined;
       gramSession?: string | undefined;
     }]
   >,

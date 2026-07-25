@@ -7,14 +7,9 @@
 
 package server
 
-// FetchRemoteSessionIssuerMetadataRemoteSessionIssuersPath returns the URL path to the remoteSessionIssuers service fetchRemoteSessionIssuerMetadata HTTP endpoint.
-func FetchRemoteSessionIssuerMetadataRemoteSessionIssuersPath() string {
-	return "/rpc/remoteSessionIssuers.fetchMetadata"
-}
-
-// RefreshRemoteSessionIssuerMetadataRemoteSessionIssuersPath returns the URL path to the remoteSessionIssuers service refreshRemoteSessionIssuerMetadata HTTP endpoint.
-func RefreshRemoteSessionIssuerMetadataRemoteSessionIssuersPath() string {
-	return "/rpc/remoteSessionIssuers.refreshMetadata"
+// DiscoverRemoteSessionIssuerRemoteSessionIssuersPath returns the URL path to the remoteSessionIssuers service discoverRemoteSessionIssuer HTTP endpoint.
+func DiscoverRemoteSessionIssuerRemoteSessionIssuersPath() string {
+	return "/rpc/remoteSessionIssuers.discover"
 }
 
 // CreateRemoteSessionIssuerRemoteSessionIssuersPath returns the URL path to the remoteSessionIssuers service createRemoteSessionIssuer HTTP endpoint.

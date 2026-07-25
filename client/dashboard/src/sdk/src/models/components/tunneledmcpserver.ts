@@ -54,10 +54,6 @@ export type TunneledMcpServer = {
    */
   agentVersion?: string | undefined;
   /**
-   * Whether the owner has consented to serving this source through a public, anonymous MCP endpoint
-   */
-  allowPublic: boolean;
-  /**
    * Derived live connection status for a tunneled MCP server source
    */
   connectionStatus: ConnectionStatus;
@@ -114,7 +110,6 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
     active_connection_count: z.int(),
     active_consumer_session_count: z.int(),
     agent_version: z.optional(z.string()),
-    allow_public: z.boolean(),
     connection_status: ConnectionStatus$inboundSchema,
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -138,7 +133,6 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
       "active_connection_count": "activeConnectionCount",
       "active_consumer_session_count": "activeConsumerSessionCount",
       "agent_version": "agentVersion",
-      "allow_public": "allowPublic",
       "connection_status": "connectionStatus",
       "created_at": "createdAt",
       "key_prefix": "keyPrefix",

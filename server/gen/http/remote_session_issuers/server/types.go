@@ -13,20 +13,12 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// FetchRemoteSessionIssuerMetadataRequestBody is the type of the
-// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
-// HTTP request body.
-type FetchRemoteSessionIssuerMetadataRequestBody struct {
-	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
+// DiscoverRemoteSessionIssuerRequestBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// request body.
+type DiscoverRemoteSessionIssuerRequestBody struct {
+	// Issuer URL to discover (e.g. https://login.linear.com).
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
-}
-
-// RefreshRemoteSessionIssuerMetadataRequestBody is the type of the
-// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
-// HTTP request body.
-type RefreshRemoteSessionIssuerMetadataRequestBody struct {
-	// The remote_session_issuer id.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
 // CreateRemoteSessionIssuerRequestBody is the type of the
@@ -128,10 +120,10 @@ type UpdateRemoteSessionIssuerRequestBody struct {
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
 }
 
-// FetchRemoteSessionIssuerMetadataResponseBody is the type of the
-// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
-// HTTP response body.
-type FetchRemoteSessionIssuerMetadataResponseBody struct {
+// DiscoverRemoteSessionIssuerResponseBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// response body.
+type DiscoverRemoteSessionIssuerResponseBody struct {
 	// Issuer URL; matches the iss claim.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
 	// Upstream authorization endpoint.
@@ -164,19 +156,6 @@ type FetchRemoteSessionIssuerMetadataResponseBody struct {
 	// as client_id (OAuth CIMD draft), parsed from the discovery document.
 	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
-	DiscoveryWarnings []string `form:"discovery_warnings" json:"discovery_warnings" xml:"discovery_warnings"`
-}
-
-// RefreshRemoteSessionIssuerMetadataResponseBody is the type of the
-// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
-// HTTP response body.
-type RefreshRemoteSessionIssuerMetadataResponseBody struct {
-	// The remote_session_issuer after the refreshed metadata was persisted.
-	Issuer *RemoteSessionIssuerResponseBody `form:"issuer" json:"issuer" xml:"issuer"`
-	// Warnings describing any RFC 8414 deviations encountered while re-reading the
-	// issuer's metadata document. A refresh that returns warnings still persisted
-	// its result; deviations severe enough to distrust the document abort the
-	// refresh with an error instead.
 	DiscoveryWarnings []string `form:"discovery_warnings" json:"discovery_warnings" xml:"discovery_warnings"`
 }
 
@@ -344,10 +323,10 @@ type GetRemoteSessionIssuerResponseBody struct {
 	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// FetchRemoteSessionIssuerMetadataUnauthorizedResponseBody is the type of the
-// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "unauthorized" error.
-type FetchRemoteSessionIssuerMetadataUnauthorizedResponseBody struct {
+// DiscoverRemoteSessionIssuerUnauthorizedResponseBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type DiscoverRemoteSessionIssuerUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -363,10 +342,10 @@ type FetchRemoteSessionIssuerMetadataUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// FetchRemoteSessionIssuerMetadataForbiddenResponseBody is the type of the
-// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "forbidden" error.
-type FetchRemoteSessionIssuerMetadataForbiddenResponseBody struct {
+// DiscoverRemoteSessionIssuerForbiddenResponseBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type DiscoverRemoteSessionIssuerForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -382,10 +361,10 @@ type FetchRemoteSessionIssuerMetadataForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// FetchRemoteSessionIssuerMetadataBadRequestResponseBody is the type of the
-// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "bad_request" error.
-type FetchRemoteSessionIssuerMetadataBadRequestResponseBody struct {
+// DiscoverRemoteSessionIssuerBadRequestResponseBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type DiscoverRemoteSessionIssuerBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -401,10 +380,10 @@ type FetchRemoteSessionIssuerMetadataBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// FetchRemoteSessionIssuerMetadataNotFoundResponseBody is the type of the
-// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "not_found" error.
-type FetchRemoteSessionIssuerMetadataNotFoundResponseBody struct {
+// DiscoverRemoteSessionIssuerNotFoundResponseBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type DiscoverRemoteSessionIssuerNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -420,10 +399,10 @@ type FetchRemoteSessionIssuerMetadataNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// FetchRemoteSessionIssuerMetadataConflictResponseBody is the type of the
-// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "conflict" error.
-type FetchRemoteSessionIssuerMetadataConflictResponseBody struct {
+// DiscoverRemoteSessionIssuerConflictResponseBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type DiscoverRemoteSessionIssuerConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -439,10 +418,10 @@ type FetchRemoteSessionIssuerMetadataConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// FetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody is the type of
-// the "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata"
-// endpoint HTTP response body for the "unsupported_media" error.
-type FetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody struct {
+// DiscoverRemoteSessionIssuerUnsupportedMediaResponseBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DiscoverRemoteSessionIssuerUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -458,10 +437,10 @@ type FetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// FetchRemoteSessionIssuerMetadataInvalidResponseBody is the type of the
-// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "invalid" error.
-type FetchRemoteSessionIssuerMetadataInvalidResponseBody struct {
+// DiscoverRemoteSessionIssuerInvalidResponseBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type DiscoverRemoteSessionIssuerInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -477,10 +456,10 @@ type FetchRemoteSessionIssuerMetadataInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// FetchRemoteSessionIssuerMetadataInvariantViolationResponseBody is the type
-// of the "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata"
-// endpoint HTTP response body for the "invariant_violation" error.
-type FetchRemoteSessionIssuerMetadataInvariantViolationResponseBody struct {
+// DiscoverRemoteSessionIssuerInvariantViolationResponseBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DiscoverRemoteSessionIssuerInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -496,10 +475,10 @@ type FetchRemoteSessionIssuerMetadataInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// FetchRemoteSessionIssuerMetadataUnexpectedResponseBody is the type of the
-// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "unexpected" error.
-type FetchRemoteSessionIssuerMetadataUnexpectedResponseBody struct {
+// DiscoverRemoteSessionIssuerUnexpectedResponseBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type DiscoverRemoteSessionIssuerUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -515,200 +494,10 @@ type FetchRemoteSessionIssuerMetadataUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// FetchRemoteSessionIssuerMetadataGatewayErrorResponseBody is the type of the
-// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "gateway_error" error.
-type FetchRemoteSessionIssuerMetadataGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody is the type of
-// the "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata"
-// endpoint HTTP response body for the "unauthorized" error.
-type RefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshRemoteSessionIssuerMetadataForbiddenResponseBody is the type of the
-// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "forbidden" error.
-type RefreshRemoteSessionIssuerMetadataForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshRemoteSessionIssuerMetadataBadRequestResponseBody is the type of the
-// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "bad_request" error.
-type RefreshRemoteSessionIssuerMetadataBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshRemoteSessionIssuerMetadataNotFoundResponseBody is the type of the
-// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "not_found" error.
-type RefreshRemoteSessionIssuerMetadataNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshRemoteSessionIssuerMetadataConflictResponseBody is the type of the
-// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "conflict" error.
-type RefreshRemoteSessionIssuerMetadataConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody is the type
-// of the "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata"
-// endpoint HTTP response body for the "unsupported_media" error.
-type RefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshRemoteSessionIssuerMetadataInvalidResponseBody is the type of the
-// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "invalid" error.
-type RefreshRemoteSessionIssuerMetadataInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody is the type
-// of the "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata"
-// endpoint HTTP response body for the "invariant_violation" error.
-type RefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshRemoteSessionIssuerMetadataUnexpectedResponseBody is the type of the
-// "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata" endpoint
-// HTTP response body for the "unexpected" error.
-type RefreshRemoteSessionIssuerMetadataUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// RefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody is the type of
-// the "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata"
-// endpoint HTTP response body for the "gateway_error" error.
-type RefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody struct {
+// DiscoverRemoteSessionIssuerGatewayErrorResponseBody is the type of the
+// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type DiscoverRemoteSessionIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1725,11 +1514,11 @@ type RemoteSessionIssuerResponseBody struct {
 	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// NewFetchRemoteSessionIssuerMetadataResponseBody builds the HTTP response
-// body from the result of the "fetchRemoteSessionIssuerMetadata" endpoint of
-// the "remoteSessionIssuers" service.
-func NewFetchRemoteSessionIssuerMetadataResponseBody(res *types.RemoteSessionIssuerDraft) *FetchRemoteSessionIssuerMetadataResponseBody {
-	body := &FetchRemoteSessionIssuerMetadataResponseBody{
+// NewDiscoverRemoteSessionIssuerResponseBody builds the HTTP response body
+// from the result of the "discoverRemoteSessionIssuer" endpoint of the
+// "remoteSessionIssuers" service.
+func NewDiscoverRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuerDraft) *DiscoverRemoteSessionIssuerResponseBody {
+	body := &DiscoverRemoteSessionIssuerResponseBody{
 		Issuer:                            res.Issuer,
 		AuthorizationEndpoint:             res.AuthorizationEndpoint,
 		TokenEndpoint:                     res.TokenEndpoint,
@@ -1765,25 +1554,6 @@ func NewFetchRemoteSessionIssuerMetadataResponseBody(res *types.RemoteSessionIss
 		for i, val := range res.TokenEndpointAuthMethodsSupported {
 			body.TokenEndpointAuthMethodsSupported[i] = val
 		}
-	}
-	if res.DiscoveryWarnings != nil {
-		body.DiscoveryWarnings = make([]string, len(res.DiscoveryWarnings))
-		for i, val := range res.DiscoveryWarnings {
-			body.DiscoveryWarnings[i] = val
-		}
-	} else {
-		body.DiscoveryWarnings = []string{}
-	}
-	return body
-}
-
-// NewRefreshRemoteSessionIssuerMetadataResponseBody builds the HTTP response
-// body from the result of the "refreshRemoteSessionIssuerMetadata" endpoint of
-// the "remoteSessionIssuers" service.
-func NewRefreshRemoteSessionIssuerMetadataResponseBody(res *types.RemoteSessionIssuerRefresh) *RefreshRemoteSessionIssuerMetadataResponseBody {
-	body := &RefreshRemoteSessionIssuerMetadataResponseBody{}
-	if res.Issuer != nil {
-		body.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(res.Issuer)
 	}
 	if res.DiscoveryWarnings != nil {
 		body.DiscoveryWarnings = make([]string, len(res.DiscoveryWarnings))
@@ -1977,11 +1747,11 @@ func NewGetRemoteSessionIssuerResponseBody(res *types.RemoteSessionIssuer) *GetR
 	return body
 }
 
-// NewFetchRemoteSessionIssuerMetadataUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "fetchRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewFetchRemoteSessionIssuerMetadataUnauthorizedResponseBody(res *goa.ServiceError) *FetchRemoteSessionIssuerMetadataUnauthorizedResponseBody {
-	body := &FetchRemoteSessionIssuerMetadataUnauthorizedResponseBody{
+// NewDiscoverRemoteSessionIssuerUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "discoverRemoteSessionIssuer" endpoint
+// of the "remoteSessionIssuers" service.
+func NewDiscoverRemoteSessionIssuerUnauthorizedResponseBody(res *goa.ServiceError) *DiscoverRemoteSessionIssuerUnauthorizedResponseBody {
+	body := &DiscoverRemoteSessionIssuerUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1992,11 +1762,11 @@ func NewFetchRemoteSessionIssuerMetadataUnauthorizedResponseBody(res *goa.Servic
 	return body
 }
 
-// NewFetchRemoteSessionIssuerMetadataForbiddenResponseBody builds the HTTP
-// response body from the result of the "fetchRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewFetchRemoteSessionIssuerMetadataForbiddenResponseBody(res *goa.ServiceError) *FetchRemoteSessionIssuerMetadataForbiddenResponseBody {
-	body := &FetchRemoteSessionIssuerMetadataForbiddenResponseBody{
+// NewDiscoverRemoteSessionIssuerForbiddenResponseBody builds the HTTP response
+// body from the result of the "discoverRemoteSessionIssuer" endpoint of the
+// "remoteSessionIssuers" service.
+func NewDiscoverRemoteSessionIssuerForbiddenResponseBody(res *goa.ServiceError) *DiscoverRemoteSessionIssuerForbiddenResponseBody {
+	body := &DiscoverRemoteSessionIssuerForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2007,11 +1777,11 @@ func NewFetchRemoteSessionIssuerMetadataForbiddenResponseBody(res *goa.ServiceEr
 	return body
 }
 
-// NewFetchRemoteSessionIssuerMetadataBadRequestResponseBody builds the HTTP
-// response body from the result of the "fetchRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewFetchRemoteSessionIssuerMetadataBadRequestResponseBody(res *goa.ServiceError) *FetchRemoteSessionIssuerMetadataBadRequestResponseBody {
-	body := &FetchRemoteSessionIssuerMetadataBadRequestResponseBody{
+// NewDiscoverRemoteSessionIssuerBadRequestResponseBody builds the HTTP
+// response body from the result of the "discoverRemoteSessionIssuer" endpoint
+// of the "remoteSessionIssuers" service.
+func NewDiscoverRemoteSessionIssuerBadRequestResponseBody(res *goa.ServiceError) *DiscoverRemoteSessionIssuerBadRequestResponseBody {
+	body := &DiscoverRemoteSessionIssuerBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2022,11 +1792,11 @@ func NewFetchRemoteSessionIssuerMetadataBadRequestResponseBody(res *goa.ServiceE
 	return body
 }
 
-// NewFetchRemoteSessionIssuerMetadataNotFoundResponseBody builds the HTTP
-// response body from the result of the "fetchRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewFetchRemoteSessionIssuerMetadataNotFoundResponseBody(res *goa.ServiceError) *FetchRemoteSessionIssuerMetadataNotFoundResponseBody {
-	body := &FetchRemoteSessionIssuerMetadataNotFoundResponseBody{
+// NewDiscoverRemoteSessionIssuerNotFoundResponseBody builds the HTTP response
+// body from the result of the "discoverRemoteSessionIssuer" endpoint of the
+// "remoteSessionIssuers" service.
+func NewDiscoverRemoteSessionIssuerNotFoundResponseBody(res *goa.ServiceError) *DiscoverRemoteSessionIssuerNotFoundResponseBody {
+	body := &DiscoverRemoteSessionIssuerNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2037,11 +1807,11 @@ func NewFetchRemoteSessionIssuerMetadataNotFoundResponseBody(res *goa.ServiceErr
 	return body
 }
 
-// NewFetchRemoteSessionIssuerMetadataConflictResponseBody builds the HTTP
-// response body from the result of the "fetchRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewFetchRemoteSessionIssuerMetadataConflictResponseBody(res *goa.ServiceError) *FetchRemoteSessionIssuerMetadataConflictResponseBody {
-	body := &FetchRemoteSessionIssuerMetadataConflictResponseBody{
+// NewDiscoverRemoteSessionIssuerConflictResponseBody builds the HTTP response
+// body from the result of the "discoverRemoteSessionIssuer" endpoint of the
+// "remoteSessionIssuers" service.
+func NewDiscoverRemoteSessionIssuerConflictResponseBody(res *goa.ServiceError) *DiscoverRemoteSessionIssuerConflictResponseBody {
+	body := &DiscoverRemoteSessionIssuerConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2052,11 +1822,11 @@ func NewFetchRemoteSessionIssuerMetadataConflictResponseBody(res *goa.ServiceErr
 	return body
 }
 
-// NewFetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody builds the
-// HTTP response body from the result of the "fetchRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewFetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody(res *goa.ServiceError) *FetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody {
-	body := &FetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody{
+// NewDiscoverRemoteSessionIssuerUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "discoverRemoteSessionIssuer" endpoint
+// of the "remoteSessionIssuers" service.
+func NewDiscoverRemoteSessionIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *DiscoverRemoteSessionIssuerUnsupportedMediaResponseBody {
+	body := &DiscoverRemoteSessionIssuerUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2067,11 +1837,11 @@ func NewFetchRemoteSessionIssuerMetadataUnsupportedMediaResponseBody(res *goa.Se
 	return body
 }
 
-// NewFetchRemoteSessionIssuerMetadataInvalidResponseBody builds the HTTP
-// response body from the result of the "fetchRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewFetchRemoteSessionIssuerMetadataInvalidResponseBody(res *goa.ServiceError) *FetchRemoteSessionIssuerMetadataInvalidResponseBody {
-	body := &FetchRemoteSessionIssuerMetadataInvalidResponseBody{
+// NewDiscoverRemoteSessionIssuerInvalidResponseBody builds the HTTP response
+// body from the result of the "discoverRemoteSessionIssuer" endpoint of the
+// "remoteSessionIssuers" service.
+func NewDiscoverRemoteSessionIssuerInvalidResponseBody(res *goa.ServiceError) *DiscoverRemoteSessionIssuerInvalidResponseBody {
+	body := &DiscoverRemoteSessionIssuerInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2082,11 +1852,11 @@ func NewFetchRemoteSessionIssuerMetadataInvalidResponseBody(res *goa.ServiceErro
 	return body
 }
 
-// NewFetchRemoteSessionIssuerMetadataInvariantViolationResponseBody builds the
-// HTTP response body from the result of the "fetchRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewFetchRemoteSessionIssuerMetadataInvariantViolationResponseBody(res *goa.ServiceError) *FetchRemoteSessionIssuerMetadataInvariantViolationResponseBody {
-	body := &FetchRemoteSessionIssuerMetadataInvariantViolationResponseBody{
+// NewDiscoverRemoteSessionIssuerInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "discoverRemoteSessionIssuer" endpoint
+// of the "remoteSessionIssuers" service.
+func NewDiscoverRemoteSessionIssuerInvariantViolationResponseBody(res *goa.ServiceError) *DiscoverRemoteSessionIssuerInvariantViolationResponseBody {
+	body := &DiscoverRemoteSessionIssuerInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2097,11 +1867,11 @@ func NewFetchRemoteSessionIssuerMetadataInvariantViolationResponseBody(res *goa.
 	return body
 }
 
-// NewFetchRemoteSessionIssuerMetadataUnexpectedResponseBody builds the HTTP
-// response body from the result of the "fetchRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewFetchRemoteSessionIssuerMetadataUnexpectedResponseBody(res *goa.ServiceError) *FetchRemoteSessionIssuerMetadataUnexpectedResponseBody {
-	body := &FetchRemoteSessionIssuerMetadataUnexpectedResponseBody{
+// NewDiscoverRemoteSessionIssuerUnexpectedResponseBody builds the HTTP
+// response body from the result of the "discoverRemoteSessionIssuer" endpoint
+// of the "remoteSessionIssuers" service.
+func NewDiscoverRemoteSessionIssuerUnexpectedResponseBody(res *goa.ServiceError) *DiscoverRemoteSessionIssuerUnexpectedResponseBody {
+	body := &DiscoverRemoteSessionIssuerUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2112,165 +1882,11 @@ func NewFetchRemoteSessionIssuerMetadataUnexpectedResponseBody(res *goa.ServiceE
 	return body
 }
 
-// NewFetchRemoteSessionIssuerMetadataGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "fetchRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewFetchRemoteSessionIssuerMetadataGatewayErrorResponseBody(res *goa.ServiceError) *FetchRemoteSessionIssuerMetadataGatewayErrorResponseBody {
-	body := &FetchRemoteSessionIssuerMetadataGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody builds the
-// HTTP response body from the result of the
-// "refreshRemoteSessionIssuerMetadata" endpoint of the "remoteSessionIssuers"
-// service.
-func NewRefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody(res *goa.ServiceError) *RefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody {
-	body := &RefreshRemoteSessionIssuerMetadataUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshRemoteSessionIssuerMetadataForbiddenResponseBody builds the HTTP
-// response body from the result of the "refreshRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewRefreshRemoteSessionIssuerMetadataForbiddenResponseBody(res *goa.ServiceError) *RefreshRemoteSessionIssuerMetadataForbiddenResponseBody {
-	body := &RefreshRemoteSessionIssuerMetadataForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshRemoteSessionIssuerMetadataBadRequestResponseBody builds the HTTP
-// response body from the result of the "refreshRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewRefreshRemoteSessionIssuerMetadataBadRequestResponseBody(res *goa.ServiceError) *RefreshRemoteSessionIssuerMetadataBadRequestResponseBody {
-	body := &RefreshRemoteSessionIssuerMetadataBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshRemoteSessionIssuerMetadataNotFoundResponseBody builds the HTTP
-// response body from the result of the "refreshRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewRefreshRemoteSessionIssuerMetadataNotFoundResponseBody(res *goa.ServiceError) *RefreshRemoteSessionIssuerMetadataNotFoundResponseBody {
-	body := &RefreshRemoteSessionIssuerMetadataNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshRemoteSessionIssuerMetadataConflictResponseBody builds the HTTP
-// response body from the result of the "refreshRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewRefreshRemoteSessionIssuerMetadataConflictResponseBody(res *goa.ServiceError) *RefreshRemoteSessionIssuerMetadataConflictResponseBody {
-	body := &RefreshRemoteSessionIssuerMetadataConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody builds the
-// HTTP response body from the result of the
-// "refreshRemoteSessionIssuerMetadata" endpoint of the "remoteSessionIssuers"
-// service.
-func NewRefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody(res *goa.ServiceError) *RefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody {
-	body := &RefreshRemoteSessionIssuerMetadataUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshRemoteSessionIssuerMetadataInvalidResponseBody builds the HTTP
-// response body from the result of the "refreshRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewRefreshRemoteSessionIssuerMetadataInvalidResponseBody(res *goa.ServiceError) *RefreshRemoteSessionIssuerMetadataInvalidResponseBody {
-	body := &RefreshRemoteSessionIssuerMetadataInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody builds
-// the HTTP response body from the result of the
-// "refreshRemoteSessionIssuerMetadata" endpoint of the "remoteSessionIssuers"
-// service.
-func NewRefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody(res *goa.ServiceError) *RefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody {
-	body := &RefreshRemoteSessionIssuerMetadataInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshRemoteSessionIssuerMetadataUnexpectedResponseBody builds the HTTP
-// response body from the result of the "refreshRemoteSessionIssuerMetadata"
-// endpoint of the "remoteSessionIssuers" service.
-func NewRefreshRemoteSessionIssuerMetadataUnexpectedResponseBody(res *goa.ServiceError) *RefreshRemoteSessionIssuerMetadataUnexpectedResponseBody {
-	body := &RefreshRemoteSessionIssuerMetadataUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewRefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody builds the
-// HTTP response body from the result of the
-// "refreshRemoteSessionIssuerMetadata" endpoint of the "remoteSessionIssuers"
-// service.
-func NewRefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody(res *goa.ServiceError) *RefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody {
-	body := &RefreshRemoteSessionIssuerMetadataGatewayErrorResponseBody{
+// NewDiscoverRemoteSessionIssuerGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "discoverRemoteSessionIssuer" endpoint
+// of the "remoteSessionIssuers" service.
+func NewDiscoverRemoteSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *DiscoverRemoteSessionIssuerGatewayErrorResponseBody {
+	body := &DiscoverRemoteSessionIssuerGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3031,24 +2647,11 @@ func NewDeleteRemoteSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
-// NewFetchRemoteSessionIssuerMetadataPayload builds a remoteSessionIssuers
-// service fetchRemoteSessionIssuerMetadata endpoint payload.
-func NewFetchRemoteSessionIssuerMetadataPayload(body *FetchRemoteSessionIssuerMetadataRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.FetchRemoteSessionIssuerMetadataPayload {
-	v := &remotesessionissuers.FetchRemoteSessionIssuerMetadataPayload{
+// NewDiscoverRemoteSessionIssuerPayload builds a remoteSessionIssuers service
+// discoverRemoteSessionIssuer endpoint payload.
+func NewDiscoverRemoteSessionIssuerPayload(body *DiscoverRemoteSessionIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.DiscoverRemoteSessionIssuerPayload {
+	v := &remotesessionissuers.DiscoverRemoteSessionIssuerPayload{
 		Issuer: *body.Issuer,
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v
-}
-
-// NewRefreshRemoteSessionIssuerMetadataPayload builds a remoteSessionIssuers
-// service refreshRemoteSessionIssuerMetadata endpoint payload.
-func NewRefreshRemoteSessionIssuerMetadataPayload(body *RefreshRemoteSessionIssuerMetadataRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionissuers.RefreshRemoteSessionIssuerMetadataPayload {
-	v := &remotesessionissuers.RefreshRemoteSessionIssuerMetadataPayload{
-		ID: *body.ID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -3198,23 +2801,11 @@ func NewDeleteRemoteSessionIssuerPayload(id string, sessionToken *string, apikey
 	return v
 }
 
-// ValidateFetchRemoteSessionIssuerMetadataRequestBody runs the validations
-// defined on FetchRemoteSessionIssuerMetadataRequestBody
-func ValidateFetchRemoteSessionIssuerMetadataRequestBody(body *FetchRemoteSessionIssuerMetadataRequestBody) (err error) {
+// ValidateDiscoverRemoteSessionIssuerRequestBody runs the validations defined
+// on DiscoverRemoteSessionIssuerRequestBody
+func ValidateDiscoverRemoteSessionIssuerRequestBody(body *DiscoverRemoteSessionIssuerRequestBody) (err error) {
 	if body.Issuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
-	}
-	return
-}
-
-// ValidateRefreshRemoteSessionIssuerMetadataRequestBody runs the validations
-// defined on RefreshRemoteSessionIssuerMetadataRequestBody
-func ValidateRefreshRemoteSessionIssuerMetadataRequestBody(body *RefreshRemoteSessionIssuerMetadataRequestBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }
