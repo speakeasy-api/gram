@@ -1,18 +1,4 @@
-import type { QueryClient } from "@tanstack/react-query";
-import { invalidateAllSpendRulesListEvents } from "@gram/client/react-query/spendRulesListEvents.js";
-import { invalidateAllSpendRulesListRules } from "@gram/client/react-query/spendRulesListRules.js";
-import { invalidateAllSpendRulesOverview } from "@gram/client/react-query/spendRulesOverview.js";
-import type { SpendRule } from "@gram/client/models/components/spendrule.js";
-import type { SpendRuleEvent } from "@gram/client/models/components/spendruleevent.js";
-import type { SpendRuleUsage } from "@gram/client/models/components/spendruleusage.js";
 import { ACTOR_ATTRIBUTES } from "./budget-cel";
-
-export type { PreviewSpendRuleResult } from "@gram/client/models/components/previewspendruleresult.js";
-export type { SpendRule } from "@gram/client/models/components/spendrule.js";
-export type { SpendRuleActorUsage } from "@gram/client/models/components/spendruleactorusage.js";
-export type { SpendRuleEvent } from "@gram/client/models/components/spendruleevent.js";
-export type { SpendRulesOverviewResult } from "@gram/client/models/components/spendrulesoverviewresult.js";
-export type { SpendRuleUsage } from "@gram/client/models/components/spendruleusage.js";
 
 /* -------------------------------------------------------------------------- */
 /*  Vocabulary                                                                 */
@@ -43,6 +29,112 @@ interface RuleTargetLike {
   attribute: string;
   operator: string;
   value: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Models                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/* App-owned budget view types. They mirror the spend-rules API responses but
+ * are defined here, not re-exported from the generated SDK, so a regeneration
+ * that reshapes an SDK model surfaces as a type error in the mapping layer
+ * (budgets-queries.ts) rather than silently rippling through every component.
+ * The SDK→app mapping happens once, at the react-query boundary. */
+
+/** A budget rule as the UI consumes it. One immutable version row: editing a
+ *  rule archives the current row and creates a successor with a fresh id. */
+export interface SpendRule {
+  id: string;
+  organizationId: string;
+  /** URL-safe identifier, unique per org and immutable; the URN embeds it. */
+  slug: string;
+  /** Versioned identity, e.g. `spend_rule:eng-monthly-cap:v3`. */
+  urn: string;
+  /** Position in the slug lineage; every edit increments it. */
+  version: number;
+  name: string;
+  description: string;
+  /** Structured actor-directory condition — who the rule covers. */
+  target: RuleTargetCondition;
+  /** CEL expression selecting matched members (derived from `target`). */
+  targetExpr: string;
+  /** CEL expression over actor usage identifying a breach. */
+  ruleExpr: string;
+  /** Per-person budget in USD for one window. */
+  limitUsd: number;
+  windowKind: BudgetWindow;
+  /** Percent of the limit (1–99) at which a warning event fires. */
+  warnAtPct: number;
+  action: RuleAction;
+  enabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Server-computed current-window usage for one rule (overview endpoint). */
+export interface SpendRuleUsage {
+  ruleId: string;
+  status: RuleStatus;
+  /** Aggregate spend across matched people this window. */
+  spendUsd: number;
+  /** Total budget = per-person limit × matched people. */
+  budgetUsd: number;
+  matchedUsers: number;
+  usersWarned: number;
+  usersBreached: number;
+  /** Highest per-person utilization, as a percent of the limit. */
+  worstUsedPct: number;
+}
+
+/** One matched person's current-window spend against their per-person budget. */
+export interface SpendRuleActorUsage {
+  email: string;
+  displayName?: string;
+  userId?: string;
+  spendUsd: number;
+  limitUsd: number;
+  usedPct: number;
+  breached: boolean;
+}
+
+/** A warning or breach recorded when a rule evaluated a person's spend. Pins
+ *  the config (rule name, limit) that applied when it fired. */
+export interface SpendRuleEvent {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  /** Versioned URN the event fired under — the live rule may have moved on. */
+  ruleUrn: string;
+  eventType: SpendEventType;
+  email: string;
+  displayName?: string;
+  userId?: string;
+  spendUsd: number;
+  limitUsd: number;
+  windowStart: Date;
+  windowEnd: Date;
+  createdAt: Date;
+}
+
+/** Org-wide rollup shown as summary cards above the rules table. */
+export interface SpendRulesOverviewResult {
+  rules: SpendRuleUsage[];
+  rulesTotal: number;
+  rulesUnhealthy: number;
+  totalSpendUsd: number;
+  totalBudgetUsd: number;
+  spendOverBudgetUsd: number;
+  usersTotal: number;
+  usersBreached: number;
+}
+
+/** Result of previewing a rule's target: which people it matches and their
+ *  current spend against the proposed budget. */
+export interface PreviewSpendRuleResult {
+  actors: SpendRuleActorUsage[];
+  matchedCount: number;
+  windowStart: Date;
+  windowEnd: Date;
 }
 
 export const WINDOW_LABELS: Record<BudgetWindow, string> = {
@@ -137,18 +229,6 @@ export function parseRuleUrn(
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Query invalidation                                                         */
-/* -------------------------------------------------------------------------- */
-
-/** Rules, overview, and events all describe the same state; a rule mutation
- *  refreshes every budgets query so no tab shows stale numbers. */
-export function invalidateBudgetQueries(client: QueryClient): void {
-  void invalidateAllSpendRulesListRules(client);
-  void invalidateAllSpendRulesOverview(client);
-  void invalidateAllSpendRulesListEvents(client);
-}
-
-/* -------------------------------------------------------------------------- */
 /*  Derived display helpers                                                    */
 /* -------------------------------------------------------------------------- */
 
@@ -240,7 +320,9 @@ function targetAttributeLabel(name: string): string {
     .join(" ");
 }
 
-function normalizeTargetCondition(target: RuleTargetLike): RuleTargetCondition {
+export function normalizeTargetCondition(
+  target: RuleTargetLike,
+): RuleTargetCondition {
   return {
     attribute: target.attribute,
     operator: isRuleTargetOperator(target.operator)

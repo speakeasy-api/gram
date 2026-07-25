@@ -8,8 +8,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
-import { useSpendRulesListEvents } from "@gram/client/react-query/spendRulesListEvents.js";
-import { useSpendRulesPreviewRuleMutation } from "@gram/client/react-query/spendRulesPreviewRule.js";
 import { Loader2, Pencil, Search, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import { EventTypeBadge, RuleActionBadge, UsageBar } from "./budget-shared";
@@ -25,6 +23,7 @@ import {
   type SpendRuleActorUsage,
   type SpendRuleUsage,
 } from "./budgets-data";
+import { useBudgetEvents, usePreviewBudgetRule } from "./budgets-queries";
 
 /** Read-only drill-down for one rule: live budget state, which people are
  *  driving the spend, and the rule's lifecycle events. */
@@ -63,25 +62,30 @@ function useRuleActorBreakdown(rule: SpendRule): {
   error: boolean;
   retry: () => void;
 } {
-  const previewMutation = useSpendRulesPreviewRuleMutation();
+  const {
+    preview: runPreviewMutation,
+    isPending,
+    isError,
+  } = usePreviewBudgetRule();
   const [preview, setPreview] = useState<PreviewSpendRuleResult | null>(null);
-  const { mutate } = previewMutation;
 
   const runPreview = useCallback(() => {
-    mutate(
+    runPreviewMutation(
       {
-        request: {
-          previewSpendRuleRequestBody: {
-            target: rule.target,
-            limitUsd: rule.limitUsd,
-            warnAtPct: rule.warnAtPct,
-            windowKind: rule.windowKind,
-          },
-        },
+        target: rule.target,
+        limitUsd: rule.limitUsd,
+        warnAtPct: rule.warnAtPct,
+        windowKind: rule.windowKind,
       },
       { onSuccess: (data) => setPreview(data) },
     );
-  }, [rule.target, rule.limitUsd, rule.warnAtPct, rule.windowKind, mutate]);
+  }, [
+    rule.target,
+    rule.limitUsd,
+    rule.warnAtPct,
+    rule.windowKind,
+    runPreviewMutation,
+  ]);
 
   useEffect(() => {
     runPreview();
@@ -92,8 +96,8 @@ function useRuleActorBreakdown(rule: SpendRule): {
   // an empty match look identical otherwise).
   return {
     preview,
-    loading: previewMutation.isPending,
-    error: previewMutation.isError && preview === null,
+    loading: isPending,
+    error: isError && preview === null,
     retry: runPreview,
   };
 }
@@ -113,14 +117,11 @@ function RuleDetail({
     error: actorsError,
     retry: retryActors,
   } = useRuleActorBreakdown(rule);
-  const { data: eventsData } = useSpendRulesListEvents({
+  const { events: ruleEvents } = useBudgetEvents({
     ruleId: rule.id,
     limit: 50,
   });
-  const events = useMemo(
-    () => sortEventsByRecency(eventsData?.events ?? []),
-    [eventsData],
-  );
+  const events = useMemo(() => sortEventsByRecency(ruleEvents), [ruleEvents]);
 
   const actors = preview?.actors ?? [];
 

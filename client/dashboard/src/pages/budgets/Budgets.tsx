@@ -11,14 +11,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { useSpendRulesArchiveRuleMutation } from "@gram/client/react-query/spendRulesArchiveRule.js";
-import { useSpendRulesCreateRuleMutation } from "@gram/client/react-query/spendRulesCreateRule.js";
-import { useSpendRulesListEvents } from "@gram/client/react-query/spendRulesListEvents.js";
-import { useSpendRulesListRules } from "@gram/client/react-query/spendRulesListRules.js";
-import { useSpendRulesOverview } from "@gram/client/react-query/spendRulesOverview.js";
-import { useSpendRulesUpdateRuleMutation } from "@gram/client/react-query/spendRulesUpdateRule.js";
 import { Table, type Column } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
 import { Inbox, Plus, SearchX, TriangleAlert, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
@@ -34,7 +27,6 @@ import {
 import {
   WINDOW_LABELS,
   formatUsd,
-  invalidateBudgetQueries,
   parseRuleUrn,
   ruleStatusOf,
   targetSummary,
@@ -46,6 +38,15 @@ import {
   type SpendRulesOverviewResult,
   type SpendRuleUsage,
 } from "./budgets-data";
+import {
+  useArchiveBudgetRule,
+  useBudgetEvents,
+  useBudgetOverview,
+  useBudgetRules,
+  useCreateBudgetRule,
+  useInvalidateBudgetQueries,
+  useUpdateBudgetRule,
+} from "./budgets-queries";
 
 type ActionFilter = "all" | RuleAction;
 type BudgetTab = "rules" | "events";
@@ -54,79 +55,71 @@ type BudgetTab = "rules" | "events";
  *  pages/costs/Costs.tsx, which owns the `gram-budgets` flag gate and the
  *  org:admin scope guard around this content). */
 export function BudgetsContent(): JSX.Element {
-  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<BudgetTab>("rules");
   const [createOpen, setCreateOpen] = useState(false);
   const [viewing, setViewing] = useState<SpendRule | null>(null);
   const [editing, setEditing] = useState<SpendRule | null>(null);
 
   const {
-    data: rulesData,
+    rules,
     isLoading: rulesLoading,
     isError: rulesError,
     refetch: refetchRules,
-  } = useSpendRulesListRules();
-  const { data: overview } = useSpendRulesOverview();
-  const rules = useMemo(() => rulesData?.rules ?? [], [rulesData]);
+  } = useBudgetRules();
+  const { overview } = useBudgetOverview();
   const usageMap = useMemo(() => usageByRuleId(overview?.rules), [overview]);
 
-  const invalidate = () => invalidateBudgetQueries(queryClient);
+  const invalidate = useInvalidateBudgetQueries();
 
-  const createMutation = useSpendRulesCreateRuleMutation({
+  const { create, isPending: creating } = useCreateBudgetRule({
     onSuccess: () => {
       invalidate();
       setCreateOpen(false);
       toast.success("Rule created");
     },
-    onError: (error) => toast.error(error.message),
+    onError: (message) => {
+      toast.error(message);
+    },
   });
 
-  const updateMutation = useSpendRulesUpdateRuleMutation({
+  const { update, isPending: updating } = useUpdateBudgetRule({
     onSuccess: () => {
       invalidate();
       setEditing(null);
       toast.success("Rule updated");
     },
-    onError: (error) => toast.error(error.message),
+    onError: (message) => {
+      toast.error(message);
+    },
   });
 
-  const archiveMutation = useSpendRulesArchiveRuleMutation({
+  const { archive, isPending: archiving } = useArchiveBudgetRule({
     onSuccess: () => {
       invalidate();
       setEditing(null);
       toast.success("Rule archived");
     },
-    onError: (error) => toast.error(error.message),
+    onError: (message) => {
+      toast.error(message);
+    },
   });
 
   const handleCreate = (draft: RuleDraft) => {
-    createMutation.mutate({
-      request: { createSpendRuleRequestBody: draft },
-    });
+    create(draft);
   };
 
   const handleUpdate = (draft: RuleDraft) => {
     if (!editing) return;
-    updateMutation.mutate({
-      request: {
-        updateSpendRuleRequestBody: { id: editing.id, ...draft },
-      },
-    });
+    update({ id: editing.id, ...draft });
   };
 
   const handleArchive = () => {
     if (!editing) return;
-    archiveMutation.mutate({
-      request: { riskIDRequestBody: { id: editing.id } },
-    });
+    archive(editing.id);
   };
 
   const handleToggle = (rule: SpendRule, on: boolean) => {
-    updateMutation.mutate({
-      request: {
-        updateSpendRuleRequestBody: { id: rule.id, enabled: on },
-      },
-    });
+    update({ id: rule.id, enabled: on });
   };
 
   return (
@@ -167,7 +160,7 @@ export function BudgetsContent(): JSX.Element {
                   rules={rules}
                   loading={rulesLoading}
                   error={rulesError}
-                  onRetry={() => void refetchRules()}
+                  onRetry={() => refetchRules()}
                   usageMap={usageMap}
                   onNew={() => setCreateOpen(true)}
                   onView={setViewing}
@@ -195,7 +188,7 @@ export function BudgetsContent(): JSX.Element {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSubmit={handleCreate}
-        submitting={createMutation.isPending}
+        submitting={creating}
       />
       <RuleSheet
         open={editing !== null}
@@ -205,7 +198,7 @@ export function BudgetsContent(): JSX.Element {
         rule={editing ?? undefined}
         onSubmit={handleUpdate}
         onArchive={handleArchive}
-        submitting={updateMutation.isPending || archiveMutation.isPending}
+        submitting={updating || archiving}
       />
     </>
   );
@@ -525,12 +518,18 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
   // instead of replacing it.
   const [loaded, setLoaded] = useState<SpendRuleEvent[]>([]);
 
-  const { data, isLoading, isFetching, isError, refetch } =
-    useSpendRulesListEvents({
-      eventType: filter === "all" ? undefined : filter,
-      cursor,
-      limit: EVENTS_PAGE_LIMIT,
-    });
+  const {
+    events: page,
+    nextCursor,
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+  } = useBudgetEvents({
+    eventType: filter === "all" ? undefined : filter,
+    cursor,
+    limit: EVENTS_PAGE_LIMIT,
+  });
 
   // Changing the filter restarts pagination from the first page.
   useEffect(() => {
@@ -541,17 +540,15 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
   // Append each fetched page, de-duping by id so a re-render or overlap never
   // doubles a row.
   useEffect(() => {
-    const page = data?.events;
-    if (!page || page.length === 0) return;
+    if (page.length === 0) return;
     setLoaded((prev) => {
       const seen = new Set(prev.map((event) => event.id));
       const additions = page.filter((event) => !seen.has(event.id));
       return additions.length > 0 ? [...prev, ...additions] : prev;
     });
-  }, [data]);
+  }, [page]);
 
   const events = loaded;
-  const nextCursor = data?.nextCursor;
 
   // Live version per slug lineage. Events reference the exact (possibly
   // superseded) version row that fired them, so the slug — not the row id —
@@ -618,7 +615,7 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
         title="Couldn't load budget events"
         description="Something went wrong while loading the event history. Retry, or refresh the page if the problem persists."
         action={
-          <Button variant="outline" onClick={() => void refetch()}>
+          <Button variant="outline" onClick={() => refetch()}>
             Retry
           </Button>
         }

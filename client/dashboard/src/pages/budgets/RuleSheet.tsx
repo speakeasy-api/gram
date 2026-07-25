@@ -26,7 +26,6 @@ import {
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { useSpendRulesPreviewRuleMutation } from "@gram/client/react-query/spendRulesPreviewRule.js";
 import { Archive, Check, Loader2, Search, Users } from "lucide-react";
 import {
   useEffect,
@@ -50,6 +49,7 @@ import {
   type RuleTargetOperator,
   type SpendRule,
 } from "./budgets-data";
+import { usePreviewBudgetRule } from "./budgets-queries";
 
 const WINDOWS: BudgetWindow[] = ["daily", "weekly", "monthly"];
 
@@ -151,9 +151,8 @@ export function RuleSheet({
 function useRulePreview(
   draft: Pick<RuleDraft, "target" | "limitUsd" | "warnAtPct" | "windowKind">,
 ): { preview: PreviewSpendRuleResult | null; loading: boolean } {
-  const previewMutation = useSpendRulesPreviewRuleMutation();
+  const { preview: runPreviewMutation, isPending } = usePreviewBudgetRule();
   const [preview, setPreview] = useState<PreviewSpendRuleResult | null>(null);
-  const { mutate } = previewMutation;
 
   useEffect(() => {
     if (draft.limitUsd <= 0 || draft.target.value.trim() === "") {
@@ -163,26 +162,26 @@ function useRulePreview(
       return;
     }
     const timer = setTimeout(() => {
-      mutate(
+      runPreviewMutation(
         {
-          request: {
-            previewSpendRuleRequestBody: {
-              target: draft.target,
-              limitUsd: draft.limitUsd,
-              warnAtPct: draft.warnAtPct,
-              windowKind: draft.windowKind,
-            },
-          },
+          target: draft.target,
+          limitUsd: draft.limitUsd,
+          warnAtPct: draft.warnAtPct,
+          windowKind: draft.windowKind,
         },
-        {
-          onSuccess: (data) => setPreview(data),
-        },
+        { onSuccess: (data) => setPreview(data) },
       );
     }, 350);
     return () => clearTimeout(timer);
-  }, [draft.target, draft.limitUsd, draft.warnAtPct, draft.windowKind, mutate]);
+  }, [
+    draft.target,
+    draft.limitUsd,
+    draft.warnAtPct,
+    draft.windowKind,
+    runPreviewMutation,
+  ]);
 
-  return { preview, loading: previewMutation.isPending };
+  return { preview, loading: isPending };
 }
 
 function RuleForm({
