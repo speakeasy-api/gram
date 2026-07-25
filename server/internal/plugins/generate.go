@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net"
 	"net/url"
 	"path"
 	"slices"
@@ -933,6 +934,8 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 		mcpServers[keys[i]] = entry
 	}
 	if feedbackURL, headers, ok := skillFeedbackMCPConfig(p, cfg); ok {
+		// Codex trims invalid edge characters when forming keys, so a
+		// non-exact display name can still occupy the reserved key.
 		if _, exists := mcpServers[skillFeedbackMCPServerName]; !exists {
 			mcpServers[skillFeedbackMCPServerName] = codexMCPServer{
 				URL:               feedbackURL,
@@ -1692,12 +1695,10 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 		}
 	}
 	if feedbackURL, headers, ok := skillFeedbackMCPConfig(p, cfg); ok {
-		if _, exists := mcpServers[skillFeedbackMCPServerName]; !exists {
-			mcpServers[skillFeedbackMCPServerName] = claudeMCPServer{
-				Type:    "http",
-				URL:     feedbackURL,
-				Headers: headers,
-			}
+		mcpServers[skillFeedbackMCPServerName] = claudeMCPServer{
+			Type:    "http",
+			URL:     feedbackURL,
+			Headers: headers,
 		}
 	}
 	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
@@ -1750,8 +1751,14 @@ func skillFeedbackMCPConfig(p PluginInfo, cfg GenerateConfig) (string, map[strin
 	hooksKey := strings.TrimSpace(cfg.HooksAPIKey)
 	projectSlug := strings.TrimSpace(cfg.ProjectSlug)
 	base, err := url.Parse(strings.TrimSpace(cfg.ServerURL))
-	if hooksKey == "" || projectSlug == "" || err != nil || base.Host == "" || (base.Scheme != "http" && base.Scheme != "https") {
+	if hooksKey == "" || projectSlug == "" || err != nil || base.Host == "" || base.Hostname() == "" {
 		return "", nil, false
+	}
+	if base.Scheme != "https" {
+		ip := net.ParseIP(base.Hostname())
+		if base.Scheme != "http" || (base.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback())) {
+			return "", nil, false
+		}
 	}
 
 	return platformtools.PlatformToolsetURL(base, platformtools.SkillFeedbackPlatformToolsetSlug), map[string]string{
@@ -1812,11 +1819,9 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		}
 	}
 	if feedbackURL, headers, ok := skillFeedbackMCPConfig(p, cfg); ok {
-		if _, exists := mcpServers[skillFeedbackMCPServerName]; !exists {
-			mcpServers[skillFeedbackMCPServerName] = cursorMCPServer{
-				URL:     feedbackURL,
-				Headers: headers,
-			}
+		mcpServers[skillFeedbackMCPServerName] = cursorMCPServer{
+			URL:     feedbackURL,
+			Headers: headers,
 		}
 	}
 	mcpJSON, err := marshalJSON(cursorMCPConfig{MCPServers: mcpServers})

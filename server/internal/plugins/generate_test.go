@@ -1982,6 +1982,55 @@ func TestGenerateMCPFilesOmitsSkillFeedbackWithoutSkillOrKey(t *testing.T) {
 	}
 }
 
+func TestGenerateSinglePluginPackageOmitsSkillFeedbackForUnsafeServerURLs(t *testing.T) {
+	t.Parallel()
+	plugin := PluginInfo{
+		Name:   "Engineering Tools",
+		Slug:   "engineering-tools",
+		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
+	}
+	for _, serverURL := range []string{
+		"http://example.com",
+		"https:///missing-host",
+		"ftp://localhost",
+	} {
+		files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{
+			ServerURL:   serverURL,
+			HooksAPIKey: "gram_hooks_feedback",
+			ProjectSlug: "acme",
+		}, "claude")
+		require.NoError(t, err)
+
+		var config claudeMCPConfig
+		require.NoError(t, json.Unmarshal(files[".mcp.json"], &config))
+		require.NotContains(t, config.MCPServers, skillFeedbackMCPServerName, serverURL)
+	}
+}
+
+func TestGenerateSinglePluginPackageEmitsSkillFeedbackForLoopbackHTTP(t *testing.T) {
+	t.Parallel()
+	plugin := PluginInfo{
+		Name:   "Engineering Tools",
+		Slug:   "engineering-tools",
+		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
+	}
+	for serverURL, expectedURL := range map[string]string{
+		"http://localhost:8080///": "http://localhost:8080/platform/mcp/skill-feedback",
+		"http://127.0.0.1:8080///": "http://127.0.0.1:8080/platform/mcp/skill-feedback",
+	} {
+		files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{
+			ServerURL:   serverURL,
+			HooksAPIKey: "gram_hooks_feedback",
+			ProjectSlug: "acme",
+		}, "claude")
+		require.NoError(t, err)
+
+		var config claudeMCPConfig
+		require.NoError(t, json.Unmarshal(files[".mcp.json"], &config))
+		require.Equal(t, expectedURL, config.MCPServers[skillFeedbackMCPServerName].URL)
+	}
+}
+
 func TestGenerateMCPFilesPreservesSkillFeedbackServerCollision(t *testing.T) {
 	t.Parallel()
 	plugin := PluginInfo{
@@ -2015,6 +2064,30 @@ func TestGenerateMCPFilesPreservesSkillFeedbackServerCollision(t *testing.T) {
 	require.NoError(t, json.Unmarshal(files["engineering-tools-codex/.mcp.json"], &codex))
 	require.Equal(t, "https://user.example.com/mcp", codex.MCPServers[skillFeedbackMCPServerName].URL)
 	require.Equal(t, "Bearer gram_consumer_key", codex.MCPServers[skillFeedbackMCPServerName].HTTPHeaders["Authorization"])
+}
+
+func TestGenerateCodexPluginPreservesNormalizedSkillFeedbackServerCollision(t *testing.T) {
+	t.Parallel()
+	plugin := PluginInfo{
+		Name: "Engineering Tools",
+		Slug: "engineering-tools",
+		Servers: []PluginServerInfo{{
+			DisplayName: "!" + skillFeedbackMCPServerName,
+			MCPURL:      "https://user.example.com/mcp",
+		}},
+		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
+	}
+	files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		APIKey:      "gram_consumer_key",
+		HooksAPIKey: "gram_hooks_feedback",
+		ProjectSlug: "acme",
+	}, "codex")
+	require.NoError(t, err)
+
+	var config codexMCPConfig
+	require.NoError(t, json.Unmarshal(files[".mcp.json"], &config))
+	require.Equal(t, "https://user.example.com/mcp", config.MCPServers[skillFeedbackMCPServerName].URL)
 }
 
 // Distributing a skill (or changing its resolved content) must move the
