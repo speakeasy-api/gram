@@ -227,6 +227,32 @@ func (s *Service) ListSpendRules(ctx context.Context, payload *gen.ListSpendRule
 	return &gen.ListSpendRulesResult{Rules: rules}, nil
 }
 
+// ListActorAttributes returns the static catalog of member attributes a target
+// condition may reference. The source of truth is celenv.ActorAttributes,
+// shared with the CEL environment and target validation, so the editor can
+// never offer an attribute the server would reject.
+func (s *Service) ListActorAttributes(ctx context.Context, payload *gen.ListActorAttributesPayload) (*gen.ListActorAttributesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	attributes := make([]*gen.ActorAttribute, 0, len(celenv.ActorAttributes))
+	for _, a := range celenv.ActorAttributes {
+		attributes = append(attributes, &gen.ActorAttribute{
+			Name:        a.Name,
+			Type:        string(a.Kind),
+			Description: a.Description,
+		})
+	}
+
+	return &gen.ListActorAttributesResult{Attributes: attributes}, nil
+}
+
 func (s *Service) GetSpendRule(ctx context.Context, payload *gen.GetSpendRulePayload) (*types.SpendRule, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -855,56 +881,51 @@ var (
 	targetInExpr         = regexp.MustCompile(`^("(?:\\.|[^"])*")\s+in\s+([A-Za-z_]\w*)$`)
 )
 
-var targetAttributeTypes = map[string]string{
-	"email":            "string",
-	"department_name":  "string",
-	"job_title":        "string",
-	"employee_type":    "string",
-	"division_name":    "string",
-	"cost_center_name": "string",
-	"groups":           "list",
-	"roles":            "list",
-}
-
 func targetConditionExpr(attribute, operator, value string) (string, error) {
-	attrType, ok := targetAttributeTypes[attribute]
+	attrKind, ok := celenv.TargetAttributeKind(attribute)
 	if !ok {
 		return "", fmt.Errorf("unknown target attribute %q", attribute)
+	}
+	requireString := func() error {
+		if attrKind != celenv.KindString {
+			return fmt.Errorf("operator %q requires a string attribute", operator)
+		}
+		return nil
 	}
 	quoted := strconv.Quote(value)
 	switch operator {
 	case "equals":
-		if attrType != "string" {
-			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		if err := requireString(); err != nil {
+			return "", err
 		}
 		return attribute + " == " + quoted, nil
 	case "not_equals":
-		if attrType != "string" {
-			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		if err := requireString(); err != nil {
+			return "", err
 		}
 		return attribute + " != " + quoted, nil
 	case "starts_with":
-		if attrType != "string" {
-			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		if err := requireString(); err != nil {
+			return "", err
 		}
 		return attribute + ".startsWith(" + quoted + ")", nil
 	case "ends_with":
-		if attrType != "string" {
-			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		if err := requireString(); err != nil {
+			return "", err
 		}
 		return attribute + ".endsWith(" + quoted + ")", nil
 	case "contains":
-		if attrType != "string" {
-			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		if err := requireString(); err != nil {
+			return "", err
 		}
 		return attribute + ".contains(" + quoted + ")", nil
 	case "matches":
-		if attrType != "string" {
-			return "", fmt.Errorf("operator %q requires a string attribute", operator)
+		if err := requireString(); err != nil {
+			return "", err
 		}
 		return attribute + ".matches(" + quoted + ")", nil
 	case "includes":
-		if attrType != "list" {
+		if attrKind != celenv.KindList {
 			return "", fmt.Errorf("operator %q requires a list attribute", operator)
 		}
 		return quoted + " in " + attribute, nil

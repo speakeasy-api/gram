@@ -36603,6 +36603,105 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: SpendRulesGetRule
+    /rpc/spendrules.listActorAttributes:
+        get:
+            description: List the member attributes a rule target condition can be written against, with each attribute's value kind. Static reference data that powers the rule editor's attribute picker.
+            operationId: listSpendRuleActorAttributes
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListActorAttributesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listActorAttributes spendRules
+            tags:
+                - spendRules
+            x-speakeasy-group: spendRules.actorAttributes
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: SpendRulesActorAttributes
     /rpc/spendrules.listEvents:
         get:
             description: List warning and breach events emitted by budget rule evaluation, most recent first.
@@ -46943,6 +47042,25 @@ components:
                     description: The policy that issued the warning.
             required:
                 - acknowledged
+        ActorAttribute:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Human-readable description of the attribute.
+                name:
+                    type: string
+                    description: Attribute name as used in target conditions, e.g. department_name.
+                type:
+                    type: string
+                    description: 'Value kind: a scalar string or a list of strings.'
+                    enum:
+                        - string
+                        - list
+            required:
+                - name
+                - type
+                - description
         AddDeploymentPackageForm:
             type: object
             properties:
@@ -54143,6 +54261,16 @@ components:
                 - organization_id
                 - provider
                 - schedules
+        ListActorAttributesResult:
+            type: object
+            properties:
+                attributes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ActorAttribute'
+                    description: The member attributes available to target conditions, in editor display order.
+            required:
+                - attributes
         ListAllowedOriginsResult:
             type: object
             properties:

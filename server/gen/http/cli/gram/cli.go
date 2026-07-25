@@ -136,7 +136,7 @@ func UsageCommands() []string {
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|update|list|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
-		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview)",
+		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
@@ -2292,6 +2292,11 @@ func ParseEndpoint(
 		spendRulesGetSpendRulesOverviewSessionTokenFlag     = spendRulesGetSpendRulesOverviewFlags.String("session-token", "", "")
 		spendRulesGetSpendRulesOverviewProjectSlugInputFlag = spendRulesGetSpendRulesOverviewFlags.String("project-slug-input", "", "")
 
+		spendRulesListActorAttributesFlags                = flag.NewFlagSet("list-actor-attributes", flag.ExitOnError)
+		spendRulesListActorAttributesApikeyTokenFlag      = spendRulesListActorAttributesFlags.String("apikey-token", "", "")
+		spendRulesListActorAttributesSessionTokenFlag     = spendRulesListActorAttributesFlags.String("session-token", "", "")
+		spendRulesListActorAttributesProjectSlugInputFlag = spendRulesListActorAttributesFlags.String("project-slug-input", "", "")
+
 		telemetryFlags = flag.NewFlagSet("telemetry", flag.ContinueOnError)
 
 		telemetrySearchLogsFlags                = flag.NewFlagSet("search-logs", flag.ExitOnError)
@@ -3334,6 +3339,7 @@ func ParseEndpoint(
 	spendRulesPreviewSpendRuleFlags.Usage = spendRulesPreviewSpendRuleUsage
 	spendRulesListSpendRuleEventsFlags.Usage = spendRulesListSpendRuleEventsUsage
 	spendRulesGetSpendRulesOverviewFlags.Usage = spendRulesGetSpendRulesOverviewUsage
+	spendRulesListActorAttributesFlags.Usage = spendRulesListActorAttributesUsage
 
 	telemetryFlags.Usage = telemetryUsage
 	telemetrySearchLogsFlags.Usage = telemetrySearchLogsUsage
@@ -4936,6 +4942,9 @@ func ParseEndpoint(
 
 			case "get-spend-rules-overview":
 				epf = spendRulesGetSpendRulesOverviewFlags
+
+			case "list-actor-attributes":
+				epf = spendRulesListActorAttributesFlags
 
 			}
 
@@ -6632,6 +6641,9 @@ func ParseEndpoint(
 			case "get-spend-rules-overview":
 				endpoint = c.GetSpendRulesOverview()
 				data, err = spendrulesc.BuildGetSpendRulesOverviewPayload(*spendRulesGetSpendRulesOverviewApikeyTokenFlag, *spendRulesGetSpendRulesOverviewSessionTokenFlag, *spendRulesGetSpendRulesOverviewProjectSlugInputFlag)
+			case "list-actor-attributes":
+				endpoint = c.ListActorAttributes()
+				data, err = spendrulesc.BuildListActorAttributesPayload(*spendRulesListActorAttributesApikeyTokenFlag, *spendRulesListActorAttributesSessionTokenFlag, *spendRulesListActorAttributesProjectSlugInputFlag)
 			}
 		case "telemetry":
 			c := telemetryc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16165,6 +16177,7 @@ func spendRulesUsage() {
 	fmt.Fprintln(os.Stderr, `    preview-spend-rule: Preview which actors a target expression matches and their current spend against a proposed budget. Powers the live preview in the rule editor and the per-actor breakdown in the rule detail view.`)
 	fmt.Fprintln(os.Stderr, `    list-spend-rule-events: List warning and breach events emitted by budget rule evaluation, most recent first.`)
 	fmt.Fprintln(os.Stderr, `    get-spend-rules-overview: Get budgets overview metrics: aggregate card numbers plus current-window usage per rule.`)
+	fmt.Fprintln(os.Stderr, `    list-actor-attributes: List the member attributes a rule target condition can be written against, with each attribute's value kind. Static reference data that powers the rule editor's attribute picker.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s spend-rules COMMAND --help\n", os.Args[0])
@@ -16361,6 +16374,28 @@ func spendRulesGetSpendRulesOverviewUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "spend-rules get-spend-rules-overview --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func spendRulesListActorAttributesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] spend-rules list-actor-attributes", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the member attributes a rule target condition can be written against, with each attribute's value kind. Static reference data that powers the rule editor's attribute picker.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "spend-rules list-actor-attributes --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // telemetryUsage displays the usage of the telemetry command and its

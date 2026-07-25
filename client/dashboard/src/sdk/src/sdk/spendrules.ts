@@ -3,6 +3,7 @@
  */
 
 import { ClientSDK } from "../lib/sdks.js";
+import { ActorAttributes } from "./actorattributes.js";
 import { Events } from "./events.js";
 import { GramOverview } from "./gramoverview.js";
 import { GramRules } from "./gramrules.js";
@@ -16,6 +17,11 @@ export class SpendRules extends ClientSDK {
   private _overview?: GramOverview;
   get overview(): GramOverview {
     return (this._overview ??= new GramOverview(this._options));
+  }
+
+  private _actorAttributes?: ActorAttributes;
+  get actorAttributes(): ActorAttributes {
+    return (this._actorAttributes ??= new ActorAttributes(this._options));
   }
 
   private _events?: Events;

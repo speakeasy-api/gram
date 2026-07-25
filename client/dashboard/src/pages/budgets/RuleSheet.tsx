@@ -2,11 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-} from "@/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
@@ -25,22 +20,14 @@ import {
 } from "@/components/ui/sheet";
 import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
-import { cn } from "@/lib/utils";
 import { Archive, Check, Loader2, Search, Users } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type JSX,
-  type ReactNode,
-} from "react";
-import { ACTOR_ATTRIBUTES, type ActorAttribute } from "./budget-cel";
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import {
   WINDOW_LABELS,
   defaultRuleDraft,
   formatUsd,
   toDraft,
+  type ActorAttribute,
   type BudgetWindow,
   type PreviewSpendRuleResult,
   type RuleAction,
@@ -49,7 +36,7 @@ import {
   type RuleTargetOperator,
   type SpendRule,
 } from "./budgets-data";
-import { usePreviewBudgetRule } from "./budgets-queries";
+import { useActorAttributes, usePreviewBudgetRule } from "./budgets-queries";
 
 const WINDOWS: BudgetWindow[] = ["daily", "weekly", "monthly"];
 
@@ -95,14 +82,19 @@ const OPERATOR_LABELS: Record<RuleTargetOperator, string> = {
   includes: "includes",
 };
 
-function actorAttribute(name: string): ActorAttribute {
-  return (
-    ACTOR_ATTRIBUTES.find((attr) => attr.name === name) ?? ACTOR_ATTRIBUTES[0]!
-  );
+function actorAttribute(
+  attributes: ActorAttribute[],
+  name: string,
+): ActorAttribute | undefined {
+  return attributes.find((attr) => attr.name === name);
 }
 
-function operatorsForAttribute(attr: ActorAttribute): RuleTargetOperator[] {
-  return attr.type === "list" ? LIST_OPERATORS : STRING_OPERATORS;
+/** Operators offered for an attribute. Unknown/not-yet-loaded attributes fall
+ *  back to the string operators — the common case, and never a list-only op. */
+function operatorsForAttribute(
+  attr: ActorAttribute | undefined,
+): RuleTargetOperator[] {
+  return attr?.type === "list" ? LIST_OPERATORS : STRING_OPERATORS;
 }
 
 function attributeLabel(name: string): string {
@@ -202,6 +194,7 @@ function RuleForm({
 
   const patch = (p: Partial<RuleDraft>) => setDraft((d) => ({ ...d, ...p }));
 
+  const { attributes } = useActorAttributes();
   const { preview, loading: previewLoading } = useRulePreview(draft);
 
   const canSubmit =
@@ -275,6 +268,7 @@ function RuleForm({
           <TargetConditionField
             value={draft.target}
             onChange={(target) => patch({ target })}
+            attributes={attributes}
           />
           <MatchedActors
             preview={draft.target.value.trim() === "" ? null : preview}
@@ -636,13 +630,16 @@ function MatchedActorRows({
 }
 
 /** Single attribute/operator/value picker backing the rule's target
- *  condition. v1 deliberately allows exactly one condition per rule. */
+ *  condition. v1 deliberately allows exactly one condition per rule. The
+ *  attribute catalog is fetched from the server (see useActorAttributes). */
 function TargetConditionField({
   value,
   onChange,
+  attributes,
 }: {
   value: RuleTargetCondition;
   onChange: (value: RuleTargetCondition) => void;
+  attributes: ActorAttribute[];
 }): JSX.Element {
   const [condition, setCondition] = useState<RuleTargetCondition>(value);
 
@@ -651,7 +648,7 @@ function TargetConditionField({
     onChange(next);
   };
 
-  const attribute = actorAttribute(condition.attribute);
+  const attribute = actorAttribute(attributes, condition.attribute);
   const operators = operatorsForAttribute(attribute);
 
   return (
@@ -660,11 +657,11 @@ function TargetConditionField({
         <Select
           value={condition.attribute}
           onValueChange={(attributeName) => {
-            const nextAttribute = actorAttribute(attributeName);
+            const nextAttribute = actorAttribute(attributes, attributeName);
             update({
               attribute: attributeName,
               operator: operatorsForAttribute(nextAttribute)[0]!,
-              value: nextAttribute.samples[0] ?? "",
+              value: "",
             });
           }}
         >
@@ -672,7 +669,7 @@ function TargetConditionField({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {ACTOR_ATTRIBUTES.map((attr) => (
+            {attributes.map((attr) => (
               <SelectItem key={attr.name} value={attr.name}>
                 {attributeLabel(attr.name)}
               </SelectItem>
@@ -696,158 +693,14 @@ function TargetConditionField({
             ))}
           </SelectContent>
         </Select>
-        <ConditionValueInput
-          attribute={attribute}
+        <Input
           value={condition.value}
           onChange={(nextValue) => update({ ...condition, value: nextValue })}
+          placeholder="Value"
+          aria-label="Condition value"
         />
       </div>
     </div>
-  );
-}
-
-/** Samples matching the typed text. When the value already equals a sample
- *  (e.g. right after picking one), show the full list so refocusing the field
- *  lets the user switch instead of seeing only the current pick. */
-function matchingSamples(attribute: ActorAttribute, value: string): string[] {
-  const query = value.trim().toLowerCase();
-  const isExactSample = attribute.samples.some(
-    (sample) => sample.toLowerCase() === query,
-  );
-  if (query === "" || isExactSample) return attribute.samples;
-  return attribute.samples.filter((sample) =>
-    sample.toLowerCase().includes(query),
-  );
-}
-
-/** Free-text value with a styled suggestions dropdown. Real directories carry
- *  values the samples can't enumerate, so the field accepts anything; the
- *  dropdown only offers the known samples as starting points. */
-function ConditionValueInput({
-  attribute,
-  value,
-  onChange,
-}: {
-  attribute: ActorAttribute;
-  value: string;
-  onChange: (value: string) => void;
-}): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const suggestions = matchingSamples(attribute, value);
-
-  const close = () => {
-    setOpen(false);
-    setActiveIndex(-1);
-  };
-
-  const pick = (sample: string) => {
-    onChange(sample);
-    close();
-  };
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (suggestions.length === 0) return;
-    switch (event.key) {
-      case "ArrowDown":
-        event.preventDefault();
-        if (!open) setOpen(true);
-        setActiveIndex((index) => (index + 1) % suggestions.length);
-        break;
-      case "ArrowUp":
-        event.preventDefault();
-        if (!open) setOpen(true);
-        setActiveIndex((index) =>
-          index <= 0 ? suggestions.length - 1 : index - 1,
-        );
-        break;
-      case "Enter":
-        if (open && activeIndex >= 0 && activeIndex < suggestions.length) {
-          event.preventDefault();
-          pick(suggestions[activeIndex]!);
-        }
-        break;
-      case "Escape":
-        if (open) {
-          event.preventDefault();
-          close();
-        }
-        break;
-    }
-  };
-
-  return (
-    <Popover
-      open={open && suggestions.length > 0}
-      onOpenChange={(next) => {
-        if (!next) close();
-      }}
-    >
-      <PopoverAnchor asChild>
-        <Input
-          ref={inputRef}
-          value={value}
-          onChange={(next) => {
-            onChange(next);
-            setOpen(true);
-            setActiveIndex(-1);
-          }}
-          onFocus={() => setOpen(true)}
-          // Reopen on click for an already-focused input, where no focus
-          // event fires.
-          onClick={() => setOpen(true)}
-          onKeyDown={handleKeyDown}
-          placeholder={attribute.samples[0] ?? "Value"}
-          role="combobox"
-          aria-expanded={open && suggestions.length > 0}
-          aria-autocomplete="list"
-        />
-      </PopoverAnchor>
-      <PopoverContent
-        className="p-1"
-        align="start"
-        style={{ width: "var(--radix-popover-trigger-width)" }}
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        // Focus intentionally stays in the anchored input while the dropdown
-        // is open. Without this, the focusin that opens the popover bubbles up
-        // to Radix's just-attached outside-focus listener and instantly
-        // dismisses it.
-        onFocusOutside={(event) => event.preventDefault()}
-        // Clicking the input while the dropdown is open would otherwise count
-        // as an outside interaction and close it (with no focus change to
-        // reopen it).
-        onPointerDownOutside={(event) => {
-          if (inputRef.current?.contains(event.target as Node)) {
-            event.preventDefault();
-          }
-        }}
-      >
-        <div role="listbox">
-          {suggestions.map((sample, index) => (
-            <div
-              key={sample}
-              role="option"
-              aria-selected={index === activeIndex}
-              className={cn(
-                "flex cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm select-none",
-                index === activeIndex && "bg-accent text-accent-foreground",
-              )}
-              onMouseEnter={() => setActiveIndex(index)}
-              onMouseDown={(event) => {
-                // Select on mousedown, before the input blurs, so the
-                // popover's outside-dismiss handling can't swallow the click.
-                event.preventDefault();
-                pick(sample);
-              }}
-            >
-              {sample}
-            </div>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
   );
 }
 

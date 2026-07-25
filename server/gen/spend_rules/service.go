@@ -42,6 +42,10 @@ type Service interface {
 	// Get budgets overview metrics: aggregate card numbers plus current-window
 	// usage per rule.
 	GetSpendRulesOverview(context.Context, *GetSpendRulesOverviewPayload) (res *SpendRulesOverviewResult, err error)
+	// List the member attributes a rule target condition can be written against,
+	// with each attribute's value kind. Static reference data that powers the rule
+	// editor's attribute picker.
+	ListActorAttributes(context.Context, *ListActorAttributesPayload) (res *ListActorAttributesResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -64,7 +68,16 @@ const ServiceName = "spendRules"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"createSpendRule", "listSpendRules", "getSpendRule", "updateSpendRule", "archiveSpendRule", "previewSpendRule", "listSpendRuleEvents", "getSpendRulesOverview"}
+var MethodNames = [9]string{"createSpendRule", "listSpendRules", "getSpendRule", "updateSpendRule", "archiveSpendRule", "previewSpendRule", "listSpendRuleEvents", "getSpendRulesOverview", "listActorAttributes"}
+
+type ActorAttribute struct {
+	// Attribute name as used in target conditions, e.g. department_name.
+	Name string
+	// Value kind: a scalar string or a list of strings.
+	Type string
+	// Human-readable description of the attribute.
+	Description string
+}
 
 // ArchiveSpendRulePayload is the payload type of the spendRules service
 // archiveSpendRule method.
@@ -116,6 +129,22 @@ type GetSpendRulesOverviewPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// ListActorAttributesPayload is the payload type of the spendRules service
+// listActorAttributes method.
+type ListActorAttributesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListActorAttributesResult is the result type of the spendRules service
+// listActorAttributes method.
+type ListActorAttributesResult struct {
+	// The member attributes available to target conditions, in editor display
+	// order.
+	Attributes []*ActorAttribute
 }
 
 // ListSpendRuleEventsPayload is the payload type of the spendRules service

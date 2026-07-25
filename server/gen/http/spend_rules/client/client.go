@@ -49,6 +49,10 @@ type Client struct {
 	// getSpendRulesOverview endpoint.
 	GetSpendRulesOverviewDoer goahttp.Doer
 
+	// ListActorAttributes Doer is the HTTP client used to make requests to the
+	// listActorAttributes endpoint.
+	ListActorAttributesDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -77,6 +81,7 @@ func NewClient(
 		PreviewSpendRuleDoer:      doer,
 		ListSpendRuleEventsDoer:   doer,
 		GetSpendRulesOverviewDoer: doer,
+		ListActorAttributesDoer:   doer,
 		RestoreResponseBody:       restoreBody,
 		scheme:                    scheme,
 		host:                      host,
@@ -272,6 +277,30 @@ func (c *Client) GetSpendRulesOverview() goa.Endpoint {
 		resp, err := c.GetSpendRulesOverviewDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("spendRules", "getSpendRulesOverview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListActorAttributes returns an endpoint that makes HTTP requests to the
+// spendRules service listActorAttributes server.
+func (c *Client) ListActorAttributes() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListActorAttributesRequest(c.encoder)
+		decodeResponse = DecodeListActorAttributesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListActorAttributesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListActorAttributesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("spendRules", "listActorAttributes", err)
 		}
 		return decodeResponse(resp)
 	}

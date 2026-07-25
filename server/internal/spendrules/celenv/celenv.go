@@ -42,29 +42,82 @@ type Actor struct {
 	WarnAtPct      float64
 }
 
+// AttributeKind is the value kind of an actor attribute: a scalar string or a
+// list of strings. It drives both the CEL variable type and the operators a
+// target condition may use against the attribute.
+type AttributeKind string
+
+const (
+	KindString AttributeKind = "string"
+	KindList   AttributeKind = "list"
+)
+
+// ActorAttribute is one member attribute a target condition can reference.
+type ActorAttribute struct {
+	Name        string
+	Kind        AttributeKind
+	Description string
+}
+
+// ActorAttributes is the catalog of member attributes a spend rule target
+// condition may be written against — the single source of truth shared by the
+// CEL environment (below), target-condition validation
+// (spendrules.targetConditionExpr), and the listActorAttributes API that feeds
+// the dashboard rule editor. Order is preserved in the API response, so it
+// doubles as the editor's attribute ordering.
+//
+// Directory attributes mirror the telemetry allowlist (see
+// server/internal/telemetry/user_info_resolver.go). Add an attribute here and
+// it propagates to the CEL env, validation, the API, and the editor at once.
+var ActorAttributes = []ActorAttribute{
+	{Name: "department_name", Kind: KindString, Description: "Directory department the member belongs to."},
+	{Name: "job_title", Kind: KindString, Description: "Directory job title."},
+	{Name: "employee_type", Kind: KindString, Description: "Employment classification."},
+	{Name: "division_name", Kind: KindString, Description: "Directory division or business unit."},
+	{Name: "cost_center_name", Kind: KindString, Description: "Finance cost center the member rolls up to."},
+	{Name: "email", Kind: KindString, Description: "Member email address."},
+	{Name: "groups", Kind: KindList, Description: "IdP or directory group memberships."},
+	{Name: "roles", Kind: KindList, Description: "Organization role slugs the member holds."},
+}
+
+// TargetAttributeKind returns the value kind of a target attribute and whether
+// it is a known attribute.
+func TargetAttributeKind(name string) (AttributeKind, bool) {
+	for _, a := range ActorAttributes {
+		if a.Name == name {
+			return a.Kind, true
+		}
+	}
+	return "", false
+}
+
 type Engine struct {
 	env *cel.Env
 }
 
 // New builds the CEL environment — the single source of truth for what a
-// spend rule target expression may reference.
+// spend rule target expression may reference. Member-attribute variables are
+// derived from ActorAttributes; usage variables (spend/limit/pct) are fixed.
 func New() (*Engine, error) {
-	env, err := cel.NewEnv(
-		ext.Strings(),
-
-		cel.Variable("email", cel.StringType),
-		cel.Variable("department_name", cel.StringType),
-		cel.Variable("job_title", cel.StringType),
-		cel.Variable("employee_type", cel.StringType),
-		cel.Variable("division_name", cel.StringType),
-		cel.Variable("cost_center_name", cel.StringType),
-		cel.Variable("groups", cel.ListType(cel.StringType)),
-		cel.Variable("roles", cel.ListType(cel.StringType)),
+	opts := []cel.EnvOption{ext.Strings()}
+	for _, a := range ActorAttributes {
+		switch a.Kind {
+		case KindList:
+			opts = append(opts, cel.Variable(a.Name, cel.ListType(cel.StringType)))
+		case KindString:
+			fallthrough
+		default:
+			opts = append(opts, cel.Variable(a.Name, cel.StringType))
+		}
+	}
+	opts = append(opts,
 		cel.Variable("spend_usd", cel.DoubleType),
 		cel.Variable("limit_usd", cel.DoubleType),
 		cel.Variable("used_pct", cel.DoubleType),
 		cel.Variable("warn_at_pct", cel.DoubleType),
 	)
+
+	env, err := cel.NewEnv(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("build spend rule cel env: %w", err)
 	}

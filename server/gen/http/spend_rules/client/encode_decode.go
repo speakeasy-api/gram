@@ -1946,6 +1946,245 @@ func DecodeGetSpendRulesOverviewResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildListActorAttributesRequest instantiates a HTTP request object with
+// method and path set to call the "spendRules" service "listActorAttributes"
+// endpoint
+func (c *Client) BuildListActorAttributesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListActorAttributesSpendRulesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("spendRules", "listActorAttributes", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListActorAttributesRequest returns an encoder for requests sent to the
+// spendRules listActorAttributes server.
+func EncodeListActorAttributesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*spendrules.ListActorAttributesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("spendRules", "listActorAttributes", "*spendrules.ListActorAttributesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListActorAttributesResponse returns a decoder for responses returned
+// by the spendRules listActorAttributes endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListActorAttributesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListActorAttributesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListActorAttributesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("spendRules", "listActorAttributes", err)
+			}
+			err = ValidateListActorAttributesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("spendRules", "listActorAttributes", err)
+			}
+			res := NewListActorAttributesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListActorAttributesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("spendRules", "listActorAttributes", err)
+			}
+			err = ValidateListActorAttributesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("spendRules", "listActorAttributes", err)
+			}
+			return nil, NewListActorAttributesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListActorAttributesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("spendRules", "listActorAttributes", err)
+			}
+			err = ValidateListActorAttributesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("spendRules", "listActorAttributes", err)
+			}
+			return nil, NewListActorAttributesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListActorAttributesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("spendRules", "listActorAttributes", err)
+			}
+			err = ValidateListActorAttributesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("spendRules", "listActorAttributes", err)
+			}
+			return nil, NewListActorAttributesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListActorAttributesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("spendRules", "listActorAttributes", err)
+			}
+			err = ValidateListActorAttributesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("spendRules", "listActorAttributes", err)
+			}
+			return nil, NewListActorAttributesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListActorAttributesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("spendRules", "listActorAttributes", err)
+			}
+			err = ValidateListActorAttributesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("spendRules", "listActorAttributes", err)
+			}
+			return nil, NewListActorAttributesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListActorAttributesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("spendRules", "listActorAttributes", err)
+			}
+			err = ValidateListActorAttributesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("spendRules", "listActorAttributes", err)
+			}
+			return nil, NewListActorAttributesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListActorAttributesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("spendRules", "listActorAttributes", err)
+			}
+			err = ValidateListActorAttributesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("spendRules", "listActorAttributes", err)
+			}
+			return nil, NewListActorAttributesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListActorAttributesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("spendRules", "listActorAttributes", err)
+				}
+				err = ValidateListActorAttributesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("spendRules", "listActorAttributes", err)
+				}
+				return nil, NewListActorAttributesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListActorAttributesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("spendRules", "listActorAttributes", err)
+				}
+				err = ValidateListActorAttributesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("spendRules", "listActorAttributes", err)
+				}
+				return nil, NewListActorAttributesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("spendRules", "listActorAttributes", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListActorAttributesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("spendRules", "listActorAttributes", err)
+			}
+			err = ValidateListActorAttributesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("spendRules", "listActorAttributes", err)
+			}
+			return nil, NewListActorAttributesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("spendRules", "listActorAttributes", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalTypesSpendRuleTargetConditionToSpendRuleTargetConditionRequestBody
 // builds a value of type *SpendRuleTargetConditionRequestBody from a value of
 // type *types.SpendRuleTargetCondition.
@@ -2064,6 +2303,19 @@ func unmarshalSpendRuleUsageResponseBodyToSpendrulesSpendRuleUsage(v *SpendRuleU
 		BudgetUsd:     *v.BudgetUsd,
 		WorstUsedPct:  *v.WorstUsedPct,
 		Status:        *v.Status,
+	}
+
+	return res
+}
+
+// unmarshalActorAttributeResponseBodyToSpendrulesActorAttribute builds a value
+// of type *spendrules.ActorAttribute from a value of type
+// *ActorAttributeResponseBody.
+func unmarshalActorAttributeResponseBodyToSpendrulesActorAttribute(v *ActorAttributeResponseBody) *spendrules.ActorAttribute {
+	res := &spendrules.ActorAttribute{
+		Name:        *v.Name,
+		Type:        *v.Type,
+		Description: *v.Description,
 	}
 
 	return res

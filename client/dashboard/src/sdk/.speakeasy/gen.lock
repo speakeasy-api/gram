@@ -386,6 +386,7 @@ trackedFiles:
   src/funcs/skillsUndistribute.ts: {}
   src/funcs/skillsUnshare.ts: {}
   src/funcs/skillsUpdate.ts: {}
+  src/funcs/spendRulesActorAttributesList.ts: {}
   src/funcs/spendRulesEventsList.ts: {}
   src/funcs/spendRulesOverviewGet.ts: {}
   src/funcs/spendRulesRulesArchive.ts: {}
@@ -508,6 +509,7 @@ trackedFiles:
   src/models/components/accessmember.ts: {}
   src/models/components/acknowledgeriskpolicychallengerequestbody.ts: {}
   src/models/components/acknowledgeriskpolicychallengeresponsebody.ts: {}
+  src/models/components/actorattribute.ts: {}
   src/models/components/adddeploymentpackageform.ts: {}
   src/models/components/addexternalmcpform.ts: {}
   src/models/components/addexternaloauthserverrequestbody.ts: {}
@@ -730,6 +732,7 @@ trackedFiles:
   src/models/components/integrationentry.ts: {}
   src/models/components/integrationversion.ts: {}
   src/models/components/key.ts: {}
+  src/models/components/listactorattributesresult.ts: {}
   src/models/components/listaiintegrationschedulesresult.ts: {}
   src/models/components/listallowedoriginsresult.ts: {}
   src/models/components/listassetsresult.ts: {}
@@ -1495,6 +1498,7 @@ trackedFiles:
   src/models/operations/listskilldistributions.ts: {}
   src/models/operations/listskills.ts: {}
   src/models/operations/listskillversions.ts: {}
+  src/models/operations/listspendruleactorattributes.ts: {}
   src/models/operations/listspendruleevents.ts: {}
   src/models/operations/listspendrules.ts: {}
   src/models/operations/listsyncedagentusers.ts: {}
@@ -2208,6 +2212,8 @@ trackedFiles:
   src/react-query/skillVersions.ts: {}
   src/react-query/skills.core.ts: {}
   src/react-query/skills.ts: {}
+  src/react-query/spendRulesActorAttributes.core.ts: {}
+  src/react-query/spendRulesActorAttributes.ts: {}
   src/react-query/spendRulesArchiveRule.ts: {}
   src/react-query/spendRulesCreateRule.ts: {}
   src/react-query/spendRulesGetRule.core.ts: {}
@@ -2316,6 +2322,7 @@ trackedFiles:
   src/react-query/workUnitsTrend.core.ts: {}
   src/react-query/workUnitsTrend.ts: {}
   src/sdk/access.ts: {}
+  src/sdk/actorattributes.ts: {}
   src/sdk/adminchatanalysis.ts: {}
   src/sdk/adminremotesessions.ts: {}
   src/sdk/agent.ts: {}
@@ -5644,6 +5651,15 @@ examples:
       responses:
         "200":
           application/json: {"items": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listSpendRuleActorAttributes:
+    speakeasy-default-list-spend-rule-actor-attributes:
+      responses:
+        "200":
+          application/json: {"attributes": [{"description": "odd fatally during cavernous off guest clonk aw exalt", "name": "<value>", "type": "list"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

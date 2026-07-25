@@ -271,6 +271,14 @@ type GetSpendRulesOverviewResponseBody struct {
 	Rules []*SpendRuleUsageResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
 }
 
+// ListActorAttributesResponseBody is the type of the "spendRules" service
+// "listActorAttributes" endpoint HTTP response body.
+type ListActorAttributesResponseBody struct {
+	// The member attributes available to target conditions, in editor display
+	// order.
+	Attributes []*ActorAttributeResponseBody `form:"attributes,omitempty" json:"attributes,omitempty" xml:"attributes,omitempty"`
+}
+
 // CreateSpendRuleUnauthorizedResponseBody is the type of the "spendRules"
 // service "createSpendRule" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1763,6 +1771,196 @@ type GetSpendRulesOverviewGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListActorAttributesUnauthorizedResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListActorAttributesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListActorAttributesForbiddenResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "forbidden" error.
+type ListActorAttributesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListActorAttributesBadRequestResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "bad_request" error.
+type ListActorAttributesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListActorAttributesNotFoundResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "not_found" error.
+type ListActorAttributesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListActorAttributesConflictResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the "conflict"
+// error.
+type ListActorAttributesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListActorAttributesUnsupportedMediaResponseBody is the type of the
+// "spendRules" service "listActorAttributes" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListActorAttributesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListActorAttributesInvalidResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the "invalid"
+// error.
+type ListActorAttributesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListActorAttributesInvariantViolationResponseBody is the type of the
+// "spendRules" service "listActorAttributes" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListActorAttributesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListActorAttributesUnexpectedResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "unexpected" error.
+type ListActorAttributesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListActorAttributesGatewayErrorResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListActorAttributesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SpendRuleTargetConditionRequestBody is used to define fields on request body
 // types.
 type SpendRuleTargetConditionRequestBody struct {
@@ -1899,6 +2097,16 @@ type SpendRuleUsageResponseBody struct {
 	WorstUsedPct *float64 `form:"worst_used_pct,omitempty" json:"worst_used_pct,omitempty" xml:"worst_used_pct,omitempty"`
 	// Derived rule status from the worst matched actor.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+}
+
+// ActorAttributeResponseBody is used to define fields on response body types.
+type ActorAttributeResponseBody struct {
+	// Attribute name as used in target conditions, e.g. department_name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Value kind: a scalar string or a list of strings.
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Human-readable description of the attribute.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
 
 // NewCreateSpendRuleRequestBody builds the HTTP request body from the payload
@@ -3347,6 +3555,172 @@ func NewGetSpendRulesOverviewGatewayError(body *GetSpendRulesOverviewGatewayErro
 	return v
 }
 
+// NewListActorAttributesResultOK builds a "spendRules" service
+// "listActorAttributes" endpoint result from a HTTP "OK" response.
+func NewListActorAttributesResultOK(body *ListActorAttributesResponseBody) *spendrules.ListActorAttributesResult {
+	v := &spendrules.ListActorAttributesResult{}
+	v.Attributes = make([]*spendrules.ActorAttribute, len(body.Attributes))
+	for i, val := range body.Attributes {
+		if val == nil {
+			v.Attributes[i] = nil
+			continue
+		}
+		v.Attributes[i] = unmarshalActorAttributeResponseBodyToSpendrulesActorAttribute(val)
+	}
+
+	return v
+}
+
+// NewListActorAttributesUnauthorized builds a spendRules service
+// listActorAttributes endpoint unauthorized error.
+func NewListActorAttributesUnauthorized(body *ListActorAttributesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListActorAttributesForbidden builds a spendRules service
+// listActorAttributes endpoint forbidden error.
+func NewListActorAttributesForbidden(body *ListActorAttributesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListActorAttributesBadRequest builds a spendRules service
+// listActorAttributes endpoint bad_request error.
+func NewListActorAttributesBadRequest(body *ListActorAttributesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListActorAttributesNotFound builds a spendRules service
+// listActorAttributes endpoint not_found error.
+func NewListActorAttributesNotFound(body *ListActorAttributesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListActorAttributesConflict builds a spendRules service
+// listActorAttributes endpoint conflict error.
+func NewListActorAttributesConflict(body *ListActorAttributesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListActorAttributesUnsupportedMedia builds a spendRules service
+// listActorAttributes endpoint unsupported_media error.
+func NewListActorAttributesUnsupportedMedia(body *ListActorAttributesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListActorAttributesInvalid builds a spendRules service
+// listActorAttributes endpoint invalid error.
+func NewListActorAttributesInvalid(body *ListActorAttributesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListActorAttributesInvariantViolation builds a spendRules service
+// listActorAttributes endpoint invariant_violation error.
+func NewListActorAttributesInvariantViolation(body *ListActorAttributesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListActorAttributesUnexpected builds a spendRules service
+// listActorAttributes endpoint unexpected error.
+func NewListActorAttributesUnexpected(body *ListActorAttributesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListActorAttributesGatewayError builds a spendRules service
+// listActorAttributes endpoint gateway_error error.
+func NewListActorAttributesGatewayError(body *ListActorAttributesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateCreateSpendRuleResponseBody runs the validations defined on
 // CreateSpendRuleResponseBody
 func ValidateCreateSpendRuleResponseBody(body *CreateSpendRuleResponseBody) (err error) {
@@ -3683,6 +4057,22 @@ func ValidateGetSpendRulesOverviewResponseBody(body *GetSpendRulesOverviewRespon
 	for _, e := range body.Rules {
 		if e != nil {
 			if err2 := ValidateSpendRuleUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListActorAttributesResponseBody runs the validations defined on
+// ListActorAttributesResponseBody
+func ValidateListActorAttributesResponseBody(body *ListActorAttributesResponseBody) (err error) {
+	if body.Attributes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attributes", "body"))
+	}
+	for _, e := range body.Attributes {
+		if e != nil {
+			if err2 := ValidateActorAttributeResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -5611,6 +6001,246 @@ func ValidateGetSpendRulesOverviewGatewayErrorResponseBody(body *GetSpendRulesOv
 	return
 }
 
+// ValidateListActorAttributesUnauthorizedResponseBody runs the validations
+// defined on listActorAttributes_unauthorized_response_body
+func ValidateListActorAttributesUnauthorizedResponseBody(body *ListActorAttributesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListActorAttributesForbiddenResponseBody runs the validations
+// defined on listActorAttributes_forbidden_response_body
+func ValidateListActorAttributesForbiddenResponseBody(body *ListActorAttributesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListActorAttributesBadRequestResponseBody runs the validations
+// defined on listActorAttributes_bad_request_response_body
+func ValidateListActorAttributesBadRequestResponseBody(body *ListActorAttributesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListActorAttributesNotFoundResponseBody runs the validations defined
+// on listActorAttributes_not_found_response_body
+func ValidateListActorAttributesNotFoundResponseBody(body *ListActorAttributesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListActorAttributesConflictResponseBody runs the validations defined
+// on listActorAttributes_conflict_response_body
+func ValidateListActorAttributesConflictResponseBody(body *ListActorAttributesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListActorAttributesUnsupportedMediaResponseBody runs the validations
+// defined on listActorAttributes_unsupported_media_response_body
+func ValidateListActorAttributesUnsupportedMediaResponseBody(body *ListActorAttributesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListActorAttributesInvalidResponseBody runs the validations defined
+// on listActorAttributes_invalid_response_body
+func ValidateListActorAttributesInvalidResponseBody(body *ListActorAttributesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListActorAttributesInvariantViolationResponseBody runs the
+// validations defined on listActorAttributes_invariant_violation_response_body
+func ValidateListActorAttributesInvariantViolationResponseBody(body *ListActorAttributesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListActorAttributesUnexpectedResponseBody runs the validations
+// defined on listActorAttributes_unexpected_response_body
+func ValidateListActorAttributesUnexpectedResponseBody(body *ListActorAttributesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListActorAttributesGatewayErrorResponseBody runs the validations
+// defined on listActorAttributes_gateway_error_response_body
+func ValidateListActorAttributesGatewayErrorResponseBody(body *ListActorAttributesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSpendRuleTargetConditionResponseBody runs the validations defined on
 // SpendRuleTargetConditionResponseBody
 func ValidateSpendRuleTargetConditionResponseBody(body *SpendRuleTargetConditionResponseBody) (err error) {
@@ -5820,6 +6450,26 @@ func ValidateSpendRuleUsageResponseBody(body *SpendRuleUsageResponseBody) (err e
 	if body.Status != nil {
 		if !(*body.Status == "healthy" || *body.Status == "approaching" || *body.Status == "flagging" || *body.Status == "blocking") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"healthy", "approaching", "flagging", "blocking"}))
+		}
+	}
+	return
+}
+
+// ValidateActorAttributeResponseBody runs the validations defined on
+// ActorAttributeResponseBody
+func ValidateActorAttributeResponseBody(body *ActorAttributeResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Type != nil {
+		if !(*body.Type == "string" || *body.Type == "list") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"string", "list"}))
 		}
 	}
 	return

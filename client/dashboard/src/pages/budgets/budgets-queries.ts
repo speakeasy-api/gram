@@ -9,11 +9,13 @@ import { invalidateAllSpendRulesListRules } from "@gram/client/react-query/spend
 import { invalidateAllSpendRulesOverview } from "@gram/client/react-query/spendRulesOverview.js";
 import { useSpendRulesArchiveRuleMutation } from "@gram/client/react-query/spendRulesArchiveRule.js";
 import { useSpendRulesCreateRuleMutation } from "@gram/client/react-query/spendRulesCreateRule.js";
+import { useSpendRulesActorAttributes } from "@gram/client/react-query/spendRulesActorAttributes.js";
 import { useSpendRulesListEvents } from "@gram/client/react-query/spendRulesListEvents.js";
 import { useSpendRulesListRules } from "@gram/client/react-query/spendRulesListRules.js";
 import { useSpendRulesOverview } from "@gram/client/react-query/spendRulesOverview.js";
 import { useSpendRulesPreviewRuleMutation } from "@gram/client/react-query/spendRulesPreviewRule.js";
 import { useSpendRulesUpdateRuleMutation } from "@gram/client/react-query/spendRulesUpdateRule.js";
+import type { ActorAttribute as SdkActorAttribute } from "@gram/client/models/components/actorattribute.js";
 import type { PreviewSpendRuleResult as SdkPreviewSpendRuleResult } from "@gram/client/models/components/previewspendruleresult.js";
 import type { SpendRule as SdkSpendRule } from "@gram/client/models/components/spendrule.js";
 import type { SpendRuleActorUsage as SdkSpendRuleActorUsage } from "@gram/client/models/components/spendruleactorusage.js";
@@ -24,6 +26,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import {
   normalizeTargetCondition,
+  type ActorAttribute,
   type PreviewSpendRuleResult,
   type RuleDraft,
   type SpendEventType,
@@ -125,6 +128,10 @@ function mapPreview(p: SdkPreviewSpendRuleResult): PreviewSpendRuleResult {
   };
 }
 
+function mapActorAttribute(a: SdkActorAttribute): ActorAttribute {
+  return { name: a.name, type: a.type, description: a.description };
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Queries                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -161,6 +168,27 @@ export function useBudgetOverview(): {
     [query.data],
   );
   return { overview };
+}
+
+/** The member-attribute catalog for the rule editor. Static server reference
+ *  data (backed by the CEL environment), so it's cached indefinitely. */
+export function useActorAttributes(): {
+  attributes: ActorAttribute[];
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const query = useSpendRulesActorAttributes(undefined, undefined, {
+    staleTime: Infinity,
+  });
+  const attributes = useMemo(
+    () => (query.data?.attributes ?? []).map(mapActorAttribute),
+    [query.data],
+  );
+  return {
+    attributes,
+    isLoading: query.isLoading,
+    isError: query.isError,
+  };
 }
 
 export interface BudgetEventsParams {

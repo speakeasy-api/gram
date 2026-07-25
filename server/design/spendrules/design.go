@@ -308,6 +308,31 @@ var _ = Service("spendRules", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "get")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SpendRulesOverview"}`)
 	})
+
+	Method("listActorAttributes", func() {
+		Description("List the member attributes a rule target condition can be written against, with each attribute's value kind. Static reference data that powers the rule editor's attribute picker.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListActorAttributesResult)
+
+		HTTP(func() {
+			GET("/rpc/spendrules.listActorAttributes")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSpendRuleActorAttributes")
+		Meta("openapi:extension:x-speakeasy-group", "spendRules.actorAttributes")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SpendRulesActorAttributes"}`)
+	})
 })
 
 var SpendRuleTargetCondition = Type("SpendRuleTargetCondition", func() {
@@ -448,4 +473,19 @@ var ListSpendRuleEventsResult = Type("ListSpendRuleEventsResult", func() {
 	Attribute("events", ArrayOf(SpendRuleEvent), "The list of budget rule events, most recent first.")
 	Attribute("next_cursor", String, "Cursor for the next page of events.")
 	Required("events")
+})
+
+var ActorAttribute = Type("ActorAttribute", func() {
+	Attribute("name", String, "Attribute name as used in target conditions, e.g. department_name.")
+	Attribute("type", String, "Value kind: a scalar string or a list of strings.", func() {
+		Enum("string", "list")
+	})
+	Attribute("description", String, "Human-readable description of the attribute.")
+
+	Required("name", "type", "description")
+})
+
+var ListActorAttributesResult = Type("ListActorAttributesResult", func() {
+	Attribute("attributes", ArrayOf(ActorAttribute), "The member attributes available to target conditions, in editor display order.")
+	Required("attributes")
 })

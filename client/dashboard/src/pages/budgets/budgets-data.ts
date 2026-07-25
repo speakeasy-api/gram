@@ -1,5 +1,3 @@
-import { ACTOR_ATTRIBUTES } from "./budget-cel";
-
 /* -------------------------------------------------------------------------- */
 /*  Vocabulary                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -23,6 +21,17 @@ export interface RuleTargetCondition {
   attribute: string;
   operator: RuleTargetOperator;
   value: string;
+}
+
+/** A member attribute a target condition can be written against. Fetched from
+ *  the server (spendrules.listActorAttributes) — the backend CEL environment
+ *  is the source of truth — so the editor can never offer an attribute the
+ *  server would reject. */
+export interface ActorAttribute {
+  name: string;
+  /** Value kind: a scalar string, or a list of strings (uses `includes`). */
+  type: "string" | "list";
+  description: string;
 }
 
 interface RuleTargetLike {
@@ -189,7 +198,7 @@ export function defaultRuleDraft(): RuleDraft {
     target: {
       attribute: "department_name",
       operator: "equals",
-      value: "Engineering",
+      value: "",
     },
     limitUsd: 1000,
     windowKind: "monthly",
@@ -312,9 +321,10 @@ export function targetSummary(target: RuleTargetLike): string {
   return `${targetAttributeLabel(target.attribute)} ${operatorSummary(target.operator)} ${target.value}`;
 }
 
-function targetAttributeLabel(name: string): string {
-  const attr = ACTOR_ATTRIBUTES.find((a) => a.name === name);
-  return (attr?.name ?? name)
+/** Title-case an attribute name for display, e.g. department_name → Department
+ *  Name. Kept local so summaries render without the fetched attribute catalog. */
+export function targetAttributeLabel(name: string): string {
+  return name
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");

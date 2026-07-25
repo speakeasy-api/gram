@@ -46,3 +46,8 @@ func ListSpendRuleEventsSpendRulesPath() string {
 func GetSpendRulesOverviewSpendRulesPath() string {
 	return "/rpc/spendrules.getOverview"
 }
+
+// ListActorAttributesSpendRulesPath returns the URL path to the spendRules service listActorAttributes HTTP endpoint.
+func ListActorAttributesSpendRulesPath() string {
+	return "/rpc/spendrules.listActorAttributes"
+}

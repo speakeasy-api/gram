@@ -477,3 +477,32 @@ func BuildGetSpendRulesOverviewPayload(spendRulesGetSpendRulesOverviewApikeyToke
 
 	return v, nil
 }
+
+// BuildListActorAttributesPayload builds the payload for the spendRules
+// listActorAttributes endpoint from CLI flags.
+func BuildListActorAttributesPayload(spendRulesListActorAttributesApikeyToken string, spendRulesListActorAttributesSessionToken string, spendRulesListActorAttributesProjectSlugInput string) (*spendrules.ListActorAttributesPayload, error) {
+	var apikeyToken *string
+	{
+		if spendRulesListActorAttributesApikeyToken != "" {
+			apikeyToken = &spendRulesListActorAttributesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if spendRulesListActorAttributesSessionToken != "" {
+			sessionToken = &spendRulesListActorAttributesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if spendRulesListActorAttributesProjectSlugInput != "" {
+			projectSlugInput = &spendRulesListActorAttributesProjectSlugInput
+		}
+	}
+	v := &spendrules.ListActorAttributesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

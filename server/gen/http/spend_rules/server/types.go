@@ -271,6 +271,14 @@ type GetSpendRulesOverviewResponseBody struct {
 	Rules []*SpendRuleUsageResponseBody `form:"rules" json:"rules" xml:"rules"`
 }
 
+// ListActorAttributesResponseBody is the type of the "spendRules" service
+// "listActorAttributes" endpoint HTTP response body.
+type ListActorAttributesResponseBody struct {
+	// The member attributes available to target conditions, in editor display
+	// order.
+	Attributes []*ActorAttributeResponseBody `form:"attributes" json:"attributes" xml:"attributes"`
+}
+
 // CreateSpendRuleUnauthorizedResponseBody is the type of the "spendRules"
 // service "createSpendRule" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1763,6 +1771,196 @@ type GetSpendRulesOverviewGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListActorAttributesUnauthorizedResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListActorAttributesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListActorAttributesForbiddenResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "forbidden" error.
+type ListActorAttributesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListActorAttributesBadRequestResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "bad_request" error.
+type ListActorAttributesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListActorAttributesNotFoundResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "not_found" error.
+type ListActorAttributesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListActorAttributesConflictResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the "conflict"
+// error.
+type ListActorAttributesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListActorAttributesUnsupportedMediaResponseBody is the type of the
+// "spendRules" service "listActorAttributes" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListActorAttributesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListActorAttributesInvalidResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the "invalid"
+// error.
+type ListActorAttributesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListActorAttributesInvariantViolationResponseBody is the type of the
+// "spendRules" service "listActorAttributes" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListActorAttributesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListActorAttributesUnexpectedResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "unexpected" error.
+type ListActorAttributesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListActorAttributesGatewayErrorResponseBody is the type of the "spendRules"
+// service "listActorAttributes" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListActorAttributesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SpendRuleTargetConditionResponseBody is used to define fields on response
 // body types.
 type SpendRuleTargetConditionResponseBody struct {
@@ -1887,6 +2085,16 @@ type SpendRuleUsageResponseBody struct {
 	WorstUsedPct float64 `form:"worst_used_pct" json:"worst_used_pct" xml:"worst_used_pct"`
 	// Derived rule status from the worst matched actor.
 	Status string `form:"status" json:"status" xml:"status"`
+}
+
+// ActorAttributeResponseBody is used to define fields on response body types.
+type ActorAttributeResponseBody struct {
+	// Attribute name as used in target conditions, e.g. department_name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Value kind: a scalar string or a list of strings.
+	Type string `form:"type" json:"type" xml:"type"`
+	// Human-readable description of the attribute.
+	Description string `form:"description" json:"description" xml:"description"`
 }
 
 // SpendRuleTargetConditionRequestBody is used to define fields on request body
@@ -2068,6 +2276,25 @@ func NewGetSpendRulesOverviewResponseBody(res *spendrules.SpendRulesOverviewResu
 		}
 	} else {
 		body.Rules = []*SpendRuleUsageResponseBody{}
+	}
+	return body
+}
+
+// NewListActorAttributesResponseBody builds the HTTP response body from the
+// result of the "listActorAttributes" endpoint of the "spendRules" service.
+func NewListActorAttributesResponseBody(res *spendrules.ListActorAttributesResult) *ListActorAttributesResponseBody {
+	body := &ListActorAttributesResponseBody{}
+	if res.Attributes != nil {
+		body.Attributes = make([]*ActorAttributeResponseBody, len(res.Attributes))
+		for i, val := range res.Attributes {
+			if val == nil {
+				body.Attributes[i] = nil
+				continue
+			}
+			body.Attributes[i] = marshalSpendrulesActorAttributeToActorAttributeResponseBody(val)
+		}
+	} else {
+		body.Attributes = []*ActorAttributeResponseBody{}
 	}
 	return body
 }
@@ -3228,6 +3455,155 @@ func NewGetSpendRulesOverviewGatewayErrorResponseBody(res *goa.ServiceError) *Ge
 	return body
 }
 
+// NewListActorAttributesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listActorAttributes" endpoint of the "spendRules"
+// service.
+func NewListActorAttributesUnauthorizedResponseBody(res *goa.ServiceError) *ListActorAttributesUnauthorizedResponseBody {
+	body := &ListActorAttributesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListActorAttributesForbiddenResponseBody builds the HTTP response body
+// from the result of the "listActorAttributes" endpoint of the "spendRules"
+// service.
+func NewListActorAttributesForbiddenResponseBody(res *goa.ServiceError) *ListActorAttributesForbiddenResponseBody {
+	body := &ListActorAttributesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListActorAttributesBadRequestResponseBody builds the HTTP response body
+// from the result of the "listActorAttributes" endpoint of the "spendRules"
+// service.
+func NewListActorAttributesBadRequestResponseBody(res *goa.ServiceError) *ListActorAttributesBadRequestResponseBody {
+	body := &ListActorAttributesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListActorAttributesNotFoundResponseBody builds the HTTP response body
+// from the result of the "listActorAttributes" endpoint of the "spendRules"
+// service.
+func NewListActorAttributesNotFoundResponseBody(res *goa.ServiceError) *ListActorAttributesNotFoundResponseBody {
+	body := &ListActorAttributesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListActorAttributesConflictResponseBody builds the HTTP response body
+// from the result of the "listActorAttributes" endpoint of the "spendRules"
+// service.
+func NewListActorAttributesConflictResponseBody(res *goa.ServiceError) *ListActorAttributesConflictResponseBody {
+	body := &ListActorAttributesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListActorAttributesUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listActorAttributes" endpoint of the
+// "spendRules" service.
+func NewListActorAttributesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListActorAttributesUnsupportedMediaResponseBody {
+	body := &ListActorAttributesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListActorAttributesInvalidResponseBody builds the HTTP response body from
+// the result of the "listActorAttributes" endpoint of the "spendRules" service.
+func NewListActorAttributesInvalidResponseBody(res *goa.ServiceError) *ListActorAttributesInvalidResponseBody {
+	body := &ListActorAttributesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListActorAttributesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listActorAttributes" endpoint of the
+// "spendRules" service.
+func NewListActorAttributesInvariantViolationResponseBody(res *goa.ServiceError) *ListActorAttributesInvariantViolationResponseBody {
+	body := &ListActorAttributesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListActorAttributesUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listActorAttributes" endpoint of the "spendRules"
+// service.
+func NewListActorAttributesUnexpectedResponseBody(res *goa.ServiceError) *ListActorAttributesUnexpectedResponseBody {
+	body := &ListActorAttributesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListActorAttributesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listActorAttributes" endpoint of the "spendRules"
+// service.
+func NewListActorAttributesGatewayErrorResponseBody(res *goa.ServiceError) *ListActorAttributesGatewayErrorResponseBody {
+	body := &ListActorAttributesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateSpendRulePayload builds a spendRules service createSpendRule
 // endpoint payload.
 func NewCreateSpendRulePayload(body *CreateSpendRuleRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *spendrules.CreateSpendRulePayload {
@@ -3367,6 +3743,17 @@ func NewListSpendRuleEventsPayload(ruleID *string, eventType *string, cursor *st
 // getSpendRulesOverview endpoint payload.
 func NewGetSpendRulesOverviewPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *spendrules.GetSpendRulesOverviewPayload {
 	v := &spendrules.GetSpendRulesOverviewPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListActorAttributesPayload builds a spendRules service
+// listActorAttributes endpoint payload.
+func NewListActorAttributesPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *spendrules.ListActorAttributesPayload {
+	v := &spendrules.ListActorAttributesPayload{}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -27,6 +27,7 @@ type Server struct {
 	PreviewSpendRule      http.Handler
 	ListSpendRuleEvents   http.Handler
 	GetSpendRulesOverview http.Handler
+	ListActorAttributes   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -64,6 +65,7 @@ func New(
 			{"PreviewSpendRule", "POST", "/rpc/spendrules.previewRule"},
 			{"ListSpendRuleEvents", "GET", "/rpc/spendrules.listEvents"},
 			{"GetSpendRulesOverview", "GET", "/rpc/spendrules.getOverview"},
+			{"ListActorAttributes", "GET", "/rpc/spendrules.listActorAttributes"},
 		},
 		CreateSpendRule:       NewCreateSpendRuleHandler(e.CreateSpendRule, mux, decoder, encoder, errhandler, formatter),
 		ListSpendRules:        NewListSpendRulesHandler(e.ListSpendRules, mux, decoder, encoder, errhandler, formatter),
@@ -73,6 +75,7 @@ func New(
 		PreviewSpendRule:      NewPreviewSpendRuleHandler(e.PreviewSpendRule, mux, decoder, encoder, errhandler, formatter),
 		ListSpendRuleEvents:   NewListSpendRuleEventsHandler(e.ListSpendRuleEvents, mux, decoder, encoder, errhandler, formatter),
 		GetSpendRulesOverview: NewGetSpendRulesOverviewHandler(e.GetSpendRulesOverview, mux, decoder, encoder, errhandler, formatter),
+		ListActorAttributes:   NewListActorAttributesHandler(e.ListActorAttributes, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -89,6 +92,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.PreviewSpendRule = m(s.PreviewSpendRule)
 	s.ListSpendRuleEvents = m(s.ListSpendRuleEvents)
 	s.GetSpendRulesOverview = m(s.GetSpendRulesOverview)
+	s.ListActorAttributes = m(s.ListActorAttributes)
 }
 
 // MethodNames returns the methods served.
@@ -104,6 +108,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountPreviewSpendRuleHandler(mux, h.PreviewSpendRule)
 	MountListSpendRuleEventsHandler(mux, h.ListSpendRuleEvents)
 	MountGetSpendRulesOverviewHandler(mux, h.GetSpendRulesOverview)
+	MountListActorAttributesHandler(mux, h.ListActorAttributes)
 }
 
 // Mount configures the mux to serve the spendRules endpoints.
@@ -512,6 +517,59 @@ func NewGetSpendRulesOverviewHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getSpendRulesOverview")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "spendRules")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListActorAttributesHandler configures the mux to serve the "spendRules"
+// service "listActorAttributes" endpoint.
+func MountListActorAttributesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/spendrules.listActorAttributes", f)
+}
+
+// NewListActorAttributesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "spendRules" service "listActorAttributes" endpoint.
+func NewListActorAttributesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListActorAttributesRequest(mux, decoder)
+		encodeResponse = EncodeListActorAttributesResponse(encoder)
+		encodeError    = EncodeListActorAttributesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listActorAttributes")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "spendRules")
 		payload, err := decodeRequest(r)
 		if err != nil {

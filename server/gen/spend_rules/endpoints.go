@@ -24,6 +24,7 @@ type Endpoints struct {
 	PreviewSpendRule      goa.Endpoint
 	ListSpendRuleEvents   goa.Endpoint
 	GetSpendRulesOverview goa.Endpoint
+	ListActorAttributes   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "spendRules" service with endpoints.
@@ -39,6 +40,7 @@ func NewEndpoints(s Service) *Endpoints {
 		PreviewSpendRule:      NewPreviewSpendRuleEndpoint(s, a.APIKeyAuth),
 		ListSpendRuleEvents:   NewListSpendRuleEventsEndpoint(s, a.APIKeyAuth),
 		GetSpendRulesOverview: NewGetSpendRulesOverviewEndpoint(s, a.APIKeyAuth),
+		ListActorAttributes:   NewListActorAttributesEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -52,6 +54,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.PreviewSpendRule = m(e.PreviewSpendRule)
 	e.ListSpendRuleEvents = m(e.ListSpendRuleEvents)
 	e.GetSpendRulesOverview = m(e.GetSpendRulesOverview)
+	e.ListActorAttributes = m(e.ListActorAttributes)
 }
 
 // NewCreateSpendRuleEndpoint returns an endpoint function that calls the
@@ -523,5 +526,64 @@ func NewGetSpendRulesOverviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.GetSpendRulesOverview(ctx, p)
+	}
+}
+
+// NewListActorAttributesEndpoint returns an endpoint function that calls the
+// method "listActorAttributes" of service "spendRules".
+func NewListActorAttributesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListActorAttributesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListActorAttributes(ctx, p)
 	}
 }
