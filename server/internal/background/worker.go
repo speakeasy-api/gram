@@ -431,6 +431,12 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.ResetStaleChatAnalysisReservations)
 	temporalWorker.RegisterActivity(activities.chatAnalysisScorer.SignalChatAnalysisCoordinator)
 	skillEfficacyWorker.RegisterActivity(activities.chatAnalysisScorer.PublishChatAnalysisBatch)
+	if activities.skillSuggestionAnalyzer != nil {
+		temporalWorker.RegisterActivity(activities.skillSuggestionAnalyzer.ListSkillSuggestionProjects)
+		temporalWorker.RegisterActivity(activities.skillSuggestionAnalyzer.ListRecentlyActiveSuggestionSkills)
+		temporalWorker.RegisterActivity(activities.skillSuggestionAnalyzer.SignalSkillSuggestions)
+		skillEfficacyWorker.RegisterActivity(activities.skillSuggestionAnalyzer.AnalyzeSkillSuggestion)
+	}
 
 	// AI integration usage syncing runs on its own worker and task queue.
 	aiUsageWorker.RegisterActivity(activities.PollAIData)
@@ -506,6 +512,9 @@ func NewTemporalWorker(
 	// Chat analysis workflows
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
+	temporalWorker.RegisterWorkflow(SkillSuggestionWorkflow)
+	temporalWorker.RegisterWorkflow(SkillSuggestionAnalysisWorkflow)
+	temporalWorker.RegisterWorkflow(SkillSuggestionSweepWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -591,6 +600,12 @@ func NewTemporalWorker(
 
 	if err := AddChatAnalysisSweepSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add chat analysis sweep schedule", attr.SlogError(err))
+	}
+
+	if activities.skillSuggestionAnalyzer != nil {
+		if err := AddSkillSuggestionSweepSchedule(context.Background(), env); err != nil {
+			logger.ErrorContext(context.Background(), "failed to add skill suggestion sweep schedule", attr.SlogError(err))
+		}
 	}
 
 	if opts.DB != nil && opts.K8sClient != nil && opts.ExpectedTargetCNAME != "" {

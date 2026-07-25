@@ -311,6 +311,39 @@ func (q *Queries) CompleteSkillObservations(ctx context.Context, arg CompleteSki
 	return seen_count, err
 }
 
+const countScoredSkillEvaluationsAfter = `-- name: CountScoredSkillEvaluationsAfter :one
+SELECT COUNT(*)
+FROM skill_efficacy_evaluations evaluation
+JOIN skills s
+  ON s.project_id = evaluation.project_id
+  AND s.id = evaluation.skill_id
+WHERE evaluation.project_id = $1
+  AND evaluation.skill_id = $2
+  AND evaluation.skill_version_id = $3
+  AND evaluation.state = 'scored'
+  AND evaluation.scored_at > $4
+  AND s.archived_at IS NULL
+`
+
+type CountScoredSkillEvaluationsAfterParams struct {
+	ProjectID     uuid.UUID
+	SkillID       uuid.UUID
+	BaseVersionID uuid.UUID
+	ScoredAfter   pgtype.Timestamptz
+}
+
+func (q *Queries) CountScoredSkillEvaluationsAfter(ctx context.Context, arg CountScoredSkillEvaluationsAfterParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countScoredSkillEvaluationsAfter,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.BaseVersionID,
+		arg.ScoredAfter,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSkillEfficacyOrgSpendForProject = `-- name: CountSkillEfficacyOrgSpendForProject :one
 SELECT count(*) AS spend
 FROM skill_efficacy_evaluations e
@@ -424,6 +457,26 @@ func (q *Queries) CountSkillEfficacyVersionLifetimeSpend(ctx context.Context, ar
 	return items, nil
 }
 
+const countUnreviewedSkillFeedback = `-- name: CountUnreviewedSkillFeedback :one
+SELECT COUNT(*)
+FROM skill_feedback
+WHERE project_id = $1
+  AND skill_name = $2
+  AND reviewed_at IS NULL
+`
+
+type CountUnreviewedSkillFeedbackParams struct {
+	ProjectID uuid.UUID
+	SkillName string
+}
+
+func (q *Queries) CountUnreviewedSkillFeedback(ctx context.Context, arg CountUnreviewedSkillFeedbackParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUnreviewedSkillFeedback, arg.ProjectID, arg.SkillName)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCapturedSkill = `-- name: CreateCapturedSkill :one
 INSERT INTO skills (
   project_id,
@@ -520,6 +573,91 @@ func (q *Queries) CreateObservedSkill(ctx context.Context, arg CreateObservedSki
 		&i.LastSeenAt,
 		&i.SeenCount,
 		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createScoredSkillEfficacyEvaluationFixture = `-- name: CreateScoredSkillEfficacyEvaluationFixture :one
+INSERT INTO skill_efficacy_evaluations (
+  organization_id,
+  project_id,
+  surface,
+  session_id,
+  chat_id,
+  skill_id,
+  skill_version_id,
+  canonical_sha256,
+  observed_at,
+  state,
+  scored_at
+)
+SELECT
+  p.organization_id,
+  s.project_id,
+  $1,
+  $2,
+  $3,
+  s.id,
+  sv.id,
+  sv.canonical_sha256,
+  $4,
+  'scored',
+  $4
+FROM skills s
+JOIN projects p
+  ON p.id = s.project_id
+  AND p.deleted IS FALSE
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = $5
+WHERE s.project_id = $6
+  AND s.id = $7
+  AND s.archived_at IS NULL
+RETURNING skill_efficacy_evaluations.id, skill_efficacy_evaluations.organization_id, skill_efficacy_evaluations.project_id, skill_efficacy_evaluations.surface, skill_efficacy_evaluations.session_id, skill_efficacy_evaluations.chat_id, skill_efficacy_evaluations.skill_id, skill_efficacy_evaluations.skill_version_id, skill_efficacy_evaluations.canonical_sha256, skill_efficacy_evaluations.observed_at, skill_efficacy_evaluations.state, skill_efficacy_evaluations.reserved_on, skill_efficacy_evaluations.claim_token, skill_efficacy_evaluations.attempts, skill_efficacy_evaluations.last_error, skill_efficacy_evaluations.scored_at, skill_efficacy_evaluations.failed_at, skill_efficacy_evaluations.created_at, skill_efficacy_evaluations.updated_at
+`
+
+type CreateScoredSkillEfficacyEvaluationFixtureParams struct {
+	Surface       string
+	SessionID     string
+	ChatID        uuid.UUID
+	ScoredAt      pgtype.Timestamptz
+	BaseVersionID uuid.UUID
+	ProjectID     uuid.UUID
+	SkillID       uuid.UUID
+}
+
+// Test-only fixture for suggestion evidence timestamp and watermark tests.
+func (q *Queries) CreateScoredSkillEfficacyEvaluationFixture(ctx context.Context, arg CreateScoredSkillEfficacyEvaluationFixtureParams) (SkillEfficacyEvaluation, error) {
+	row := q.db.QueryRow(ctx, createScoredSkillEfficacyEvaluationFixture,
+		arg.Surface,
+		arg.SessionID,
+		arg.ChatID,
+		arg.ScoredAt,
+		arg.BaseVersionID,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	var i SkillEfficacyEvaluation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Surface,
+		&i.SessionID,
+		&i.ChatID,
+		&i.SkillID,
+		&i.SkillVersionID,
+		&i.CanonicalSha256,
+		&i.ObservedAt,
+		&i.State,
+		&i.ReservedOn,
+		&i.ClaimToken,
+		&i.Attempts,
+		&i.LastError,
+		&i.ScoredAt,
+		&i.FailedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -640,6 +778,142 @@ func (q *Queries) CreateSkillDistribution(ctx context.Context, arg CreateSkillDi
 		&i.Channel,
 		&i.CreatedByUserID,
 		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createSkillEditSuggestion = `-- name: CreateSkillEditSuggestion :one
+INSERT INTO skill_edit_suggestions (
+  project_id,
+  skill_id,
+  base_version_id,
+  proposed_content,
+  rationale,
+  feedback_count,
+  scored_session_count
+)
+SELECT
+  s.project_id,
+  s.id,
+  sv.id,
+  $1,
+  $2,
+  $3,
+  $4
+FROM skills s
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = $5
+WHERE s.project_id = $6
+  AND s.id = $7
+  AND s.archived_at IS NULL
+RETURNING id, project_id, skill_id, base_version_id, proposed_content, rationale, status, feedback_count, scored_session_count, approved_by_user_id, resulting_version_id, approved_at, created_at, updated_at
+`
+
+type CreateSkillEditSuggestionParams struct {
+	ProposedContent    string
+	Rationale          string
+	FeedbackCount      int64
+	ScoredSessionCount int64
+	BaseVersionID      uuid.UUID
+	ProjectID          uuid.UUID
+	SkillID            uuid.UUID
+}
+
+func (q *Queries) CreateSkillEditSuggestion(ctx context.Context, arg CreateSkillEditSuggestionParams) (SkillEditSuggestion, error) {
+	row := q.db.QueryRow(ctx, createSkillEditSuggestion,
+		arg.ProposedContent,
+		arg.Rationale,
+		arg.FeedbackCount,
+		arg.ScoredSessionCount,
+		arg.BaseVersionID,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	var i SkillEditSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.BaseVersionID,
+		&i.ProposedContent,
+		&i.Rationale,
+		&i.Status,
+		&i.FeedbackCount,
+		&i.ScoredSessionCount,
+		&i.ApprovedByUserID,
+		&i.ResultingVersionID,
+		&i.ApprovedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createSkillEditSuggestionWatermark = `-- name: CreateSkillEditSuggestionWatermark :one
+INSERT INTO skill_edit_suggestions (
+  project_id,
+  skill_id,
+  base_version_id,
+  proposed_content,
+  rationale,
+  status,
+  feedback_count,
+  scored_session_count
+)
+SELECT
+  s.project_id,
+  s.id,
+  sv.id,
+  sv.content,
+  $1,
+  'superseded',
+  $2,
+  $3
+FROM skills s
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = $4
+WHERE s.project_id = $5
+  AND s.id = $6
+  AND s.archived_at IS NULL
+RETURNING id, project_id, skill_id, base_version_id, proposed_content, rationale, status, feedback_count, scored_session_count, approved_by_user_id, resulting_version_id, approved_at, created_at, updated_at
+`
+
+type CreateSkillEditSuggestionWatermarkParams struct {
+	Rationale          string
+	FeedbackCount      int64
+	ScoredSessionCount int64
+	BaseVersionID      uuid.UUID
+	ProjectID          uuid.UUID
+	SkillID            uuid.UUID
+}
+
+func (q *Queries) CreateSkillEditSuggestionWatermark(ctx context.Context, arg CreateSkillEditSuggestionWatermarkParams) (SkillEditSuggestion, error) {
+	row := q.db.QueryRow(ctx, createSkillEditSuggestionWatermark,
+		arg.Rationale,
+		arg.FeedbackCount,
+		arg.ScoredSessionCount,
+		arg.BaseVersionID,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	var i SkillEditSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.BaseVersionID,
+		&i.ProposedContent,
+		&i.Rationale,
+		&i.Status,
+		&i.FeedbackCount,
+		&i.ScoredSessionCount,
+		&i.ApprovedByUserID,
+		&i.ResultingVersionID,
+		&i.ApprovedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -839,6 +1113,49 @@ type DeleteSkillVersionOriginParams struct {
 func (q *Queries) DeleteSkillVersionOrigin(ctx context.Context, arg DeleteSkillVersionOriginParams) error {
 	_, err := q.db.Exec(ctx, deleteSkillVersionOrigin, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
 	return err
+}
+
+const dismissSkillEditSuggestion = `-- name: DismissSkillEditSuggestion :one
+UPDATE skill_edit_suggestions suggestion
+SET status = 'dismissed',
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE suggestion.project_id = $1
+  AND suggestion.skill_id = $2
+  AND suggestion.id = $3
+  AND suggestion.status = 'open'
+  AND s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+  AND s.archived_at IS NULL
+RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+`
+
+type DismissSkillEditSuggestionParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) DismissSkillEditSuggestion(ctx context.Context, arg DismissSkillEditSuggestionParams) (SkillEditSuggestion, error) {
+	row := q.db.QueryRow(ctx, dismissSkillEditSuggestion, arg.ProjectID, arg.SkillID, arg.ID)
+	var i SkillEditSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.BaseVersionID,
+		&i.ProposedContent,
+		&i.Rationale,
+		&i.Status,
+		&i.FeedbackCount,
+		&i.ScoredSessionCount,
+		&i.ApprovedByUserID,
+		&i.ResultingVersionID,
+		&i.ApprovedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const enqueueSkillEfficacyEvaluations = `-- name: EnqueueSkillEfficacyEvaluations :exec
@@ -1157,6 +1474,46 @@ func (q *Queries) GetAssistantForDistribution(ctx context.Context, arg GetAssist
 	return i, err
 }
 
+const getLatestSkillEditSuggestion = `-- name: GetLatestSkillEditSuggestion :one
+SELECT suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+FROM skill_edit_suggestions suggestion
+JOIN skills s
+  ON s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+WHERE suggestion.project_id = $1
+  AND suggestion.skill_id = $2
+  AND s.archived_at IS NULL
+ORDER BY suggestion.created_at DESC, suggestion.id DESC
+LIMIT 1
+`
+
+type GetLatestSkillEditSuggestionParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+func (q *Queries) GetLatestSkillEditSuggestion(ctx context.Context, arg GetLatestSkillEditSuggestionParams) (SkillEditSuggestion, error) {
+	row := q.db.QueryRow(ctx, getLatestSkillEditSuggestion, arg.ProjectID, arg.SkillID)
+	var i SkillEditSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.BaseVersionID,
+		&i.ProposedContent,
+		&i.Rationale,
+		&i.Status,
+		&i.FeedbackCount,
+		&i.ScoredSessionCount,
+		&i.ApprovedByUserID,
+		&i.ResultingVersionID,
+		&i.ApprovedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getLatestValidSkillVersion = `-- name: GetLatestValidSkillVersion :one
 SELECT sv.id
 FROM skill_versions sv
@@ -1183,6 +1540,45 @@ func (q *Queries) GetLatestValidSkillVersion(ctx context.Context, arg GetLatestV
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getOpenSkillEditSuggestion = `-- name: GetOpenSkillEditSuggestion :one
+SELECT suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+FROM skill_edit_suggestions suggestion
+JOIN skills s
+  ON s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+WHERE suggestion.project_id = $1
+  AND suggestion.skill_id = $2
+  AND suggestion.status = 'open'
+  AND s.archived_at IS NULL
+`
+
+type GetOpenSkillEditSuggestionParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+func (q *Queries) GetOpenSkillEditSuggestion(ctx context.Context, arg GetOpenSkillEditSuggestionParams) (SkillEditSuggestion, error) {
+	row := q.db.QueryRow(ctx, getOpenSkillEditSuggestion, arg.ProjectID, arg.SkillID)
+	var i SkillEditSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.BaseVersionID,
+		&i.ProposedContent,
+		&i.Rationale,
+		&i.Status,
+		&i.FeedbackCount,
+		&i.ScoredSessionCount,
+		&i.ApprovedByUserID,
+		&i.ResultingVersionID,
+		&i.ApprovedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getPluginForDistribution = `-- name: GetPluginForDistribution :one
@@ -2782,6 +3178,81 @@ func (q *Queries) ListProjectsWithPendingSkillObservations(ctx context.Context, 
 	return items, nil
 }
 
+const listRecentScoredSkillEvaluationChats = `-- name: ListRecentScoredSkillEvaluationChats :many
+WITH recent AS (
+  SELECT DISTINCT ON (evaluation.chat_id)
+    evaluation.chat_id,
+    evaluation.surface,
+    evaluation.skill_version_id,
+    evaluation.scored_at
+  FROM skill_efficacy_evaluations evaluation
+  JOIN skills s
+    ON s.project_id = evaluation.project_id
+    AND s.id = evaluation.skill_id
+  JOIN chats c
+    ON c.project_id = evaluation.project_id
+    AND c.id = evaluation.chat_id
+    AND c.deleted IS FALSE
+  WHERE evaluation.project_id = $2
+    AND evaluation.skill_id = $3
+    AND evaluation.skill_version_id = ANY($4::uuid[])
+    AND evaluation.state = 'scored'
+    AND evaluation.scored_at >= $5
+    AND s.archived_at IS NULL
+  ORDER BY evaluation.chat_id, evaluation.scored_at DESC, evaluation.id DESC
+)
+SELECT chat_id, surface, skill_version_id, scored_at
+FROM recent
+ORDER BY scored_at DESC, chat_id DESC
+LIMIT $1
+`
+
+type ListRecentScoredSkillEvaluationChatsParams struct {
+	PageLimit   int32
+	ProjectID   uuid.UUID
+	SkillID     uuid.UUID
+	VersionIds  []uuid.UUID
+	ScoredSince pgtype.Timestamptz
+}
+
+type ListRecentScoredSkillEvaluationChatsRow struct {
+	ChatID         uuid.UUID
+	Surface        string
+	SkillVersionID uuid.UUID
+	ScoredAt       pgtype.Timestamptz
+}
+
+func (q *Queries) ListRecentScoredSkillEvaluationChats(ctx context.Context, arg ListRecentScoredSkillEvaluationChatsParams) ([]ListRecentScoredSkillEvaluationChatsRow, error) {
+	rows, err := q.db.Query(ctx, listRecentScoredSkillEvaluationChats,
+		arg.PageLimit,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.VersionIds,
+		arg.ScoredSince,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentScoredSkillEvaluationChatsRow
+	for rows.Next() {
+		var i ListRecentScoredSkillEvaluationChatsRow
+		if err := rows.Scan(
+			&i.ChatID,
+			&i.Surface,
+			&i.SkillVersionID,
+			&i.ScoredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentSkillFeedback = `-- name: ListRecentSkillFeedback :many
 SELECT id, project_id, skill_id, skill_version_id, skill_name, source, outcome, note, session_id, user_id, user_email, reviewed_at, created_at
 FROM skill_feedback
@@ -2820,6 +3291,77 @@ func (q *Queries) ListRecentSkillFeedback(ctx context.Context, arg ListRecentSki
 			&i.UserEmail,
 			&i.ReviewedAt,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentlyActiveSkills = `-- name: ListRecentlyActiveSkills :many
+SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+FROM skills
+WHERE project_id = $1
+  AND archived_at IS NULL
+  AND last_seen_at >= $2
+  AND EXISTS (
+    SELECT 1
+    FROM skill_versions sv
+    WHERE sv.skill_id = skills.id
+      AND sv.spec_valid IS TRUE
+  )
+  AND (
+    $3::timestamptz IS NULL
+    OR (last_seen_at, id) < (
+      $3::timestamptz,
+      $4::uuid
+    )
+  )
+ORDER BY last_seen_at DESC, id DESC
+LIMIT $5
+`
+
+type ListRecentlyActiveSkillsParams struct {
+	ProjectID        uuid.UUID
+	ActiveSince      pgtype.Timestamptz
+	CursorLastSeenAt pgtype.Timestamptz
+	CursorID         uuid.NullUUID
+	PageLimit        int32
+}
+
+func (q *Queries) ListRecentlyActiveSkills(ctx context.Context, arg ListRecentlyActiveSkillsParams) ([]Skill, error) {
+	rows, err := q.db.Query(ctx, listRecentlyActiveSkills,
+		arg.ProjectID,
+		arg.ActiveSince,
+		arg.CursorLastSeenAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Skill
+	for rows.Next() {
+		var i Skill
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Summary,
+			&i.SourceKind,
+			&i.Classification,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
+			&i.SeenCount,
+			&i.ArchivedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -3035,6 +3577,54 @@ func (q *Queries) ListSkillSightingTimeline(ctx context.Context, arg ListSkillSi
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillSuggestionProjects = `-- name: ListSkillSuggestionProjects :many
+SELECT p.id AS project_id
+FROM projects p
+WHERE p.deleted IS FALSE
+  AND p.id > $1
+  AND EXISTS (
+    SELECT 1
+    FROM skills s
+    WHERE s.project_id = p.id
+      AND s.archived_at IS NULL
+      AND s.last_seen_at >= $2
+      AND EXISTS (
+        SELECT 1
+        FROM skill_versions sv
+        WHERE sv.skill_id = s.id
+          AND sv.spec_valid IS TRUE
+      )
+  )
+ORDER BY p.id
+LIMIT $3
+`
+
+type ListSkillSuggestionProjectsParams struct {
+	AfterProjectID uuid.UUID
+	ActiveSince    pgtype.Timestamptz
+	PageLimit      int32
+}
+
+func (q *Queries) ListSkillSuggestionProjects(ctx context.Context, arg ListSkillSuggestionProjectsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listSkillSuggestionProjects, arg.AfterProjectID, arg.ActiveSince, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -3832,6 +4422,81 @@ func (q *Queries) ResolveSkillObservationVersions(ctx context.Context, arg Resol
 	return items, nil
 }
 
+const resolveSkillSuggestionBase = `-- name: ResolveSkillSuggestionBase :one
+WITH base AS (
+  SELECT sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.created_by_user_id
+  FROM skills s
+  JOIN skill_versions sv ON sv.skill_id = s.id
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = s.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE s.project_id = $1
+    AND s.id = $2
+    AND s.archived_at IS NULL
+    AND sv.spec_valid IS TRUE
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, sv.created_at DESC, sv.id DESC
+  LIMIT 1
+)
+SELECT
+  base.id AS base_version_id,
+  base.created_at AS base_floor_reference_at,
+  base.content AS base_content,
+  base.canonical_sha256 AS base_canonical_sha256,
+  COALESCE(predecessor.id, '00000000-0000-0000-0000-000000000000'::uuid) AS predecessor_version_id,
+  COALESCE(predecessor.content, '')::text AS predecessor_content,
+  COALESCE(predecessor.canonical_sha256, '')::text AS predecessor_canonical_sha256
+FROM base
+LEFT JOIN skill_version_lineages lineage
+  ON lineage.skill_id = base.skill_id
+  AND lineage.skill_version_id = base.id
+LEFT JOIN LATERAL (
+  SELECT previous.id, previous.content, previous.canonical_sha256
+  FROM skill_versions previous
+  WHERE previous.skill_id = base.skill_id
+    AND (
+      previous.id = lineage.derived_from_version_id
+      OR (
+        lineage.derived_from_version_id IS NULL
+        AND previous.spec_valid IS TRUE
+        AND (previous.created_at, previous.id) < (base.created_at, base.id)
+      )
+    )
+  ORDER BY previous.created_at DESC, previous.id DESC
+  LIMIT 1
+) predecessor ON TRUE
+`
+
+type ResolveSkillSuggestionBaseParams struct {
+	ProjectID uuid.UUID
+	SkillID   uuid.UUID
+}
+
+type ResolveSkillSuggestionBaseRow struct {
+	BaseVersionID              uuid.UUID
+	BaseFloorReferenceAt       pgtype.Timestamptz
+	BaseContent                string
+	BaseCanonicalSha256        string
+	PredecessorVersionID       uuid.UUID
+	PredecessorContent         string
+	PredecessorCanonicalSha256 string
+}
+
+func (q *Queries) ResolveSkillSuggestionBase(ctx context.Context, arg ResolveSkillSuggestionBaseParams) (ResolveSkillSuggestionBaseRow, error) {
+	row := q.db.QueryRow(ctx, resolveSkillSuggestionBase, arg.ProjectID, arg.SkillID)
+	var i ResolveSkillSuggestionBaseRow
+	err := row.Scan(
+		&i.BaseVersionID,
+		&i.BaseFloorReferenceAt,
+		&i.BaseContent,
+		&i.BaseCanonicalSha256,
+		&i.PredecessorVersionID,
+		&i.PredecessorContent,
+		&i.PredecessorCanonicalSha256,
+	)
+	return i, err
+}
+
 const retireSkillObservationsForDeletedChats = `-- name: RetireSkillObservationsForDeletedChats :execrows
 UPDATE skill_observations
 SET efficacy_enqueued_at = clock_timestamp()
@@ -4052,6 +4717,49 @@ func (q *Queries) StoreSkillRawHashAlias(ctx context.Context, arg StoreSkillRawH
 	return matches, err
 }
 
+const supersedeOpenSkillEditSuggestion = `-- name: SupersedeOpenSkillEditSuggestion :one
+UPDATE skill_edit_suggestions suggestion
+SET status = 'superseded',
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE suggestion.project_id = $1
+  AND suggestion.skill_id = $2
+  AND suggestion.base_version_id <> $3
+  AND suggestion.status = 'open'
+  AND s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+  AND s.archived_at IS NULL
+RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+`
+
+type SupersedeOpenSkillEditSuggestionParams struct {
+	ProjectID            uuid.UUID
+	SkillID              uuid.UUID
+	CurrentBaseVersionID uuid.UUID
+}
+
+func (q *Queries) SupersedeOpenSkillEditSuggestion(ctx context.Context, arg SupersedeOpenSkillEditSuggestionParams) (SkillEditSuggestion, error) {
+	row := q.db.QueryRow(ctx, supersedeOpenSkillEditSuggestion, arg.ProjectID, arg.SkillID, arg.CurrentBaseVersionID)
+	var i SkillEditSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.BaseVersionID,
+		&i.ProposedContent,
+		&i.Rationale,
+		&i.Status,
+		&i.FeedbackCount,
+		&i.ScoredSessionCount,
+		&i.ApprovedByUserID,
+		&i.ResultingVersionID,
+		&i.ApprovedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const syncSkillSummary = `-- name: SyncSkillSummary :one
 UPDATE skills
 SET summary = $1::text,
@@ -4083,6 +4791,126 @@ func (q *Queries) SyncSkillSummary(ctx context.Context, arg SyncSkillSummaryPara
 		&i.LastSeenAt,
 		&i.SeenCount,
 		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateLatestSkillEditSuggestionWatermark = `-- name: UpdateLatestSkillEditSuggestionWatermark :one
+WITH latest AS (
+  SELECT suggestion.id
+  FROM skill_edit_suggestions suggestion
+  JOIN skills s
+    ON s.project_id = suggestion.project_id
+    AND s.id = suggestion.skill_id
+  WHERE suggestion.project_id = $3
+    AND suggestion.skill_id = $4
+    AND suggestion.base_version_id = $5
+    AND s.archived_at IS NULL
+  ORDER BY suggestion.created_at DESC, suggestion.id DESC
+  LIMIT 1
+)
+UPDATE skill_edit_suggestions suggestion
+SET feedback_count = $1,
+    scored_session_count = $2,
+    updated_at = clock_timestamp()
+FROM latest
+WHERE suggestion.project_id = $3
+  AND suggestion.skill_id = $4
+  AND suggestion.base_version_id = $5
+  AND suggestion.id = latest.id
+RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+`
+
+type UpdateLatestSkillEditSuggestionWatermarkParams struct {
+	FeedbackCount      int64
+	ScoredSessionCount int64
+	ProjectID          uuid.UUID
+	SkillID            uuid.UUID
+	BaseVersionID      uuid.UUID
+}
+
+func (q *Queries) UpdateLatestSkillEditSuggestionWatermark(ctx context.Context, arg UpdateLatestSkillEditSuggestionWatermarkParams) (SkillEditSuggestion, error) {
+	row := q.db.QueryRow(ctx, updateLatestSkillEditSuggestionWatermark,
+		arg.FeedbackCount,
+		arg.ScoredSessionCount,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.BaseVersionID,
+	)
+	var i SkillEditSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.BaseVersionID,
+		&i.ProposedContent,
+		&i.Rationale,
+		&i.Status,
+		&i.FeedbackCount,
+		&i.ScoredSessionCount,
+		&i.ApprovedByUserID,
+		&i.ResultingVersionID,
+		&i.ApprovedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateOpenSkillEditSuggestion = `-- name: UpdateOpenSkillEditSuggestion :one
+UPDATE skill_edit_suggestions suggestion
+SET proposed_content = $1,
+    rationale = $2,
+    feedback_count = $3,
+    scored_session_count = $4,
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE suggestion.project_id = $5
+  AND suggestion.skill_id = $6
+  AND suggestion.base_version_id = $7
+  AND suggestion.status = 'open'
+  AND s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+  AND s.archived_at IS NULL
+RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+`
+
+type UpdateOpenSkillEditSuggestionParams struct {
+	ProposedContent    string
+	Rationale          string
+	FeedbackCount      int64
+	ScoredSessionCount int64
+	ProjectID          uuid.UUID
+	SkillID            uuid.UUID
+	BaseVersionID      uuid.UUID
+}
+
+func (q *Queries) UpdateOpenSkillEditSuggestion(ctx context.Context, arg UpdateOpenSkillEditSuggestionParams) (SkillEditSuggestion, error) {
+	row := q.db.QueryRow(ctx, updateOpenSkillEditSuggestion,
+		arg.ProposedContent,
+		arg.Rationale,
+		arg.FeedbackCount,
+		arg.ScoredSessionCount,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.BaseVersionID,
+	)
+	var i SkillEditSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.BaseVersionID,
+		&i.ProposedContent,
+		&i.Rationale,
+		&i.Status,
+		&i.FeedbackCount,
+		&i.ScoredSessionCount,
+		&i.ApprovedByUserID,
+		&i.ResultingVersionID,
+		&i.ApprovedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

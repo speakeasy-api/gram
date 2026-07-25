@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -53,6 +54,7 @@ import (
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 	spendrulesch "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -136,6 +138,7 @@ type Activities struct {
 	listSpendRuleOrgs               *spend_rules.ListOrgs
 	evaluateOrgSpendRules           *spend_rules.EvaluateOrg
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
+	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
 }
 
@@ -230,6 +233,15 @@ func NewActivities(
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
 	}
 
+	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
+	if db != nil && telemetryRepo != nil && chatClient != nil && temporalEnv != nil && judgeRateLimiter != nil {
+		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
+		if err != nil {
+			panic(fmt.Errorf("new skill suggestion engine: %w", err))
+		}
+		skillSuggestionAnalyzer = activities.NewSkillSuggestionAnalyzer(db, engine, &TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0})
+	}
+
 	return &Activities{
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -305,6 +317,7 @@ func NewActivities(
 			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter)),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
+		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -210,9 +211,22 @@ func TestCapturedVersionDoesNotOutrankManualDistribution(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	manual := createSkill(t, ctx, ti, "distribution-priority", "Manual version.")
+	open, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
+		ProposedContent:    skillManifest("distribution-priority", "Suggested.", "suggested"),
+		Rationale:          "evidence",
+		FeedbackCount:      1,
+		ScoredSessionCount: 1,
+		BaseVersionID:      uuid.MustParse(manual.Version.ID),
+		ProjectID:          ti.projectID,
+		SkillID:            uuid.MustParse(manual.Skill.ID),
+	})
+	require.NoError(t, err)
 	captured, err := skills.CaptureSkillContent(ctx, ti.conn, ti.projectID, capturedManifest("distribution-priority", "Captured version.", "newer"))
 	require.NoError(t, err)
 	require.NotEqual(t, manual.Version.ID, captured.SkillVersionID.String())
+	stillOpen, err := ti.repo.GetOpenSkillEditSuggestion(ctx, repo.GetOpenSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: uuid.MustParse(manual.Skill.ID)})
+	require.NoError(t, err)
+	require.Equal(t, open.ID, stillOpen.ID)
 	plugin := createPlugin(t, ctx, ti, ti.projectID, "capture-priority-plugin")
 
 	distribution, err := ti.service.Distribute(ctx, &gen.DistributePayload{

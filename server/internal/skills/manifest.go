@@ -31,6 +31,11 @@ const (
 var errCanonicalDocumentTooLarge = errors.New("canonical skill manifest exceeds 65536 bytes")
 var errYAMLSourceTooDeep = errors.New("YAML source exceeds maximum nesting depth of 64")
 
+// ErrSkillSuggestionNoOp marks a valid proposal that is canonically identical
+// to its base. Suggestion generation treats this as a terminal decline rather
+// than asking the model to reformat the same content.
+var ErrSkillSuggestionNoOp = errors.New("skill suggestion is unchanged from base")
+
 type validationError struct {
 	Code    string `json:"code"`
 	Field   string `json:"field"`
@@ -49,6 +54,37 @@ type parsedSkillManifest struct {
 	RawSHA256        string
 	CanonicalSHA256  string
 	canonicalContent string
+}
+
+// ValidatedSkillSuggestion is a proposed SKILL.md that differs canonically
+// from its base version.
+type ValidatedSkillSuggestion struct {
+	Content         string
+	CanonicalSHA256 string
+}
+
+// ValidateSkillSuggestion applies the SKILL.md parser and spec validation used
+// by skill versions, verifies the target skill, and rejects canonical no-ops.
+func ValidateSkillSuggestion(content, expectedName, baseCanonicalSHA256 string) (ValidatedSkillSuggestion, error) {
+	proposed, err := parseSkillManifest(content)
+	if err != nil {
+		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: %w", err)
+	}
+	if !proposed.SpecValid {
+		return ValidatedSkillSuggestion{}, errors.New("validate proposed skill manifest: manifest is not spec-valid")
+	}
+	if proposed.Name != expectedName {
+		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: name %q does not match skill %q", proposed.Name, expectedName)
+	}
+
+	if proposed.CanonicalSHA256 == baseCanonicalSHA256 {
+		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: content is unchanged from base: %w", ErrSkillSuggestionNoOp)
+	}
+
+	return ValidatedSkillSuggestion{
+		Content:         proposed.RawContent,
+		CanonicalSHA256: proposed.CanonicalSHA256,
+	}, nil
 }
 
 func parseSkillManifest(content string) (parsedSkillManifest, error) {
