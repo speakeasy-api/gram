@@ -302,6 +302,7 @@ CREATE TABLE IF NOT EXISTS skill_versions (
   validation_errors JSONB NOT NULL DEFAULT '[]'::jsonb,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  promoted_at timestamptz,
   created_by_user_id TEXT NOT NULL,
 
   CONSTRAINT skill_versions_pkey PRIMARY KEY (id),
@@ -312,6 +313,7 @@ CREATE TABLE IF NOT EXISTS skill_versions (
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_canonical_sha256_key ON skill_versions (skill_id, canonical_sha256);
 CREATE UNIQUE INDEX IF NOT EXISTS skill_versions_skill_id_id_key ON skill_versions (skill_id, id);
 CREATE INDEX IF NOT EXISTS skill_versions_skill_id_created_at_id_idx ON skill_versions (skill_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS skill_versions_skill_id_effective_at_id_idx ON skill_versions (skill_id, COALESCE(promoted_at, created_at) DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS skill_version_lineages (
   skill_version_id uuid NOT NULL,
@@ -371,6 +373,10 @@ ON skill_feedback (project_id, skill_name, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS skill_feedback_project_id_skill_name_created_at_unreviewed_idx
 ON skill_feedback (project_id, skill_name, created_at)
 WHERE reviewed_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS skill_feedback_project_id_skill_id_created_at_id_idx
+ON skill_feedback (project_id, skill_id, created_at DESC, id DESC)
+WHERE skill_id IS NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_feedback_project_id_id_key
 ON skill_feedback (project_id, id);
