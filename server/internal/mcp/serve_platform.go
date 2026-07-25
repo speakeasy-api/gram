@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -478,6 +479,10 @@ func (s *Service) callPlatformToolsetTool(
 	}()
 
 	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
+		var shareableErr *oops.ShareableError
+		if errors.As(err, &shareableErr) {
+			return nil, fmt.Errorf("execute platform tool: %w", err)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
 	}
 	outputBytes = int64(rw.body.Len())
