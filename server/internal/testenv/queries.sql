@@ -197,3 +197,15 @@ FROM device_integration_syncs s
 JOIN device_integration_schedules sch
   ON s.device_integration_schedule_id = sch.id
 WHERE sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: SetDeviceIntegrationSyncPushDigestFixture :exec
+UPDATE device_integration_syncs s
+SET last_push_digest = @last_push_digest
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = @device_integration_config_id;
+
+-- name: CorruptDeviceIntegrationCredentialsFixture :exec
+UPDATE device_integration_configs
+SET credentials_encrypted = 'not-a-valid-ciphertext'
+WHERE id = @id;

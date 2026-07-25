@@ -12,6 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const corruptDeviceIntegrationCredentialsFixture = `-- name: CorruptDeviceIntegrationCredentialsFixture :exec
+UPDATE device_integration_configs
+SET credentials_encrypted = 'not-a-valid-ciphertext'
+WHERE id = $1
+`
+
+func (q *Queries) CorruptDeviceIntegrationCredentialsFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, corruptDeviceIntegrationCredentialsFixture, id)
+	return err
+}
+
 const countFunctionsAccess = `-- name: CountFunctionsAccess :one
 SELECT count(id)
 FROM functions_access
@@ -657,6 +668,24 @@ type SetDeploymentFunctionInfraOverridesParams struct {
 
 func (q *Queries) SetDeploymentFunctionInfraOverrides(ctx context.Context, arg SetDeploymentFunctionInfraOverridesParams) error {
 	_, err := q.db.Exec(ctx, setDeploymentFunctionInfraOverrides, arg.MemoryMibOverride, arg.ScaleOverride, arg.DeploymentID)
+	return err
+}
+
+const setDeviceIntegrationSyncPushDigestFixture = `-- name: SetDeviceIntegrationSyncPushDigestFixture :exec
+UPDATE device_integration_syncs s
+SET last_push_digest = $1
+FROM device_integration_schedules sch
+WHERE s.device_integration_schedule_id = sch.id
+  AND sch.device_integration_config_id = $2
+`
+
+type SetDeviceIntegrationSyncPushDigestFixtureParams struct {
+	LastPushDigest            pgtype.Text
+	DeviceIntegrationConfigID uuid.UUID
+}
+
+func (q *Queries) SetDeviceIntegrationSyncPushDigestFixture(ctx context.Context, arg SetDeviceIntegrationSyncPushDigestFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDeviceIntegrationSyncPushDigestFixture, arg.LastPushDigest, arg.DeviceIntegrationConfigID)
 	return err
 }
 

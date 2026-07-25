@@ -185,6 +185,7 @@ WHERE s.device_integration_schedule_id = sch.id
 UPDATE device_integration_syncs s
 SET auto_paused_at = NULL,
     consecutive_failures = 0,
+    consecutive_auth_rejections = 0,
     last_poll_error = NULL,
     last_poll_failed_at = NULL,
     last_push_digest = NULL,
@@ -203,6 +204,7 @@ WHERE s.device_integration_schedule_id = sch.id
 UPDATE device_integration_syncs s
 SET auto_paused_at = NULL,
     consecutive_failures = 0,
+    consecutive_auth_rejections = 0,
     last_poll_error = NULL,
     last_poll_failed_at = NULL,
     next_poll_after = clock_timestamp(),
@@ -297,3 +299,225 @@ WHERE d.organization_id = @organization_id
   AND (sqlc.narg('bucket')::text IS NULL OR sqlc.narg('bucket')::text = cov.coverage_bucket)
 ORDER BY d.id DESC
 LIMIT @page_limit;
+
+-- Scheduling: the Temporal coordinator selects due syncs, and the sync runner
+-- records outcomes. Workflow payloads carry only sync ids — the runner loads
+-- config and decrypts credentials inside the activity, never in Temporal
+-- history.
+
+-- DBNow anchors sync-start cutoffs to the database clock: mdm_devices rows
+-- are stamped with clock_timestamp(), so comparing them against an
+-- app-server timestamp would mis-mark devices whenever the two clocks skew.
+
+-- name: DBNow :one
+SELECT clock_timestamp()::timestamptz AS now;
+
+-- name: ListSyncCandidates :many
+SELECT
+    s.id AS sync_id
+  , c.organization_id
+  , om.slug AS organization_slug
+  , c.provider
+  , sch.schedule
+FROM device_integration_syncs s
+JOIN device_integration_schedules sch
+  ON sch.id = s.device_integration_schedule_id
+JOIN device_integration_configs c
+  ON c.id = sch.device_integration_config_id
+JOIN organization_metadata om
+  ON om.id = c.organization_id
+WHERE c.enabled IS TRUE
+  AND c.deleted IS FALSE
+  AND sch.disabled_at IS NULL
+  AND s.auto_paused_at IS NULL
+  AND s.next_poll_after <= clock_timestamp()
+  AND NOT (s.id = ANY (@exclude_sync_ids::uuid[]))
+ORDER BY s.next_poll_after ASC, c.organization_id ASC, sch.schedule ASC
+LIMIT @limit_count;
+
+-- name: GetSyncTarget :one
+SELECT
+    c.id AS config_id
+  , c.organization_id
+  , c.provider
+  , c.credentials_encrypted
+  , c.settings
+  , c.enabled
+  , c.deleted
+  , c.updated_at AS config_updated_at
+  , sch.schedule
+  , sch.disabled_at
+  , s.id AS sync_id
+  , s.poll_watermark_at
+  , s.consecutive_failures
+  , s.auto_paused_at
+  , s.last_push_digest
+FROM device_integration_syncs s
+JOIN device_integration_schedules sch
+  ON sch.id = s.device_integration_schedule_id
+JOIN device_integration_configs c
+  ON c.id = sch.device_integration_config_id
+WHERE s.id = @sync_id;
+
+-- RecordSyncSuccess reschedules a sync and clears its failure state — the
+-- error fields clear on success by contract, so scheduleStatus's recency
+-- derivation renders recovery as success. last_push_digest only moves when
+-- the caller supplies one (evidence pushes); inventory syncs leave it alone.
+-- The write is guarded on the config's updated_at as observed when the sync
+-- started: a config save (rotation, settings change) invalidates in-flight
+-- outcomes so a pre-save sync cannot clobber the post-save clean slate.
+-- next_poll_after is computed on the database clock so all scheduler time
+-- arithmetic lives in one clock domain.
+
+-- name: RecordSyncSuccess :execrows
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp() + make_interval(secs => @next_in_seconds::int),
+    poll_watermark_at = COALESCE(sqlc.narg('poll_watermark_at')::timestamptz, s.poll_watermark_at),
+    last_poll_success_at = clock_timestamp(),
+    last_poll_error = NULL,
+    last_poll_failed_at = NULL,
+    consecutive_failures = 0,
+    consecutive_auth_rejections = 0,
+    auto_paused_at = NULL,
+    last_push_digest = COALESCE(sqlc.narg('last_push_digest')::text, s.last_push_digest),
+    updated_at = clock_timestamp()
+FROM device_integration_schedules sch
+JOIN device_integration_configs c
+  ON c.id = sch.device_integration_config_id
+WHERE s.id = @sync_id
+  AND sch.id = s.device_integration_schedule_id
+  AND c.updated_at = @config_updated_at;
+
+-- RecordSyncFailure reschedules with backoff and, when pause_after is
+-- positive and the new streak reaches it, auto-pauses the schedule so
+-- candidate selection stops re-enqueueing it. Callers pass zero pause_after
+-- for failures that should never pause (e.g. transient network errors).
+
+-- name: RecordSyncFailure :exec
+UPDATE device_integration_syncs s
+SET next_poll_after = clock_timestamp() + make_interval(secs => @next_in_seconds::int),
+    last_poll_error = @last_poll_error,
+    last_poll_failed_at = clock_timestamp(),
+    consecutive_failures = s.consecutive_failures + 1,
+    -- The auth-rejection streak is tracked separately: any non-auth failure
+    -- resets it, so only a PURE run of credential rejections can reach the
+    -- auto-pause threshold.
+    consecutive_auth_rejections = CASE
+      WHEN @auth_rejection::bool THEN s.consecutive_auth_rejections + 1
+      ELSE 0
+    END,
+    auto_paused_at = CASE
+      WHEN @auth_rejection::bool AND @pause_after::int > 0 AND s.consecutive_auth_rejections + 1 >= @pause_after::int
+      THEN clock_timestamp()
+      ELSE s.auto_paused_at
+    END,
+    updated_at = clock_timestamp()
+FROM device_integration_schedules sch
+JOIN device_integration_configs c
+  ON c.id = sch.device_integration_config_id
+WHERE s.id = @sync_id
+  AND sch.id = s.device_integration_schedule_id
+  AND c.updated_at = @config_updated_at;
+
+-- UpsertMdmDevice reconciles one inventory row. A reappearing device clears
+-- missing_since; last_seen_at stamps this observation for the mark-missing
+-- cutoff. The write is guarded on the config's updated_at as observed when
+-- the sync started: a config save (rotation, endpoint change) mid-pull makes
+-- the insert a zero-row no-op, so stale-credential inventory never merges
+-- into the newly saved config.
+
+-- name: UpsertMdmDevice :execrows
+INSERT INTO mdm_devices (
+    device_integration_config_id
+  , organization_id
+  , external_id
+  , serial_number
+  , hostname
+  , os_name
+  , os_version
+  , user_email
+  , user_id
+  , mdm_last_check_in_at
+  , raw
+)
+SELECT
+    @device_integration_config_id
+  , @organization_id
+  , @external_id
+  , sqlc.narg('serial_number')::text
+  , sqlc.narg('hostname')::text
+  , sqlc.narg('os_name')::text
+  , sqlc.narg('os_version')::text
+  , sqlc.narg('user_email')::text
+  , sqlc.narg('user_id')::text
+  , sqlc.narg('mdm_last_check_in_at')::timestamptz
+  , @raw
+WHERE EXISTS (
+  SELECT 1
+  FROM device_integration_configs c
+  WHERE c.id = @device_integration_config_id
+    AND c.updated_at = @config_updated_at
+)
+ON CONFLICT (device_integration_config_id, external_id) DO UPDATE SET
+    serial_number = EXCLUDED.serial_number,
+    hostname = EXCLUDED.hostname,
+    os_name = EXCLUDED.os_name,
+    os_version = EXCLUDED.os_version,
+    user_email = EXCLUDED.user_email,
+    user_id = EXCLUDED.user_id,
+    mdm_last_check_in_at = EXCLUDED.mdm_last_check_in_at,
+    raw = EXCLUDED.raw,
+    last_seen_at = clock_timestamp(),
+    missing_since = NULL,
+    updated_at = clock_timestamp();
+
+-- MarkDevicesMissing stamps devices absent from the snapshot that started at
+-- @sync_started_at. INVARIANT: only ever called in the same transaction that
+-- records the fully completed snapshot (RecordSyncSuccess) — a partial pull
+-- must never mark unvisited devices missing.
+
+-- name: MarkDevicesMissing :exec
+UPDATE mdm_devices
+SET missing_since = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE device_integration_config_id = @device_integration_config_id
+  AND missing_since IS NULL
+  AND last_seen_at < @sync_started_at;
+
+-- ResolveOrgMemberByEmail maps an MDM-reported email to the org member it
+-- belongs to, scoped through the org membership so a same-email user in a
+-- different org never links.
+
+-- name: ResolveOrgMemberByEmail :one
+SELECT u.id
+FROM users u
+JOIN organization_user_relationships our
+  ON our.user_id = u.id
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+  AND LOWER(u.email) = LOWER(@email)
+  AND u.deleted_at IS NULL
+ORDER BY u.id
+LIMIT 1;
+
+-- ListCoverageSnapshotDevices feeds evidence-sink pushes: every present
+-- device across the org's live configs, with the assigned user's agent
+-- heartbeat. Ordered by external id so the snapshot digest is deterministic.
+
+-- name: ListCoverageSnapshotDevices :many
+SELECT
+    d.external_id
+  , d.serial_number
+  , d.hostname
+  , d.user_email
+  , das.last_seen_at AS agent_last_seen_at
+FROM mdm_devices d
+JOIN device_integration_configs c
+  ON c.id = d.device_integration_config_id
+ AND c.deleted IS FALSE
+LEFT JOIN device_agent_syncs das
+  ON das.organization_id = d.organization_id
+ AND LOWER(das.email) = LOWER(d.user_email)
+WHERE d.organization_id = @organization_id
+  AND d.missing_since IS NULL
+ORDER BY d.external_id ASC, d.id ASC;
