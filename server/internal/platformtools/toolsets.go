@@ -12,6 +12,10 @@ const AssistantsPlatformToolsetSlug = "assistants"
 // other assistant.
 const ManagedAssistantPlatformToolsetSlug = "managed-assistant"
 
+// SkillFeedbackPlatformToolsetSlug identifies the fixed dev-only feedback
+// endpoint. It is intentionally not part of the assistant toolset registry.
+const SkillFeedbackPlatformToolsetSlug = "skill-feedback"
+
 // Toolset is a virtual collection of platform tools exposed at runtime via a
 // dedicated MCP endpoint. Platform toolsets are not persisted; the slug is
 // hardcoded per consumer and wired in code at process startup.
@@ -78,6 +82,10 @@ func NewAssistantsToolset(tools ...ExternalTool) Toolset {
 // production wiring goes through BuildToolsets.
 func NewManagedAssistantToolset(tools ...ExternalTool) Toolset {
 	return Toolset{Slug: ManagedAssistantPlatformToolsetSlug, Tools: tools}
+}
+
+func NewSkillFeedbackToolset(tool ExternalTool) Toolset {
+	return Toolset{Slug: SkillFeedbackPlatformToolsetSlug, Tools: []ExternalTool{tool}}
 }
 
 // PlatformToolsetURL builds the URL where a runtime reaches the named

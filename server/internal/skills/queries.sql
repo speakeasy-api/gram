@@ -30,6 +30,13 @@ INSERT INTO skill_feedback (
 )
 RETURNING *;
 
+-- name: GetActiveSkillByName :one
+SELECT *
+FROM skills
+WHERE project_id = @project_id
+  AND name = @name
+  AND archived_at IS NULL;
+
 -- name: ListRecentSkillFeedback :many
 SELECT *
 FROM skill_feedback

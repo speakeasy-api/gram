@@ -997,6 +997,40 @@ func (q *Queries) FailSkillObservationReconciliations(ctx context.Context, arg F
 	return result.RowsAffected(), nil
 }
 
+const getActiveSkillByName = `-- name: GetActiveSkillByName :one
+SELECT id, project_id, name, display_name, summary, source_kind, classification, first_seen_at, last_seen_at, seen_count, archived_at, created_at, updated_at
+FROM skills
+WHERE project_id = $1
+  AND name = $2
+  AND archived_at IS NULL
+`
+
+type GetActiveSkillByNameParams struct {
+	ProjectID uuid.UUID
+	Name      string
+}
+
+func (q *Queries) GetActiveSkillByName(ctx context.Context, arg GetActiveSkillByNameParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, getActiveSkillByName, arg.ProjectID, arg.Name)
+	var i Skill
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Summary,
+		&i.SourceKind,
+		&i.Classification,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.SeenCount,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getActiveSkillDistributionRecord = `-- name: GetActiveSkillDistributionRecord :one
 SELECT
   sd.id, sd.project_id, sd.skill_id, sd.pinned_version_id, sd.plugin_id, sd.assistant_id, sd.channel, sd.created_by_user_id, sd.revoked_at, sd.created_at, sd.updated_at,

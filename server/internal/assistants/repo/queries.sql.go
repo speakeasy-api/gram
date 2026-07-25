@@ -972,6 +972,60 @@ func (q *Queries) GetAssistantRuntimeV2(ctx context.Context, arg GetAssistantRun
 	return i, err
 }
 
+const getAssistantSkillFeedbackObservation = `-- name: GetAssistantSkillFeedbackObservation :one
+SELECT
+  so.skill_id::uuid AS skill_id,
+  so.skill_version_id::uuid AS skill_version_id,
+  so.skill_name,
+  t.chat_id
+FROM assistant_threads t
+JOIN skill_observations so
+  ON so.project_id = t.project_id
+  AND so.provider = 'assistant'
+  AND so.session_id = t.chat_id::text
+WHERE t.project_id = $1
+  AND t.assistant_id = $2
+  AND t.id = $3
+  AND t.deleted IS FALSE
+  AND so.idempotency_key LIKE 'assistant:' || $2::text || ':' || t.chat_id::text || ':%'
+  AND so.skill_name = $4
+  AND so.reconciled_at IS NOT NULL
+  AND so.reconcile_error_code IS NULL
+ORDER BY so.seen_at DESC, so.id DESC
+LIMIT 1
+`
+
+type GetAssistantSkillFeedbackObservationParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+	SkillName   string
+}
+
+type GetAssistantSkillFeedbackObservationRow struct {
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+	SkillName      string
+	ChatID         uuid.UUID
+}
+
+func (q *Queries) GetAssistantSkillFeedbackObservation(ctx context.Context, arg GetAssistantSkillFeedbackObservationParams) (GetAssistantSkillFeedbackObservationRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantSkillFeedbackObservation,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+		arg.SkillName,
+	)
+	var i GetAssistantSkillFeedbackObservationRow
+	err := row.Scan(
+		&i.SkillID,
+		&i.SkillVersionID,
+		&i.SkillName,
+		&i.ChatID,
+	)
+	return i, err
+}
+
 const getAssistantThreadIDByCorrelation = `-- name: GetAssistantThreadIDByCorrelation :one
 SELECT id
 FROM assistant_threads
@@ -2572,9 +2626,9 @@ INSERT INTO skill_observations (
 )
 SELECT
     s.project_id
-  , 'assistant:' || $1::text || ':' || sv.id::text
+  , 'assistant:' || $1::uuid || ':' || $2::text || ':' || sv.id::text
   , 'assistant'
-  , $1::text
+  , $2::text
   , s.name
   , sv.raw_sha256
   , observed.seen_at
@@ -2584,15 +2638,16 @@ SELECT
 FROM skills s
 JOIN skill_versions sv
   ON sv.skill_id = s.id
-  AND sv.id = $2
+  AND sv.id = $3
 CROSS JOIN observed
-WHERE s.project_id = $3
-  AND s.id = $4
+WHERE s.project_id = $4
+  AND s.id = $5
 ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
-DO NOTHING
+DO UPDATE SET seen_at = EXCLUDED.seen_at
 `
 
 type RecordAssistantSkillObservationParams struct {
+	AssistantID    uuid.UUID
 	SessionID      string
 	SkillVersionID uuid.UUID
 	ProjectID      uuid.UUID
@@ -2601,6 +2656,7 @@ type RecordAssistantSkillObservationParams struct {
 
 func (q *Queries) RecordAssistantSkillObservation(ctx context.Context, arg RecordAssistantSkillObservationParams) (int64, error) {
 	result, err := q.db.Exec(ctx, recordAssistantSkillObservation,
+		arg.AssistantID,
 		arg.SessionID,
 		arg.SkillVersionID,
 		arg.ProjectID,

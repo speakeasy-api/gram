@@ -1,6 +1,10 @@
 package skills_test
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -8,7 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/skills"
+	feedbackrecorder "github.com/speakeasy-api/gram/server/internal/skills/feedback"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func createSkillFeedback(t *testing.T, ti *testInstance, projectID uuid.UUID, skillName, note string) repo.SkillFeedback {
@@ -54,6 +60,194 @@ func TestSkillFeedbackValues(t *testing.T) {
 	require.Equal(t, skills.EditSuggestionStatusApproved, skills.EditSuggestionStatus("approved"))
 	require.Equal(t, skills.EditSuggestionStatusDismissed, skills.EditSuggestionStatus("dismissed"))
 	require.Equal(t, skills.EditSuggestionStatusSuperseded, skills.EditSuggestionStatus("superseded"))
+}
+
+func TestFeedbackRecorderValidatesInputBeforeWriting(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestService(t)
+	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), nil)
+	valid := feedbackrecorder.RecordInput{
+		ProjectID:      ti.projectID,
+		SkillID:        uuid.NullUUID{},
+		SkillVersionID: uuid.NullUUID{},
+		SkillName:      "valid-skill",
+		Source:         skills.FeedbackSourceDev,
+		Outcome:        skills.FeedbackOutcomeHelped,
+		Note:           "",
+		SessionID:      "",
+		UserID:         "",
+		UserEmail:      "",
+	}
+
+	invalid := valid
+	invalid.SkillName = "Not Canonical"
+	_, err := recorder.Record(t.Context(), invalid)
+	require.ErrorContains(t, err, "canonical")
+
+	invalid = valid
+	invalid.Source = skills.FeedbackSource("other")
+	_, err = recorder.Record(t.Context(), invalid)
+	require.ErrorContains(t, err, "source")
+
+	invalid = valid
+	invalid.Outcome = skills.FeedbackOutcome("other")
+	_, err = recorder.Record(t.Context(), invalid)
+	require.ErrorContains(t, err, "outcome")
+
+	invalid = valid
+	invalid.SkillVersionID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	_, err = recorder.Record(t.Context(), invalid)
+	require.ErrorContains(t, err, "exact skill")
+
+	rows, err := ti.repo.ListRecentSkillFeedback(t.Context(), repo.ListRecentSkillFeedbackParams{
+		ProjectID: ti.projectID,
+		SkillName: valid.SkillName,
+		PageLimit: 10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+func TestFeedbackRecorderResolvesActiveNameOrPreservesUnresolvedName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "resolved-feedback", "Resolved")
+	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), nil)
+
+	resolved, err := recorder.Record(ctx, feedbackrecorder.RecordInput{
+		ProjectID:      ti.projectID,
+		SkillID:        uuid.NullUUID{},
+		SkillVersionID: uuid.NullUUID{},
+		SkillName:      "  resolved-feedback  ",
+		Source:         skills.FeedbackSourceDev,
+		Outcome:        skills.FeedbackOutcomeHelped,
+		Note:           "",
+		SessionID:      "",
+		UserID:         "",
+		UserEmail:      "",
+	})
+	require.NoError(t, err)
+	require.Equal(t, uuid.MustParse(created.Skill.ID), resolved.SkillID.UUID)
+	require.False(t, resolved.SkillVersionID.Valid)
+	require.Equal(t, created.Skill.Name, resolved.SkillName)
+
+	unresolved, err := recorder.Record(ctx, feedbackrecorder.RecordInput{
+		ProjectID:      ti.projectID,
+		SkillID:        uuid.NullUUID{},
+		SkillVersionID: uuid.NullUUID{},
+		SkillName:      "  unresolved-feedback  ",
+		Source:         skills.FeedbackSourceDev,
+		Outcome:        skills.FeedbackOutcomeDidNotHelp,
+		Note:           "",
+		SessionID:      "",
+		UserID:         "",
+		UserEmail:      "",
+	})
+	require.NoError(t, err)
+	require.False(t, unresolved.SkillID.Valid)
+	require.False(t, unresolved.SkillVersionID.Valid)
+	require.Equal(t, "unresolved-feedback", unresolved.SkillName)
+}
+
+func TestFeedbackRecorderExactIDsAndEmptyNote(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "exact-feedback", "Exact")
+	skillID := uuid.MustParse(created.Skill.ID)
+	versionID := uuid.MustParse(created.Version.ID)
+	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), nil)
+
+	feedback, err := recorder.Record(ctx, feedbackrecorder.RecordInput{
+		ProjectID:      ti.projectID,
+		SkillID:        uuid.NullUUID{UUID: skillID, Valid: true},
+		SkillVersionID: uuid.NullUUID{UUID: versionID, Valid: true},
+		SkillName:      "exact-feedback",
+		Source:         skills.FeedbackSourceAssistant,
+		Outcome:        skills.FeedbackOutcomePartiallyHelped,
+		Note:           "",
+		SessionID:      "chat-id",
+		UserID:         "user-id",
+		UserEmail:      "user@example.test",
+	})
+	require.NoError(t, err)
+	require.Equal(t, skillID, feedback.SkillID.UUID)
+	require.Equal(t, versionID, feedback.SkillVersionID.UUID)
+	require.False(t, feedback.Note.Valid)
+}
+
+func TestFeedbackRecorderNoteUnicodeBoundary(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestService(t)
+	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), nil)
+	input := feedbackrecorder.RecordInput{
+		ProjectID:      ti.projectID,
+		SkillID:        uuid.NullUUID{},
+		SkillVersionID: uuid.NullUUID{},
+		SkillName:      "unicode-feedback",
+		Source:         skills.FeedbackSourceDev,
+		Outcome:        skills.FeedbackOutcomeHelped,
+		Note:           strings.Repeat("界", 4000),
+		SessionID:      "",
+		UserID:         "",
+		UserEmail:      "",
+	}
+
+	feedback, err := recorder.Record(t.Context(), input)
+	require.NoError(t, err)
+	require.Equal(t, input.Note, feedback.Note.String)
+
+	input.Note += "界"
+	_, err = recorder.Record(t.Context(), input)
+	require.ErrorContains(t, err, "4000")
+}
+
+type feedbackDurabilitySignaler struct {
+	repo      *repo.Queries
+	skillName string
+	sawWrite  bool
+	err       error
+}
+
+func (s *feedbackDurabilitySignaler) Signal(ctx context.Context, projectID uuid.UUID) error {
+	rows, err := s.repo.ListRecentSkillFeedback(ctx, repo.ListRecentSkillFeedbackParams{
+		ProjectID: projectID,
+		SkillName: s.skillName,
+		PageLimit: 10,
+	})
+	if err != nil {
+		return fmt.Errorf("read feedback during signal: %w", err)
+	}
+	s.sawWrite = len(rows) == 1
+	return s.err
+}
+
+func TestFeedbackRecorderSignalsAfterInsertAndSwallowsSignalError(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestService(t)
+	signalErr := errors.New("coordinator unavailable")
+	signaler := &feedbackDurabilitySignaler{repo: ti.repo, skillName: "signaled-feedback", sawWrite: false, err: signalErr}
+	recorder := feedbackrecorder.NewRecorder(ti.conn, testenv.NewLogger(t), signaler)
+
+	feedback, err := recorder.Record(t.Context(), feedbackrecorder.RecordInput{
+		ProjectID:      ti.projectID,
+		SkillID:        uuid.NullUUID{},
+		SkillVersionID: uuid.NullUUID{},
+		SkillName:      signaler.skillName,
+		Source:         skills.FeedbackSourceDev,
+		Outcome:        skills.FeedbackOutcomeHelped,
+		Note:           "",
+		SessionID:      "",
+		UserID:         "",
+		UserEmail:      "",
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, feedback.ID)
+	require.True(t, signaler.sawWrite)
 }
 
 func TestCreateSkillFeedbackUnresolvedNameRoundTrip(t *testing.T) {

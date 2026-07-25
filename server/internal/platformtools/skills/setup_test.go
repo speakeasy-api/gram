@@ -41,9 +41,13 @@ func TestMain(m *testing.M) {
 // skillLoadFixture is one assistant in one project with one attached skill —
 // the smallest estate a skills_load call can succeed against.
 type skillLoadFixture struct {
-	conn      *pgxpool.Pool
-	projectID uuid.UUID
-	version   skillsrepo.SkillVersion
+	conn           *pgxpool.Pool
+	organizationID string
+	projectID      uuid.UUID
+	assistantID    uuid.UUID
+	threadID       uuid.UUID
+	chatID         uuid.UUID
+	version        skillsrepo.SkillVersion
 }
 
 func newSkillLoadFixture(t *testing.T, name string) (context.Context, *skillLoadFixture) {
@@ -115,18 +119,47 @@ func newSkillLoadFixture(t *testing.T, name string) (context.Context, *skillLoad
 		SkillID:         skill.ID,
 	})
 	require.NoError(t, err)
+	chatID := uuid.New()
+	err = assistantrepo.New(conn).UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      project.ID,
+		OrganizationID: organizationID,
+		UserID:         pgtype.Text{String: "user-test", Valid: true},
+		Title:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+	threadID, err := assistantrepo.New(conn).UpsertAssistantThread(ctx, assistantrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistant.ID,
+		ProjectID:     project.ID,
+		CorrelationID: "platform-skills-" + uuid.NewString(),
+		ChatID:        chatID,
+		SourceKind:    "dashboard",
+		SourceRefJson: []byte(`{}`),
+	})
+	require.NoError(t, err)
 
+	email := "user@example.test"
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID: organizationID,
+		UserID:               "user-test",
+		Email:                &email,
 		ProjectID:            &project.ID,
 		ProjectSlug:          &project.Slug,
 	})
 	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{
 		AssistantID: assistant.ID,
-		ThreadID:    uuid.New(),
+		ThreadID:    threadID,
 	})
 
-	return ctx, &skillLoadFixture{conn: conn, projectID: project.ID, version: version}
+	return ctx, &skillLoadFixture{
+		conn:           conn,
+		organizationID: organizationID,
+		projectID:      project.ID,
+		assistantID:    assistant.ID,
+		threadID:       threadID,
+		chatID:         chatID,
+		version:        version,
+	}
 }
 
 func skillToolCallEnv(chatID string) toolconfig.ToolCallEnv {

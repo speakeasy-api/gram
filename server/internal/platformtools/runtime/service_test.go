@@ -120,9 +120,22 @@ func TestManagedAssistantSkillsToolsExposesCatalog(t *testing.T) {
 func TestAssistantSkillToolsExposesCatalog(t *testing.T) {
 	t.Parallel()
 
-	tools := AssistantSkillTools(testenv.NewLogger(t), nil)
-	require.Equal(t, []string{platformtools.ToolNameSkillsLoad}, toolNames(tools))
-	require.Empty(t, tools[0].RequiredFeature)
+	tools := AssistantSkillTools(testenv.NewLogger(t), nil, nil)
+	require.Equal(t, []string{
+		platformtools.ToolNameSkillsLoad,
+		platformtools.ToolNamePlatformSkillFeedback,
+	}, toolNames(tools))
+	for _, tool := range tools {
+		require.Empty(t, tool.RequiredFeature)
+	}
+}
+
+func TestDevSkillFeedbackToolsetExposesOnlyFeedback(t *testing.T) {
+	t.Parallel()
+
+	toolset := DevSkillFeedbackToolset(nil)
+	require.Equal(t, platformtools.SkillFeedbackPlatformToolsetSlug, toolset.Slug)
+	require.Equal(t, []string{platformtools.ToolNameSkillFeedback}, toolNames(toolset.Tools))
 }
 
 func toolNames(tools []platformtools.ExternalTool) []string {
