@@ -287,6 +287,7 @@ CREATE TABLE IF NOT EXISTS skills (
 CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_id_key ON skills (project_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key ON skills (project_id, name) WHERE archived_at IS NULL;
+CREATE INDEX IF NOT EXISTS skills_suggestion_sweep_idx ON skills (project_id, last_seen_at DESC, id DESC) WHERE archived_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS skill_versions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -652,6 +653,10 @@ WHERE reserved_on IS NOT NULL;
 CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_stale_reserved_idx
 ON skill_efficacy_evaluations (project_id, updated_at, id)
 WHERE state = 'reserved';
+
+CREATE INDEX IF NOT EXISTS skill_efficacy_evaluations_suggestion_scored_idx
+ON skill_efficacy_evaluations (project_id, skill_id, skill_version_id, scored_at DESC, id DESC)
+WHERE state = 'scored';
 
 CREATE TABLE IF NOT EXISTS packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
