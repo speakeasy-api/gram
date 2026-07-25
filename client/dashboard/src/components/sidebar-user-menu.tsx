@@ -203,7 +203,7 @@ export function SidebarUserMenu(): JSX.Element {
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <a
-                href="https://status.speakeasyapi.dev/"
+                href="https://status.speakeasy.com/"
                 target="_blank"
                 rel="noopener noreferrer"
               >
