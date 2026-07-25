@@ -141,6 +141,16 @@ trackedFiles:
   src/funcs/deploymentsList.ts: {}
   src/funcs/deploymentsLogs.ts: {}
   src/funcs/deploymentsRedeployDeployment.ts: {}
+  src/funcs/deviceIntegrationsDeleteConfig.ts: {}
+  src/funcs/deviceIntegrationsGetConfig.ts: {}
+  src/funcs/deviceIntegrationsGetCoverage.ts: {}
+  src/funcs/deviceIntegrationsListManagedDevices.ts: {}
+  src/funcs/deviceIntegrationsListProviders.ts: {}
+  src/funcs/deviceIntegrationsListSchedules.ts: {}
+  src/funcs/deviceIntegrationsRetrySchedule.ts: {}
+  src/funcs/deviceIntegrationsSetScheduleEnabled.ts: {}
+  src/funcs/deviceIntegrationsTestConnection.ts: {}
+  src/funcs/deviceIntegrationsUpsertConfig.ts: {}
   src/funcs/domainsDeleteDomain.ts: {}
   src/funcs/domainsGetDomain.ts: {}
   src/funcs/domainsListMcpEndpoints.ts: {}
@@ -619,6 +629,13 @@ trackedFiles:
   src/models/components/deploymentpackage.ts: {}
   src/models/components/deploymentsummary.ts:
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
+  src/models/components/deviceintegrationconfig.ts: {}
+  src/models/components/deviceintegrationcoverage.ts: {}
+  src/models/components/deviceintegrationprovider.ts: {}
+  src/models/components/deviceintegrationproviderfield.ts: {}
+  src/models/components/deviceintegrationproviderschedule.ts: {}
+  src/models/components/deviceintegrationschedulestate.ts: {}
+  src/models/components/deviceintegrationtestconnectionresult.ts: {}
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
   src/models/components/discoverremotesessionissuerrequestbody.ts: {}
   src/models/components/distributeskillrequestbody.ts: {}
@@ -737,6 +754,8 @@ trackedFiles:
   src/models/components/listcustomdetectionrulesresult.ts: {}
   src/models/components/listcustomdomainmcpendpointsresult.ts: {}
   src/models/components/listdeploymentresult.ts: {}
+  src/models/components/listdeviceintegrationprovidersresult.ts: {}
+  src/models/components/listdeviceintegrationschedulesresult.ts: {}
   src/models/components/listenvironmentsresult.ts: {}
   src/models/components/listexternalcredentialsresult.ts: {}
   src/models/components/listexternalkeysresult.ts: {}
@@ -748,6 +767,7 @@ trackedFiles:
   src/models/components/listinvitesresult.ts: {}
   src/models/components/listkeysresponsebody.ts: {}
   src/models/components/listkeysresult.ts: {}
+  src/models/components/listmanageddevicesresult.ts: {}
   src/models/components/listmcpendpointsresult.ts: {}
   src/models/components/listmcpserversresult.ts: {}
   src/models/components/listmembersresult.ts: {}
@@ -812,6 +832,7 @@ trackedFiles:
   src/models/components/listversionsresult.ts: {}
   src/models/components/llmclientusage.ts: {}
   src/models/components/logfilter.ts: {}
+  src/models/components/manageddevice.ts: {}
   src/models/components/marketplacesettingsresult.ts: {}
   src/models/components/mcpcollection.ts: {}
   src/models/components/mcpendpoint.ts: {}
@@ -1146,6 +1167,7 @@ trackedFiles:
   src/models/components/upsertallowedoriginresult.ts: {}
   src/models/components/upsertconfigrequestbody.ts: {}
   src/models/components/upsertconfigrequestbody2.ts: {}
+  src/models/components/upsertconfigrequestbody3.ts: {}
   src/models/components/upsertglobaltoolvariationform.ts: {}
   src/models/components/upsertglobaltoolvariationresult.ts: {}
   src/models/components/upsertkeyrequestbody.ts: {}
@@ -1253,6 +1275,7 @@ trackedFiles:
   src/models/operations/deletechat.ts: {}
   src/models/operations/deletecollection.ts: {}
   src/models/operations/deletecustomdetectionrule.ts: {}
+  src/models/operations/deletedeviceintegrationconfig.ts: {}
   src/models/operations/deletedomain.ts: {}
   src/models/operations/deleteenvironment.ts: {}
   src/models/operations/deletegcpiamcredential.ts: {}
@@ -1319,6 +1342,8 @@ trackedFiles:
   src/models/operations/getcustomdetectionrule.ts: {}
   src/models/operations/getdeployment.ts: {}
   src/models/operations/getdeploymentlogs.ts: {}
+  src/models/operations/getdeviceintegrationconfig.ts: {}
+  src/models/operations/getdeviceintegrationcoverage.ts: {}
   src/models/operations/getdomain.ts: {}
   src/models/operations/getemployeedataflowgraph.ts: {}
   src/models/operations/getgcpiamcredential.ts: {}
@@ -1416,6 +1441,8 @@ trackedFiles:
   src/models/operations/listcustomdetectionrules.ts: {}
   src/models/operations/listcustomdomainmcpendpoints.ts: {}
   src/models/operations/listdeployments.ts: {}
+  src/models/operations/listdeviceintegrationproviders.ts: {}
+  src/models/operations/listdeviceintegrationschedules.ts: {}
   src/models/operations/listenvironments.ts: {}
   src/models/operations/listexternalcredentials.ts: {}
   src/models/operations/listexternalkeys.ts: {}
@@ -1429,6 +1456,7 @@ trackedFiles:
   src/models/operations/listhookstraces.ts: {}
   src/models/operations/listintegrations.ts: {}
   src/models/operations/listinvites.ts: {}
+  src/models/operations/listmanageddevices.ts: {}
   src/models/operations/listmcpcatalog.ts: {}
   src/models/operations/listmcpendpoints.ts: {}
   src/models/operations/listmcpregistries.ts: {}
@@ -1517,6 +1545,7 @@ trackedFiles:
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
   src/models/operations/resumetriggerinstance.ts: {}
   src/models/operations/retryaiintegrationschedule.ts: {}
+  src/models/operations/retrydeviceintegrationschedule.ts: {}
   src/models/operations/revokeallorganizationremotesessionclientsessions.ts: {}
   src/models/operations/revokeapikey.ts: {}
   src/models/operations/revokechatsession.ts: {}
@@ -1545,6 +1574,7 @@ trackedFiles:
   src/models/operations/setaiintegrationscheduleenabled.ts: {}
   src/models/operations/setbillingmetadata.ts: {}
   src/models/operations/setchatpinned.ts: {}
+  src/models/operations/setdeviceintegrationscheduleenabled.ts: {}
   src/models/operations/setmcpmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadatabatch.ts: {}
@@ -1564,6 +1594,7 @@ trackedFiles:
   src/models/operations/suggestexclusion.ts: {}
   src/models/operations/switchauthscopes.ts: {}
   src/models/operations/testdetectionrule.ts: {}
+  src/models/operations/testdeviceintegrationconnection.ts: {}
   src/models/operations/tokenexchange.ts: {}
   src/models/operations/triggerchatanalysis.ts: {}
   src/models/operations/triggerriskanalysis.ts: {}
@@ -1615,6 +1646,7 @@ trackedFiles:
   src/models/operations/upsertaiintegrationconfig.ts: {}
   src/models/operations/upsertallowedorigin.ts: {}
   src/models/operations/upsertchatanalysissettings.ts: {}
+  src/models/operations/upsertdeviceintegrationconfig.ts: {}
   src/models/operations/upsertglobalvariation.ts: {}
   src/models/operations/upsertmodelproviderkey.ts: {}
   src/models/operations/upsertotelforwardingconfig.ts: {}
@@ -1728,6 +1760,7 @@ trackedFiles:
   src/react-query/deleteAIIntegrationConfig.ts: {}
   src/react-query/deleteAwsIamCredential.ts: {}
   src/react-query/deleteAwsKmsKey.ts: {}
+  src/react-query/deleteDeviceIntegrationConfig.ts: {}
   src/react-query/deleteDomain.ts: {}
   src/react-query/deleteEnvironment.ts: {}
   src/react-query/deleteGcpIamCredential.ts: {}
@@ -1764,6 +1797,14 @@ trackedFiles:
   src/react-query/deploymentLogs.core.ts: {}
   src/react-query/deploymentLogs.ts: {}
   src/react-query/detachUserSessionIssuer.ts: {}
+  src/react-query/deviceIntegrationConfig.core.ts: {}
+  src/react-query/deviceIntegrationConfig.ts: {}
+  src/react-query/deviceIntegrationCoverage.core.ts: {}
+  src/react-query/deviceIntegrationCoverage.ts: {}
+  src/react-query/deviceIntegrationProviders.core.ts: {}
+  src/react-query/deviceIntegrationProviders.ts: {}
+  src/react-query/deviceIntegrationSchedules.core.ts: {}
+  src/react-query/deviceIntegrationSchedules.ts: {}
   src/react-query/disableRBAC.ts: {}
   src/react-query/disableWebhooks.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
@@ -1956,6 +1997,8 @@ trackedFiles:
   src/react-query/loadChat.core.ts: {}
   src/react-query/loadChat.ts: {}
   src/react-query/logout.ts: {}
+  src/react-query/managedDevices.core.ts: {}
+  src/react-query/managedDevices.ts: {}
   src/react-query/marketplaceSettings.core.ts: {}
   src/react-query/marketplaceSettings.ts: {}
   src/react-query/mcpEndpoints.core.ts: {}
@@ -2050,6 +2093,7 @@ trackedFiles:
   src/react-query/resolveShadowMCPInventoryRequest.ts: {}
   src/react-query/resumeTrigger.ts: {}
   src/react-query/retryAIIntegrationSchedule.ts: {}
+  src/react-query/retryDeviceIntegrationSchedule.ts: {}
   src/react-query/revokeAPIKey.ts: {}
   src/react-query/revokeAllOrganizationRemoteSessionClientSessions.ts: {}
   src/react-query/revokeInvite.ts: {}
@@ -2146,6 +2190,7 @@ trackedFiles:
   src/react-query/sessionInfo.ts: {}
   src/react-query/setAIIntegrationScheduleEnabled.ts: {}
   src/react-query/setBillingMetadata.ts: {}
+  src/react-query/setDeviceIntegrationScheduleEnabled.ts: {}
   src/react-query/setMcpServerToolMetadata.ts: {}
   src/react-query/setMcpServerToolMetadataBatch.ts: {}
   src/react-query/setModelProviderKeyEnabled.ts: {}
@@ -2192,6 +2237,7 @@ trackedFiles:
   src/react-query/template.ts: {}
   src/react-query/templates.core.ts: {}
   src/react-query/templates.ts: {}
+  src/react-query/testDeviceIntegrationConnection.ts: {}
   src/react-query/tokenExchangeExchange.ts: {}
   src/react-query/toolVariationGroups.core.ts: {}
   src/react-query/toolVariationGroups.ts: {}
@@ -2249,6 +2295,7 @@ trackedFiles:
   src/react-query/upsertAIIntegrationConfig.ts: {}
   src/react-query/upsertAllowedOrigin.ts: {}
   src/react-query/upsertChatAnalysisSettings.ts: {}
+  src/react-query/upsertDeviceIntegrationConfig.ts: {}
   src/react-query/upsertGlobalVariation.ts: {}
   src/react-query/upsertModelProviderKey.ts: {}
   src/react-query/upsertOtelForwardingConfig.ts: {}
@@ -2293,6 +2340,7 @@ trackedFiles:
   src/sdk/collections.ts: {}
   src/sdk/customrules.ts: {}
   src/sdk/deployments.ts: {}
+  src/sdk/deviceintegrations.ts: {}
   src/sdk/domains.ts: {}
   src/sdk/environments.ts: {}
   src/sdk/evals.ts: {}
@@ -3224,6 +3272,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deleteDeviceIntegrationConfig:
+    speakeasy-default-delete-device-integration-config:
+      requestBody:
+        application/json: {"provider": "<value>"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   deleteDomain:
     speakeasy-default-delete-domain:
       responses:
@@ -3910,6 +3967,27 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getDeviceIntegrationConfig:
+    speakeasy-default-get-device-integration-config:
+      parameters:
+        query:
+          provider: "<value>"
+      responses:
+        "200":
+          application/json: {"enabled": false, "has_credentials": true, "organization_id": "<id>", "provider": "<value>", "settings": {}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getDeviceIntegrationCoverage:
+    speakeasy-default-get-device-integration-coverage:
+      responses:
+        "200":
+          application/json: {"active_window_minutes": 656966, "agent_active": 936181, "agent_stale": 628953, "missing": 482460, "no_agent": 978251, "no_email": 639554, "organization_id": "<id>", "total_devices": 639009, "unmanaged_agent_users": 235041, "unresolved_email": 11818}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getDomain:
     speakeasy-default-get-domain:
       responses:
@@ -4992,6 +5070,27 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listDeviceIntegrationProviders:
+    speakeasy-default-list-device-integration-providers:
+      responses:
+        "200":
+          application/json: {"providers": [{"capabilities": [], "display_name": "Nadia.Emmerich71", "fields": [{"key": "<key>", "kind": "text", "label": "<value>", "required": true, "secret": false}], "id": "<id>", "schedules": [{"interval_minutes": 893749, "schedule": "<value>"}]}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listDeviceIntegrationSchedules:
+    speakeasy-default-list-device-integration-schedules:
+      parameters:
+        query:
+          provider: "<value>"
+      responses:
+        "200":
+          application/json: {"organization_id": "<id>", "provider": "<value>", "schedules": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listEnvironments:
     speakeasy-default-list-environments:
       responses:
@@ -5134,6 +5233,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listManagedDevices:
+    speakeasy-default-list-managed-devices:
+      parameters:
+        query:
+          limit: 50
+      responses:
+        "200":
+          application/json: {"devices": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listMcpEndpoints:
     speakeasy-default-list-mcp-endpoints:
       responses:
@@ -6062,6 +6173,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  retryDeviceIntegrationSchedule:
+    speakeasy-default-retry-device-integration-schedule:
+      requestBody:
+        application/json: {"provider": "<value>", "schedule": "<value>"}
+      responses:
+        "200":
+          application/json: {"consecutive_failures": 581339, "enabled": false, "schedule": "<value>", "status": "failed"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   revokeAPIKey:
     speakeasy-default-revoke-API-key:
       parameters:
@@ -6382,6 +6504,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  setDeviceIntegrationScheduleEnabled:
+    speakeasy-default-set-device-integration-schedule-enabled:
+      requestBody:
+        application/json: {"enabled": false, "provider": "<value>", "schedule": "<value>"}
+      responses:
+        "200":
+          application/json: {"consecutive_failures": 830784, "enabled": true, "schedule": "<value>", "status": "auto_paused"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   setMcpMetadata:
     speakeasy-default-set-mcp-metadata:
       requestBody:
@@ -6589,6 +6722,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  testDeviceIntegrationConnection:
+    speakeasy-default-test-device-integration-connection:
+      requestBody:
+        application/json: {"provider": "<value>"}
+      responses:
+        "200":
+          application/json: {"ok": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   tokenExchange:
     speakeasy-default-token-exchange:
       requestBody:
@@ -7173,6 +7317,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  upsertDeviceIntegrationConfig:
+    speakeasy-default-upsert-device-integration-config:
+      requestBody:
+        application/json: {"enabled": true, "provider": "<value>"}
+      responses:
+        "200":
+          application/json: {"enabled": true, "has_credentials": true, "organization_id": "<id>", "provider": "<value>", "settings": {"key": "<value>", "key1": "<value>"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   upsertGlobalVariation:
     speakeasy-default-upsert-global-variation:
       requestBody:

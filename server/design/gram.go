@@ -19,6 +19,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/cliauth"
 	_ "github.com/speakeasy-api/gram/server/design/collections"
 	_ "github.com/speakeasy-api/gram/server/design/deployments"
+	_ "github.com/speakeasy-api/gram/server/design/deviceintegrations"
 	_ "github.com/speakeasy-api/gram/server/design/domains"
 	_ "github.com/speakeasy-api/gram/server/design/environments"
 	_ "github.com/speakeasy-api/gram/server/design/external"

@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  UpsertConfigRequestBody2,
-  UpsertConfigRequestBody2$Outbound,
-  UpsertConfigRequestBody2$outboundSchema,
-} from "../components/upsertconfigrequestbody2.js";
+  UpsertConfigRequestBody3,
+  UpsertConfigRequestBody3$Outbound,
+  UpsertConfigRequestBody3$outboundSchema,
+} from "../components/upsertconfigrequestbody3.js";
 
 export type UpsertOtelForwardingConfigSecurity = {
   apikeyHeaderGramKey?: string | undefined;
@@ -24,7 +24,7 @@ export type UpsertOtelForwardingConfigRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  upsertConfigRequestBody2: UpsertConfigRequestBody2;
+  upsertConfigRequestBody3: UpsertConfigRequestBody3;
 };
 
 /** @internal */
@@ -64,7 +64,7 @@ export function upsertOtelForwardingConfigSecurityToJSON(
 export type UpsertOtelForwardingConfigRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
-  UpsertConfigRequestBody2: UpsertConfigRequestBody2$Outbound;
+  UpsertConfigRequestBody3: UpsertConfigRequestBody3$Outbound;
 };
 
 /** @internal */
@@ -75,13 +75,13 @@ export const UpsertOtelForwardingConfigRequest$outboundSchema: z.ZodMiniType<
   z.object({
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
-    upsertConfigRequestBody2: UpsertConfigRequestBody2$outboundSchema,
+    upsertConfigRequestBody3: UpsertConfigRequestBody3$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
-      upsertConfigRequestBody2: "UpsertConfigRequestBody2",
+      upsertConfigRequestBody3: "UpsertConfigRequestBody3",
     });
   }),
 );

@@ -30,6 +30,7 @@ import (
 	cliauthc "github.com/speakeasy-api/gram/server/gen/http/cli_auth/client"
 	collectionsc "github.com/speakeasy-api/gram/server/gen/http/collections/client"
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
+	deviceintegrationsc "github.com/speakeasy-api/gram/server/gen/http/device_integrations/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
 	externalc "github.com/speakeasy-api/gram/server/gen/http/external/client"
@@ -100,6 +101,7 @@ func UsageCommands() []string {
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
+		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage)",
 		"domains (get-domain|create-domain|update-domain|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|delete-aws-iam-credential|delete-gcp-iam-credential)",
@@ -744,6 +746,59 @@ func ParseEndpoint(
 		deploymentsGetDeploymentLogsApikeyTokenFlag      = deploymentsGetDeploymentLogsFlags.String("apikey-token", "", "")
 		deploymentsGetDeploymentLogsSessionTokenFlag     = deploymentsGetDeploymentLogsFlags.String("session-token", "", "")
 		deploymentsGetDeploymentLogsProjectSlugInputFlag = deploymentsGetDeploymentLogsFlags.String("project-slug-input", "", "")
+
+		deviceIntegrationsFlags = flag.NewFlagSet("device-integrations", flag.ContinueOnError)
+
+		deviceIntegrationsListProvidersFlags            = flag.NewFlagSet("list-providers", flag.ExitOnError)
+		deviceIntegrationsListProvidersApikeyTokenFlag  = deviceIntegrationsListProvidersFlags.String("apikey-token", "", "")
+		deviceIntegrationsListProvidersSessionTokenFlag = deviceIntegrationsListProvidersFlags.String("session-token", "", "")
+
+		deviceIntegrationsGetConfigFlags            = flag.NewFlagSet("get-config", flag.ExitOnError)
+		deviceIntegrationsGetConfigProviderFlag     = deviceIntegrationsGetConfigFlags.String("provider", "REQUIRED", "")
+		deviceIntegrationsGetConfigApikeyTokenFlag  = deviceIntegrationsGetConfigFlags.String("apikey-token", "", "")
+		deviceIntegrationsGetConfigSessionTokenFlag = deviceIntegrationsGetConfigFlags.String("session-token", "", "")
+
+		deviceIntegrationsUpsertConfigFlags            = flag.NewFlagSet("upsert-config", flag.ExitOnError)
+		deviceIntegrationsUpsertConfigBodyFlag         = deviceIntegrationsUpsertConfigFlags.String("body", "REQUIRED", "")
+		deviceIntegrationsUpsertConfigApikeyTokenFlag  = deviceIntegrationsUpsertConfigFlags.String("apikey-token", "", "")
+		deviceIntegrationsUpsertConfigSessionTokenFlag = deviceIntegrationsUpsertConfigFlags.String("session-token", "", "")
+
+		deviceIntegrationsDeleteConfigFlags            = flag.NewFlagSet("delete-config", flag.ExitOnError)
+		deviceIntegrationsDeleteConfigBodyFlag         = deviceIntegrationsDeleteConfigFlags.String("body", "REQUIRED", "")
+		deviceIntegrationsDeleteConfigApikeyTokenFlag  = deviceIntegrationsDeleteConfigFlags.String("apikey-token", "", "")
+		deviceIntegrationsDeleteConfigSessionTokenFlag = deviceIntegrationsDeleteConfigFlags.String("session-token", "", "")
+
+		deviceIntegrationsTestConnectionFlags            = flag.NewFlagSet("test-connection", flag.ExitOnError)
+		deviceIntegrationsTestConnectionBodyFlag         = deviceIntegrationsTestConnectionFlags.String("body", "REQUIRED", "")
+		deviceIntegrationsTestConnectionApikeyTokenFlag  = deviceIntegrationsTestConnectionFlags.String("apikey-token", "", "")
+		deviceIntegrationsTestConnectionSessionTokenFlag = deviceIntegrationsTestConnectionFlags.String("session-token", "", "")
+
+		deviceIntegrationsListSchedulesFlags            = flag.NewFlagSet("list-schedules", flag.ExitOnError)
+		deviceIntegrationsListSchedulesProviderFlag     = deviceIntegrationsListSchedulesFlags.String("provider", "REQUIRED", "")
+		deviceIntegrationsListSchedulesApikeyTokenFlag  = deviceIntegrationsListSchedulesFlags.String("apikey-token", "", "")
+		deviceIntegrationsListSchedulesSessionTokenFlag = deviceIntegrationsListSchedulesFlags.String("session-token", "", "")
+
+		deviceIntegrationsSetScheduleEnabledFlags            = flag.NewFlagSet("set-schedule-enabled", flag.ExitOnError)
+		deviceIntegrationsSetScheduleEnabledBodyFlag         = deviceIntegrationsSetScheduleEnabledFlags.String("body", "REQUIRED", "")
+		deviceIntegrationsSetScheduleEnabledApikeyTokenFlag  = deviceIntegrationsSetScheduleEnabledFlags.String("apikey-token", "", "")
+		deviceIntegrationsSetScheduleEnabledSessionTokenFlag = deviceIntegrationsSetScheduleEnabledFlags.String("session-token", "", "")
+
+		deviceIntegrationsRetryScheduleFlags            = flag.NewFlagSet("retry-schedule", flag.ExitOnError)
+		deviceIntegrationsRetryScheduleBodyFlag         = deviceIntegrationsRetryScheduleFlags.String("body", "REQUIRED", "")
+		deviceIntegrationsRetryScheduleApikeyTokenFlag  = deviceIntegrationsRetryScheduleFlags.String("apikey-token", "", "")
+		deviceIntegrationsRetryScheduleSessionTokenFlag = deviceIntegrationsRetryScheduleFlags.String("session-token", "", "")
+
+		deviceIntegrationsListManagedDevicesFlags              = flag.NewFlagSet("list-managed-devices", flag.ExitOnError)
+		deviceIntegrationsListManagedDevicesProviderFlag       = deviceIntegrationsListManagedDevicesFlags.String("provider", "", "")
+		deviceIntegrationsListManagedDevicesCoverageBucketFlag = deviceIntegrationsListManagedDevicesFlags.String("coverage-bucket", "", "")
+		deviceIntegrationsListManagedDevicesCursorFlag         = deviceIntegrationsListManagedDevicesFlags.String("cursor", "", "")
+		deviceIntegrationsListManagedDevicesLimitFlag          = deviceIntegrationsListManagedDevicesFlags.String("limit", "50", "")
+		deviceIntegrationsListManagedDevicesApikeyTokenFlag    = deviceIntegrationsListManagedDevicesFlags.String("apikey-token", "", "")
+		deviceIntegrationsListManagedDevicesSessionTokenFlag   = deviceIntegrationsListManagedDevicesFlags.String("session-token", "", "")
+
+		deviceIntegrationsGetCoverageFlags            = flag.NewFlagSet("get-coverage", flag.ExitOnError)
+		deviceIntegrationsGetCoverageApikeyTokenFlag  = deviceIntegrationsGetCoverageFlags.String("apikey-token", "", "")
+		deviceIntegrationsGetCoverageSessionTokenFlag = deviceIntegrationsGetCoverageFlags.String("session-token", "", "")
 
 		domainsFlags = flag.NewFlagSet("domains", flag.ContinueOnError)
 
@@ -2937,6 +2992,18 @@ func ParseEndpoint(
 	deploymentsListDeploymentsFlags.Usage = deploymentsListDeploymentsUsage
 	deploymentsGetDeploymentLogsFlags.Usage = deploymentsGetDeploymentLogsUsage
 
+	deviceIntegrationsFlags.Usage = deviceIntegrationsUsage
+	deviceIntegrationsListProvidersFlags.Usage = deviceIntegrationsListProvidersUsage
+	deviceIntegrationsGetConfigFlags.Usage = deviceIntegrationsGetConfigUsage
+	deviceIntegrationsUpsertConfigFlags.Usage = deviceIntegrationsUpsertConfigUsage
+	deviceIntegrationsDeleteConfigFlags.Usage = deviceIntegrationsDeleteConfigUsage
+	deviceIntegrationsTestConnectionFlags.Usage = deviceIntegrationsTestConnectionUsage
+	deviceIntegrationsListSchedulesFlags.Usage = deviceIntegrationsListSchedulesUsage
+	deviceIntegrationsSetScheduleEnabledFlags.Usage = deviceIntegrationsSetScheduleEnabledUsage
+	deviceIntegrationsRetryScheduleFlags.Usage = deviceIntegrationsRetryScheduleUsage
+	deviceIntegrationsListManagedDevicesFlags.Usage = deviceIntegrationsListManagedDevicesUsage
+	deviceIntegrationsGetCoverageFlags.Usage = deviceIntegrationsGetCoverageUsage
+
 	domainsFlags.Usage = domainsUsage
 	domainsGetDomainFlags.Usage = domainsGetDomainUsage
 	domainsCreateDomainFlags.Usage = domainsCreateDomainUsage
@@ -3437,6 +3504,8 @@ func ParseEndpoint(
 			svcf = cliAuthFlags
 		case "deployments":
 			svcf = deploymentsFlags
+		case "device-integrations":
+			svcf = deviceIntegrationsFlags
 		case "domains":
 			svcf = domainsFlags
 		case "environments":
@@ -3908,6 +3977,40 @@ func ParseEndpoint(
 
 			case "get-deployment-logs":
 				epf = deploymentsGetDeploymentLogsFlags
+
+			}
+
+		case "device-integrations":
+			switch epn {
+			case "list-providers":
+				epf = deviceIntegrationsListProvidersFlags
+
+			case "get-config":
+				epf = deviceIntegrationsGetConfigFlags
+
+			case "upsert-config":
+				epf = deviceIntegrationsUpsertConfigFlags
+
+			case "delete-config":
+				epf = deviceIntegrationsDeleteConfigFlags
+
+			case "test-connection":
+				epf = deviceIntegrationsTestConnectionFlags
+
+			case "list-schedules":
+				epf = deviceIntegrationsListSchedulesFlags
+
+			case "set-schedule-enabled":
+				epf = deviceIntegrationsSetScheduleEnabledFlags
+
+			case "retry-schedule":
+				epf = deviceIntegrationsRetryScheduleFlags
+
+			case "list-managed-devices":
+				epf = deviceIntegrationsListManagedDevicesFlags
+
+			case "get-coverage":
+				epf = deviceIntegrationsGetCoverageFlags
 
 			}
 
@@ -5576,6 +5679,40 @@ func ParseEndpoint(
 			case "get-deployment-logs":
 				endpoint = c.GetDeploymentLogs()
 				data, err = deploymentsc.BuildGetDeploymentLogsPayload(*deploymentsGetDeploymentLogsDeploymentIDFlag, *deploymentsGetDeploymentLogsCursorFlag, *deploymentsGetDeploymentLogsApikeyTokenFlag, *deploymentsGetDeploymentLogsSessionTokenFlag, *deploymentsGetDeploymentLogsProjectSlugInputFlag)
+			}
+		case "device-integrations":
+			c := deviceintegrationsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-providers":
+				endpoint = c.ListProviders()
+				data, err = deviceintegrationsc.BuildListProvidersPayload(*deviceIntegrationsListProvidersApikeyTokenFlag, *deviceIntegrationsListProvidersSessionTokenFlag)
+			case "get-config":
+				endpoint = c.GetConfig()
+				data, err = deviceintegrationsc.BuildGetConfigPayload(*deviceIntegrationsGetConfigProviderFlag, *deviceIntegrationsGetConfigApikeyTokenFlag, *deviceIntegrationsGetConfigSessionTokenFlag)
+			case "upsert-config":
+				endpoint = c.UpsertConfig()
+				data, err = deviceintegrationsc.BuildUpsertConfigPayload(*deviceIntegrationsUpsertConfigBodyFlag, *deviceIntegrationsUpsertConfigApikeyTokenFlag, *deviceIntegrationsUpsertConfigSessionTokenFlag)
+			case "delete-config":
+				endpoint = c.DeleteConfig()
+				data, err = deviceintegrationsc.BuildDeleteConfigPayload(*deviceIntegrationsDeleteConfigBodyFlag, *deviceIntegrationsDeleteConfigApikeyTokenFlag, *deviceIntegrationsDeleteConfigSessionTokenFlag)
+			case "test-connection":
+				endpoint = c.TestConnection()
+				data, err = deviceintegrationsc.BuildTestConnectionPayload(*deviceIntegrationsTestConnectionBodyFlag, *deviceIntegrationsTestConnectionApikeyTokenFlag, *deviceIntegrationsTestConnectionSessionTokenFlag)
+			case "list-schedules":
+				endpoint = c.ListSchedules()
+				data, err = deviceintegrationsc.BuildListSchedulesPayload(*deviceIntegrationsListSchedulesProviderFlag, *deviceIntegrationsListSchedulesApikeyTokenFlag, *deviceIntegrationsListSchedulesSessionTokenFlag)
+			case "set-schedule-enabled":
+				endpoint = c.SetScheduleEnabled()
+				data, err = deviceintegrationsc.BuildSetScheduleEnabledPayload(*deviceIntegrationsSetScheduleEnabledBodyFlag, *deviceIntegrationsSetScheduleEnabledApikeyTokenFlag, *deviceIntegrationsSetScheduleEnabledSessionTokenFlag)
+			case "retry-schedule":
+				endpoint = c.RetrySchedule()
+				data, err = deviceintegrationsc.BuildRetrySchedulePayload(*deviceIntegrationsRetryScheduleBodyFlag, *deviceIntegrationsRetryScheduleApikeyTokenFlag, *deviceIntegrationsRetryScheduleSessionTokenFlag)
+			case "list-managed-devices":
+				endpoint = c.ListManagedDevices()
+				data, err = deviceintegrationsc.BuildListManagedDevicesPayload(*deviceIntegrationsListManagedDevicesProviderFlag, *deviceIntegrationsListManagedDevicesCoverageBucketFlag, *deviceIntegrationsListManagedDevicesCursorFlag, *deviceIntegrationsListManagedDevicesLimitFlag, *deviceIntegrationsListManagedDevicesApikeyTokenFlag, *deviceIntegrationsListManagedDevicesSessionTokenFlag)
+			case "get-coverage":
+				endpoint = c.GetCoverage()
+				data, err = deviceintegrationsc.BuildGetCoveragePayload(*deviceIntegrationsGetCoverageApikeyTokenFlag, *deviceIntegrationsGetCoverageSessionTokenFlag)
 			}
 		case "domains":
 			c := domainsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -9394,6 +9531,248 @@ func deploymentsGetDeploymentLogsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments get-deployment-logs --deployment-id \"abc123\" --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// deviceIntegrationsUsage displays the usage of the device-integrations
+// command and its subcommands.
+func deviceIntegrationsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization-level device integrations: MDM inventory sources and compliance evidence sinks.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] device-integrations COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-providers: List the providers the device integrations framework supports, including the credential fields each needs.`)
+	fmt.Fprintln(os.Stderr, `    get-config: Get the org-wide device integration config for a provider. Returns an empty config (enabled=false, has_credentials=false) when none is set.`)
+	fmt.Fprintln(os.Stderr, `    upsert-config: Create or update the org-wide device integration config for a provider. Omit credentials to keep the stored secrets; supplying credentials rotates them in place and resets the schedules' sync state. Settings merge per key: an omitted key keeps its stored value, a supplied key overwrites it.`)
+	fmt.Fprintln(os.Stderr, `    delete-config: Disconnect the org-wide device integration for a provider. Synced inventory becomes invisible to coverage; reconnecting starts fresh.`)
+	fmt.Fprintln(os.Stderr, `    test-connection: Probe the provider with the stored credentials to verify they work. Save the config first; this tests what is stored, so secrets never round-trip.`)
+	fmt.Fprintln(os.Stderr, `    list-schedules: List the sync schedules and their state for a provider's org-wide device integration config. Returns an empty list when no config is set.`)
+	fmt.Fprintln(os.Stderr, `    set-schedule-enabled: Enable or disable one sync schedule of a provider's device integration. Disabling records user intent on the schedule; only re-enabling clears it — config saves do not.`)
+	fmt.Fprintln(os.Stderr, `    retry-schedule: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak.`)
+	fmt.Fprintln(os.Stderr, `    list-managed-devices: Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.`)
+	fmt.Fprintln(os.Stderr, `    get-coverage: Summarize agent coverage across the org's connected MDM inventories.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s device-integrations COMMAND --help\n", os.Args[0])
+}
+func deviceIntegrationsListProvidersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations list-providers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the providers the device integrations framework supports, including the credential fields each needs.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-providers --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func deviceIntegrationsGetConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations get-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the org-wide device integration config for a provider. Returns an empty config (enabled=false, has_credentials=false) when none is set.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations get-config --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func deviceIntegrationsUpsertConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations upsert-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or update the org-wide device integration config for a provider. Omit credentials to keep the stored secrets; supplying credentials rotates them in place and resets the schedules' sync state. Settings merge per key: an omitted key keeps its stored value, a supplied key overwrites it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations upsert-config --body '{\n      \"credentials\": {\n         \"abc123\": \"abc123\"\n      },\n      \"enabled\": false,\n      \"provider\": \"abc123\",\n      \"settings\": {\n         \"abc123\": \"abc123\"\n      }\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func deviceIntegrationsDeleteConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations delete-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Disconnect the org-wide device integration for a provider. Synced inventory becomes invisible to coverage; reconnecting starts fresh.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations delete-config --body '{\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func deviceIntegrationsTestConnectionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations test-connection", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Probe the provider with the stored credentials to verify they work. Save the config first; this tests what is stored, so secrets never round-trip.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations test-connection --body '{\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func deviceIntegrationsListSchedulesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations list-schedules", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the sync schedules and their state for a provider's org-wide device integration config. Returns an empty list when no config is set.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-schedules --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func deviceIntegrationsSetScheduleEnabledUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations set-schedule-enabled", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Enable or disable one sync schedule of a provider's device integration. Disabling records user intent on the schedule; only re-enabling clears it — config saves do not.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations set-schedule-enabled --body '{\n      \"enabled\": false,\n      \"provider\": \"abc123\",\n      \"schedule\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func deviceIntegrationsRetryScheduleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations retry-schedule", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations retry-schedule --body '{\n      \"provider\": \"abc123\",\n      \"schedule\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func deviceIntegrationsListManagedDevicesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations list-managed-devices", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -coverage-bucket STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -coverage-bucket STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations list-managed-devices --provider \"abc123\" --coverage-bucket \"agent_stale\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func deviceIntegrationsGetCoverageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations get-coverage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Summarize agent coverage across the org's connected MDM inventories.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations get-coverage --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // domainsUsage displays the usage of the domains command and its subcommands.

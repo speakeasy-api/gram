@@ -24,6 +24,7 @@ var All = []outbox.EventRegistration{
 	ChatSessionV1,
 	CustomDomainV1,
 	DeploymentV1,
+	DeviceIntegrationV1,
 	EnvironmentV1,
 	GcpIamCredentialV1,
 	GcpKmsKeyV1,

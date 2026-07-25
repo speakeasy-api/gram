@@ -31,6 +31,7 @@ var (
 	ChatAnalysisSettingsV1      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.chat_analysis_settings_event_v1", "Emitted when chat analysis settings are changed")
 	ChatSessionV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.chat_session_event_v1", "Emitted when a chat session is accessed")
 	CustomDomainV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.custom_domain_event_v1", "Emitted when changes to custom domains are made")
+	DeviceIntegrationV1         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_integration_event_v1", "Emitted when changes to device integration configs are made")
 	DeploymentV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.deployment_event_v1", "Emitted when changes to deployments are made")
 	EnvironmentV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.environment_event_v1", "Emitted when changes to environments are made")
 	GcpIamCredentialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_iam_credential_event_v1", "Emitted when changes to GCP IAM external credentials are made")
