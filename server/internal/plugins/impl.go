@@ -1922,11 +1922,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
 
-	// Decide which components to (re)generate. The hooks subtree changes only on
-	// a hooksGeneratorVersion bump, so an MCP publish never touches it. A human
-	// publish (SkipIfUnchanged == false) always refreshes MCP so installed copies
-	// pick up a new manifest version, but still leaves hooks alone unless its
-	// version bumped.
+	// Decide which components to (re)generate. A human publish
+	// (SkipIfUnchanged == false) always refreshes MCP so installed copies pick up
+	// a new manifest version. Hooks change independently based on their version
+	// and output-affecting config.
 	mcpChanged := firstPublish || !input.SkipIfUnchanged ||
 		!maps.Equal(mcpFingerprints, decodeMCPFingerprints(existing.PublishedMcpFingerprints))
 
@@ -2019,6 +2018,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 
 	files := make(map[string][]byte)
 	var candidates []pluginAPIKeyCandidate
+	var hooksCandidate *pluginAPIKeyCandidate
 
 	// MCP component: carry when unchanged, otherwise regenerate with a fresh key.
 	carriedMCP := false
@@ -2035,6 +2035,15 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").LogError(ctx, s.logger)
 		}
 		cfg.APIKey = mcpCandidate.fullKey
+		if needsSkillFeedbackMCPKey(pluginInfos, cfg) {
+			candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").LogError(ctx, s.logger)
+			}
+			hooksCandidate = &candidate
+			cfg.HooksAPIKey = candidate.fullKey
+			candidates = append(candidates, candidate)
+		}
 		mcpFiles, err := generateMCPFiles(pluginInfos, cfg)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "generate mcp files").LogError(ctx, s.logger)
@@ -2055,9 +2064,13 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		carriedHooksOrgName, carriedHooks = carryHooksSubtree(files, existingFiles, targetHooksConfigJSON, cfg.OrgName)
 	}
 	if !carriedHooks {
-		hooksCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").LogError(ctx, s.logger)
+		if hooksCandidate == nil {
+			candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").LogError(ctx, s.logger)
+			}
+			hooksCandidate = &candidate
+			candidates = append(candidates, candidate)
 		}
 		cfg.HooksAPIKey = hooksCandidate.fullKey
 		hooksFiles, err := generateHooksFiles(cfg)
@@ -2065,7 +2078,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "generate hooks files").LogError(ctx, s.logger)
 		}
 		maps.Copy(files, hooksFiles)
-		candidates = append(candidates, hooksCandidate)
 		// What lands in the repo is the CURRENT generator's output; persist that
 		// truthfully even when the rollout gate had pinned an older published
 		// version — recording the stale version would make every subsequent

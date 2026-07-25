@@ -6,14 +6,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net/url"
 	"path"
 	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
+	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 )
 
 // ServerEnvConfig represents a user-facing environment variable required by a server.
@@ -70,13 +74,13 @@ type GenerateConfig struct {
 	// APIKey is the plaintext consumer-scoped Gram API key to inject into
 	// MCP server configs. If empty, configs will use placeholder variables.
 	APIKey string
-	// HooksAPIKey controls whether the observability plugin is emitted. Runtime
-	// hook senders authenticate with explicit env credentials or a local cached
-	// hooks key, then fall back to this org-wide key embedded in speakeasy.json.
+	// HooksAPIKey controls whether the observability plugin and distributed-skill
+	// feedback MCP servers are emitted. Both authenticate with this hooks-scoped
+	// key.
 	HooksAPIKey string
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
-	// requires it via the Gram-Project header (Claude's does not), and it scopes
-	// the default marketplace name for non-default projects.
+	// and skill feedback MCP server require it via the Gram-Project header, and
+	// it scopes the default marketplace name for non-default projects.
 	ProjectSlug string
 	// IsDefaultProject reports whether this is the org's default project (its
 	// oldest, by id ASC). The default project keeps the bare org-derived
@@ -345,7 +349,7 @@ func storedHooksConfigHash(stored []byte) string {
 // MCP plugins on the next run, even when a project's generated MCP output is
 // byte-identical — for generator changes that alter MCP behaviour in ways the
 // placeholder fingerprint pass can't observe.
-const mcpGeneratorVersion = "9"
+const mcpGeneratorVersion = "10"
 
 // hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
 // plugin. It is stamped into the hooks plugin.json version (see
@@ -362,7 +366,7 @@ const hooksGeneratorVersion = "22"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
-// the observability plugin entirely (see GenerateConfig.HooksAPIKey), which
+// hooks and skill feedback MCP output (see GenerateConfig.HooksAPIKey), which
 // would make the fingerprint blind to it. Constant values keep the generated
 // bytes stable across publishes while the real keys rotate.
 const (
@@ -386,15 +390,14 @@ const mcpSharedFingerprintKey = "__shared__"
 // Fingerprints are stored per plugin (rather than as one aggregate) so a future
 // per-plugin publish flow can decide independently which plugins have unpublished
 // changes without a schema migration; today the rollout treats the MCP component
-// as changed when any entry differs. Per-publish fields (manifest version, the
-// injected MCP API key) are normalized out so the same MCP configuration and
+// as changed when any entry differs. Per-publish fields (manifest version and
+// injected API keys) are normalized out so the same MCP configuration and
 // mcpGeneratorVersion always produce the same fingerprints.
 func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig) (map[string]string, error) {
 	cfg.Version = ""
 	cfg.APIKey = fingerprintAPIKeySentinel
-	// HooksAPIKey affects only the shared files here (whether the observability
-	// entry is listed in marketplace.json). Published repos always carry a hooks
-	// key, so pin a stable non-empty sentinel to keep that entry in the hash.
+	// Published repos carry a hooks key. Normalize it so skill feedback MCP
+	// entries are fingerprinted without rotating the hash on every publish.
 	cfg.HooksAPIKey = fingerprintHooksKeySentinel
 
 	out := make(map[string]string, len(plugins)+1)
@@ -573,6 +576,7 @@ func writeHooksRuntimeFiles(files map[string][]byte, subdir string, cfg Generate
 // verbatim from the existing repo when only the hooks component changed.
 func mcpFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
 	cfg.APIKey = fingerprintAPIKeySentinel
+	cfg.HooksAPIKey = fingerprintHooksKeySentinel
 	files, err := generateMCPFiles(plugins, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("enumerate mcp file paths: %w", err)
@@ -898,7 +902,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 		taken[key] = true
 	}
 
-	mcpServers := make(map[string]codexMCPServer, len(p.Servers))
+	mcpServers := make(map[string]codexMCPServer, len(p.Servers)+1)
 	for i, s := range p.Servers {
 		if keys[i] == "" {
 			continue
@@ -927,6 +931,16 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 		}
 
 		mcpServers[keys[i]] = entry
+	}
+	if feedbackURL, headers, ok := skillFeedbackMCPConfig(p, cfg); ok {
+		if _, exists := mcpServers[skillFeedbackMCPServerName]; !exists {
+			mcpServers[skillFeedbackMCPServerName] = codexMCPServer{
+				URL:               feedbackURL,
+				BearerTokenEnvVar: "",
+				HTTPHeaders:       headers,
+				EnvHTTPHeaders:    nil,
+			}
+		}
 	}
 	mcpJSON, err := marshalJSON(codexMCPConfig{MCPServers: mcpServers})
 	if err != nil {
@@ -1654,7 +1668,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 	files[path.Join(subdir, ".claude-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]claudeMCPServer)
+	mcpServers := make(map[string]claudeMCPServer, len(p.Servers)+1)
 	for _, s := range p.Servers {
 		var headers map[string]string
 
@@ -1677,6 +1691,15 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 			Headers: headers,
 		}
 	}
+	if feedbackURL, headers, ok := skillFeedbackMCPConfig(p, cfg); ok {
+		if _, exists := mcpServers[skillFeedbackMCPServerName]; !exists {
+			mcpServers[skillFeedbackMCPServerName] = claudeMCPServer{
+				Type:    "http",
+				URL:     feedbackURL,
+				Headers: headers,
+			}
+		}
+	}
 	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
 	if err != nil {
 		return fmt.Errorf("marshal .mcp.json: %w", err)
@@ -1696,32 +1719,55 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 // than trust the invariant across the DB boundary.
 func emitPluginSkills(files map[string][]byte, subdir string, p PluginInfo) {
 	for _, sk := range p.Skills {
-		if !validSkillDirName(sk.Name) {
+		if !domainskills.ValidSpecName(sk.Name) {
 			continue
 		}
 		files[path.Join(subdir, "skills", sk.Name, "SKILL.md")] = []byte(sk.Content)
 	}
 }
 
-// validSkillDirName reports whether a skill name is safe to use as a package
-// directory: 1-64 chars of lowercase alphanumerics and single interior
-// hyphens, mirroring the skill spec's name rules.
-func validSkillDirName(name string) bool {
-	if len(name) == 0 || len(name) > 64 || name[0] == '-' || name[len(name)-1] == '-' {
-		return false
-	}
-	previousHyphen := false
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z' || r >= '0' && r <= '9':
-			previousHyphen = false
-		case r == '-' && !previousHyphen:
-			previousHyphen = true
-		default:
-			return false
+const skillFeedbackMCPServerName = "speakeasy-skill-feedback"
+
+// skillFeedbackMCPConfig uses the same name predicate as emitPluginSkills, so
+// feedback is bundled exactly when this feature package carries a skill.
+func skillFeedbackMCPConfig(p PluginInfo, cfg GenerateConfig) (string, map[string]string, bool) {
+	hasSkill := false
+	for _, skill := range p.Skills {
+		if domainskills.ValidSpecName(skill.Name) {
+			hasSkill = true
+			break
 		}
 	}
-	return true
+	if !hasSkill {
+		return "", nil, false
+	}
+	for _, server := range p.Servers {
+		if server.DisplayName == skillFeedbackMCPServerName {
+			return "", nil, false
+		}
+	}
+
+	hooksKey := strings.TrimSpace(cfg.HooksAPIKey)
+	projectSlug := strings.TrimSpace(cfg.ProjectSlug)
+	base, err := url.Parse(strings.TrimSpace(cfg.ServerURL))
+	if hooksKey == "" || projectSlug == "" || err != nil || base.Host == "" || (base.Scheme != "http" && base.Scheme != "https") {
+		return "", nil, false
+	}
+
+	return platformtools.PlatformToolsetURL(base, platformtools.SkillFeedbackPlatformToolsetSlug), map[string]string{
+		"Authorization":         "Bearer " + hooksKey,
+		constants.ProjectHeader: projectSlug,
+	}, true
+}
+
+func needsSkillFeedbackMCPKey(plugins []PluginInfo, cfg GenerateConfig) bool {
+	cfg.HooksAPIKey = fingerprintHooksKeySentinel
+	for _, plugin := range plugins {
+		if _, _, ok := skillFeedbackMCPConfig(plugin, cfg); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
@@ -1743,7 +1789,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 	}
 	files[path.Join(subdir, ".cursor-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]cursorMCPServer)
+	mcpServers := make(map[string]cursorMCPServer, len(p.Servers)+1)
 	for _, s := range p.Servers {
 		var headers map[string]string
 
@@ -1763,6 +1809,14 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		mcpServers[s.DisplayName] = cursorMCPServer{
 			URL:     s.MCPURL,
 			Headers: headers,
+		}
+	}
+	if feedbackURL, headers, ok := skillFeedbackMCPConfig(p, cfg); ok {
+		if _, exists := mcpServers[skillFeedbackMCPServerName]; !exists {
+			mcpServers[skillFeedbackMCPServerName] = cursorMCPServer{
+				URL:     feedbackURL,
+				Headers: headers,
+			}
 		}
 	}
 	mcpJSON, err := marshalJSON(cursorMCPConfig{MCPServers: mcpServers})

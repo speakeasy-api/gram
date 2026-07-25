@@ -1837,10 +1837,12 @@ func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 	t.Parallel()
 	plugins := fingerprintTestPlugins()
+	plugins[0].Skills = []PluginSkillInfo{{Name: "release-notes", Content: "v1"}}
 
 	base, err := MCPFingerprints(plugins, GenerateConfig{
-		OrgName:   "Acme Corp",
-		ServerURL: "https://app.getgram.ai",
+		OrgName:     "Acme Corp",
+		ServerURL:   "https://app.getgram.ai",
+		ProjectSlug: "acme",
 	})
 	require.NoError(t, err)
 
@@ -1849,6 +1851,7 @@ func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 	withNoise, err := MCPFingerprints(plugins, GenerateConfig{
 		OrgName:     "Acme Corp",
 		ServerURL:   "https://app.getgram.ai",
+		ProjectSlug: "acme",
 		Version:     "1750000000",
 		APIKey:      "gram_live_realkey",
 		HooksAPIKey: "gram_live_realhookskey",
@@ -1889,7 +1892,12 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 
 func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 	t.Parallel()
-	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai"}
+	cfg := GenerateConfig{
+		OrgName:     "Acme Corp",
+		ServerURL:   "https://app.getgram.ai///",
+		HooksAPIKey: "gram_hooks_feedback",
+		ProjectSlug: "acme",
+	}
 	content := "---\nname: release-notes\ndescription: d\n---\n\nbody\n"
 	plugins := []PluginInfo{{
 		Name:        "Engineering Tools",
@@ -1914,6 +1922,99 @@ func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 	for p := range files {
 		require.NotContains(t, p, "escape", "invalid skill names must be dropped, not emitted as paths")
 	}
+
+	expectedURL := "https://app.getgram.ai/platform/mcp/skill-feedback"
+	expectedHeaders := map[string]string{
+		"Authorization": "Bearer gram_hooks_feedback",
+		"Gram-Project":  "acme",
+	}
+
+	var claude claudeMCPConfig
+	require.NoError(t, json.Unmarshal(files["engineering-tools/.mcp.json"], &claude))
+	require.Equal(t, claudeMCPServer{Type: "http", URL: expectedURL, Headers: expectedHeaders}, claude.MCPServers[skillFeedbackMCPServerName])
+
+	var cursor cursorMCPConfig
+	require.NoError(t, json.Unmarshal(files[cursorPluginRoot+"/engineering-tools-cursor/mcp.json"], &cursor))
+	require.Equal(t, cursorMCPServer{URL: expectedURL, Headers: expectedHeaders}, cursor.MCPServers[skillFeedbackMCPServerName])
+
+	var codex codexMCPConfig
+	require.NoError(t, json.Unmarshal(files["engineering-tools-codex/.mcp.json"], &codex))
+	require.Equal(t, codexMCPServer{
+		URL:               expectedURL,
+		BearerTokenEnvVar: "",
+		HTTPHeaders:       expectedHeaders,
+		EnvHTTPHeaders:    nil,
+	}, codex.MCPServers[skillFeedbackMCPServerName])
+	feedbackJSON, err := json.Marshal(codex.MCPServers[skillFeedbackMCPServerName])
+	require.NoError(t, err)
+	require.NotContains(t, string(feedbackJSON), "bearer_token_env_var")
+	require.NotContains(t, string(feedbackJSON), "env_http_headers")
+}
+
+func TestGenerateMCPFilesOmitsSkillFeedbackWithoutSkillOrKey(t *testing.T) {
+	t.Parallel()
+	withSkill := PluginInfo{
+		Name:   "Engineering Tools",
+		Slug:   "engineering-tools",
+		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
+	}
+	for _, platform := range []string{"claude", "cursor", "codex"} {
+		files, err := GenerateSinglePluginPackage(withSkill, GenerateConfig{
+			ServerURL:   "https://app.getgram.ai",
+			ProjectSlug: "acme",
+		}, platform)
+		require.NoError(t, err)
+		for _, content := range files {
+			require.NotContains(t, string(content), skillFeedbackMCPServerName)
+		}
+	}
+
+	withoutSkill := withSkill
+	withoutSkill.Skills = []PluginSkillInfo{{Name: "../escape", Content: "invalid"}}
+	files, err := generateMCPFiles([]PluginInfo{withoutSkill}, GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_hooks_feedback",
+		ProjectSlug: "acme",
+	})
+	require.NoError(t, err)
+	for _, content := range files {
+		require.NotContains(t, string(content), skillFeedbackMCPServerName)
+	}
+}
+
+func TestGenerateMCPFilesPreservesSkillFeedbackServerCollision(t *testing.T) {
+	t.Parallel()
+	plugin := PluginInfo{
+		Name: "Engineering Tools",
+		Slug: "engineering-tools",
+		Servers: []PluginServerInfo{{
+			DisplayName: skillFeedbackMCPServerName,
+			MCPURL:      "https://user.example.com/mcp",
+		}},
+		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
+	}
+	files, err := generateMCPFiles([]PluginInfo{plugin}, GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		APIKey:      "gram_consumer_key",
+		HooksAPIKey: "gram_hooks_feedback",
+		ProjectSlug: "acme",
+	})
+	require.NoError(t, err)
+
+	var claude claudeMCPConfig
+	require.NoError(t, json.Unmarshal(files["engineering-tools/.mcp.json"], &claude))
+	require.Equal(t, "https://user.example.com/mcp", claude.MCPServers[skillFeedbackMCPServerName].URL)
+	require.Equal(t, "Bearer gram_consumer_key", claude.MCPServers[skillFeedbackMCPServerName].Headers["Authorization"])
+
+	var cursor cursorMCPConfig
+	require.NoError(t, json.Unmarshal(files[cursorPluginRoot+"/engineering-tools-cursor/mcp.json"], &cursor))
+	require.Equal(t, "https://user.example.com/mcp", cursor.MCPServers[skillFeedbackMCPServerName].URL)
+	require.Equal(t, "Bearer gram_consumer_key", cursor.MCPServers[skillFeedbackMCPServerName].Headers["Authorization"])
+
+	var codex codexMCPConfig
+	require.NoError(t, json.Unmarshal(files["engineering-tools-codex/.mcp.json"], &codex))
+	require.Equal(t, "https://user.example.com/mcp", codex.MCPServers[skillFeedbackMCPServerName].URL)
+	require.Equal(t, "Bearer gram_consumer_key", codex.MCPServers[skillFeedbackMCPServerName].HTTPHeaders["Authorization"])
 }
 
 // Distributing a skill (or changing its resolved content) must move the
