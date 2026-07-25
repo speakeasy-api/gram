@@ -35,6 +35,15 @@ type AddVersionRequestBody struct {
 	DerivedFromVersionID *string `form:"derived_from_version_id,omitempty" json:"derived_from_version_id,omitempty" xml:"derived_from_version_id,omitempty"`
 }
 
+// RestoreVersionRequestBody is the type of the "skills" service
+// "restoreVersion" endpoint HTTP request body.
+type RestoreVersionRequestBody struct {
+	// The skill ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The historical version to restore.
+	VersionID *string `form:"version_id,omitempty" json:"version_id,omitempty" xml:"version_id,omitempty"`
+}
+
 // UpdateRequestBody is the type of the "skills" service "update" endpoint HTTP
 // request body.
 type UpdateRequestBody struct {
@@ -142,6 +151,20 @@ type AddVersionResponseBody struct {
 	CreatedVersion bool `form:"created_version" json:"created_version" xml:"created_version"`
 }
 
+// RestoreVersionResponseBody is the type of the "skills" service
+// "restoreVersion" endpoint HTTP response body.
+type RestoreVersionResponseBody struct {
+	// The recorded skill.
+	Skill *SkillResponseBody `form:"skill" json:"skill" xml:"skill"`
+	// The resulting immutable skill version.
+	Version *SkillVersionResponseBody `form:"version" json:"version" xml:"version"`
+	// Whether this request created the skill.
+	CreatedSkill bool `form:"created_skill" json:"created_skill" xml:"created_skill"`
+	// Whether this request created a new immutable version rather than resolving
+	// to an existing canonical version.
+	CreatedVersion bool `form:"created_version" json:"created_version" xml:"created_version"`
+}
+
 // UpdateResponseBody is the type of the "skills" service "update" endpoint
 // HTTP response body.
 type UpdateResponseBody struct {
@@ -159,8 +182,7 @@ type UpdateResponseBody struct {
 	SourceKind string `form:"source_kind" json:"source_kind" xml:"source_kind"`
 	// The skill classification.
 	Classification string `form:"classification" json:"classification" xml:"classification"`
-	// The derived latest version ID, selected from immutable version creation
-	// order.
+	// The current version ID, selected by effective promotion time.
 	LatestVersionID *string `form:"latest_version_id,omitempty" json:"latest_version_id,omitempty" xml:"latest_version_id,omitempty"`
 	// The number of immutable versions recorded for the skill.
 	VersionCount int64 `form:"version_count" json:"version_count" xml:"version_count"`
@@ -196,6 +218,15 @@ type ListSuggestionsResponseBody struct {
 	Suggestions []*SkillEditSuggestionResponseBody `form:"suggestions" json:"suggestions" xml:"suggestions"`
 	// The total number of matching open suggestions, independent of pagination.
 	TotalOpenCount int64 `form:"total_open_count" json:"total_open_count" xml:"total_open_count"`
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// ListFeedbackResponseBody is the type of the "skills" service "listFeedback"
+// endpoint HTTP response body.
+type ListFeedbackResponseBody struct {
+	Counts   *SkillFeedbackCountsResponseBody `form:"counts" json:"counts" xml:"counts"`
+	Feedback []*SkillFeedbackResponseBody     `form:"feedback" json:"feedback" xml:"feedback"`
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -263,7 +294,7 @@ type ApproveAllSuggestionsResponseBody struct {
 type GetResponseBody struct {
 	// The skill.
 	Skill *SkillResponseBody `form:"skill" json:"skill" xml:"skill"`
-	// The latest immutable version by creation order.
+	// The current immutable version by effective promotion time.
 	LatestVersion *SkillVersionResponseBody `form:"latest_version,omitempty" json:"latest_version,omitempty" xml:"latest_version,omitempty"`
 	// Activation adoption metrics.
 	Adoption *SkillAdoptionResponseBody `form:"adoption" json:"adoption" xml:"adoption"`
@@ -706,6 +737,188 @@ type AddVersionUnexpectedResponseBody struct {
 // AddVersionGatewayErrorResponseBody is the type of the "skills" service
 // "addVersion" endpoint HTTP response body for the "gateway_error" error.
 type AddVersionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestoreVersionUnauthorizedResponseBody is the type of the "skills" service
+// "restoreVersion" endpoint HTTP response body for the "unauthorized" error.
+type RestoreVersionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestoreVersionForbiddenResponseBody is the type of the "skills" service
+// "restoreVersion" endpoint HTTP response body for the "forbidden" error.
+type RestoreVersionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestoreVersionBadRequestResponseBody is the type of the "skills" service
+// "restoreVersion" endpoint HTTP response body for the "bad_request" error.
+type RestoreVersionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestoreVersionNotFoundResponseBody is the type of the "skills" service
+// "restoreVersion" endpoint HTTP response body for the "not_found" error.
+type RestoreVersionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestoreVersionConflictResponseBody is the type of the "skills" service
+// "restoreVersion" endpoint HTTP response body for the "conflict" error.
+type RestoreVersionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestoreVersionUnsupportedMediaResponseBody is the type of the "skills"
+// service "restoreVersion" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RestoreVersionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestoreVersionInvalidResponseBody is the type of the "skills" service
+// "restoreVersion" endpoint HTTP response body for the "invalid" error.
+type RestoreVersionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestoreVersionInvariantViolationResponseBody is the type of the "skills"
+// service "restoreVersion" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RestoreVersionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestoreVersionUnexpectedResponseBody is the type of the "skills" service
+// "restoreVersion" endpoint HTTP response body for the "unexpected" error.
+type RestoreVersionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RestoreVersionGatewayErrorResponseBody is the type of the "skills" service
+// "restoreVersion" endpoint HTTP response body for the "gateway_error" error.
+type RestoreVersionGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1248,6 +1461,187 @@ type ListSuggestionsUnexpectedResponseBody struct {
 // ListSuggestionsGatewayErrorResponseBody is the type of the "skills" service
 // "listSuggestions" endpoint HTTP response body for the "gateway_error" error.
 type ListSuggestionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFeedbackUnauthorizedResponseBody is the type of the "skills" service
+// "listFeedback" endpoint HTTP response body for the "unauthorized" error.
+type ListFeedbackUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFeedbackForbiddenResponseBody is the type of the "skills" service
+// "listFeedback" endpoint HTTP response body for the "forbidden" error.
+type ListFeedbackForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFeedbackBadRequestResponseBody is the type of the "skills" service
+// "listFeedback" endpoint HTTP response body for the "bad_request" error.
+type ListFeedbackBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFeedbackNotFoundResponseBody is the type of the "skills" service
+// "listFeedback" endpoint HTTP response body for the "not_found" error.
+type ListFeedbackNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFeedbackConflictResponseBody is the type of the "skills" service
+// "listFeedback" endpoint HTTP response body for the "conflict" error.
+type ListFeedbackConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFeedbackUnsupportedMediaResponseBody is the type of the "skills" service
+// "listFeedback" endpoint HTTP response body for the "unsupported_media" error.
+type ListFeedbackUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFeedbackInvalidResponseBody is the type of the "skills" service
+// "listFeedback" endpoint HTTP response body for the "invalid" error.
+type ListFeedbackInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFeedbackInvariantViolationResponseBody is the type of the "skills"
+// service "listFeedback" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListFeedbackInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFeedbackUnexpectedResponseBody is the type of the "skills" service
+// "listFeedback" endpoint HTTP response body for the "unexpected" error.
+type ListFeedbackUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListFeedbackGatewayErrorResponseBody is the type of the "skills" service
+// "listFeedback" endpoint HTTP response body for the "gateway_error" error.
+type ListFeedbackGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3652,8 +4046,7 @@ type SkillResponseBody struct {
 	SourceKind string `form:"source_kind" json:"source_kind" xml:"source_kind"`
 	// The skill classification.
 	Classification string `form:"classification" json:"classification" xml:"classification"`
-	// The derived latest version ID, selected from immutable version creation
-	// order.
+	// The current version ID, selected by effective promotion time.
 	LatestVersionID *string `form:"latest_version_id,omitempty" json:"latest_version_id,omitempty" xml:"latest_version_id,omitempty"`
 	// The number of immutable versions recorded for the skill.
 	VersionCount int64 `form:"version_count" json:"version_count" xml:"version_count"`
@@ -3778,6 +4171,35 @@ type SkillEditSuggestionChangeResponseBody struct {
 	// Distinct sessions that reported the feedback behind this change.
 	FeedbackSessionCount int64 `form:"feedback_session_count" json:"feedback_session_count" xml:"feedback_session_count"`
 	// When the change was recorded.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
+// SkillFeedbackCountsResponseBody is used to define fields on response body
+// types.
+type SkillFeedbackCountsResponseBody struct {
+	Total           int64 `form:"total" json:"total" xml:"total"`
+	Helped          int64 `form:"helped" json:"helped" xml:"helped"`
+	PartiallyHelped int64 `form:"partially_helped" json:"partially_helped" xml:"partially_helped"`
+	DidNotHelp      int64 `form:"did_not_help" json:"did_not_help" xml:"did_not_help"`
+	Misleading      int64 `form:"misleading" json:"misleading" xml:"misleading"`
+	Harmful         int64 `form:"harmful" json:"harmful" xml:"harmful"`
+}
+
+// SkillFeedbackResponseBody is used to define fields on response body types.
+type SkillFeedbackResponseBody struct {
+	// The feedback ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Where the feedback was recorded.
+	Source string `form:"source" json:"source" xml:"source"`
+	// The reported outcome.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// An optional feedback note.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
+	// The attributed skill version, when known.
+	SkillVersionID *string `form:"skill_version_id,omitempty" json:"skill_version_id,omitempty" xml:"skill_version_id,omitempty"`
+	// When automated suggestion analysis reviewed this feedback.
+	ReviewedAt *string `form:"reviewed_at,omitempty" json:"reviewed_at,omitempty" xml:"reviewed_at,omitempty"`
+	// When the feedback was recorded.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
@@ -3925,6 +4347,22 @@ func NewAddVersionResponseBody(res *skills.RecordSkillResult) *AddVersionRespons
 	return body
 }
 
+// NewRestoreVersionResponseBody builds the HTTP response body from the result
+// of the "restoreVersion" endpoint of the "skills" service.
+func NewRestoreVersionResponseBody(res *skills.RecordSkillResult) *RestoreVersionResponseBody {
+	body := &RestoreVersionResponseBody{
+		CreatedSkill:   res.CreatedSkill,
+		CreatedVersion: res.CreatedVersion,
+	}
+	if res.Skill != nil {
+		body.Skill = marshalTypesSkillToSkillResponseBody(res.Skill)
+	}
+	if res.Version != nil {
+		body.Version = marshalTypesSkillVersionToSkillVersionResponseBody(res.Version)
+	}
+	return body
+}
+
 // NewUpdateResponseBody builds the HTTP response body from the result of the
 // "update" endpoint of the "skills" service.
 func NewUpdateResponseBody(res *types.Skill) *UpdateResponseBody {
@@ -3988,6 +4426,30 @@ func NewListSuggestionsResponseBody(res *skills.ListSkillSuggestionsResult) *Lis
 		}
 	} else {
 		body.Suggestions = []*SkillEditSuggestionResponseBody{}
+	}
+	return body
+}
+
+// NewListFeedbackResponseBody builds the HTTP response body from the result of
+// the "listFeedback" endpoint of the "skills" service.
+func NewListFeedbackResponseBody(res *skills.ListSkillFeedbackResult) *ListFeedbackResponseBody {
+	body := &ListFeedbackResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Counts != nil {
+		body.Counts = marshalSkillsSkillFeedbackCountsToSkillFeedbackCountsResponseBody(res.Counts)
+	}
+	if res.Feedback != nil {
+		body.Feedback = make([]*SkillFeedbackResponseBody, len(res.Feedback))
+		for i, val := range res.Feedback {
+			if val == nil {
+				body.Feedback[i] = nil
+				continue
+			}
+			body.Feedback[i] = marshalSkillsSkillFeedbackToSkillFeedbackResponseBody(val)
+		}
+	} else {
+		body.Feedback = []*SkillFeedbackResponseBody{}
 	}
 	return body
 }
@@ -4484,6 +4946,147 @@ func NewAddVersionGatewayErrorResponseBody(res *goa.ServiceError) *AddVersionGat
 	return body
 }
 
+// NewRestoreVersionUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "restoreVersion" endpoint of the "skills" service.
+func NewRestoreVersionUnauthorizedResponseBody(res *goa.ServiceError) *RestoreVersionUnauthorizedResponseBody {
+	body := &RestoreVersionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestoreVersionForbiddenResponseBody builds the HTTP response body from
+// the result of the "restoreVersion" endpoint of the "skills" service.
+func NewRestoreVersionForbiddenResponseBody(res *goa.ServiceError) *RestoreVersionForbiddenResponseBody {
+	body := &RestoreVersionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestoreVersionBadRequestResponseBody builds the HTTP response body from
+// the result of the "restoreVersion" endpoint of the "skills" service.
+func NewRestoreVersionBadRequestResponseBody(res *goa.ServiceError) *RestoreVersionBadRequestResponseBody {
+	body := &RestoreVersionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestoreVersionNotFoundResponseBody builds the HTTP response body from the
+// result of the "restoreVersion" endpoint of the "skills" service.
+func NewRestoreVersionNotFoundResponseBody(res *goa.ServiceError) *RestoreVersionNotFoundResponseBody {
+	body := &RestoreVersionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestoreVersionConflictResponseBody builds the HTTP response body from the
+// result of the "restoreVersion" endpoint of the "skills" service.
+func NewRestoreVersionConflictResponseBody(res *goa.ServiceError) *RestoreVersionConflictResponseBody {
+	body := &RestoreVersionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestoreVersionUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "restoreVersion" endpoint of the "skills" service.
+func NewRestoreVersionUnsupportedMediaResponseBody(res *goa.ServiceError) *RestoreVersionUnsupportedMediaResponseBody {
+	body := &RestoreVersionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestoreVersionInvalidResponseBody builds the HTTP response body from the
+// result of the "restoreVersion" endpoint of the "skills" service.
+func NewRestoreVersionInvalidResponseBody(res *goa.ServiceError) *RestoreVersionInvalidResponseBody {
+	body := &RestoreVersionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestoreVersionInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "restoreVersion" endpoint of the "skills"
+// service.
+func NewRestoreVersionInvariantViolationResponseBody(res *goa.ServiceError) *RestoreVersionInvariantViolationResponseBody {
+	body := &RestoreVersionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestoreVersionUnexpectedResponseBody builds the HTTP response body from
+// the result of the "restoreVersion" endpoint of the "skills" service.
+func NewRestoreVersionUnexpectedResponseBody(res *goa.ServiceError) *RestoreVersionUnexpectedResponseBody {
+	body := &RestoreVersionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRestoreVersionGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "restoreVersion" endpoint of the "skills" service.
+func NewRestoreVersionGatewayErrorResponseBody(res *goa.ServiceError) *RestoreVersionGatewayErrorResponseBody {
+	body := &RestoreVersionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewUpdateUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "update" endpoint of the "skills" service.
 func NewUpdateUnauthorizedResponseBody(res *goa.ServiceError) *UpdateUnauthorizedResponseBody {
@@ -4895,6 +5498,146 @@ func NewListSuggestionsUnexpectedResponseBody(res *goa.ServiceError) *ListSugges
 // from the result of the "listSuggestions" endpoint of the "skills" service.
 func NewListSuggestionsGatewayErrorResponseBody(res *goa.ServiceError) *ListSuggestionsGatewayErrorResponseBody {
 	body := &ListSuggestionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFeedbackUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listFeedback" endpoint of the "skills" service.
+func NewListFeedbackUnauthorizedResponseBody(res *goa.ServiceError) *ListFeedbackUnauthorizedResponseBody {
+	body := &ListFeedbackUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFeedbackForbiddenResponseBody builds the HTTP response body from the
+// result of the "listFeedback" endpoint of the "skills" service.
+func NewListFeedbackForbiddenResponseBody(res *goa.ServiceError) *ListFeedbackForbiddenResponseBody {
+	body := &ListFeedbackForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFeedbackBadRequestResponseBody builds the HTTP response body from the
+// result of the "listFeedback" endpoint of the "skills" service.
+func NewListFeedbackBadRequestResponseBody(res *goa.ServiceError) *ListFeedbackBadRequestResponseBody {
+	body := &ListFeedbackBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFeedbackNotFoundResponseBody builds the HTTP response body from the
+// result of the "listFeedback" endpoint of the "skills" service.
+func NewListFeedbackNotFoundResponseBody(res *goa.ServiceError) *ListFeedbackNotFoundResponseBody {
+	body := &ListFeedbackNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFeedbackConflictResponseBody builds the HTTP response body from the
+// result of the "listFeedback" endpoint of the "skills" service.
+func NewListFeedbackConflictResponseBody(res *goa.ServiceError) *ListFeedbackConflictResponseBody {
+	body := &ListFeedbackConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFeedbackUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listFeedback" endpoint of the "skills" service.
+func NewListFeedbackUnsupportedMediaResponseBody(res *goa.ServiceError) *ListFeedbackUnsupportedMediaResponseBody {
+	body := &ListFeedbackUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFeedbackInvalidResponseBody builds the HTTP response body from the
+// result of the "listFeedback" endpoint of the "skills" service.
+func NewListFeedbackInvalidResponseBody(res *goa.ServiceError) *ListFeedbackInvalidResponseBody {
+	body := &ListFeedbackInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFeedbackInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listFeedback" endpoint of the "skills" service.
+func NewListFeedbackInvariantViolationResponseBody(res *goa.ServiceError) *ListFeedbackInvariantViolationResponseBody {
+	body := &ListFeedbackInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFeedbackUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listFeedback" endpoint of the "skills" service.
+func NewListFeedbackUnexpectedResponseBody(res *goa.ServiceError) *ListFeedbackUnexpectedResponseBody {
+	body := &ListFeedbackUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListFeedbackGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listFeedback" endpoint of the "skills" service.
+func NewListFeedbackGatewayErrorResponseBody(res *goa.ServiceError) *ListFeedbackGatewayErrorResponseBody {
+	body := &ListFeedbackGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6777,6 +7520,20 @@ func NewAddVersionPayload(body *AddVersionRequestBody, sessionToken *string, api
 	return v
 }
 
+// NewRestoreVersionPayload builds a skills service restoreVersion endpoint
+// payload.
+func NewRestoreVersionPayload(body *RestoreVersionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.RestoreVersionPayload {
+	v := &skills.RestoreVersionPayload{
+		ID:        *body.ID,
+		VersionID: *body.VersionID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewUpdatePayload builds a skills service update endpoint payload.
 func NewUpdatePayload(body *UpdateRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.UpdatePayload {
 	v := &skills.UpdatePayload{
@@ -6809,6 +7566,19 @@ func NewListPayload(cursor *string, limit int, sessionToken *string, apikeyToken
 func NewListSuggestionsPayload(skillID *string, cursor *string, limit int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListSuggestionsPayload {
 	v := &skills.ListSuggestionsPayload{}
 	v.SkillID = skillID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListFeedbackPayload builds a skills service listFeedback endpoint payload.
+func NewListFeedbackPayload(id string, cursor *string, limit int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListFeedbackPayload {
+	v := &skills.ListFeedbackPayload{}
+	v.ID = id
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
@@ -7004,6 +7774,24 @@ func ValidateAddVersionRequestBody(body *AddVersionRequestBody) (err error) {
 	}
 	if body.DerivedFromVersionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.derived_from_version_id", *body.DerivedFromVersionID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRestoreVersionRequestBody runs the validations defined on
+// RestoreVersionRequestBody
+func ValidateRestoreVersionRequestBody(body *RestoreVersionRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.VersionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.VersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.version_id", *body.VersionID, goa.FormatUUID))
 	}
 	return
 }

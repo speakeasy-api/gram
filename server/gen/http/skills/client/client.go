@@ -24,6 +24,10 @@ type Client struct {
 	// endpoint.
 	AddVersionDoer goahttp.Doer
 
+	// RestoreVersion Doer is the HTTP client used to make requests to the
+	// restoreVersion endpoint.
+	RestoreVersionDoer goahttp.Doer
+
 	// Update Doer is the HTTP client used to make requests to the update endpoint.
 	UpdateDoer goahttp.Doer
 
@@ -33,6 +37,10 @@ type Client struct {
 	// ListSuggestions Doer is the HTTP client used to make requests to the
 	// listSuggestions endpoint.
 	ListSuggestionsDoer goahttp.Doer
+
+	// ListFeedback Doer is the HTTP client used to make requests to the
+	// listFeedback endpoint.
+	ListFeedbackDoer goahttp.Doer
 
 	// ApproveSuggestion Doer is the HTTP client used to make requests to the
 	// approveSuggestion endpoint.
@@ -106,9 +114,11 @@ func NewClient(
 	return &Client{
 		CreateDoer:                 doer,
 		AddVersionDoer:             doer,
+		RestoreVersionDoer:         doer,
 		UpdateDoer:                 doer,
 		ListDoer:                   doer,
 		ListSuggestionsDoer:        doer,
+		ListFeedbackDoer:           doer,
 		ApproveSuggestionDoer:      doer,
 		DismissSuggestionDoer:      doer,
 		ApproveAllSuggestionsDoer:  doer,
@@ -173,6 +183,30 @@ func (c *Client) AddVersion() goa.Endpoint {
 		resp, err := c.AddVersionDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "addVersion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RestoreVersion returns an endpoint that makes HTTP requests to the skills
+// service restoreVersion server.
+func (c *Client) RestoreVersion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRestoreVersionRequest(c.encoder)
+		decodeResponse = DecodeRestoreVersionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRestoreVersionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RestoreVersionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "restoreVersion", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -245,6 +279,30 @@ func (c *Client) ListSuggestions() goa.Endpoint {
 		resp, err := c.ListSuggestionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "listSuggestions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListFeedback returns an endpoint that makes HTTP requests to the skills
+// service listFeedback server.
+func (c *Client) ListFeedback() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListFeedbackRequest(c.encoder)
+		decodeResponse = DecodeListFeedbackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListFeedbackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListFeedbackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "listFeedback", err)
 		}
 		return decodeResponse(resp)
 	}

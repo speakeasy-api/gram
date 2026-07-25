@@ -26,6 +26,9 @@ type Service interface {
 	// implementation requires the skills product feature and skill write scope,
 	// and returns the existing canonical version as a no-op when appropriate.
 	AddVersion(context.Context, *AddVersionPayload) (res *RecordSkillResult, err error)
+	// Restore a historical valid version as the skill's current version without
+	// changing the immutable version record or explicit distribution pins.
+	RestoreVersion(context.Context, *RestoreVersionPayload) (res *RecordSkillResult, err error)
 	// Rename an active skill or update its display name and summary. The
 	// implementation requires the skills product feature and skill write scope.
 	Update(context.Context, *UpdatePayload) (res *types.Skill, err error)
@@ -35,6 +38,9 @@ type Service interface {
 	// List open skill edit suggestions in the project, newest first. The
 	// implementation requires the skills product feature and skill read scope.
 	ListSuggestions(context.Context, *ListSuggestionsPayload) (res *ListSkillSuggestionsResult, err error)
+	// List all-time outcome counts and recent resolved feedback for a skill.
+	// Name-only feedback is excluded.
+	ListFeedback(context.Context, *ListFeedbackPayload) (res *ListSkillFeedbackResult, err error)
 	// Approve an open skill edit suggestion, optionally replacing its proposed
 	// SKILL.md content or taking only one of its proposed changes. Stale
 	// suggestions are superseded instead.
@@ -98,7 +104,7 @@ const ServiceName = "skills"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [18]string{"create", "addVersion", "update", "list", "listSuggestions", "approveSuggestion", "dismissSuggestion", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
+var MethodNames = [20]string{"create", "addVersion", "restoreVersion", "update", "list", "listSuggestions", "listFeedback", "approveSuggestion", "dismissSuggestion", "approveAllSuggestions", "get", "listUnknownActivations", "listVersions", "archive", "distribute", "undistribute", "share", "unshare", "getShared", "listDistributions"}
 
 // AddVersionPayload is the payload type of the skills service addVersion
 // method.
@@ -223,7 +229,7 @@ type GetSharedPayload struct {
 type GetSkillResult struct {
 	// The skill.
 	Skill *types.Skill
-	// The latest immutable version by creation order.
+	// The current immutable version by effective promotion time.
 	LatestVersion *types.SkillVersion
 	// Activation adoption metrics.
 	Adoption *SkillAdoption
@@ -251,6 +257,20 @@ type ListDistributionsPayload struct {
 	ProjectSlugInput *string
 }
 
+// ListFeedbackPayload is the payload type of the skills service listFeedback
+// method.
+type ListFeedbackPayload struct {
+	// The skill ID.
+	ID string
+	// Cursor for the next page of feedback.
+	Cursor *string
+	// The number of feedback rows to return per page.
+	Limit            int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // ListPayload is the payload type of the skills service list method.
 type ListPayload struct {
 	// Cursor for the next page of skills.
@@ -267,6 +287,15 @@ type ListPayload struct {
 type ListSkillDistributionsResult struct {
 	// The active plugin skill distributions in this page.
 	Distributions []*types.PluginSkillDistribution
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string
+}
+
+// ListSkillFeedbackResult is the result type of the skills service
+// listFeedback method.
+type ListSkillFeedbackResult struct {
+	Counts   *SkillFeedbackCounts
+	Feedback []*SkillFeedback
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string
 }
@@ -361,6 +390,18 @@ type RecordSkillResult struct {
 	CreatedVersion bool
 }
 
+// RestoreVersionPayload is the payload type of the skills service
+// restoreVersion method.
+type RestoreVersionPayload struct {
+	// The skill ID.
+	ID string
+	// The historical version to restore.
+	VersionID        string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // SharePayload is the payload type of the skills service share method.
 type SharePayload struct {
 	// The skill ID.
@@ -423,6 +464,40 @@ type SkillDrift struct {
 	// Active machines without a version or without one unambiguous target.
 	IndeterminateMachines int64
 }
+
+// A privacy-minimized feedback row for a skill.
+type SkillFeedback struct {
+	// The feedback ID.
+	ID string
+	// Where the feedback was recorded.
+	Source SkillFeedbackSource
+	// The reported outcome.
+	Outcome SkillFeedbackOutcome
+	// An optional feedback note.
+	Note *string
+	// The attributed skill version, when known.
+	SkillVersionID *string
+	// When automated suggestion analysis reviewed this feedback.
+	ReviewedAt *string
+	// When the feedback was recorded.
+	CreatedAt string
+}
+
+// All-time outcome counts for resolved feedback on a skill.
+type SkillFeedbackCounts struct {
+	Total           int64
+	Helped          int64
+	PartiallyHelped int64
+	DidNotHelp      int64
+	Misleading      int64
+	Harmful         int64
+}
+
+// The reported skill feedback outcome.
+type SkillFeedbackOutcome string
+
+// Where skill feedback was recorded.
+type SkillFeedbackSource string
 
 // A UTC-day activation bucket for a skill.
 type SkillSightingTimelinePoint struct {

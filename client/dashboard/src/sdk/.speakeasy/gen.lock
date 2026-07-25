@@ -407,9 +407,11 @@ trackedFiles:
   src/funcs/skillsGetShared.ts: {}
   src/funcs/skillsList.ts: {}
   src/funcs/skillsListDistributions.ts: {}
+  src/funcs/skillsListFeedback.ts: {}
   src/funcs/skillsListSuggestions.ts: {}
   src/funcs/skillsListUnknownActivations.ts: {}
   src/funcs/skillsListVersions.ts: {}
+  src/funcs/skillsRestoreVersion.ts: {}
   src/funcs/skillsShare.ts: {}
   src/funcs/skillsUndistribute.ts: {}
   src/funcs/skillsUnshare.ts: {}
@@ -839,6 +841,7 @@ trackedFiles:
   src/models/components/listshadowmcpinventoryresult.ts: {}
   src/models/components/listshadowmcpinventoryusersresult.ts: {}
   src/models/components/listskilldistributionsresult.ts: {}
+  src/models/components/listskillfeedbackresult.ts: {}
   src/models/components/listskillsresult.ts: {}
   src/models/components/listskillsuggestionsresult.ts: {}
   src/models/components/listskillversionsresult.ts: {}
@@ -989,6 +992,7 @@ trackedFiles:
   src/models/components/resource.ts: {}
   src/models/components/resourceentry.ts: {}
   src/models/components/responsefilter.ts: {}
+  src/models/components/restoreskillversionrequestbody.ts: {}
   src/models/components/retryschedulerequestbody.ts: {}
   src/models/components/revokeallremotesessionsresult.ts: {}
   src/models/components/riskblock.ts: {}
@@ -1085,8 +1089,11 @@ trackedFiles:
   src/models/components/skillefficacyinsight.ts: {}
   src/models/components/skillefficacyinsightsresult.ts: {}
   src/models/components/skillefficacymetrics.ts: {}
+  src/models/components/skillefficacyregressionsignal.ts: {}
   src/models/components/skillefficacyscoredsession.ts: {}
   src/models/components/skillefficacysettings.ts: {}
+  src/models/components/skillfeedback.ts: {}
+  src/models/components/skillfeedbackcounts.ts: {}
   src/models/components/skillfeedbackpayload.ts: {}
   src/models/components/skillinsightmetrics.ts: {}
   src/models/components/skillinsightpoint.ts: {}
@@ -1565,6 +1572,7 @@ trackedFiles:
   src/models/operations/listshadowmcpinventory.ts: {}
   src/models/operations/listshadowmcpinventoryusers.ts: {}
   src/models/operations/listskilldistributions.ts: {}
+  src/models/operations/listskillfeedback.ts: {}
   src/models/operations/listskills.ts: {}
   src/models/operations/listskillsuggestions.ts: {}
   src/models/operations/listskillversions.ts: {}
@@ -1619,6 +1627,7 @@ trackedFiles:
   src/models/operations/rendertemplatebyid.ts: {}
   src/models/operations/resolvechallenge.ts: {}
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
+  src/models/operations/restoreskillversion.ts: {}
   src/models/operations/resumetriggerinstance.ts: {}
   src/models/operations/retryaiintegrationschedule.ts: {}
   src/models/operations/retrydeviceintegrationschedule.ts: {}
@@ -2188,6 +2197,7 @@ trackedFiles:
   src/react-query/renderTemplateByID.ts: {}
   src/react-query/resolveChallenge.ts: {}
   src/react-query/resolveShadowMCPInventoryRequest.ts: {}
+  src/react-query/restoreSkillVersion.ts: {}
   src/react-query/resumeTrigger.ts: {}
   src/react-query/retryAIIntegrationSchedule.ts: {}
   src/react-query/retryDeviceIntegrationSchedule.ts: {}
@@ -2318,6 +2328,8 @@ trackedFiles:
   src/react-query/skillEfficacyInsights.ts: {}
   src/react-query/skillEfficacySettings.core.ts: {}
   src/react-query/skillEfficacySettings.ts: {}
+  src/react-query/skillFeedback.core.ts: {}
+  src/react-query/skillFeedback.ts: {}
   src/react-query/skillSuggestions.core.ts: {}
   src/react-query/skillSuggestions.ts: {}
   src/react-query/skillVersions.core.ts: {}
@@ -5918,6 +5930,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listSkillFeedback:
+    speakeasy-default-list-skill-feedback:
+      parameters:
+        query:
+          id: "e02b831d-9763-46f1-b56b-25ad8f596a0f"
+          limit: 20
+      responses:
+        "200":
+          application/json: {"counts": {"did_not_help": 9166, "harmful": 958057, "helped": 233517, "misleading": 284907, "partially_helped": 732301, "total": 162598}, "feedback": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listSkillSuggestions:
     speakeasy-default-list-skill-suggestions:
       parameters:
@@ -6511,6 +6536,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  restoreSkillVersion:
+    speakeasy-default-restore-skill-version:
+      requestBody:
+        application/json: {"id": "abd88044-ee7b-4382-bfce-afb4cdd1570d", "version_id": "05e4bdd7-6dd2-4afe-a3d0-74ac1f748cee"}
+      responses:
+        "200":
+          application/json: {"created_skill": true, "created_version": false, "skill": {"classification": "<value>", "created_at": "2025-11-22T21:23:32.157Z", "display_name": "Waldo_Runolfsson", "has_valid_version": false, "id": "ee09c63c-6cca-44d6-8683-709a5655abe1", "name": "<value>", "project_id": "7c07d8f8-e4f5-4f94-b312-8f42bd676dd9", "seen_count": 153726, "source_kind": "<value>", "updated_at": "2026-07-06T19:46:51.845Z", "version_count": 359073}, "version": {"canonical_sha256": "<value>", "content": "<value>", "created_at": "2025-06-21T22:34:08.324Z", "created_by_user_id": "<id>", "frontmatter": {}, "id": "1f9da039-752d-4779-a0d8-c382db765440", "metadata": {}, "raw_sha256": "<value>", "seen_count": 765170, "skill_id": "20010ced-1a50-46dd-bbe8-9898b7ac1727", "spec_valid": false, "validation_errors": [{"code": "<value>", "field": "<value>", "message": "<value>"}]}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   resumeTriggerInstance:
     speakeasy-default-resume-trigger-instance:
       parameters:

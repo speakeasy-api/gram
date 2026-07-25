@@ -73,6 +73,34 @@ var _ = Service("skills", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddSkillVersion"}`)
 	})
 
+	Method("restoreVersion", func() {
+		Description("Restore a historical valid version as the skill's current version without changing the immutable version record or explicit distribution pins.")
+
+		Payload(func() {
+			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Attribute("version_id", String, "The historical version to restore.", func() { Format(FormatUUID) })
+			Required("id", "version_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RecordSkillResult)
+
+		HTTP(func() {
+			POST("/rpc/skills.restoreVersion")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Body(RestoreSkillVersionRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "restoreSkillVersion")
+		Meta("openapi:extension:x-speakeasy-name-override", "restoreVersion")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RestoreSkillVersion"}`)
+	})
+
 	Method("update", func() {
 		Description("Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.")
 
@@ -169,6 +197,42 @@ var _ = Service("skills", func() {
 		Meta("openapi:operationId", "listSkillSuggestions")
 		Meta("openapi:extension:x-speakeasy-name-override", "listSuggestions")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillSuggestions"}`)
+	})
+
+	Method("listFeedback", func() {
+		Description("List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.")
+
+		Payload(func() {
+			Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Attribute("cursor", String, "Cursor for the next page of feedback.")
+			Attribute("limit", Int, "The number of feedback rows to return per page.", func() {
+				Default(20)
+				Minimum(1)
+				Maximum(50)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListSkillFeedbackResult)
+
+		HTTP(func() {
+			GET("/rpc/skills.listFeedback")
+			Param("id")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listSkillFeedback")
+		Meta("openapi:extension:x-speakeasy-name-override", "listFeedback")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillFeedback"}`)
 	})
 
 	Method("approveSuggestion", func() {
@@ -576,6 +640,14 @@ var AddSkillVersionRequestBody = Type("AddSkillVersionRequestBody", func() {
 	Required("id", "content")
 })
 
+var RestoreSkillVersionRequestBody = Type("RestoreSkillVersionRequestBody", func() {
+	Meta("openapi:typename", "RestoreSkillVersionRequestBody")
+
+	Attribute("id", String, "The skill ID.", func() { Format(FormatUUID) })
+	Attribute("version_id", String, "The historical version to restore.", func() { Format(FormatUUID) })
+	Required("id", "version_id")
+})
+
 var ApproveSkillSuggestionRequestBody = Type("ApproveSkillSuggestionRequestBody", func() {
 	Meta("openapi:typename", "ApproveSkillSuggestionRequestBody")
 
@@ -704,7 +776,7 @@ var Skill = Type("Skill", func() {
 	Attribute("summary", String, "The optional registry summary.")
 	Attribute("source_kind", String, "How the skill entered the registry.")
 	Attribute("classification", String, "The skill classification.")
-	Attribute("latest_version_id", String, "The derived latest version ID, selected from immutable version creation order.", func() {
+	Attribute("latest_version_id", String, "The current version ID, selected by effective promotion time.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("version_count", Int64, "The number of immutable versions recorded for the skill.")
@@ -792,6 +864,48 @@ var SkillEditSuggestionChange = Type("SkillEditSuggestionChange", func() {
 	Attribute("created_at", String, "When the change was recorded.", func() { Format(FormatDateTime) })
 
 	Required("id", "suggestion_id", "proposed_diff", "rationale", "applies_cleanly", "feedback_count", "feedback_session_count", "created_at")
+})
+
+var SkillFeedbackSource = Type("SkillFeedbackSource", String, func() {
+	Description("Where skill feedback was recorded.")
+	Meta("openapi:typename", "SkillFeedbackSource")
+})
+
+var SkillFeedbackOutcome = Type("SkillFeedbackOutcome", String, func() {
+	Description("The reported skill feedback outcome.")
+	Enum("helped", "partially_helped", "did_not_help", "misleading", "harmful")
+	Meta("openapi:typename", "SkillFeedbackOutcome")
+})
+
+var SkillFeedback = Type("SkillFeedback", func() {
+	Description("A privacy-minimized feedback row for a skill.")
+	Attribute("id", String, "The feedback ID.", func() { Format(FormatUUID) })
+	Attribute("source", SkillFeedbackSource, "Where the feedback was recorded.")
+	Attribute("outcome", SkillFeedbackOutcome, "The reported outcome.")
+	Attribute("note", String, "An optional feedback note.")
+	Attribute("skill_version_id", String, "The attributed skill version, when known.", func() { Format(FormatUUID) })
+	Attribute("reviewed_at", String, "When automated suggestion analysis reviewed this feedback.", func() { Format(FormatDateTime) })
+	Attribute("created_at", String, "When the feedback was recorded.", func() { Format(FormatDateTime) })
+	Required("id", "source", "outcome", "created_at")
+})
+
+var SkillFeedbackCounts = Type("SkillFeedbackCounts", func() {
+	Description("All-time outcome counts for resolved feedback on a skill.")
+	Attribute("total", Int64)
+	Attribute("helped", Int64)
+	Attribute("partially_helped", Int64)
+	Attribute("did_not_help", Int64)
+	Attribute("misleading", Int64)
+	Attribute("harmful", Int64)
+	Required("total", "helped", "partially_helped", "did_not_help", "misleading", "harmful")
+})
+
+var ListSkillFeedbackResult = Type("ListSkillFeedbackResult", func() {
+	Description("All-time outcome counts and a newest-first page of feedback for a skill.")
+	Attribute("counts", SkillFeedbackCounts)
+	Attribute("feedback", ArrayOf(SkillFeedback))
+	Attribute("next_cursor", String, "Cursor for the next page; absent when exhausted.")
+	Required("counts", "feedback")
 })
 
 var ListSkillSuggestionsResult = Type("ListSkillSuggestionsResult", func() {
@@ -936,10 +1050,10 @@ var RecordSkillResult = Type("RecordSkillResult", func() {
 })
 
 var GetSkillResult = Type("GetSkillResult", func() {
-	Description("An active skill and its derived latest version.")
+	Description("An active skill and its current version.")
 
 	Attribute("skill", Skill, "The skill.")
-	Attribute("latest_version", SkillVersion, "The latest immutable version by creation order.")
+	Attribute("latest_version", SkillVersion, "The current immutable version by effective promotion time.")
 	Attribute("adoption", SkillAdoption, "Activation adoption metrics.")
 	Attribute("sighting_timeline", ArrayOf(SkillSightingTimelinePoint), "Daily activations in the adoption window.")
 	Attribute("drift", SkillDrift, "Active-machine version convergence.")

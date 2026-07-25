@@ -21,9 +21,11 @@ type Server struct {
 	Mounts                 []*MountPoint
 	Create                 http.Handler
 	AddVersion             http.Handler
+	RestoreVersion         http.Handler
 	Update                 http.Handler
 	List                   http.Handler
 	ListSuggestions        http.Handler
+	ListFeedback           http.Handler
 	ApproveSuggestion      http.Handler
 	DismissSuggestion      http.Handler
 	ApproveAllSuggestions  http.Handler
@@ -68,9 +70,11 @@ func New(
 		Mounts: []*MountPoint{
 			{"Create", "POST", "/rpc/skills.create"},
 			{"AddVersion", "POST", "/rpc/skills.addVersion"},
+			{"RestoreVersion", "POST", "/rpc/skills.restoreVersion"},
 			{"Update", "POST", "/rpc/skills.update"},
 			{"List", "GET", "/rpc/skills.list"},
 			{"ListSuggestions", "GET", "/rpc/skills.listSuggestions"},
+			{"ListFeedback", "GET", "/rpc/skills.listFeedback"},
 			{"ApproveSuggestion", "POST", "/rpc/skills.approveSuggestion"},
 			{"DismissSuggestion", "POST", "/rpc/skills.dismissSuggestion"},
 			{"ApproveAllSuggestions", "POST", "/rpc/skills.approveAllSuggestions"},
@@ -87,9 +91,11 @@ func New(
 		},
 		Create:                 NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
 		AddVersion:             NewAddVersionHandler(e.AddVersion, mux, decoder, encoder, errhandler, formatter),
+		RestoreVersion:         NewRestoreVersionHandler(e.RestoreVersion, mux, decoder, encoder, errhandler, formatter),
 		Update:                 NewUpdateHandler(e.Update, mux, decoder, encoder, errhandler, formatter),
 		List:                   NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
 		ListSuggestions:        NewListSuggestionsHandler(e.ListSuggestions, mux, decoder, encoder, errhandler, formatter),
+		ListFeedback:           NewListFeedbackHandler(e.ListFeedback, mux, decoder, encoder, errhandler, formatter),
 		ApproveSuggestion:      NewApproveSuggestionHandler(e.ApproveSuggestion, mux, decoder, encoder, errhandler, formatter),
 		DismissSuggestion:      NewDismissSuggestionHandler(e.DismissSuggestion, mux, decoder, encoder, errhandler, formatter),
 		ApproveAllSuggestions:  NewApproveAllSuggestionsHandler(e.ApproveAllSuggestions, mux, decoder, encoder, errhandler, formatter),
@@ -113,9 +119,11 @@ func (s *Server) Service() string { return "skills" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Create = m(s.Create)
 	s.AddVersion = m(s.AddVersion)
+	s.RestoreVersion = m(s.RestoreVersion)
 	s.Update = m(s.Update)
 	s.List = m(s.List)
 	s.ListSuggestions = m(s.ListSuggestions)
+	s.ListFeedback = m(s.ListFeedback)
 	s.ApproveSuggestion = m(s.ApproveSuggestion)
 	s.DismissSuggestion = m(s.DismissSuggestion)
 	s.ApproveAllSuggestions = m(s.ApproveAllSuggestions)
@@ -138,9 +146,11 @@ func (s *Server) MethodNames() []string { return skills.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateHandler(mux, h.Create)
 	MountAddVersionHandler(mux, h.AddVersion)
+	MountRestoreVersionHandler(mux, h.RestoreVersion)
 	MountUpdateHandler(mux, h.Update)
 	MountListHandler(mux, h.List)
 	MountListSuggestionsHandler(mux, h.ListSuggestions)
+	MountListFeedbackHandler(mux, h.ListFeedback)
 	MountApproveSuggestionHandler(mux, h.ApproveSuggestion)
 	MountDismissSuggestionHandler(mux, h.DismissSuggestion)
 	MountApproveAllSuggestionsHandler(mux, h.ApproveAllSuggestions)
@@ -244,6 +254,59 @@ func NewAddVersionHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "addVersion")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRestoreVersionHandler configures the mux to serve the "skills" service
+// "restoreVersion" endpoint.
+func MountRestoreVersionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/skills.restoreVersion", f)
+}
+
+// NewRestoreVersionHandler creates a HTTP handler which loads the HTTP request
+// and calls the "skills" service "restoreVersion" endpoint.
+func NewRestoreVersionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRestoreVersionRequest(mux, decoder)
+		encodeResponse = EncodeRestoreVersionResponse(encoder)
+		encodeError    = EncodeRestoreVersionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "restoreVersion")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -403,6 +466,59 @@ func NewListSuggestionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listSuggestions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListFeedbackHandler configures the mux to serve the "skills" service
+// "listFeedback" endpoint.
+func MountListFeedbackHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.listFeedback", f)
+}
+
+// NewListFeedbackHandler creates a HTTP handler which loads the HTTP request
+// and calls the "skills" service "listFeedback" endpoint.
+func NewListFeedbackHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListFeedbackRequest(mux, decoder)
+		encodeResponse = EncodeListFeedbackResponse(encoder)
+		encodeError    = EncodeListFeedbackError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listFeedback")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
 		payload, err := decodeRequest(r)
 		if err != nil {
