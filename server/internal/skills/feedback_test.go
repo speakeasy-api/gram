@@ -188,6 +188,13 @@ func TestListSkillFeedbackDeterministicAndBounded(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, recent[:2], recentPage)
+	recentNegative, err := ti.repo.ListRecentSkillFeedback(t.Context(), repo.ListRecentSkillFeedbackParams{
+		ProjectID: ti.projectID,
+		SkillName: "ordered-skill",
+		PageLimit: -1,
+	})
+	require.NoError(t, err)
+	require.Empty(t, recentNegative)
 
 	unreviewed, err := ti.repo.ListUnreviewedSkillFeedback(t.Context(), repo.ListUnreviewedSkillFeedbackParams{
 		ProjectID: ti.projectID,
@@ -206,6 +213,13 @@ func TestListSkillFeedbackDeterministicAndBounded(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, unreviewed[:2], unreviewedPage)
+	unreviewedNegative, err := ti.repo.ListUnreviewedSkillFeedback(t.Context(), repo.ListUnreviewedSkillFeedbackParams{
+		ProjectID: ti.projectID,
+		SkillName: "ordered-skill",
+		PageLimit: -1,
+	})
+	require.NoError(t, err)
+	require.Empty(t, unreviewedNegative)
 }
 
 func TestMarkSkillFeedbackReviewedSelectiveAndIdempotent(t *testing.T) {

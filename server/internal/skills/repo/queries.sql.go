@@ -2754,7 +2754,7 @@ FROM skill_feedback
 WHERE project_id = $1
   AND skill_name = $2
 ORDER BY created_at DESC, id DESC
-LIMIT $3
+LIMIT GREATEST($3::int, 0)
 `
 
 type ListRecentSkillFeedbackParams struct {
@@ -3268,7 +3268,7 @@ WHERE project_id = $1
   AND skill_name = $2
   AND reviewed_at IS NULL
 ORDER BY created_at, id
-LIMIT $3
+LIMIT GREATEST($3::int, 0)
 `
 
 type ListUnreviewedSkillFeedbackParams struct {

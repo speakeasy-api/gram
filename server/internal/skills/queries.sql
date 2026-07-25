@@ -36,7 +36,7 @@ FROM skill_feedback
 WHERE project_id = @project_id
   AND skill_name = @skill_name
 ORDER BY created_at DESC, id DESC
-LIMIT @page_limit;
+LIMIT GREATEST(@page_limit::int, 0);
 
 -- name: ListUnreviewedSkillFeedback :many
 SELECT *
@@ -45,7 +45,7 @@ WHERE project_id = @project_id
   AND skill_name = @skill_name
   AND reviewed_at IS NULL
 ORDER BY created_at, id
-LIMIT @page_limit;
+LIMIT GREATEST(@page_limit::int, 0);
 
 -- name: MarkSkillFeedbackReviewed :execrows
 UPDATE skill_feedback
