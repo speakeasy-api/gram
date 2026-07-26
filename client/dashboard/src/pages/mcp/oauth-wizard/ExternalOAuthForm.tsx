@@ -71,9 +71,6 @@ export function ExternalOAuthForm({
   );
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [feedback, setFeedback] = useState<DiscoveryFeedback | null>(null);
-  const [testedFingerprint, setTestedFingerprint] = useState<string | null>(
-    null,
-  );
 
   const externalRef = useRef(external);
   externalRef.current = external;
@@ -92,10 +89,6 @@ export function ExternalOAuthForm({
       ),
     [external.issuerUrl, external.metadataJson],
   );
-  const currentFingerprint = `${external.issuerUrl.trim()}\n${external.metadataJson}`;
-  const configurationVerified =
-    testedFingerprint !== null && testedFingerprint === currentFingerprint;
-
   const discoveryMutation = useMutation({
     mutationFn: async ({
       issuerUrl,
@@ -112,10 +105,6 @@ export function ExternalOAuthForm({
         null,
         2,
       );
-      const validation = validateExternalMetadataJson(metadataJson, issuerUrl);
-      if (!validation.ok) {
-        throw new Error(validation.reason);
-      }
       return { issuerUrl, metadataJson, purpose };
     },
     onSuccess: ({ issuerUrl, metadataJson, purpose }) => {
@@ -146,17 +135,13 @@ export function ExternalOAuthForm({
         return;
       }
 
-      setTestedFingerprint(
-        `${current.issuerUrl.trim()}\n${current.metadataJson}`,
-      );
       setFeedback({
         kind: "verified",
         message:
-          "Configuration verified. The issuer is reachable and advertises the required OAuth and dynamic registration endpoints.",
+          "Configuration verified. The issuer is reachable, and the configured OAuth and dynamic registration endpoints are valid.",
       });
     },
     onError: (error) => {
-      setTestedFingerprint(null);
       setFeedback({
         kind: "error",
         message:
@@ -191,7 +176,6 @@ export function ExternalOAuthForm({
   }, [external.metadataJson, metadataValidation.ok]);
 
   const clearVerification = () => {
-    setTestedFingerprint(null);
     setFeedback(null);
   };
 
@@ -419,7 +403,10 @@ export function ExternalOAuthForm({
           <Button
             onClick={() => send({ type: "SUBMIT" })}
             disabled={
-              submitting || !external.slug.trim() || !configurationVerified
+              submitting ||
+              !external.slug.trim() ||
+              !!issuerError ||
+              !metadataValidation.ok
             }
           >
             {submitting ? "Configuring..." : "Configure External OAuth"}

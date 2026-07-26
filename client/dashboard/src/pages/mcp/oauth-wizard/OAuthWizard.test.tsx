@@ -311,6 +311,44 @@ describe("OAuthWizard — rendering", () => {
     ).toContain('"registration_endpoint"');
   });
 
+  it("shows missing DCR metadata inline and allows an advanced override", async () => {
+    mocks.discoverIssuer.mockResolvedValueOnce({
+      issuer: "http://localhost:4000",
+      authorizationEndpoint: "http://localhost:4000/authorize",
+      tokenEndpoint: "http://localhost:4000/token",
+      clientIdMetadataDocumentSupported: false,
+      discoveryWarnings: [],
+      oidc: true,
+      passthrough: true,
+    });
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "http://localhost:4000" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("my-oauth-server"), {
+      target: { value: "local-oauth" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/registration_endpoint/)).toBeTruthy();
+    });
+
+    const metadataInput = screen.getByLabelText(
+      "OAuth Authorization Server Metadata",
+    ) as HTMLTextAreaElement;
+    const metadata = JSON.parse(metadataInput.value) as Record<string, unknown>;
+    metadata.registration_endpoint = "http://localhost:4000/register";
+    fireEvent.change(metadataInput, {
+      target: { value: JSON.stringify(metadata) },
+    });
+
+    const saveButton = screen.getByRole("button", {
+      name: "Configure External OAuth",
+    });
+    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("keeps auto-configure labeled as OAuth Proxy when user-session onboarding is enabled", () => {
     mocks.isFeatureEnabled.mockReturnValue(true);
     renderWizard({ toolset: oauthToolset });
