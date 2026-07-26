@@ -5,13 +5,16 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AddVariableSheet } from "./AddVariableSheet";
 
 afterEach(cleanup);
 
-function renderSheet(onAddVariables = vi.fn()) {
+type OnAddVariables = ComponentProps<typeof AddVariableSheet>["onAddVariables"];
+
+function renderSheet(onAddVariables: OnAddVariables = () => {}) {
   render(
     <TooltipProvider>
       <AddVariableSheet
