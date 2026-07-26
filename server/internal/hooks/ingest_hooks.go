@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	"github.com/speakeasy-api/gram/server/internal/hooks/policies"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -397,11 +398,9 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 // canonicalActor is the human the event is attributed to. Distinct from the
 // AuthContext identity: an org-wide plugin key authenticates many machines,
 // so its owner (the publishing admin) must not absorb every developer's
-// telemetry.
-type canonicalActor struct {
-	UserID string
-	Email  string
-}
+// telemetry. It aliases policies.Actor so the identity Ingest resolves is
+// the exact value the policy stages gate on — no conversion, no drift.
+type canonicalActor = policies.Actor
 
 // resolveCanonicalActor picks the attribution identity for one ingested event:
 // the payload's self-reported user email when present (matching the legacy
@@ -538,10 +537,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	if typed == nil {
 		return "", ""
 	}
-	ctx = withIngestPolicyRequest(ctx, &ingestPolicyRequest{
-		payload: payload,
-		authCtx: authCtx,
-		actor:   actor,
+	ctx = policies.WithRequest(ctx, &policies.Request{
+		Payload:          payload,
+		AuthCtx:          authCtx,
+		Actor:            actor,
+		ToolName:         canonicalToolName(payload),
+		ToolInput:        canonicalToolInput(payload),
+		IsMCPToolRequest: canonicalIsMCPToolRequest(payload),
+		AllowWarnAck:     authenticatedIngestOptions(ctx).AllowWarnAcknowledgement,
 	})
 	decision, err := s.policies.Decide(ctx, typed)
 	if err != nil {
@@ -564,32 +567,6 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 // shadow-MCP gate applies.
 func canonicalIsMCPToolRequest(payload *gen.IngestPayload) bool {
 	return canonicalMCPData(payload) != nil || toolref.IsMCPToolName(canonicalToolName(payload))
-}
-
-// appendCanonicalBlockURL mints the durable block row for a policy-denied
-// tool call and attaches its URL to the agent-facing reason, matching the
-// legacy per-provider handlers. Retried deliveries keep the deny but must not
-// mint a second row.
-func (s *Service) appendCanonicalBlockURL(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, auditReason, toolName, policyID, userReason string) string {
-	if s.isHookDuplicate(ctx) {
-		return userReason
-	}
-	bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
-		Provider:       strings.TrimSpace(payload.Source.Adapter),
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		Reason:         auditReason,
-		ToolName:       toolName,
-		UserID:         actor.UserID,
-		RiskPolicyID:   conv.StringToNullUUID(policyID),
-		RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ChatID:         chatIDForBlock(canonicalSessionID(payload)),
-		ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	if bURL == "" {
-		return userReason
-	}
-	return appendBlockURL(userReason, bURL)
 }
 
 func canonicalHookEvent(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) hookevents.Event {
@@ -650,50 +627,6 @@ func canonicalRiskEventType(payload *gen.IngestPayload) hookevents.EventType {
 	default:
 		return hookevents.EventType(strings.TrimSpace(payload.Event.Type))
 	}
-}
-
-func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, rawToolName string, toolInput any) (string, string) {
-	policy := s.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID)
-	if policy == nil {
-		return "", ""
-	}
-
-	toolName := toolref.MCPFunctionOf(rawToolName)
-	evidence := canonicalShadowMCPEvidence(payload, rawToolName)
-	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
-		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
-			OrganizationID:  authCtx.ActiveOrganizationID,
-			ProjectID:       authCtx.ProjectID.String(),
-			RequesterUserID: actor.UserID,
-			UserMessage:     policy.UserMessage,
-			AuditReason:     auditReason,
-			Evidence:        evidence,
-			ToolName:        toolName,
-			ToolInput:       toolInput,
-			RiskPolicyID:    policy.ID,
-		})
-		// Retried deliveries still get the deny decision, but must not mint
-		// another block row (and a second block URL) for the same call.
-		if !s.isHookDuplicate(ctx) {
-			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
-				Provider:       strings.TrimSpace(payload.Source.Adapter),
-				OrganizationID: authCtx.ActiveOrganizationID,
-				ProjectID:      *authCtx.ProjectID,
-				Reason:         auditReason,
-				ToolName:       toolName,
-				UserID:         actor.UserID,
-				RiskPolicyID:   conv.StringToNullUUID(policy.ID),
-				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				ChatID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			}); bURL != "" {
-				userReason = appendBlockURL(userReason, bURL)
-			}
-		}
-		return auditReason, userReason
-	}
-	return "", ""
 }
 
 func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) shadowmcp.AccessEvidence {

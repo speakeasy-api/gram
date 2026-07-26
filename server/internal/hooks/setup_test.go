@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/policies"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -187,6 +188,10 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	spendGate, err := spendrules.NewGate(logger, spendGateCache, spendCelEngine)
 	require.NoError(t, err)
+	// The enforcer is shared by the service (embedded) and the policy runner,
+	// mirroring the cmd wiring: swapping a field on ti.service (riskScanner,
+	// siteURL, ...) mutates the state the runner's stages read at call time.
+	enforcer := NewEnforcer(logger, conn, cacheAdapter, nil, policyBypass, spendGate, shadowMCPClient, siteURL, "test-jwt-secret")
 	svc := NewService(
 		logger,
 		conn,
@@ -194,22 +199,17 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		meterProvider,
 		nil,
 		sessionManager,
-		cacheAdapter,
 		nil,
 		nil,
 		authzEngine,
 		nil,
 		nil,
-		nil,
-		policyBypass,
-		spendGate,
-		shadowMCPClient,
 		chatWriter,
 		efficacySignals,
 		nil,
 		serverURL,
-		siteURL,
-		"test-jwt-secret",
+		enforcer,
+		policies.NewRunner(logger, enforcer),
 	)
 
 	return ctx, &testInstance{

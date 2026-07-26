@@ -23,17 +23,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
-	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -43,22 +39,24 @@ import (
 )
 
 type Service struct {
+	// Enforcer owns the enforcement dependencies and primitives (logger,
+	// cache, riskScanner, siteURL, block rows, shadow-MCP evaluation, ...).
+	// It is embedded so every existing read of a promoted field or method
+	// (s.riskScanner, s.scanToolRequestForEnforcement, ...) keeps working,
+	// and so a test swapping a field after construction
+	// (ti.service.riskScanner = ...) mutates the same state the policy
+	// runner's stages read at call time — the runner is built from this
+	// Enforcer in cmd (see policies.NewRunner).
+	*Enforcer
 	tracer             trace.Tracer
 	metrics            *metrics
-	logger             *slog.Logger
 	db                 *pgxpool.Pool
 	telemetryLogger    *telemetry.Logger
 	auth               authorizer
 	authz              *authz.Engine
-	cache              cache.Cache
 	temporalEnv        *tenv.Environment
-	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
-	riskScanner        risk.RiskScanner
-	policyBypass       *risk.PolicyBypassEvaluator
-	spendGate          *spendrules.Gate
-	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
 	// efficacySignaler is optional: when nil, hook paths record exactly as
 	// before and emit no wakes.
@@ -67,15 +65,12 @@ type Service struct {
 	// suggestion-analysis wake.
 	suggestionSignaler suggest.Signaler
 	serverURL          *url.URL
-	siteURL            *url.URL
-	jwtSecret          string
 	// policies is the ingest decision pipeline: the agenthooks event router
 	// the canonical Ingest path runs its gating policies on (see
-	// newPolicyRunner in agenthooks_policies.go for the registration block
-	// documenting the run order). Built once in NewService; the stages are
-	// Service method values, so swapping a dependency field (riskScanner,
-	// siteURL, ...) after construction — as tests do — is picked up on the
-	// next event.
+	// policies.NewRunner for the registration block documenting the run
+	// order). Constructed in cmd from the same Enforcer this Service embeds
+	// and passed into NewService, so the stages read the dependencies tests
+	// swap (riskScanner, siteURL, ...) at call time.
 	policies *agenthooks.Runner
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the
@@ -202,52 +197,36 @@ func NewService(
 	meterProvider metric.MeterProvider,
 	telemetryLogger *telemetry.Logger,
 	sessionsMgr *sessions.Manager,
-	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
-	riskScanner risk.RiskScanner,
-	policyBypass *risk.PolicyBypassEvaluator,
-	spendGate *spendrules.Gate,
-	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
 	efficacySignaler efficacy.Signaler,
 	suggestionSignaler suggest.Signaler,
 	serverURL *url.URL,
-	siteURL *url.URL,
-	jwtSecret string,
+	enforcer *Enforcer,
+	policyRunner *agenthooks.Runner,
 ) *Service {
-	s := &Service{
+	return &Service{
+		Enforcer:           enforcer,
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		metrics:            newMetrics(meterProvider, logger),
-		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
 		telemetryLogger:    telemetryLogger,
 		auth:               auth.New(logger, db, sessionsMgr, authz),
 		authz:              authz,
-		cache:              cacheAdapter,
 		temporalEnv:        temporalEnv,
-		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
-		riskScanner:        riskScanner,
-		policyBypass:       policyBypass,
-		spendGate:          spendGate,
-		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
 		efficacySignaler:   efficacySignaler,
 		suggestionSignaler: suggestionSignaler,
 		serverURL:          serverURL,
-		siteURL:            siteURL,
-		jwtSecret:          jwtSecret,
-		policies:           nil,
+		policies:           policyRunner,
 		nowFunc:            time.Now,
 	}
-	// Built after the literal: the policy stages are method values on s.
-	s.policies = s.newPolicyRunner()
-	return s
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -336,17 +315,17 @@ func (s *Service) withAuthContext(ctx context.Context, logger *slog.Logger) *slo
 // back to permissive behaviour. Flag-action policies are intentionally ignored
 // here — they surface as findings via the batch scanner instead of denying at
 // the hook layer.
-func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizationID, projectID, userID string) *risk.ShadowMCPPolicy {
-	if s.riskScanner == nil || projectID == "" {
+func (e *Enforcer) lookupShadowMCPBlockingPolicy(ctx context.Context, organizationID, projectID, userID string) *risk.ShadowMCPPolicy {
+	if e.riskScanner == nil || projectID == "" {
 		return nil
 	}
 	pid, err := uuid.Parse(projectID)
 	if err != nil {
 		return nil
 	}
-	policy, err := s.riskScanner.LookupShadowMCPBlockingPolicy(ctx, organizationID, pid, userID)
+	policy, err := e.riskScanner.LookupShadowMCPBlockingPolicy(ctx, organizationID, pid, userID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to look up shadow_mcp policy; defaulting to off",
+		e.logger.WarnContext(ctx, "failed to look up shadow_mcp policy; defaulting to off",
 			attr.SlogError(err),
 		)
 		return nil

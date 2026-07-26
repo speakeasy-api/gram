@@ -17,14 +17,14 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
-	service := &Service{
+	enforcer := &Enforcer{
 		logger:    testenv.NewLogger(t),
 		siteURL:   siteURL,
 		jwtSecret: "test-jwt-secret",
 		cache:     cache.NoopCache,
 	}
 
-	requestURL, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
+	requestURL, ok := enforcer.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
 		OrganizationID:  "org_test",
 		ProjectID:       "00000000-0000-0000-0000-000000000001",
 		RequesterUserID: "user_test",
@@ -59,14 +59,14 @@ func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
 
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
-	service := &Service{
+	enforcer := &Enforcer{
 		logger:    testenv.NewLogger(t),
 		siteURL:   siteURL,
 		jwtSecret: "test-jwt-secret",
 		cache:     cache.NoopCache,
 	}
 
-	_, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
+	_, ok := enforcer.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
 		OrganizationID:  "org_test",
 		ProjectID:       "00000000-0000-0000-0000-000000000001",
 		RequesterUserID: "user_test",
@@ -82,14 +82,14 @@ func TestShadowMCPApprovalRequestURLAllowsServerIdentityEvidence(t *testing.T) {
 
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
-	service := &Service{
+	enforcer := &Enforcer{
 		logger:    testenv.NewLogger(t),
 		siteURL:   siteURL,
 		jwtSecret: "test-jwt-secret",
 		cache:     cache.NoopCache,
 	}
 
-	requestURL, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
+	requestURL, ok := enforcer.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
 		OrganizationID:  "org_test",
 		ProjectID:       "00000000-0000-0000-0000-000000000001",
 		RequesterUserID: "user_test",

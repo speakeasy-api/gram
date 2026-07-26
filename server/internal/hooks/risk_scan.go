@@ -31,36 +31,36 @@ func markRiskScanned(ctx context.Context) {
 	}
 }
 
-func (s *Service) scanUserPromptForEnforcement(ctx context.Context, ev *hookevents.UserPromptSubmit) *risk.ScanResult {
+func (e *Enforcer) scanUserPromptForEnforcement(ctx context.Context, ev *hookevents.UserPromptSubmit) *risk.ScanResult {
 	if ev == nil {
 		return nil
 	}
-	return s.scanHookEventForEnforcement(ctx, ev.Event, ev.Prompt, message.User, "")
+	return e.scanHookEventForEnforcement(ctx, ev.Event, ev.Prompt, message.User, "")
 }
 
-func (s *Service) scanToolRequestForEnforcement(ctx context.Context, ev *hookevents.BeforeToolUse) *risk.ScanResult {
+func (e *Enforcer) scanToolRequestForEnforcement(ctx context.Context, ev *hookevents.BeforeToolUse) *risk.ScanResult {
 	if ev == nil {
 		return nil
 	}
-	return s.scanHookEventForEnforcement(ctx, ev.Event, marshalToJSON(ev.ToolInput), message.ToolRequest, ev.ToolName)
+	return e.scanHookEventForEnforcement(ctx, ev.Event, marshalToJSON(ev.ToolInput), message.ToolRequest, ev.ToolName)
 }
 
-func (s *Service) scanMCPRequestForEnforcement(ctx context.Context, ev *hookevents.BeforeMCPExecution) *risk.ScanResult {
+func (e *Enforcer) scanMCPRequestForEnforcement(ctx context.Context, ev *hookevents.BeforeMCPExecution) *risk.ScanResult {
 	if ev == nil {
 		return nil
 	}
-	return s.scanHookEventForEnforcement(ctx, ev.Event, marshalToJSON(ev.ToolInput), message.ToolRequest, ev.ToolName)
+	return e.scanHookEventForEnforcement(ctx, ev.Event, marshalToJSON(ev.ToolInput), message.ToolRequest, ev.ToolName)
 }
 
-func (s *Service) scanPermissionRequestForEnforcement(ctx context.Context, ev *hookevents.PermissionRequest) *risk.ScanResult {
+func (e *Enforcer) scanPermissionRequestForEnforcement(ctx context.Context, ev *hookevents.PermissionRequest) *risk.ScanResult {
 	if ev == nil {
 		return nil
 	}
-	return s.scanHookEventForEnforcement(ctx, ev.Event, marshalToJSON(ev.ToolInput), message.ToolRequest, ev.ToolName)
+	return e.scanHookEventForEnforcement(ctx, ev.Event, marshalToJSON(ev.ToolInput), message.ToolRequest, ev.ToolName)
 }
 
-func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents.Event, text string, messageType message.Type, toolName string) *risk.ScanResult {
-	if s.riskScanner == nil {
+func (e *Enforcer) scanHookEventForEnforcement(ctx context.Context, ev hookevents.Event, text string, messageType message.Type, toolName string) *risk.ScanResult {
+	if e.riskScanner == nil {
 		return nil
 	}
 
@@ -79,9 +79,9 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 	}
 
 	markRiskScanned(ctx)
-	result, err := s.riskScanner.ScanForEnforcement(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, text, messageType, toolName)
+	result, err := e.riskScanner.ScanForEnforcement(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, text, messageType, toolName)
 	if err != nil {
-		s.logger.WarnContext(ctx, "risk scan failed for hook event",
+		e.logger.WarnContext(ctx, "risk scan failed for hook event",
 			attr.SlogError(err),
 			attr.SlogEvent("risk_scan_error"),
 			attr.SlogHookSource(string(ev.Provider)),
@@ -114,11 +114,11 @@ const warnMatchMaxLen = 120
 // warnAcknowledged reports whether the user has a live acknowledgement for a
 // warn (challenge) match, so the retried call should be allowed. Only meaningful
 // when scanResult.Action == "warn".
-func (s *Service) warnAcknowledged(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, toolName string) bool {
-	if s.riskScanner == nil || scanResult == nil {
+func (e *Enforcer) warnAcknowledged(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, toolName string) bool {
+	if e.riskScanner == nil || scanResult == nil {
 		return false
 	}
-	return s.riskScanner.HasAcknowledgedChallenge(ctx, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.CallFingerprint)
+	return e.riskScanner.HasAcknowledgedChallenge(ctx, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.CallFingerprint)
 }
 
 // warnDenyReason records the challenge and returns two framings of the deny:
@@ -138,18 +138,18 @@ func (s *Service) warnAcknowledged(ctx context.Context, ev hookevents.Event, sca
 // ok=false means an ack link could not be produced (missing site URL / cache /
 // user id) — the caller MUST fall back to a plain block (fail-safe): a warn must
 // never silently allow.
-func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, toolName string) (agentReason, userReason string, ok bool) {
-	if s.siteURL == nil || s.cache == nil || ev.Context.User.ID == "" {
+func (e *Enforcer) warnDenyReason(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, toolName string) (agentReason, userReason string, ok bool) {
+	if e.siteURL == nil || e.cache == nil || ev.Context.User.ID == "" {
 		return "", "", false
 	}
 	// Record the challenge (log-safe fields only — never the matched value).
-	s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
+	e.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
 
 	var toolPtr *string
 	if toolName != "" {
 		toolPtr = &toolName
 	}
-	ackURL, _, err := risk.GeneratePolicyAckURL(ctx, s.cache, s.siteURL, risk.PolicyAckTokenInput{
+	ackURL, _, err := risk.GeneratePolicyAckURL(ctx, e.cache, e.siteURL, risk.PolicyAckTokenInput{
 		OrganizationID: ev.Context.OrganizationID,
 		ProjectID:      ev.Context.ProjectID.String(),
 		UserID:         ev.Context.User.ID,
@@ -165,7 +165,7 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 		RememberFor: 0,
 	}, 0)
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to generate risk policy ack link; falling back to block",
+		e.logger.WarnContext(ctx, "failed to generate risk policy ack link; falling back to block",
 			attr.SlogError(err))
 		return "", "", false
 	}

@@ -72,6 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	hookpolicies "github.com/speakeasy-api/gram/server/internal/hooks/policies"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -1150,6 +1151,20 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				completionsClient,
 			))
+			// The enforcer is shared by the hooks service (embedded) and the
+			// ingest policy runner: one copy of each enforcement dependency,
+			// read by both at call time.
+			hooksEnforcer := hooks.NewEnforcer(
+				logger,
+				db,
+				hooksCache,
+				riskScanner,
+				policyBypass,
+				spendGate,
+				shadowMCPClient,
+				siteURL,
+				c.String("jwt-signing-key"),
+			)
 			hooksService := hooks.NewService(
 				logger,
 				db,
@@ -1157,22 +1172,17 @@ func newStartCommand() *cli.Command {
 				meterProvider,
 				telemLogger,
 				sessionManager,
-				hooksCache,
 				chatClient,
 				temporalEnv,
 				authzEngine,
 				productFeatures,
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
-				riskScanner,
-				policyBypass,
-				spendGate,
-				shadowMCPClient,
 				chatWriter,
 				efficacySignaler,
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0},
 				serverURL,
-				siteURL,
-				c.String("jwt-signing-key"),
+				hooksEnforcer,
+				hookpolicies.NewRunner(logger, hooksEnforcer),
 			)
 			hooks.Attach(mux, hooksService)
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, productFeatures, auditLogger, c.String("environment"))

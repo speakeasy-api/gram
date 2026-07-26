@@ -17,17 +17,17 @@ import (
 // before any policy evaluation. Every failure mode resolves to "not blocked"
 // (fail-open): a nil gate, an unresolved org/user identity, and cache
 // infrastructure errors.
-func (s *Service) checkSpendGate(ctx context.Context, ev hookevents.Event) *spendrules.Block {
-	if s.spendGate == nil {
+func (e *Enforcer) checkSpendGate(ctx context.Context, ev hookevents.Event) *spendrules.Block {
+	if e.spendGate == nil {
 		return nil
 	}
 	if ev.Context.OrganizationID == "" || ev.Context.User.ID == "" {
 		return nil
 	}
 
-	block, err := s.spendGate.CheckBlocked(ctx, ev.Context.OrganizationID, ev.Context.User.ID)
+	block, err := e.spendGate.CheckBlocked(ctx, ev.Context.OrganizationID, ev.Context.User.ID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "spend gate check failed; failing open",
+		e.logger.WarnContext(ctx, "spend gate check failed; failing open",
 			attr.SlogError(err),
 			attr.SlogEvent("spend_gate_error"),
 			attr.SlogHookSource(string(ev.Provider)),

@@ -78,6 +78,7 @@ func TestAgenthooksTypedEvent_ToolRequested(t *testing.T) {
 				return payload
 			},
 			check: func(t *testing.T, typed any) {
+				t.Helper()
 				ev, ok := typed.(*agenthooks.ToolPreEvent)
 				require.True(t, ok, "expected *agenthooks.ToolPreEvent, got %T", typed)
 				require.Equal(t, agenthooks.KindToolPre, ev.Kind)
@@ -105,6 +106,7 @@ func TestAgenthooksTypedEvent_ToolRequested(t *testing.T) {
 				return payload
 			},
 			check: func(t *testing.T, typed any) {
+				t.Helper()
 				ev, ok := typed.(*agenthooks.ToolPreEvent)
 				require.True(t, ok, "expected *agenthooks.ToolPreEvent, got %T", typed)
 				require.True(t, ev.Tool.Synthesized)
@@ -131,6 +133,7 @@ func TestAgenthooksTypedEvent_ToolRequested(t *testing.T) {
 				return payload
 			},
 			check: func(t *testing.T, typed any) {
+				t.Helper()
 				ev, ok := typed.(*agenthooks.ToolPreEvent)
 				require.True(t, ok, "expected *agenthooks.ToolPreEvent, got %T", typed)
 				require.Equal(t, agenthooks.ToolMCP, ev.Tool.Canonical)
@@ -162,6 +165,7 @@ func TestAgenthooksTypedEvent_ToolRequested(t *testing.T) {
 				return payload
 			},
 			check: func(t *testing.T, typed any) {
+				t.Helper()
 				ev, ok := typed.(*agenthooks.ToolPreEvent)
 				require.True(t, ok, "expected *agenthooks.ToolPreEvent, got %T", typed)
 				require.Equal(t, agenthooks.ToolMCP, ev.Tool.Canonical)
@@ -199,6 +203,7 @@ func TestAgenthooksTypedEvent_ToolRequested(t *testing.T) {
 				return payload
 			},
 			check: func(t *testing.T, typed any) {
+				t.Helper()
 				ev, ok := typed.(*agenthooks.ToolPreEvent)
 				require.True(t, ok, "expected *agenthooks.ToolPreEvent, got %T", typed)
 				require.Equal(t, agenthooks.ToolMCP, ev.Tool.Canonical)
@@ -229,6 +234,7 @@ func TestAgenthooksTypedEvent_ToolRequested(t *testing.T) {
 				return payload
 			},
 			check: func(t *testing.T, typed any) {
+				t.Helper()
 				ev, ok := typed.(*agenthooks.PermissionEvent)
 				require.True(t, ok, "expected *agenthooks.PermissionEvent, got %T", typed)
 				require.Equal(t, agenthooks.KindPermission, ev.Kind)
@@ -256,6 +262,7 @@ func TestAgenthooksTypedEvent_ToolRequested(t *testing.T) {
 				return payload
 			},
 			check: func(t *testing.T, typed any) {
+				t.Helper()
 				_, ok := typed.(*agenthooks.ToolPreEvent)
 				require.True(t, ok, "expected *agenthooks.ToolPreEvent, got %T", typed)
 			},
@@ -279,6 +286,7 @@ func TestAgenthooksTypedEvent_ToolRequested(t *testing.T) {
 				return payload
 			},
 			check: func(t *testing.T, typed any) {
+				t.Helper()
 				ev, ok := typed.(*agenthooks.PermissionEvent)
 				require.True(t, ok, "expected *agenthooks.PermissionEvent, got %T", typed)
 				require.Equal(t, agenthooks.ToolMCP, ev.Tool.Canonical)
