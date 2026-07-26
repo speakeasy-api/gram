@@ -588,6 +588,11 @@ describe("oauthWizardMachine — external happy path", () => {
     const actor = makeActor(baseInput);
     actor.start();
     actor.send({ type: "SELECT_EXTERNAL" });
+    actor.send({
+      type: "FIELD_EXTERNAL",
+      key: "issuerUrl",
+      value: "https://example.com",
+    });
     actor.send({ type: "FIELD_EXTERNAL", key: "slug", value: "ext-slug" });
     actor.send({
       type: "FIELD_EXTERNAL",
@@ -607,6 +612,11 @@ describe("oauthWizardMachine — external happy path", () => {
     const actor = makeActor(baseInput);
     actor.start();
     actor.send({ type: "SELECT_EXTERNAL" });
+    actor.send({
+      type: "FIELD_EXTERNAL",
+      key: "issuerUrl",
+      value: "https://example.com",
+    });
     actor.send({ type: "FIELD_EXTERNAL", key: "slug", value: "ext-slug" });
     actor.send({
       type: "FIELD_EXTERNAL",

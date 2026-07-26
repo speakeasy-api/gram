@@ -211,11 +211,19 @@ export function ExternalOAuthForm({
   };
 
   const handleTest = () => {
-    if (issuerError || !metadataValidation.ok) {
+    if (issuerError) {
       setAdvancedOpen(true);
       setFeedback({
         kind: "error",
-        message: issuerError ?? metadataValidation.reason,
+        message: issuerError,
+      });
+      return;
+    }
+    if (!metadataValidation.ok) {
+      setAdvancedOpen(true);
+      setFeedback({
+        kind: "error",
+        message: metadataValidation.reason,
       });
       return;
     }
