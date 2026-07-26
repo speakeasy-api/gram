@@ -19,6 +19,9 @@ const testState = vi.hoisted(() => ({
   invalidateSkill: vi.fn().mockResolvedValue(undefined),
   invalidateDistributions: vi.fn().mockResolvedValue(undefined),
   invalidateVersions: vi.fn().mockResolvedValue(undefined),
+  invalidateSuggestions: vi.fn().mockResolvedValue(undefined),
+  invalidateFeedback: vi.fn().mockResolvedValue(undefined),
+  invalidateEfficacy: vi.fn().mockResolvedValue(undefined),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   fetchNextPage: vi.fn(),
@@ -74,6 +77,15 @@ vi.mock("./SkillInsightsSection", () => ({
   SKILL_INSIGHTS_SECTION_ID: "insights",
   SkillInsightsSection: () => <div>Skill insights</div>,
 }));
+vi.mock("./SuggestedSkillEditSection", () => ({
+  SuggestedSkillEditSection: () => <div>Suggested edit review</div>,
+}));
+vi.mock("./SkillFeedbackSection", () => ({
+  SkillFeedbackSection: () => <div>Agent feedback log</div>,
+}));
+vi.mock("./RestoreSkillVersionDialog", () => ({
+  RestoreSkillVersionDialog: () => null,
+}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => testState.queryClient,
 }));
@@ -126,6 +138,15 @@ vi.mock("@gram/client/react-query/skillVersions.js", () => ({
     fetchNextPage: testState.fetchNextPage,
   }),
   invalidateAllSkillVersions: testState.invalidateVersions,
+}));
+vi.mock("@gram/client/react-query/skillSuggestions.js", () => ({
+  invalidateAllSkillSuggestions: testState.invalidateSuggestions,
+}));
+vi.mock("@gram/client/react-query/skillFeedback.js", () => ({
+  invalidateAllSkillFeedback: testState.invalidateFeedback,
+}));
+vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
+  invalidateAllSkillEfficacyInsights: testState.invalidateEfficacy,
 }));
 vi.mock("@gram/client/react-query/skillDistributions.js", () => ({
   invalidateAllSkillDistributions: testState.invalidateDistributions,
@@ -218,6 +239,9 @@ beforeEach(() => {
   testState.invalidateSkill.mockClear();
   testState.invalidateDistributions.mockClear();
   testState.invalidateVersions.mockClear();
+  testState.invalidateSuggestions.mockClear();
+  testState.invalidateFeedback.mockClear();
+  testState.invalidateEfficacy.mockClear();
   testState.toastSuccess.mockReset();
   testState.toastError.mockReset();
   testState.fetchNextPage.mockReset();
@@ -294,6 +318,39 @@ describe("SkillDetail", () => {
     expect(screen.getByText("Unable to load more versions.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.fetchNextPage).toHaveBeenCalledOnce();
+  });
+
+  it("offers restore only for valid non-current versions", () => {
+    testState.versions = [
+      testState.version,
+      {
+        ...testState.version,
+        id: "version_old",
+        canonicalSha256: "oldvalid12345678",
+      },
+      {
+        ...testState.version,
+        id: "version_invalid",
+        canonicalSha256: "invalid123456789",
+        specValid: false,
+      },
+    ];
+    render(<SkillDetail />);
+
+    expect(
+      screen.getAllByRole("button", { name: "Restore this version" }),
+    ).toHaveLength(1);
+    expect(
+      screen.getByRole("group", {
+        name: "Version 12345678, current version",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("group", { name: "Version oldvalid restore target" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("group", { name: "Version invalid1, invalid version" }),
+    ).toBeTruthy();
   });
 
   it("archives with the exact wrapper, navigates back, and invalidates all skill caches", async () => {
