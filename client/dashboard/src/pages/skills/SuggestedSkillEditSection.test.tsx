@@ -408,6 +408,10 @@ describe("SuggestedSkillEditSection", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Dismiss" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.refetch).toHaveBeenCalledOnce();
   });

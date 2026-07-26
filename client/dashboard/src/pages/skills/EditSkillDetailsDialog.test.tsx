@@ -129,6 +129,15 @@ describe("EditSkillDetailsDialog", () => {
     expect(testState.invalidateVersions).toHaveBeenCalledWith(
       testState.queryClient,
     );
+    expect(testState.invalidateSuggestions).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(testState.invalidateFeedback).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
+    expect(testState.invalidateEfficacy).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
