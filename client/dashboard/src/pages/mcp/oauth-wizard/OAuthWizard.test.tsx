@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
       .fn()
       .mockResolvedValue({ slug: "env-new", name: "Toolset OAuth" }),
     deleteEnvironment: vi.fn().mockResolvedValue(undefined),
+    discoverIssuer: vi.fn(),
     capture: vi.fn(),
     invalidateAllToolset: vi.fn(),
     invalidateAllGetMcpMetadata: vi.fn(),
@@ -85,7 +86,11 @@ vi.mock("@/contexts/Fetcher", () => ({
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
-  useSdkClient: () => ({}),
+  useSdkClient: () => ({
+    remoteSessionIssuers: {
+      discover: mocks.discoverIssuer,
+    },
+  }),
 }));
 
 vi.mock("@/contexts/Telemetry", () => ({
@@ -195,6 +200,16 @@ beforeEach(() => {
   for (const fn of Object.values(mocks)) {
     if (typeof fn === "function" && "mockClear" in fn) fn.mockClear();
   }
+  mocks.discoverIssuer.mockResolvedValue({
+    issuer: "https://auth.example.com",
+    authorizationEndpoint: "https://auth.example.com/oauth/authorize",
+    tokenEndpoint: "https://auth.example.com/oauth/token",
+    registrationEndpoint: "https://auth.example.com/oauth/register",
+    clientIdMetadataDocumentSupported: false,
+    discoveryWarnings: [],
+    oidc: false,
+    passthrough: true,
+  });
   mocks.isFeatureEnabled.mockReturnValue(false);
 });
 
@@ -219,8 +234,73 @@ describe("OAuthWizard — rendering", () => {
     renderWizard({ initialPath: "external" });
 
     expect(screen.getAllByText("Configure External OAuth")).toHaveLength(2);
+    expect(
+      screen.getByPlaceholderText("https://login.example.com"),
+    ).toBeTruthy();
     expect(screen.getByPlaceholderText("my-oauth-server")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /OAuth Proxy/ })).toBeNull();
+  });
+
+  it("cancels direct entry instead of navigating to the OAuth chooser", () => {
+    const onClose = vi.fn();
+    renderWizard({ initialPath: "external", onClose });
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /OAuth Proxy/ })).toBeNull();
+  });
+
+  it("keeps Back navigation for the chooser entry", () => {
+    renderWizard();
+
+    fireEvent.click(screen.getByRole("button", { name: /External OAuth/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(screen.getByRole("button", { name: /OAuth Proxy/ })).toBeTruthy();
+  });
+
+  it("auto-fetches metadata and verifies it before enabling save", async () => {
+    renderWizard({ initialPath: "external" });
+
+    fireEvent.change(screen.getByPlaceholderText("https://login.example.com"), {
+      target: { value: "https://auth.example.com" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("my-oauth-server"), {
+      target: { value: "example-oauth" },
+    });
+
+    await waitFor(() => {
+      expect(mocks.discoverIssuer).toHaveBeenCalledWith({
+        discoverRemoteSessionIssuerRequestBody: {
+          issuer: "https://auth.example.com",
+        },
+      });
+    });
+
+    const testButton = screen.getByRole("button", {
+      name: "Test Configuration",
+    });
+    expect((testButton as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(testButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Configuration verified/)).toBeTruthy();
+    });
+
+    const saveButton = screen.getByRole("button", {
+      name: "Configure External OAuth",
+    });
+    expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced metadata" }));
+    expect(
+      (
+        screen.getByLabelText(
+          "OAuth Authorization Server Metadata",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toContain('"registration_endpoint"');
   });
 
   it("keeps auto-configure labeled as OAuth Proxy when user-session onboarding is enabled", () => {

@@ -1,65 +1,24 @@
-import { z } from "zod";
-
 import { type Context } from "./machine-types";
+import {
+  validateExternalMetadataJson,
+  validateIssuerUrl,
+} from "./externalOAuthMetadata";
 
 export type GuardResult = { ok: true } | { ok: false; reason: string };
-
-const ExternalMetadataSchema = z
-  .object({
-    authorization_endpoint: z.url(),
-    token_endpoint: z.url(),
-    registration_endpoint: z.url(),
-  })
-  .loose();
-
-const ExternalMetadataJsonSchema = z
-  .string()
-  .transform((s, ctx) => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(s);
-    } catch {
-      ctx.addIssue({ code: "custom", message: "Invalid JSON format" });
-      return z.NEVER;
-    }
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      Array.isArray(parsed)
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Metadata must be a JSON object",
-      });
-      return z.NEVER;
-    }
-    return parsed;
-  })
-  .pipe(ExternalMetadataSchema);
-
-function formatMetadataError(err: z.ZodError): string {
-  // Top-level errors from the JSON-parse transform have an empty path.
-  const topLevel = err.issues.find((i) => i.path.length === 0);
-  if (topLevel) return topLevel.message;
-  // Field-level errors: list the offending keys (missing or malformed URL).
-  const fields = err.issues
-    .map((i) => i.path[i.path.length - 1])
-    .filter((p): p is string => typeof p === "string");
-  if (fields.length > 0) {
-    return `Invalid or missing endpoints: ${fields.join(", ")}`;
-  }
-  return "Invalid metadata";
-}
 
 export function checkExternal(ctx: Context): GuardResult {
   if (!ctx.external.slug.trim()) {
     return { ok: false, reason: "Please provide a slug for the OAuth server" };
   }
-  const result = ExternalMetadataJsonSchema.safeParse(
+  const issuerError = validateIssuerUrl(ctx.external.issuerUrl);
+  if (issuerError) return { ok: false, reason: issuerError };
+
+  const result = validateExternalMetadataJson(
     ctx.external.metadataJson,
+    ctx.external.issuerUrl,
   );
-  if (result.success) return { ok: true };
-  return { ok: false, reason: formatMetadataError(result.error) };
+  if (result.ok) return { ok: true };
+  return result;
 }
 
 export function checkProxyMeta(ctx: Context): GuardResult {

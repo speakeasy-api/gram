@@ -34,6 +34,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const VALID_PROXY_METADATA = {
+  issuer: "https://example.com",
   authorization_endpoint: "https://example.com/auth",
   token_endpoint: "https://example.com/token",
   registration_endpoint: "https://example.com/register",
@@ -206,6 +207,7 @@ function withExternal(over: Partial<Context["external"]> = {}): Context {
   return {
     discovered: null,
     external: {
+      issuerUrl: "https://example.com",
       slug: "ok",
       metadataJson: VALID_EXTERNAL_METADATA_JSON,
       jsonError: null,

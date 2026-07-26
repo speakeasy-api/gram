@@ -22,6 +22,7 @@ export type Context = {
   discovered: DiscoveredOAuth | null;
   initialPath?: "external";
   external: {
+    issuerUrl: string;
     slug: string;
     metadataJson: string;
     jsonError: string | null;
