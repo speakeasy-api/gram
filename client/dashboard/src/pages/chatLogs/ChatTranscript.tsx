@@ -70,6 +70,7 @@ import {
   RevealSecretButton,
   RiskBadge,
 } from "./chatRisk";
+import { formatToolName } from "@/components/observe/toolNameDisplay";
 import {
   distinctRiskCount,
   resultsAreSensitive,
@@ -708,8 +709,12 @@ function ToolRowView({
   bare?: boolean;
 }) {
   const openExclusion = useContext(CreateExclusionContext);
-  const name =
-    row.toolCall?.function?.name || row.toolCall?.name || "Tool result";
+  // Strip the `mcp__<server>__` namespace so the row shows the leaf tool name,
+  // matching the tool-logs table (formatToolName). Search counting in
+  // rowSearchFields formats identically to keep the navigator aligned.
+  const name = formatToolName(
+    row.toolCall?.function?.name || row.toolCall?.name || "Tool result",
+  );
   const request = argsToString(row.toolCall?.function?.arguments);
   const result = row.resultMessage
     ? messageText(row.resultMessage.content)

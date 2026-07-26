@@ -4,6 +4,7 @@ import {
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
 import { useToolApproval } from "@/elements/hooks/useToolApproval";
+import { formatToolName } from "@/elements/lib/humanize";
 import {
   ToolUI,
   type ToolStatus,
@@ -95,7 +96,7 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
       )}
     >
       <ToolUI
-        name={toolName}
+        name={formatToolName(toolName)}
         status={getToolStatus()}
         request={args as Record<string, unknown>}
         result={getResult()}

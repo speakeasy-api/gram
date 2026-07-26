@@ -1,3 +1,15 @@
+// Some agents (Cowork / claude.ai) report tool calls with the fully namespaced
+// MCP name, e.g. `mcp__<server>__send_message`. Strip through the last `__` so
+// only the leaf tool segment shows; names without a separator are unchanged.
+// Mirrors `@/components/observe/toolNameDisplay` — elements can't import app
+// code across the publish boundary.
+export function formatToolName(toolName: string): string {
+  const separator = "__";
+  const index = toolName.lastIndexOf(separator);
+  if (index === -1) return toolName;
+  return toolName.slice(index + separator.length) || toolName;
+}
+
 // humanize tool name:
 // - split camel case into words
 // - capitalize first letter of each word

@@ -5,6 +5,7 @@ import {
   type ToolCall,
   type TraceEntryType,
 } from "./traceEntries";
+import { formatToolName } from "@/components/observe/toolNameDisplay";
 
 type MessageEntryType = Extract<
   TraceEntryType,
@@ -267,8 +268,11 @@ export function rowSearchFields(
   }
 
   const fields: RowSearchField[] = [];
-  const name =
-    row.toolCall?.function?.name || row.toolCall?.name || "Tool result";
+  // Format the name the same way the renderer does (ToolRowView) so the
+  // occurrence navigator stays in sync — see the invariant note above.
+  const name = formatToolName(
+    row.toolCall?.function?.name || row.toolCall?.name || "Tool result",
+  );
   const nameCount = findQueryRanges(name, q).length;
   if (nameCount > 0) fields.push({ key: "name", count: nameCount });
 
