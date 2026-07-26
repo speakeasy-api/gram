@@ -35,6 +35,51 @@ func upsertTestKey(t *testing.T, ctx context.Context, ti *testInstance, slot str
 	require.NoError(t, err)
 }
 
+func TestResolveKey_ReturnsAnthropicProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	enableCustomModelKeys(t, ctx, ti.conn)
+	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
+
+	_, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, func(p *gen.UpsertKeyPayload) {
+		p.Provider = modelkeys.ProviderAnthropic
+		p.APIKey = "sk-ant-project-default"
+	}))
+	require.NoError(t, err)
+
+	resolved, err := resolver.ResolveKeyForModel(ctx, orgID, projectID, billing.ModelUsageSourceAssistants, openrouter.KeyTypeChat, openrouter.DefaultChatModel)
+	require.NoError(t, err)
+	require.Equal(t, "sk-ant-project-default", resolved.Key)
+	require.Equal(t, openrouter.KeyProviderAnthropic, resolved.Provider)
+	require.True(t, resolved.Customer)
+}
+
+func TestResolveKeyForModel_IncompatibleOverrideUsesCompatibleDefault(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	enableCustomModelKeys(t, ctx, ti.conn)
+	resolver, orgID, projectID := newResolverUnderTest(t, ctx, ti)
+
+	upsertTestKey(t, ctx, ti, modelkeys.SlotDefault, "sk-or-project-default")
+	_, err := ti.service.UpsertKey(ctx, newUpsertPayload(string(billing.ModelUsageSourceAssistants), func(p *gen.UpsertKeyPayload) {
+		p.Provider = modelkeys.ProviderAnthropic
+		p.APIKey = "sk-ant-assistants"
+	}))
+	require.NoError(t, err)
+
+	resolved, err := resolver.ResolveKeyForModel(ctx, orgID, projectID, billing.ModelUsageSourceAssistants, openrouter.KeyTypeChat, "openai/gpt-5.4")
+	require.NoError(t, err)
+	require.Equal(t, "sk-or-project-default", resolved.Key)
+	require.Equal(t, openrouter.KeyProviderOpenRouter, resolved.Provider)
+
+	resolved, err = resolver.ResolveKeyForModel(ctx, orgID, projectID, billing.ModelUsageSourceAssistants, openrouter.KeyTypeChat, openrouter.DefaultChatModel)
+	require.NoError(t, err)
+	require.Equal(t, "sk-ant-assistants", resolved.Key)
+	require.Equal(t, openrouter.KeyProviderAnthropic, resolved.Provider)
+}
+
 func TestResolveKey_NoCustomerKeysFallsBackToPlatform(t *testing.T) {
 	t.Parallel()
 

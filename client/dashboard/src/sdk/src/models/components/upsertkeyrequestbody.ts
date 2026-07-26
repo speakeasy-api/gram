@@ -15,7 +15,7 @@ export type UpsertKeyRequestBody = {
    */
   enabled?: boolean | undefined;
   /**
-   * The model provider the key authenticates with. Supported values include openrouter.
+   * The model provider the key authenticates with. Supported values are openrouter and anthropic.
    */
   provider: string;
   /**

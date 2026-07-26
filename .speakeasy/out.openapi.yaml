@@ -55849,7 +55849,7 @@ components:
           format: uuid
         provider:
           type: string
-          description: The model provider the key authenticates with. Supported values include openrouter.
+          description: The model provider the key authenticates with. Supported values are openrouter and anthropic.
         slot:
           type: string
           description: The responsibility slot the key applies to. The 'default' slot covers every slot without a dedicated override.
@@ -66171,7 +66171,7 @@ components:
           default: true
         provider:
           type: string
-          description: The model provider the key authenticates with. Supported values include openrouter.
+          description: The model provider the key authenticates with. Supported values are openrouter and anthropic.
         slot:
           type: string
           description: The responsibility slot the key applies to. Use 'default' to cover every slot without a dedicated override.

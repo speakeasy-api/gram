@@ -17,8 +17,8 @@ type ModelProviderKey struct {
 	// The responsibility slot the key applies to. The 'default' slot covers every
 	// slot without a dedicated override.
 	Slot string
-	// The model provider the key authenticates with. Supported values include
-	// openrouter.
+	// The model provider the key authenticates with. Supported values are
+	// openrouter and anthropic.
 	Provider string
 	// Whether the key participates in key resolution.
 	Enabled bool

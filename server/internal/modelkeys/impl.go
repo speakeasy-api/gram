@@ -36,16 +36,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type AnthropicKeyValidator interface {
+	ValidateAPIKey(ctx context.Context, apiKey string) error
+}
+
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	auth        *auth.Auth
-	authz       *authz.Engine
-	enc         *encryption.Client
-	provisioner openrouter.Provisioner
-	features    *productfeatures.Client
-	audit       *audit.Logger
+	tracer             trace.Tracer
+	logger             *slog.Logger
+	db                 *pgxpool.Pool
+	auth               *auth.Auth
+	authz              *authz.Engine
+	enc                *encryption.Client
+	provisioner        openrouter.Provisioner
+	anthropicValidator AnthropicKeyValidator
+	features           *productfeatures.Client
+	audit              *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -59,21 +64,23 @@ func NewService(
 	authzEngine *authz.Engine,
 	enc *encryption.Client,
 	provisioner openrouter.Provisioner,
+	anthropicValidator AnthropicKeyValidator,
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("modelkeys"))
 
 	return &Service{
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/modelkeys"),
-		logger:      logger,
-		db:          db,
-		auth:        auth.New(logger, db, sessions, authzEngine),
-		authz:       authzEngine,
-		enc:         enc,
-		provisioner: provisioner,
-		features:    features,
-		audit:       auditLogger,
+		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/modelkeys"),
+		logger:             logger,
+		db:                 db,
+		auth:               auth.New(logger, db, sessions, authzEngine),
+		authz:              authzEngine,
+		enc:                enc,
+		provisioner:        provisioner,
+		anthropicValidator: anthropicValidator,
+		features:           features,
+		audit:              auditLogger,
 	}
 }
 
@@ -144,7 +151,7 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 	}
 
 	provider := strings.ToLower(strings.TrimSpace(payload.Provider))
-	if provider != ProviderOpenRouter {
+	if provider != ProviderOpenRouter && provider != ProviderAnthropic {
 		return nil, oops.E(oops.CodeInvalid, nil, "unsupported model provider: %s", provider)
 	}
 
@@ -153,8 +160,15 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 		return nil, oops.E(oops.CodeInvalid, nil, "api_key is required")
 	}
 
-	if _, _, err := s.provisioner.GetKeyUsage(ctx, apiKey); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "the model provider rejected the API key").LogError(ctx, logger)
+	var validationErr error
+	switch provider {
+	case ProviderOpenRouter:
+		_, _, validationErr = s.provisioner.GetKeyUsage(ctx, apiKey)
+	case ProviderAnthropic:
+		validationErr = s.anthropicValidator.ValidateAPIKey(ctx, apiKey)
+	}
+	if validationErr != nil {
+		return nil, oops.E(oops.CodeBadRequest, validationErr, "the model provider rejected the API key").LogError(ctx, logger)
 	}
 
 	encrypted, err := s.enc.Encrypt([]byte(apiKey))

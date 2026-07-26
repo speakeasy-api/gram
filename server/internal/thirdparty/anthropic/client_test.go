@@ -8,11 +8,43 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+func TestValidateAPIKey(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/models", r.URL.Path)
+		assert.Equal(t, "anthropic-key", r.Header.Get("x-api-key"))
+		assert.Equal(t, apiVersion, r.Header.Get("anthropic-version"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	client := New(testGuardianPolicy(t), WithBaseURL(server.URL))
+	require.NoError(t, client.ValidateAPIKey(t.Context(), "anthropic-key"))
+}
+
+func TestValidateAPIKeyRejectsUnauthorizedKey(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(server.Close)
+
+	client := New(testGuardianPolicy(t), WithBaseURL(server.URL))
+	err := client.ValidateAPIKey(t.Context(), "invalid-key")
+
+	var httpErr *HTTPError
+	require.ErrorAs(t, err, &httpErr)
+	require.Equal(t, http.StatusUnauthorized, httpErr.StatusCode)
+}
 
 func TestListActivitiesSendsAuthAndFilters(t *testing.T) {
 	t.Parallel()

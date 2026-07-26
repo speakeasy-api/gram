@@ -1,6 +1,13 @@
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Heading } from "@/components/ui/heading";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -31,9 +38,10 @@ import { type ComponentProps, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   keySourceForSlot,
-  MODEL_KEY_PROVIDER,
+  MODEL_KEY_PROVIDERS,
   MODEL_KEY_SLOTS,
   type KeySource,
+  type ModelKeyProvider,
   type ModelKeySlot,
 } from "./model-key-slots";
 
@@ -64,6 +72,9 @@ function ModelProviderKeysTable({
     { throwOnError: false },
   );
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
+  const [draftProviders, setDraftProviders] = useState<
+    Record<string, ModelKeyProvider>
+  >({});
 
   const keysBySlot = useMemo(
     () => new Map((data?.keys ?? []).map((key) => [key.slot, key] as const)),
@@ -118,13 +129,15 @@ function ModelProviderKeysTable({
   const handleSave = (slot: ModelKeySlot, key?: ModelProviderKey) => {
     const apiKey = draftValues[slot.slot]?.trim();
     if (!apiKey || isSaving) return;
+    const provider =
+      draftProviders[slot.slot] ?? providerForSlot(slot.slot, keysBySlot);
 
     upsertKey(
       {
         request: {
           upsertKeyRequestBody: {
             slot: slot.slot,
-            provider: MODEL_KEY_PROVIDER,
+            provider,
             apiKey,
             enabled: key?.enabled ?? true,
           },
@@ -140,6 +153,16 @@ function ModelProviderKeysTable({
 
   const handleValueChange = (slot: ModelKeySlot, value: string) => {
     setDraftValues((values) => ({ ...values, [slot.slot]: value }));
+  };
+
+  const handleProviderChange = (
+    slot: ModelKeySlot,
+    provider: ModelKeyProvider,
+  ) => {
+    setDraftProviders((providers) => ({
+      ...providers,
+      [slot.slot]: provider,
+    }));
   };
 
   const handleSetEnabled = (key: ModelProviderKey) => {
@@ -179,19 +202,55 @@ function ModelProviderKeysTable({
       ),
     },
     {
+      key: "provider",
+      header: "Provider",
+      width: "150px",
+      render: (slot) => {
+        const provider =
+          draftProviders[slot.slot] ?? providerForSlot(slot.slot, keysBySlot);
+        return (
+          <Select
+            value={provider}
+            onValueChange={(value) =>
+              handleProviderChange(slot, value as ModelKeyProvider)
+            }
+            disabled={isMutating || !customModelKeysEnabled}
+          >
+            <SelectTrigger
+              className="h-9 w-full"
+              aria-label={`${slot.name} key provider`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MODEL_KEY_PROVIDERS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      },
+    },
+    {
       key: "value",
       header: "Value",
       width: "260px",
       render: (slot) => {
         const key = keysBySlot.get(slot.slot);
         const draftValue = draftValues[slot.slot] ?? "";
+        const provider =
+          draftProviders[slot.slot] ?? providerForSlot(slot.slot, keysBySlot);
         const isDirty = draftValue.length > 0;
         return (
           <div className="relative">
             <Input
               type="password"
               value={draftValue}
-              placeholder={key ? "••••••••••••" : "Enter key"}
+              placeholder={
+                key ? "••••••••••••" : keyPlaceholderForProvider(provider)
+              }
               className="h-9 py-0 pr-10"
               onChange={(event) => handleValueChange(slot, event.target.value)}
               onKeyDown={(event) => {
@@ -331,15 +390,39 @@ function ModelProviderKeysTable({
           <ReleaseStageBadge stage="preview" />
         </Stack>
         <Type muted small>
-          Bring your own OpenRouter API key for model completions. Set a project
-          default for all surfaces, or override individual surfaces. Keys are
-          write-only and never displayed after saving.
+          Bring your own OpenRouter or Anthropic API key for model completions.
+          Set a project default for all surfaces, or override individual
+          surfaces. Keys are write-only and never displayed after saving.
         </Type>
       </div>
 
       {keyList}
     </Stack>
   );
+}
+
+function providerForKey(key?: ModelProviderKey): ModelKeyProvider {
+  if (key?.provider === "anthropic") return "anthropic";
+  return "openrouter";
+}
+
+function providerForSlot(
+  slot: string,
+  keysBySlot: Map<string, ModelProviderKey>,
+): ModelKeyProvider {
+  const ownKey = keysBySlot.get(slot);
+  if (ownKey) return providerForKey(ownKey);
+  if (slot !== "default") return providerForKey(keysBySlot.get("default"));
+  return "openrouter";
+}
+
+function keyPlaceholderForProvider(provider: ModelKeyProvider): string {
+  switch (provider) {
+    case "anthropic":
+      return "sk-ant-…";
+    case "openrouter":
+      return "sk-or-…";
+  }
 }
 
 const KEY_SOURCE_BADGE: Record<

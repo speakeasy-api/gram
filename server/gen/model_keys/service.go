@@ -94,8 +94,8 @@ type UpsertKeyPayload struct {
 	// The responsibility slot the key applies to. Use 'default' to cover every
 	// slot without a dedicated override.
 	Slot string
-	// The model provider the key authenticates with. Supported values include
-	// openrouter.
+	// The model provider the key authenticates with. Supported values are
+	// openrouter and anthropic.
 	Provider string
 	// The provider API key. Stored encrypted at rest; never returned on reads.
 	APIKey string

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const (
@@ -64,6 +65,36 @@ func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
 		opt(c)
 	}
 	return c
+}
+
+// ValidateAPIKey verifies that a standard Anthropic API key can access the
+// Models API. The key is supplied per call because model-provider keys are
+// project-scoped and must never be retained on this shared client.
+func (c *Client) ValidateAPIKey(ctx context.Context, apiKey string) error {
+	endpoint, err := c.endpoint("/v1/models")
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return fmt.Errorf("create anthropic API key validation request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("anthropic-version", apiVersion)
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("validate anthropic API key: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return res.Body.Close() })
+
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		return &HTTPError{StatusCode: res.StatusCode, Status: res.Status}
+	}
+
+	return nil
 }
 
 // ListActivitiesParams filters and paginates the activities feed. The feed

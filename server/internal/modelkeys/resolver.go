@@ -19,9 +19,8 @@ import (
 )
 
 const (
-	// ProviderOpenRouter is the only supported key provider: BYOK egress stays
-	// on OpenRouter (passthrough), so customer keys are OpenRouter keys.
-	ProviderOpenRouter = "openrouter"
+	ProviderOpenRouter = string(openrouter.KeyProviderOpenRouter)
+	ProviderAnthropic  = string(openrouter.KeyProviderAnthropic)
 
 	// SlotDefault is the project-wide key slot. It applies to every
 	// responsibility slot that has no dedicated override row.
@@ -50,7 +49,7 @@ func ValidSlots() []string {
 	return slots
 }
 
-// Resolver picks the OpenRouter API key a completion bills to. Precedence:
+// Resolver picks the provider API key a completion bills to. Precedence:
 // slot-override key, then the project's default-slot key, then the org's
 // provisioned platform key (delegated to the Provisioner, unchanged).
 //
@@ -64,6 +63,7 @@ type Resolver struct {
 }
 
 var _ openrouter.KeyResolver = (*Resolver)(nil)
+var _ openrouter.ModelAwareKeyResolver = (*Resolver)(nil)
 
 func NewResolver(db *pgxpool.Pool, enc *encryption.Client, provisioner openrouter.Provisioner) *Resolver {
 	return &Resolver{
@@ -74,6 +74,10 @@ func NewResolver(db *pgxpool.Pool, enc *encryption.Client, provisioner openroute
 }
 
 func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID string, slot billing.ModelUsageSource, keyType openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	return r.ResolveKeyForModel(ctx, orgID, projectID, slot, keyType, "")
+}
+
+func (r *Resolver) ResolveKeyForModel(ctx context.Context, orgID string, projectID string, slot billing.ModelUsageSource, keyType openrouter.KeyType, model string) (openrouter.ResolvedKey, error) {
 	// Callers without a project (e.g. embeddings) resolve straight to the
 	// platform key. KeyTypeInternal marks platform-initiated inference; only
 	// the slots exposed for it (the risk-analysis judges) consult customer
@@ -93,11 +97,16 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 		return openrouter.ResolvedKey{}, fmt.Errorf("invalid project id for key resolution: %w", err)
 	}
 
-	encryptedKey, err := repo.New(r.db).GetKeyForResolution(ctx, repo.GetKeyForResolutionParams{
+	providers := []string{ProviderOpenRouter}
+	if openrouter.KeyProviderAnthropic.SupportsModel(model) {
+		providers = append(providers, ProviderAnthropic)
+	}
+
+	storedKey, err := repo.New(r.db).GetKeyForResolution(ctx, repo.GetKeyForResolutionParams{
 		ProjectID:     projectUUID,
 		Slots:         []string{string(slot), SlotDefault},
+		Providers:     providers,
 		PreferredSlot: string(slot),
-		Provider:      ProviderOpenRouter,
 	})
 	switch {
 	// An absent table means BYOK is not deployed in this environment yet
@@ -114,11 +123,12 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 		return openrouter.ResolvedKey{}, fmt.Errorf("read model provider keys: %w", err)
 	}
 
-	key, err := r.enc.Decrypt(encryptedKey)
+	provider := openrouter.KeyProvider(storedKey.Provider)
+	key, err := r.enc.Decrypt(storedKey.ApiKeyEncrypted)
 	if err != nil {
 		return openrouter.ResolvedKey{}, fmt.Errorf("decrypt model provider key: %w", err)
 	}
-	return openrouter.ResolvedKey{Key: key, Customer: true}, nil
+	return openrouter.ResolvedKey{Key: key, Provider: provider, Customer: true}, nil
 }
 
 // internalBYOKSlots lists the platform-initiated (KeyTypeInternal) slots a

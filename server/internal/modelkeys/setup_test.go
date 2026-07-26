@@ -84,12 +84,23 @@ func (p *stubProvisioner) GetModelUsage(ctx context.Context, generationID string
 	return nil, errors.New("not implemented")
 }
 
+type stubAnthropicKeyValidator struct {
+	err   error
+	calls int
+}
+
+func (v *stubAnthropicKeyValidator) ValidateAPIKey(context.Context, string) error {
+	v.calls++
+	return v.err
+}
+
 type testInstance struct {
-	service     *modelkeys.Service
-	conn        *pgxpool.Pool
-	enc         *encryption.Client
-	provisioner *stubProvisioner
-	features    *productfeatures.Client
+	service            *modelkeys.Service
+	conn               *pgxpool.Pool
+	enc                *encryption.Client
+	provisioner        *stubProvisioner
+	anthropicValidator *stubAnthropicKeyValidator
+	features           *productfeatures.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -128,6 +139,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 	require.NoError(t, err)
 
 	provisioner := &stubProvisioner{platformKey: "platform-key", usageErr: nil, usageCalls: 0}
+	anthropicValidator := &stubAnthropicKeyValidator{err: nil, calls: 0}
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
 	svc := modelkeys.NewService(
@@ -138,16 +150,18 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		enc,
 		provisioner,
+		anthropicValidator,
 		features,
 		audit.NewLogger(),
 	)
 
 	return ctx, &testInstance{
-		service:     svc,
-		conn:        conn,
-		enc:         enc,
-		provisioner: provisioner,
-		features:    features,
+		service:            svc,
+		conn:               conn,
+		enc:                enc,
+		provisioner:        provisioner,
+		anthropicValidator: anthropicValidator,
+		features:           features,
 	}
 }
 

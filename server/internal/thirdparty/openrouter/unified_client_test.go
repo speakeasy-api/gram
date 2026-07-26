@@ -937,7 +937,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 		{
 			name:             "provisioner error",
 			provisionerError: fmt.Errorf("failed to provision key"),
-			expectedError:    "resolve OpenRouter key",
+			expectedError:    "resolve model provider key",
 		},
 		{
 			name:               "start or resume error",
@@ -1803,6 +1803,7 @@ type recordingKeyResolver struct {
 	project string
 	slot    billing.ModelUsageSource
 	keyType KeyType
+	result  ResolvedKey
 }
 
 var _ KeyResolver = (*recordingKeyResolver)(nil)
@@ -1811,7 +1812,10 @@ func (r *recordingKeyResolver) ResolveKey(_ context.Context, orgID string, proje
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.orgID, r.project, r.slot, r.keyType = orgID, projectID, slot, keyType
-	return ResolvedKey{Key: "recorded-key", Customer: false}, nil
+	if r.result.Key != "" {
+		return r.result, nil
+	}
+	return ResolvedKey{Key: "recorded-key", Provider: KeyProviderOpenRouter, Customer: false}, nil
 }
 
 func TestChatClient_InitializeRequest_KeySlotOverridesUsageSourceForResolution(t *testing.T) {
@@ -1859,4 +1863,77 @@ func TestChatClient_InitializeRequest_EmptyKeySlotFallsBackToUsageSource(t *test
 	require.NoError(t, err)
 	require.Equal(t, billing.ModelUsageSourceSlack, resolver.slot,
 		"trusted callers set UsageSource server-side; it doubles as the slot when KeySlot is unset")
+}
+
+func TestChatClient_InitializeRequest_NonAnthropicModelUsesPlatformKey(t *testing.T) {
+	t.Parallel()
+
+	resolver := &recordingKeyResolver{
+		result: ResolvedKey{
+			Key:      "anthropic-key",
+			Provider: KeyProviderAnthropic,
+			Customer: true,
+		},
+	}
+	provisioner := &mockProvisioner{apiKey: "platform-key"}
+	client := &ChatClient{
+		logger:      testenv.NewLogger(t),
+		provisioner: provisioner,
+		keyResolver: resolver,
+	}
+
+	result, err := client.initializeRequest(t.Context(), CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: uuid.NewString(),
+		Model:     "openai/gpt-5.4",
+		Messages:  []or.ChatMessages{CreateMessageUser("hi")},
+		KeyType:   KeyTypeChat,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "platform-key", result.apiKey)
+	require.Equal(t, KeyProviderOpenRouter, result.provider)
+	require.False(t, result.customerKey)
+	require.Equal(t, []KeyType{KeyTypeChat}, provisioner.ProvisionedKeyTypes())
+}
+
+func TestChatClient_MakeHTTPRequest_AnthropicCompatibilityEndpoint(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
+		assert.Equal(t, "Bearer anthropic-key", r.Header.Get("Authorization"))
+		assert.Equal(t, anthropicAPIVersion, r.Header.Get("anthropic-version"))
+
+		var body map[string]any
+		if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&body)) {
+			return
+		}
+		assert.Equal(t, "claude-sonnet-5", body["model"])
+		assert.NotContains(t, body, "session_id")
+		assert.NotContains(t, body, "metadata")
+		assert.NotContains(t, body, "trace")
+		assert.NotContains(t, body, "reasoning")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	client := &ChatClient{
+		httpClient: &http.Client{Transport: &testTransport{server: server}},
+	}
+	response, err := client.makeHTTPRequest(t.Context(), KeyProviderAnthropic, "anthropic-key", OpenAIChatRequest{
+		Model:          DefaultChatModel,
+		Messages:       []or.ChatMessages{CreateMessageUser("hi")},
+		Stream:         false,
+		Tools:          nil,
+		Temperature:    1,
+		ResponseFormat: nil,
+		Reasoning:      &Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		CacheControl:   nil,
+		SessionID:      uuid.NewString(),
+		User:           "test-org",
+		Metadata:       map[string]string{"source": "assistants"},
+		Trace:          &TraceConfig{TraceID: "trace", TraceName: "", SpanName: "", GenerationName: "", ParentSpanID: ""},
+	})
+	require.NoError(t, err)
+	require.NoError(t, response.Body.Close())
 }

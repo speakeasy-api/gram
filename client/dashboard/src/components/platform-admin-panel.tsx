@@ -348,7 +348,7 @@ function ProductFeaturesSection(): ReactElement {
 
       <FeatureToggle
         label="Custom Model Provider Keys"
-        description="Allows projects in this organization to store OpenRouter API keys for model completions."
+        description="Allows projects in this organization to store OpenRouter or Anthropic API keys for model completions."
         icon={Key}
         featureName={FeatureName.CustomModelKeys}
         enabled={features.customModelKeysEnabled}
