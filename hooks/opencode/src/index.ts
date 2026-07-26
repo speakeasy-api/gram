@@ -4,6 +4,7 @@ import {
   assistantResponded,
   permissionAsked,
   promptSubmitted,
+  redactMcpCommand,
   sessionEnded,
   sessionStarted,
   toolCompleted,
@@ -162,7 +163,7 @@ async function loadMcpServers(
       if (cfg.type === "remote") {
         servers.set(name, { url: cfg.url });
       } else if (cfg.type === "local") {
-        servers.set(name, { command: cfg.command.join(" ") });
+        servers.set(name, { command: redactMcpCommand(cfg.command) });
       } else {
         servers.set(name, {});
       }

@@ -3,6 +3,7 @@ import {
   assistantResponded,
   permissionAsked,
   promptSubmitted,
+  redactMcpCommand,
   resolveMcpTool,
   sessionEnded,
   sessionStarted,
@@ -246,5 +247,31 @@ describe("resolveMcpTool", () => {
   it("returns null when no MCP servers are configured", () => {
     expect(resolveMcpTool("context7_query-docs", new Map())).toBeNull();
     expect(resolveMcpTool("context7_query-docs", undefined)).toBeNull();
+  });
+});
+
+describe("redactMcpCommand", () => {
+  it("keeps the executable and package spec unchanged", () => {
+    expect(redactMcpCommand(["npx", "-y", "@scope/mcp-server"])).toBe(
+      "npx -y @scope/mcp-server",
+    );
+  });
+
+  it("redacts the value after a sensitive flag", () => {
+    expect(redactMcpCommand(["npx", "server", "--api-key", "sk-secret"])).toBe(
+      "npx server --api-key ***",
+    );
+  });
+
+  it("redacts sensitive --flag=value and env-style KEY=value args", () => {
+    expect(
+      redactMcpCommand(["node", "s.js", "--token=abc", "API_KEY=xyz"]),
+    ).toBe("node s.js --token=*** API_KEY=***");
+  });
+
+  it("leaves non-sensitive flags and their values intact", () => {
+    expect(redactMcpCommand(["uvx", "srv", "--port", "8080"])).toBe(
+      "uvx srv --port 8080",
+    );
   });
 });

@@ -69,6 +69,39 @@ export interface McpServer {
   command?: string;
 }
 
+// Flag / env-var names whose value is a credential and must never leave the
+// machine in an ingest payload.
+const SENSITIVE_ARG = /(key|token|secret|password|passwd|auth|bearer|cred)/i;
+
+// redactMcpCommand joins a local (stdio) MCP launch command into the identity
+// string sent to ingest, redacting credential values while keeping the
+// executable and package spec (the identity the server needs for shadow-MCP
+// detection). Covers "--api-key sk-..", "--api-key=sk-..", and "API_KEY=sk-.."
+// env-style args.
+// ponytail: only redacts values tied to a sensitive flag/key name; a bare
+// positional secret (no flag) still passes through. Add entropy detection if
+// that case shows up.
+export function redactMcpCommand(command: readonly string[]): string {
+  const out: string[] = [];
+  for (let i = 0; i < command.length; i++) {
+    const tok = command[i];
+    const eq = tok.indexOf("=");
+    if (eq > 0 && SENSITIVE_ARG.test(tok.slice(0, eq))) {
+      out.push(`${tok.slice(0, eq)}=***`);
+    } else if (/^--?/.test(tok) && SENSITIVE_ARG.test(tok) && eq < 0) {
+      // "--api-key VALUE": keep the flag, redact the following value token.
+      out.push(tok);
+      if (i + 1 < command.length && !/^--?/.test(command[i + 1])) {
+        out.push("***");
+        i++;
+      }
+    } else {
+      out.push(tok);
+    }
+  }
+  return out.join(" ");
+}
+
 // Wire shape of the ingest payload's data.mcp block (HookMCPData in the Goa
 // design). server_name is always set; url/command are set per transport.
 export type McpBlock = {
