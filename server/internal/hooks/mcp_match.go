@@ -221,7 +221,7 @@ func resolvedMCPMatch(matched *MCPServerEntry, serverPrefix string) string {
 // "buffer", or in the shadow-MCP guard's case, "deny with retry message".
 func (s *Service) getCachedMCPList(ctx context.Context, sessionID string) ([]MCPServerEntry, error) {
 	var entries []MCPServerEntry
-	if err := s.enforcer.cache.Get(ctx, sessionMCPListCacheKey(sessionID), &entries); err != nil {
+	if err := s.cache.Get(ctx, sessionMCPListCacheKey(sessionID), &entries); err != nil {
 		return nil, fmt.Errorf("get cached mcp list: %w", err)
 	}
 	return entries, nil

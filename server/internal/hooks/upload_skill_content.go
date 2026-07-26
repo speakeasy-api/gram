@@ -59,7 +59,7 @@ func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSki
 	if actual := hex.EncodeToString(digest[:]); actual != payload.RawSha256 {
 		return oops.E(oops.CodeBadRequest, nil, "skill content does not match raw_sha256")
 	}
-	observed, err := s.enforcer.repo.HasSkillObservationRawHash(ctx, repo.HasSkillObservationRawHashParams{
+	observed, err := s.repo.HasSkillObservationRawHash(ctx, repo.HasSkillObservationRawHashParams{
 		ProjectID: *authCtx.ProjectID,
 		RawSha256: conv.ToPGText(payload.RawSha256),
 	})

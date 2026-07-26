@@ -1172,6 +1172,7 @@ func newStartCommand() *cli.Command {
 				meterProvider,
 				telemLogger,
 				sessionManager,
+				hooksCache,
 				chatClient,
 				temporalEnv,
 				authzEngine,

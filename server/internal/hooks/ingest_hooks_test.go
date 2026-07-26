@@ -121,7 +121,7 @@ func TestCanonicalSessionMetadata_KeepsCachedCoworkServiceName(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	sessionID := "canonical-cowork-surface"
-	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:   sessionID,
 		ServiceName: "cowork",
 		GramOrgID:   authCtx.ActiveOrganizationID,
@@ -276,7 +276,7 @@ func TestIngest_ShadowMCPPolicyUsesCachedSessionIdentityForSharedKey(t *testing.
 
 	cachedUserID := "user_cached_owner"
 	sessionID := "canonical-shadow-mcp-cached-identity"
-	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID: sessionID,
 		UserID:    cachedUserID,
 		UserEmail: "cached-dev@example.com",
@@ -326,7 +326,7 @@ func TestIngest_ShadowMCPPolicyRecoversCachedIdentityForUnresolvableSharedKeyEma
 
 	cachedUserID := "user_cached_owner"
 	sessionID := "canonical-shadow-mcp-unresolvable-email"
-	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID: sessionID,
 		UserID:    cachedUserID,
 		UserEmail: "cached-dev@example.com",
@@ -569,7 +569,7 @@ func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
 	authCtx.APIKeyName = "plugins-hooks-20260713-104500-c0d3e1"
 	authCtx.OrgWidePluginHooksKey = true
 	remaining := make(chan time.Duration, 1)
-	ti.service.enforcer.cache = &sessionCacheDeadlineRecorder{Cache: ti.service.enforcer.cache, remaining: remaining}
+	ti.service.cache = &sessionCacheDeadlineRecorder{Cache: ti.service.cache, remaining: remaining}
 
 	userID := "user_codex_session_actor"
 	userEmail := "codex-session@example.com"
@@ -583,7 +583,7 @@ func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
 	require.Equal(t, "allow", result.Decision)
 
 	var cached SessionMetadata
-	require.NoError(t, ti.service.enforcer.cache.Get(ctx, sessionCacheKey(sessionID), &cached))
+	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey(sessionID), &cached))
 	require.Equal(t, userID, cached.UserID)
 	require.Equal(t, userEmail, cached.UserEmail)
 	writeBudget := <-remaining
@@ -1080,7 +1080,7 @@ func TestIngest_LinksChatToUserAccount(t *testing.T) {
 	// Seed session metadata as the OTEL path would for an attributed personal
 	// account. No ObservedUserEmail: entries cached before the field existed
 	// must still adopt via the UserEmail fallback.
-	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "claude-code",
 		UserEmail:     "personal@gmail.com",
@@ -1352,7 +1352,7 @@ func TestIngest_StampsAccountAttributionOnTelemetry(t *testing.T) {
 
 	sessionID := "canonical-stamp-" + uuid.NewString()
 	externalOrgID := "stamp-ext-org-" + sessionID
-	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:         sessionID,
 		ServiceName:       "claude-code",
 		UserEmail:         "personal@gmail.com",

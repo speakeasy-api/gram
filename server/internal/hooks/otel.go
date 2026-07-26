@@ -23,7 +23,7 @@ const claudeOTELLogsURN = "claude-code:otel:logs"
 
 // Logs handles authenticated OTEL logs data from Claude Code.
 func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
-	logger := s.enforcer.logger.With(
+	logger := s.logger.With(
 		attr.SlogHookSource("claude"),
 		attr.SlogHookEvent("Logs"),
 	)
@@ -98,7 +98,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// account UUID — would otherwise satisfy the company-credential arm
 		// below and stamp Claude rows with Codex attribution.
 		var cached SessionMetadata
-		if err := s.enforcer.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
+		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
 			cached.Provider == providerAnthropic && cached.GramOrgID == orgID && cached.ProjectID == projectID &&
 			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
 			!sessionEnrichesAttribution(session, cached) {
@@ -177,7 +177,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// attributed session, since only the attribution path runs this.
 		linkFailed := false
 		if completeMetadata.UserAccountID != "" {
-			if _, err := s.enforcer.repo.LinkChatUserAccount(ctx, repo.LinkChatUserAccountParams{
+			if _, err := s.repo.LinkChatUserAccount(ctx, repo.LinkChatUserAccountParams{
 				UserAccountID: conv.StringToNullUUID(completeMetadata.UserAccountID),
 				ID:            sessionIDToUUID(completeMetadata.SessionID),
 				ProjectID:     *authCtx.ProjectID,
@@ -200,7 +200,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// session independently so a single cache failure does not abort
 		// flushing the remaining sessions in the batch.
 		if !linkFailed {
-			if err := s.enforcer.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
+			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
 				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
 					attr.SlogEvent("claude_logs_cache_set_failed"),
 					attr.SlogError(err),
@@ -364,7 +364,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 
 	parsedProjectID, err := uuid.Parse(projectID)
 	if err != nil {
-		s.enforcer.logger.ErrorContext(ctx, "invalid project ID for Claude OTEL logs", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "invalid project ID for Claude OTEL logs", attr.SlogError(err))
 		return
 	}
 
@@ -491,11 +491,11 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 	}
 
 	if err := s.telemetryLogger.LogBulk(ctx, params); err != nil {
-		s.enforcer.logger.ErrorContext(ctx, "failed to write Claude OTEL logs to ClickHouse", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "failed to write Claude OTEL logs to ClickHouse", attr.SlogError(err))
 		return
 	}
 	if err := s.telemetryLogger.LogBulkStaging(ctx, stagedParams); err != nil {
-		s.enforcer.logger.ErrorContext(ctx, "failed to write staged Claude OTEL logs to ClickHouse", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "failed to write staged Claude OTEL logs to ClickHouse", attr.SlogError(err))
 		return
 	}
 	for sessionID := range correlationSessionIDs {
@@ -529,7 +529,7 @@ func (s *Service) scheduleClaudePromptCorrelation(ctx context.Context, projectID
 		AfterEventSequence:     0,
 		AfterEventTimeUnixNano: 0,
 	}); err != nil {
-		s.enforcer.logger.WarnContext(ctx, "failed to schedule Claude prompt correlation",
+		s.logger.WarnContext(ctx, "failed to schedule Claude prompt correlation",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),
 			attr.SlogProjectID(projectID.String()),
@@ -772,7 +772,7 @@ func stringPtrVal(s *string) string {
 
 // Metrics handles authenticated OTEL metrics data from Claude Code and Codex.
 func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
-	logger := s.enforcer.logger.With(
+	logger := s.logger.With(
 		attr.SlogHookSource("claude"),
 		attr.SlogHookEvent("Metrics"),
 	)
@@ -789,7 +789,7 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 	// Claude usage extractor — it would find no claude_code.* metrics and can
 	// reject on temporality. Persist them verbatim instead.
 	if isCodexMetricsPayload(payload) {
-		s.enforcer.logger.InfoContext(ctx, "Received Codex OTEL metrics",
+		s.logger.InfoContext(ctx, "Received Codex OTEL metrics",
 			attr.SlogHookSource("codex"),
 			attr.SlogHookEvent("Metrics"),
 			attr.SlogEvent("codex_metrics"),

@@ -38,7 +38,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, codexHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
-	logger := s.enforcer.logger.With(
+	logger := s.logger.With(
 		attr.SlogHookSource("codex"),
 		attr.SlogHookEvent(hookEventName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
@@ -310,8 +310,8 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 		// identity-less session carries nothing else, and later events may
 		// omit the hostname the fallback attribution needs.
 		if metadata.SessionID != "" && (metadata.UserEmail != "" || metadata.Hostname != "") {
-			if err := s.enforcer.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
-				s.enforcer.logger.WarnContext(ctx, "failed to cache Codex session metadata",
+			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 					attr.SlogError(err),
 					attr.SlogGenAIConversationID(metadata.SessionID),
 				)
@@ -326,19 +326,19 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 	switch payload.HookEventName {
 	case "PreToolUse":
 		if err := s.writeCodexToolCallRequestToPG(ctx, payload, metadata); err != nil {
-			s.enforcer.logger.ErrorContext(ctx, "failed to persist Codex tool call request", attr.SlogError(err))
+			s.logger.ErrorContext(ctx, "failed to persist Codex tool call request", attr.SlogError(err))
 		}
 	case "PostToolUse":
 		if err := s.writeCodexToolCallResultToPG(ctx, payload, metadata); err != nil {
-			s.enforcer.logger.ErrorContext(ctx, "failed to persist Codex tool call result", attr.SlogError(err))
+			s.logger.ErrorContext(ctx, "failed to persist Codex tool call result", attr.SlogError(err))
 		}
 	case "UserPromptSubmit":
 		if err := s.writeCodexUserPromptToPG(ctx, payload, metadata); err != nil {
-			s.enforcer.logger.ErrorContext(ctx, "failed to persist Codex user prompt", attr.SlogError(err))
+			s.logger.ErrorContext(ctx, "failed to persist Codex user prompt", attr.SlogError(err))
 		}
 	case "Stop":
 		if err := s.writeCodexAssistantResponseToPG(ctx, payload, metadata); err != nil {
-			s.enforcer.logger.ErrorContext(ctx, "failed to persist Codex assistant response", attr.SlogError(err))
+			s.logger.ErrorContext(ctx, "failed to persist Codex assistant response", attr.SlogError(err))
 		}
 	}
 }
@@ -359,8 +359,8 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 	}
 
 	entries := ParseCodexMCPList(raw)
-	if err := s.enforcer.cache.Set(ctx, sessionMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
-		s.enforcer.logger.WarnContext(ctx, "failed to cache Codex MCP list snapshot",
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache Codex MCP list snapshot",
 			attr.SlogEvent("codex_hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(*payload.SessionID),
@@ -472,7 +472,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 
 	parsedProjectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
-		s.enforcer.logger.ErrorContext(ctx, "invalid project ID for Codex hook", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "invalid project ID for Codex hook", attr.SlogError(err))
 		return
 	}
 
@@ -494,7 +494,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 			Attributes: attrs,
 		})
 
-		s.enforcer.logger.DebugContext(ctx, "wrote Codex hook to ClickHouse",
+		s.logger.DebugContext(ctx, "wrote Codex hook to ClickHouse",
 			attr.SlogEvent("codex_hook_written"),
 		)
 	}
@@ -544,14 +544,14 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 		if jsonBytes, err := json.Marshal(payload.ToolInput); err == nil {
 			attrs[attr.GenAIToolCallArgumentsKey] = string(jsonBytes)
 		} else {
-			s.enforcer.logger.WarnContext(ctx, "failed to marshal Codex ToolInput", attr.SlogError(err))
+			s.logger.WarnContext(ctx, "failed to marshal Codex ToolInput", attr.SlogError(err))
 		}
 	}
 	if payload.ToolOutput != nil {
 		if jsonBytes, err := json.Marshal(payload.ToolOutput); err == nil {
 			attrs[attr.GenAIToolCallResultKey] = string(jsonBytes)
 		} else {
-			s.enforcer.logger.WarnContext(ctx, "failed to marshal Codex ToolOutput", attr.SlogError(err))
+			s.logger.WarnContext(ctx, "failed to marshal Codex ToolOutput", attr.SlogError(err))
 		}
 	}
 
@@ -810,7 +810,7 @@ func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *
 			metadata.GramOrgID,
 			projectID.String(),
 		); err != nil {
-			s.enforcer.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
+			s.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
 		}
 	}
 

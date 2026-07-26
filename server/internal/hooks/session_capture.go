@@ -163,7 +163,7 @@ func (s *Service) sessionAgentVariant(ctx context.Context, sessionID string) str
 		return ""
 	}
 	var variant string
-	if err := s.enforcer.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
+	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
 		return ""
 	}
 	return variant
@@ -346,7 +346,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		return fmt.Errorf("check session_capture feature flag: %w", err)
 	}
 	if !enabled {
-		s.enforcer.logger.DebugContext(ctx, "session capture disabled; skipping Claude chat persistence",
+		s.logger.DebugContext(ctx, "session capture disabled; skipping Claude chat persistence",
 			attr.SlogEvent("claude_hook_session_capture_disabled"),
 			attr.SlogOrganizationID(metadata.GramOrgID),
 			attr.SlogProjectID(projectID.String()),
@@ -367,7 +367,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 	}
 
 	// Create the chat and retry.
-	_, upsertErr := s.enforcer.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
 		ID:             chatID,
 		ProjectID:      projectID,
 		OrganizationID: metadata.GramOrgID,
@@ -412,7 +412,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	if content == "" {
-		s.enforcer.logger.DebugContext(ctx, "skipping empty Claude conversation event",
+		s.logger.DebugContext(ctx, "skipping empty Claude conversation event",
 			attr.SlogEvent("claude_hook_conversation_empty"),
 			attr.SlogHookEvent(payload.HookEventName),
 			attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
@@ -461,7 +461,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 			metadata.GramOrgID,
 			projectID.String(),
 		); err != nil {
-			s.enforcer.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
+			s.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
 		}
 	}
 

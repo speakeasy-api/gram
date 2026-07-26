@@ -29,11 +29,14 @@ import (
 // to both the policy-runner builder (cmd/gram/hook_policies.go, which wires
 // its method values into the policy constructors) and NewService.
 // Service holds it in its enforcer field, so the legacy per-provider paths
-// read the same fields and methods (s.enforcer.riskScanner,
+// read the same enforcement fields and methods (s.enforcer.riskScanner,
 // s.enforcer.scanToolRequestForEnforcement, ...) — one copy of each
-// dependency, shared with the policy runner. Tests that swap a field after
-// construction (ti.service.enforcer.riskScanner = ...) mutate that shared
-// state, so the runner's stages observe the swap on the next event.
+// enforcement dependency, shared with the policy runner. Tests that swap a
+// field after construction (ti.service.enforcer.riskScanner = ...) mutate
+// that shared state, so the runner's stages observe the swap on the next
+// event. The general infra (logger, cache, repo) is NOT shared: the Service
+// owns its own copies for the provider and capture paths, and the Enforcer
+// holds these copies of the same underlying instances for its primitives.
 type Enforcer struct {
 	logger          *slog.Logger
 	repo            *repo.Queries
@@ -48,7 +51,7 @@ type Enforcer struct {
 
 // NewEnforcer builds the enforcement component from the dependencies the
 // gating paths read. The logger is tagged with the hooks component, matching
-// the logger the Service paths previously used.
+// the Service's own logger.
 func NewEnforcer(
 	logger *slog.Logger,
 	db *pgxpool.Pool,

@@ -231,6 +231,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		meterProvider,
 		nil,
 		sessionManager,
+		cacheAdapter,
 		nil,
 		nil,
 		authzEngine,

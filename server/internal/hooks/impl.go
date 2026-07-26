@@ -23,8 +23,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -39,21 +41,24 @@ import (
 )
 
 type Service struct {
-	// enforcer owns the enforcement dependencies and primitives (logger,
-	// cache, riskScanner, siteURL, block rows, shadow-MCP evaluation, ...).
-	// It is the same *Enforcer whose method values the cmd wiring hands to
-	// the policy constructors (cmd/gram/hook_policies.go), so a test
-	// swapping one of its fields after construction
-	// (ti.service.enforcer.riskScanner = ...) mutates the state the policy
-	// runner's stages read at call time.
+	// enforcer owns the enforcement dependencies and primitives (riskScanner,
+	// siteURL, jwtSecret, block rows, shadow-MCP evaluation, ...) with its
+	// own copies of the general infra (logger, cache, repo). It is the same
+	// *Enforcer whose method values the cmd wiring hands to the policy
+	// constructors (cmd/gram/hook_policies.go), so a test swapping one of
+	// its fields after construction (ti.service.enforcer.riskScanner = ...)
+	// mutates the state the policy runner's stages read at call time.
 	enforcer           *Enforcer
 	tracer             trace.Tracer
 	metrics            *metrics
+	logger             *slog.Logger
 	db                 *pgxpool.Pool
 	telemetryLogger    *telemetry.Logger
 	auth               authorizer
 	authz              *authz.Engine
+	cache              cache.Cache
 	temporalEnv        *tenv.Environment
+	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
 	writer             *chat.ChatMessageWriter
@@ -180,7 +185,7 @@ func (s *Service) signalSkillEfficacy(ctx context.Context, projectID uuid.UUID) 
 	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), skillEfficacySignalTimeout)
 	defer cancel()
 	if err := s.efficacySignaler.Signal(signalCtx, projectID); err != nil {
-		s.enforcer.logger.ErrorContext(ctx, "signal skill efficacy coordinator from hook",
+		s.logger.ErrorContext(ctx, "signal skill efficacy coordinator from hook",
 			attr.SlogError(err),
 			attr.SlogProjectID(projectID.String()),
 		)
@@ -197,6 +202,7 @@ func NewService(
 	meterProvider metric.MeterProvider,
 	telemetryLogger *telemetry.Logger,
 	sessionsMgr *sessions.Manager,
+	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
@@ -213,11 +219,14 @@ func NewService(
 		enforcer:           enforcer,
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		metrics:            newMetrics(meterProvider, logger),
+		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
 		telemetryLogger:    telemetryLogger,
 		auth:               auth.New(logger, db, sessionsMgr, authz),
 		authz:              authz,
+		cache:              cacheAdapter,
 		temporalEnv:        temporalEnv,
+		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
 		writer:             writer,
@@ -243,7 +252,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
-		srv.New(endpoints, mux, newHooksRequestDecoder(service.enforcer.logger), goahttp.ResponseEncoder, nil, nil),
+		srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, nil),
 	)
 	AttachServerNames(mux, service)
 }

@@ -35,7 +35,7 @@ func TestClaudeHookIdempotency_DeliveredTwiceStoredOnce(t *testing.T) {
 	const userEmail = "idempotency@example.com"
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
 
-	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "claude-code",
 		UserEmail:     userEmail,
@@ -159,11 +159,9 @@ func TestClaimHookIdempotency_ReplayedClaimsLongWindow(t *testing.T) {
 	t.Parallel()
 	_, ti := newTestHooksService(t)
 
-	rec := &ttlRecordingCache{Cache: ti.service.enforcer.cache, ttls: nil}
-	enforcer := *ti.service.enforcer
-	enforcer.cache = rec
+	rec := &ttlRecordingCache{Cache: ti.service.cache, ttls: nil}
 	svc := *ti.service
-	svc.enforcer = &enforcer
+	svc.cache = rec
 
 	require.True(t, svc.claimHookIdempotency(t.Context(), uuid.NewString(), false))
 	require.True(t, svc.claimHookIdempotency(t.Context(), uuid.NewString(), true))

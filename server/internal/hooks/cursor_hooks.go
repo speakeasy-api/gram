@@ -43,7 +43,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
-	logger := s.enforcer.logger.With(
+	logger := s.logger.With(
 		attr.SlogHookSource("cursor"),
 		attr.SlogHookEvent(logHookEventName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
@@ -322,7 +322,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 
 func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, blockReason string) {
 	if payload.ConversationID == nil || *payload.ConversationID == "" {
-		s.enforcer.logger.WarnContext(ctx, "Cursor event called without conversation ID")
+		s.logger.WarnContext(ctx, "Cursor event called without conversation ID")
 		return
 	}
 
@@ -385,12 +385,12 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 			return
 		}
 		if err != nil {
-			s.enforcer.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
+			s.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
 		}
 	} else {
 		// Tool call events: ClickHouse + PG
 		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason, hookEvent); err != nil {
-			s.enforcer.logger.ErrorContext(ctx, "Failed to persist Cursor tool call event", attr.SlogError(err))
+			s.logger.ErrorContext(ctx, "Failed to persist Cursor tool call event", attr.SlogError(err))
 		}
 	}
 }
@@ -433,7 +433,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 
 	parsedProjectID, err := uuid.Parse(projectID)
 	if err != nil {
-		s.enforcer.logger.ErrorContext(ctx, "Invalid project ID for Cursor hook", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "Invalid project ID for Cursor hook", attr.SlogError(err))
 		return
 	}
 
@@ -455,7 +455,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 			Attributes: attrs,
 		})
 
-		s.enforcer.logger.DebugContext(ctx, "Wrote Cursor hook to ClickHouse",
+		s.logger.DebugContext(ctx, "Wrote Cursor hook to ClickHouse",
 			attr.SlogEvent("cursor_hook_written"),
 		)
 	}
@@ -480,7 +480,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 
 	parsedProjectID, err := uuid.Parse(projectID)
 	if err != nil {
-		s.enforcer.logger.ErrorContext(ctx, "Invalid project ID for Cursor metrics", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "Invalid project ID for Cursor metrics", attr.SlogError(err))
 		return
 	}
 
@@ -538,7 +538,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 		Attributes: attrs,
 	})
 
-	s.enforcer.logger.DebugContext(ctx, "Wrote Cursor metrics to ClickHouse",
+	s.logger.DebugContext(ctx, "Wrote Cursor metrics to ClickHouse",
 		attr.SlogEvent("cursor_metrics_written"),
 	)
 }
@@ -642,14 +642,14 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		if jsonBytes, err := json.Marshal(payload.ToolInput); err == nil {
 			attrs[attr.GenAIToolCallArgumentsKey] = string(jsonBytes)
 		} else {
-			s.enforcer.logger.WarnContext(ctx, "Failed to marshal Cursor ToolInput", attr.SlogError(err))
+			s.logger.WarnContext(ctx, "Failed to marshal Cursor ToolInput", attr.SlogError(err))
 		}
 	}
 	if payload.ToolResponse != nil {
 		if jsonBytes, err := json.Marshal(payload.ToolResponse); err == nil {
 			attrs[attr.GenAIToolCallResultKey] = string(jsonBytes)
 		} else {
-			s.enforcer.logger.WarnContext(ctx, "Failed to marshal Cursor ToolResponse", attr.SlogError(err))
+			s.logger.WarnContext(ctx, "Failed to marshal Cursor ToolResponse", attr.SlogError(err))
 		}
 	}
 
@@ -913,7 +913,7 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 			metadata.GramOrgID,
 			metadata.ProjectID,
 		); err != nil {
-			s.enforcer.logger.WarnContext(ctx, "failed to schedule chat title generation for Cursor", attr.SlogError(err))
+			s.logger.WarnContext(ctx, "failed to schedule chat title generation for Cursor", attr.SlogError(err))
 		}
 	}
 
@@ -923,7 +923,7 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 // persistCursorUserPrompt writes a Cursor user prompt to PostgreSQL.
 func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata) error {
 	if payload.ConversationID == nil || *payload.ConversationID == "" {
-		s.enforcer.logger.WarnContext(ctx, "Cursor user prompt missing conversation_id")
+		s.logger.WarnContext(ctx, "Cursor user prompt missing conversation_id")
 		return nil
 	}
 
