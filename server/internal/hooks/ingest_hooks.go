@@ -538,13 +538,10 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 		return "", ""
 	}
 	ctx = policies.WithRequest(ctx, &policies.Request{
-		Payload:          payload,
-		AuthCtx:          authCtx,
-		Actor:            actor,
-		ToolName:         canonicalToolName(payload),
-		ToolInput:        canonicalToolInput(payload),
-		IsMCPToolRequest: canonicalIsMCPToolRequest(payload),
-		AllowWarnAck:     authenticatedIngestOptions(ctx).AllowWarnAcknowledgement,
+		Payload:      payload,
+		AuthCtx:      authCtx,
+		Actor:        actor,
+		AllowWarnAck: authenticatedIngestOptions(ctx).AllowWarnAcknowledgement,
 	})
 	decision, err := s.policies.Decide(ctx, typed)
 	if err != nil {

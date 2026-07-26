@@ -10,7 +10,7 @@ import (
 // ShadowMCPToolPreGate: the same shadow-MCP evaluation over a pre-approval
 // permission request.
 func ShadowMCPPermissionGate(shadow ShadowMCPEvaluator) func(context.Context, *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
-	return func(ctx context.Context, _ *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
-		return shadowMCPGate(ctx, shadow)
+	return func(ctx context.Context, ev *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
+		return shadowMCPGate(ctx, shadow, &ev.Event, ev.Tool)
 	}
 }

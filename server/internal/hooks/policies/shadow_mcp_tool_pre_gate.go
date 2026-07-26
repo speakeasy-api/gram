@@ -17,25 +17,25 @@ type ShadowMCPEvaluator interface {
 // ShadowMCPToolPreGate builds the policy that denies MCP tool calls
 // targeting non-Gram-hosted servers under a blocking shadow_mcp policy,
 // attaching the bypass-request link. The shared gate guards itself with the
-// ingest path's own MCP predicate (Request.IsMCPToolRequest) — not the
-// library's tool matcher, which parses Gemini-style mcp_server_tool names
-// and server-only mcp__ prefixes the ingest path has never treated as MCP —
-// so the gate fires for exactly the calls the inline evaluation gated and
-// stays neutral (no policy lookup, no side effects) for everything else.
+// ingest path's own MCP predicate stamped on the event (mcpToolRequest) —
+// not the library's tool matcher, which parses Gemini-style mcp_server_tool
+// names and server-only mcp__ prefixes the ingest path has never treated as
+// MCP — so the gate fires for exactly the calls the inline evaluation gated
+// and stays neutral (no policy lookup, no side effects) for everything else.
 func ShadowMCPToolPreGate(shadow ShadowMCPEvaluator) func(context.Context, *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
-	return func(ctx context.Context, _ *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
-		return shadowMCPGate(ctx, shadow)
+	return func(ctx context.Context, ev *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
+		return shadowMCPGate(ctx, shadow, &ev.Event, ev.Tool)
 	}
 }
 
 // shadowMCPGate is the shared evaluation behind ShadowMCPToolPreGate and
 // ShadowMCPPermissionGate.
-func shadowMCPGate(ctx context.Context, shadow ShadowMCPEvaluator) (agenthooks.ToolPreDecision, error) {
+func shadowMCPGate(ctx context.Context, shadow ShadowMCPEvaluator, env *agenthooks.Event, tool agenthooks.ToolCall) (agenthooks.ToolPreDecision, error) {
 	req := RequestFromContext(ctx)
-	if req == nil || !req.IsMCPToolRequest {
+	if req == nil || !mcpToolRequest(env) {
 		return agenthooks.NoDecision(), nil
 	}
-	auditReason, userReason := shadow.EvaluateShadowMCP(ctx, req, ActorFromContext(ctx), req.ToolName, req.ToolInput)
+	auditReason, userReason := shadow.EvaluateShadowMCP(ctx, req, ActorFromContext(ctx), tool.Name, toolInputOf(tool))
 	if auditReason == "" {
 		return agenthooks.NoDecision(), nil
 	}

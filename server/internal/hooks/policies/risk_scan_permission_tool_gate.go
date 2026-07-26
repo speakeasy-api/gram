@@ -16,6 +16,6 @@ import (
 // so for any non-deterministic scanner), so it is preserved exactly.
 func RiskScanPermissionToolGate(scans ToolScanner, links BlockPageLinker, warns WarnChallenger) func(context.Context, *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
 	return func(ctx context.Context, ev *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
-		return riskScanToolRequest(ctx, scans, links, warns, ev.Time)
+		return riskScanToolRequest(ctx, scans, links, warns, &ev.Event, ev.Tool)
 	}
 }

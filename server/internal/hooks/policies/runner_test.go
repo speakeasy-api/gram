@@ -26,15 +26,15 @@ func (stubDeps) ScanPrompt(context.Context, *Request, Actor, string, time.Time) 
 	return nil
 }
 
-func (stubDeps) ScanMCPToolRequest(context.Context, *Request, Actor, time.Time) *risk.ScanResult {
+func (stubDeps) ScanMCPToolRequest(context.Context, *Request, Actor, string, any, time.Time) *risk.ScanResult {
 	return nil
 }
 
-func (stubDeps) ScanToolRequest(context.Context, *Request, Actor, time.Time) *risk.ScanResult {
+func (stubDeps) ScanToolRequest(context.Context, *Request, Actor, string, any, time.Time) *risk.ScanResult {
 	return nil
 }
 
-func (stubDeps) ScanPermissionRequest(context.Context, *Request, Actor, time.Time) *risk.ScanResult {
+func (stubDeps) ScanPermissionRequest(context.Context, *Request, Actor, string, any, time.Time) *risk.ScanResult {
 	return nil
 }
 

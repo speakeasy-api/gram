@@ -123,36 +123,36 @@ func (e *Enforcer) ScanPrompt(ctx context.Context, req *policies.Request, actor 
 
 // ScanMCPToolRequest runs the MCP-flavored enforcement risk scan over a tool
 // request.
-func (e *Enforcer) ScanMCPToolRequest(ctx context.Context, req *policies.Request, actor policies.Actor, at time.Time) *risk.ScanResult {
+func (e *Enforcer) ScanMCPToolRequest(ctx context.Context, req *policies.Request, actor policies.Actor, toolName string, toolInput any, at time.Time) *risk.ScanResult {
 	return e.scanMCPRequestForEnforcement(ctx, hookevents.NewBeforeMCPExecution(
 		canonicalHookEvent(req.Payload, req.AuthCtx, actor, at),
 		hookevents.BeforeMCPExecutionParams{
-			ToolName:  req.ToolName,
-			ToolInput: req.ToolInput,
+			ToolName:  toolName,
+			ToolInput: toolInput,
 		},
 	))
 }
 
 // ScanToolRequest runs the plain tool-flavored enforcement risk scan over a
 // tool request.
-func (e *Enforcer) ScanToolRequest(ctx context.Context, req *policies.Request, actor policies.Actor, at time.Time) *risk.ScanResult {
+func (e *Enforcer) ScanToolRequest(ctx context.Context, req *policies.Request, actor policies.Actor, toolName string, toolInput any, at time.Time) *risk.ScanResult {
 	return e.scanToolRequestForEnforcement(ctx, hookevents.NewBeforeToolUse(
 		canonicalHookEvent(req.Payload, req.AuthCtx, actor, at),
 		hookevents.BeforeToolUseParams{
-			ToolName:  req.ToolName,
-			ToolInput: req.ToolInput,
+			ToolName:  toolName,
+			ToolInput: toolInput,
 		},
 	))
 }
 
 // ScanPermissionRequest runs the permission-flavored enforcement risk scan
 // over a pre-approval permission request.
-func (e *Enforcer) ScanPermissionRequest(ctx context.Context, req *policies.Request, actor policies.Actor, at time.Time) *risk.ScanResult {
+func (e *Enforcer) ScanPermissionRequest(ctx context.Context, req *policies.Request, actor policies.Actor, toolName string, toolInput any, at time.Time) *risk.ScanResult {
 	return e.scanPermissionRequestForEnforcement(ctx, hookevents.NewPermissionRequest(
 		canonicalHookEvent(req.Payload, req.AuthCtx, actor, at),
 		hookevents.PermissionRequestParams{
-			ToolName:       req.ToolName,
-			ToolInput:      req.ToolInput,
+			ToolName:       toolName,
+			ToolInput:      toolInput,
 			PermissionType: canonicalPermissionType(req.Payload),
 		},
 	))

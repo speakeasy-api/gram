@@ -12,7 +12,7 @@ import (
 // PermissionScanner runs the permission-flavored enforcement risk scan over
 // a pre-approval permission request.
 type PermissionScanner interface {
-	ScanPermissionRequest(ctx context.Context, req *Request, actor Actor, at time.Time) *risk.ScanResult
+	ScanPermissionRequest(ctx context.Context, req *Request, actor Actor, toolName string, toolInput any, at time.Time) *risk.ScanResult
 }
 
 // RiskScanPermissionGate builds the policy that scans a pre-approval
@@ -25,7 +25,7 @@ func RiskScanPermissionGate(scans PermissionScanner, links BlockPageLinker, warn
 			return agenthooks.NoDecision(), nil
 		}
 		actor := ActorFromContext(ctx)
-		scan := scans.ScanPermissionRequest(ctx, req, actor, ev.Time)
-		return riskScanToolDecision(ctx, links, warns, req, actor, scan, "permission request", ev.Time)
+		scan := scans.ScanPermissionRequest(ctx, req, actor, ev.Tool.Name, toolInputOf(ev.Tool), ev.Time)
+		return riskScanToolDecision(ctx, links, warns, req, actor, scan, ev.Tool.Name, "permission request", ev.Time)
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/policies"
 )
 
 // This file is the envelope -> typed-event adapter: it projects a validated
@@ -43,16 +44,23 @@ func agenthooksTypedEvent(payload *gen.IngestPayload, timestamp time.Time) any {
 		}
 	case "tool.requested":
 		tool := agenthooksToolCall(payload)
+		kind := agenthooks.KindToolPre
 		if canonicalPermissionType(payload) != "" {
-			return &agenthooks.PermissionEvent{
-				Event: agenthooksBaseEvent(payload, agenthooks.KindPermission, timestamp),
-				Tool:  tool,
-			}
+			kind = agenthooks.KindPermission
 		}
-		return &agenthooks.ToolPreEvent{
-			Event: agenthooksBaseEvent(payload, agenthooks.KindToolPre, timestamp),
-			Tool:  tool,
+		base := agenthooksBaseEvent(payload, kind, timestamp)
+		// Stamp ingest's MCP predicate on the event so the gates route
+		// MCP-vs-plain exactly as the inline evaluation did. Deliberately
+		// not Tool.MCP != nil: the library's matcher parses Gemini-style
+		// mcp_server_tool names and server-only mcp__ prefixes the ingest
+		// path has never treated as MCP, while Tool.MCP also absorbs the
+		// envelope's mcp-block overlay — both serve other consumers, so the
+		// ingest predicate rides as extension data instead.
+		policies.StampMCPToolRequest(&base, canonicalIsMCPToolRequest(payload))
+		if kind == agenthooks.KindPermission {
+			return &agenthooks.PermissionEvent{Event: base, Tool: tool}
 		}
+		return &agenthooks.ToolPreEvent{Event: base, Tool: tool}
 	default:
 		return nil
 	}
@@ -104,6 +112,7 @@ func agenthooksBaseEvent(payload *gen.IngestPayload, kind agenthooks.EventKind, 
 		DetectionConfidence: "",
 		Backfilled:          false,
 		Raw:                 agenthooksRaw(payload),
+		Ext:                 nil,
 	}
 }
 

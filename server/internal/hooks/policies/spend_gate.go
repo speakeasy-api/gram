@@ -43,7 +43,7 @@ func SpendGatePrompt(spend SpendChecker) func(context.Context, *agenthooks.Promp
 // reason, matching the risk-scan deny shape on this path.
 func SpendGateToolPre(spend SpendChecker, links BlockPageLinker) func(context.Context, *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
 	return func(ctx context.Context, ev *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
-		return spendGateToolRequest(ctx, spend, links, "tool call", ev.Time)
+		return spendGateToolRequest(ctx, spend, links, "tool call", ev.Tool.Name, ev.Time)
 	}
 }
 
@@ -53,13 +53,14 @@ func SpendGateToolPre(spend SpendChecker, links BlockPageLinker) func(context.Co
 // codex endpoint's spend deny.
 func SpendGatePermission(spend SpendChecker, links BlockPageLinker) func(context.Context, *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
 	return func(ctx context.Context, ev *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
-		return spendGateToolRequest(ctx, spend, links, "permission request", ev.Time)
+		return spendGateToolRequest(ctx, spend, links, "permission request", ev.Tool.Name, ev.Time)
 	}
 }
 
 // spendGateToolRequest is the shared tool-flavored spend gate behind
-// SpendGateToolPre and SpendGatePermission.
-func spendGateToolRequest(ctx context.Context, spend SpendChecker, links BlockPageLinker, kind string, eventTime time.Time) (agenthooks.ToolPreDecision, error) {
+// SpendGateToolPre and SpendGatePermission. The tool name comes off the
+// event, matching the risk-scan gates.
+func spendGateToolRequest(ctx context.Context, spend SpendChecker, links BlockPageLinker, kind, toolName string, eventTime time.Time) (agenthooks.ToolPreDecision, error) {
 	req := RequestFromContext(ctx)
 	if req == nil {
 		return agenthooks.NoDecision(), nil
@@ -69,6 +70,6 @@ func spendGateToolRequest(ctx context.Context, spend SpendChecker, links BlockPa
 	if !blocked {
 		return agenthooks.NoDecision(), nil
 	}
-	userReason := links.AppendBlockPageURL(ctx, req, actor, auditReason, req.ToolName, "", auditReason)
+	userReason := links.AppendBlockPageURL(ctx, req, actor, auditReason, toolName, "", auditReason)
 	return agenthooks.Deny(auditReason).WithSystemMessage(userReason), nil
 }
