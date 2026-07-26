@@ -82,7 +82,7 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 	// teaching a personal account later seen on the same device could never be
 	// attributed to its employee.
 	if meta.DeviceID != "" {
-		owner, err := s.repo.UpsertDeviceOwner(ctx, repo.UpsertDeviceOwnerParams{
+		owner, err := s.enforcer.repo.UpsertDeviceOwner(ctx, repo.UpsertDeviceOwnerParams{
 			OrganizationID: meta.GramOrgID,
 			Provider:       meta.Provider,
 			DeviceID:       meta.DeviceID,
@@ -118,7 +118,7 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 		return nil
 	}
 
-	account, err := s.repo.UpsertUserAccount(ctx, repo.UpsertUserAccountParams{
+	account, err := s.enforcer.repo.UpsertUserAccount(ctx, repo.UpsertUserAccountParams{
 		OrganizationID:      meta.GramOrgID,
 		Provider:            meta.Provider,
 		ExternalAccountUuid: meta.ExternalAccountUUID,
@@ -298,7 +298,7 @@ func (s *Service) classifyAccount(ctx context.Context, meta *SessionMetadata) (s
 // real enterprise org, so any account under it — even one whose email has not
 // resolved — is a team account. Requires meta.ExternalOrgID to be non-empty.
 func (s *Service) isSharedEnterpriseOrg(ctx context.Context, meta *SessionMetadata) (bool, error) {
-	employees, err := s.repo.CountEmployeesForExternalOrg(ctx, repo.CountEmployeesForExternalOrgParams{
+	employees, err := s.enforcer.repo.CountEmployeesForExternalOrg(ctx, repo.CountEmployeesForExternalOrgParams{
 		OrganizationID: meta.GramOrgID,
 		Provider:       meta.Provider,
 		ExternalOrgID:  conv.ToPGTextEmpty(meta.ExternalOrgID),
@@ -316,7 +316,7 @@ func (s *Service) isSharedEnterpriseOrg(ctx context.Context, meta *SessionMetada
 // not be classified team. Requires meta.UserID and meta.ExternalOrgID to be
 // non-empty. This is a best-effort heuristic: it leans team when it cannot tell.
 func (s *Service) employeeAlsoUsesSharedOrg(ctx context.Context, meta *SessionMetadata) (bool, error) {
-	hasShared, err := s.repo.EmployeeHasSharedExternalOrg(ctx, repo.EmployeeHasSharedExternalOrgParams{
+	hasShared, err := s.enforcer.repo.EmployeeHasSharedExternalOrg(ctx, repo.EmployeeHasSharedExternalOrgParams{
 		OrganizationID: meta.GramOrgID,
 		Provider:       meta.Provider,
 		UserID:         conv.ToPGTextEmpty(meta.UserID),

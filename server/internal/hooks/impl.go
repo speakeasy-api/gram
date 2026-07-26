@@ -39,15 +39,13 @@ import (
 )
 
 type Service struct {
-	// Enforcer owns the enforcement dependencies and primitives (logger,
+	// enforcer owns the enforcement dependencies and primitives (logger,
 	// cache, riskScanner, siteURL, block rows, shadow-MCP evaluation, ...).
-	// It is embedded so every existing read of a promoted field or method
-	// (s.riskScanner, s.scanToolRequestForEnforcement, ...) keeps working,
-	// and so a test swapping a field after construction
-	// (ti.service.riskScanner = ...) mutates the same state the policy
-	// runner's stages read at call time — the runner is built from this
-	// Enforcer in cmd (see policies.NewRunner).
-	*Enforcer
+	// It is the same *Enforcer the cmd wiring hands to policies.NewRunner,
+	// so a test swapping one of its fields after construction
+	// (ti.service.enforcer.riskScanner = ...) mutates the state the policy
+	// runner's stages read at call time.
+	enforcer           *Enforcer
 	tracer             trace.Tracer
 	metrics            *metrics
 	db                 *pgxpool.Pool
@@ -68,9 +66,9 @@ type Service struct {
 	// policies is the ingest decision pipeline: the agenthooks event router
 	// the canonical Ingest path runs its gating policies on (see
 	// policies.NewRunner for the registration block documenting the run
-	// order). Constructed in cmd from the same Enforcer this Service embeds
+	// order). Constructed in cmd from the same Enforcer this Service holds
 	// and passed into NewService, so the stages read the dependencies tests
-	// swap (riskScanner, siteURL, ...) at call time.
+	// swap (enforcer.riskScanner, enforcer.siteURL, ...) at call time.
 	policies *agenthooks.Runner
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the
@@ -180,7 +178,7 @@ func (s *Service) signalSkillEfficacy(ctx context.Context, projectID uuid.UUID) 
 	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), skillEfficacySignalTimeout)
 	defer cancel()
 	if err := s.efficacySignaler.Signal(signalCtx, projectID); err != nil {
-		s.logger.ErrorContext(ctx, "signal skill efficacy coordinator from hook",
+		s.enforcer.logger.ErrorContext(ctx, "signal skill efficacy coordinator from hook",
 			attr.SlogError(err),
 			attr.SlogProjectID(projectID.String()),
 		)
@@ -210,7 +208,7 @@ func NewService(
 	policyRunner *agenthooks.Runner,
 ) *Service {
 	return &Service{
-		Enforcer:           enforcer,
+		enforcer:           enforcer,
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		metrics:            newMetrics(meterProvider, logger),
 		db:                 db,
@@ -243,7 +241,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	srv.Mount(
 		mux,
-		srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, nil),
+		srv.New(endpoints, mux, newHooksRequestDecoder(service.enforcer.logger), goahttp.ResponseEncoder, nil, nil),
 	)
 	AttachServerNames(mux, service)
 }

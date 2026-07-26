@@ -211,7 +211,7 @@ func TestClaudeConfigChangeUpsertsShadowMCPInventoryURLsFromCachedSessionMetadat
 
 	sessionID := uuid.NewString()
 	userEmail := "metadata-shadow-inventory@example.com"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "claude-code",
 		UserEmail:     userEmail,
@@ -358,8 +358,8 @@ func TestCodexSessionStartSkipsShadowMCPInventoryWhenSnapshotCacheFails(t *testi
 	authCtx := hookAuthContext(t, ctx)
 
 	sessionID := uuid.NewString()
-	ti.service.cache = mcpSetErrorCache{
-		Cache:   ti.service.cache,
+	ti.service.enforcer.cache = mcpSetErrorCache{
+		Cache:   ti.service.enforcer.cache,
 		failKey: sessionMCPListCacheKey(sessionID),
 		err:     errors.New("redis: connection refused"),
 	}
@@ -398,7 +398,7 @@ func TestClaudeOTELLogsWarnsWhenMCPInventorySnapshotMissing(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
 	var logBuffer bytes.Buffer
-	ti.service.logger = slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	ti.service.enforcer.logger = slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	sessionID := uuid.NewString()
 	userEmail := "missing-mcp-list@example.com"

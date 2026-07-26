@@ -233,7 +233,7 @@ func TestClaudeChatSource_CoworkFromVariantOverridesAmbiguousServiceName(t *test
 	sessionID := uuid.NewString()
 	chatID := sessionIDToUUID(sessionID)
 	prompt := "hello from legacy cowork"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
 		agentVariantCowork, sessionMCPListTTL))
 
 	metadata := &SessionMetadata{

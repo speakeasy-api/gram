@@ -128,7 +128,7 @@ func TestTruncateForWarn(t *testing.T) {
 func TestClaude_PreToolUse_Warn_DeniesWithChallenge(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+	ti.service.enforcer.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:       "warn",
 		PolicyID:     uuid.NewString(),
 		PolicyName:   "danger",
@@ -168,8 +168,8 @@ func TestClaude_PreToolUse_Warn_FallsBackToBlockWhenNoLink(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	// Force warnDenyReason to return ok=false: no site URL means no ack link.
-	ti.service.siteURL = nil
-	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+	ti.service.enforcer.siteURL = nil
+	ti.service.enforcer.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:       "warn",
 		PolicyID:     uuid.NewString(),
 		PolicyName:   "danger",
@@ -210,7 +210,7 @@ func TestClaude_PreToolUse_Warn_FallsBackToBlockWhenNoLink(t *testing.T) {
 func TestClaude_UserPromptSubmit_Warn_PassesThrough(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+	ti.service.enforcer.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:       "warn",
 		PolicyID:     uuid.NewString(),
 		PolicyName:   "danger",
@@ -252,7 +252,7 @@ func canonicalToolRequest(adapter, sessionID string) *gen.IngestPayload {
 func TestIngest_Opencode_Block_Denies(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+	ti.service.enforcer.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:      "block",
 		PolicyID:    uuid.NewString(),
 		PolicyName:  "secret policy",
@@ -269,7 +269,7 @@ func TestIngest_Opencode_Block_Denies(t *testing.T) {
 func TestClaude_UserPromptSubmit_Block_Blocks(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+	ti.service.enforcer.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:      "block",
 		PolicyID:    uuid.NewString(),
 		PolicyName:  "secret policy",
@@ -311,7 +311,7 @@ func TestIngest_CanonicalWarnChallengesEveryAdapterAndEvent(t *testing.T) {
 				MatchedValue:    "rm -rf /tmp/warn",
 				CallFingerprint: "canonical-warn-fingerprint",
 			}}
-			ti.service.riskScanner = scanner
+			ti.service.enforcer.riskScanner = scanner
 			payload := canonicalWarnTestPayload(t, adapter, eventKind, adapter+"-"+eventKind+"-"+uuid.NewString())
 
 			result, err := ti.service.Ingest(ctx, payload)
@@ -345,7 +345,7 @@ func TestIngest_CanonicalAcknowledgedPermissionWarn_StillRunsShadowMCPGuard(t *t
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = &stubResultScanner{
+	ti.service.enforcer.riskScanner = &stubResultScanner{
 		acknowledged: true,
 		result: &risk.ScanResult{
 			Action:          "warn",
@@ -389,8 +389,8 @@ func TestIngest_CanonicalWarnFallsBackToBlockWithoutAckLink(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
-	ti.service.siteURL = nil
-	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+	ti.service.enforcer.siteURL = nil
+	ti.service.enforcer.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:          "warn",
 		PolicyID:        uuid.NewString(),
 		PolicyName:      "danger",
@@ -415,7 +415,7 @@ func TestIngest_CanonicalBlockBehaviorUnchanged(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+	ti.service.enforcer.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:      "block",
 		PolicyID:    uuid.NewString(),
 		PolicyName:  "hard block",

@@ -27,12 +27,12 @@ import (
 // scans, the shadow-MCP evaluation, and block-page URL minting. It exists
 // apart from Service so cmd can construct it first and hand the same value
 // to both policies.NewRunner (as the runner's policies.Deps) and NewService.
-// Service embeds it, so the legacy per-provider paths keep reading the
-// promoted fields and methods (s.riskScanner, s.scanToolRequestForEnforcement,
-// ...) exactly as before — one copy of each dependency, shared with the
-// policy runner. Tests that swap a field after construction
-// (ti.service.riskScanner = ...) mutate that shared state, so the runner's
-// stages observe the swap on the next event.
+// Service holds it in its enforcer field, so the legacy per-provider paths
+// read the same fields and methods (s.enforcer.riskScanner,
+// s.enforcer.scanToolRequestForEnforcement, ...) — one copy of each
+// dependency, shared with the policy runner. Tests that swap a field after
+// construction (ti.service.enforcer.riskScanner = ...) mutate that shared
+// state, so the runner's stages observe the swap on the next event.
 type Enforcer struct {
 	logger          *slog.Logger
 	repo            *repo.Queries
@@ -47,7 +47,7 @@ type Enforcer struct {
 
 // NewEnforcer builds the enforcement component from the dependencies the
 // gating paths read. The logger is tagged with the hooks component, matching
-// the Service logger it is promoted into.
+// the logger the Service paths previously used.
 func NewEnforcer(
 	logger *slog.Logger,
 	db *pgxpool.Pool,

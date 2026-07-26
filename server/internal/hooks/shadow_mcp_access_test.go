@@ -61,7 +61,7 @@ func TestEnforceShadowMCPToolAccess_BypassGrantAllowsBlockedCall(t *testing.T) {
 		Selector:   selector,
 	}))
 
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
+	detail, denied := ti.service.enforcer.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),
@@ -96,7 +96,7 @@ func TestEnforceShadowMCPToolAccess_URLScopedBypassGrantDoesNotAllowIdentityOnly
 		Selector:   selector,
 	}))
 
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
+	detail, denied := ti.service.enforcer.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),
@@ -132,7 +132,7 @@ func TestEnforceShadowMCPToolAccess_IdentityScopedBypassGrantAllowsIdentityOnlyT
 		Selector:   selector,
 	}))
 
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
+	detail, denied := ti.service.enforcer.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),
@@ -166,7 +166,7 @@ func TestEnforceShadowMCPToolAccess_WholePolicyBypassGrantAllowsIdentityOnlyTarg
 		Selector:   selector,
 	}))
 
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
+	detail, denied := ti.service.enforcer.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),
@@ -199,7 +199,7 @@ func TestCanBypassPolicy_EmptyEvidenceDoesNotUseWholePolicyGrant(t *testing.T) {
 		Selector:   selector,
 	}))
 
-	target, allowed := ti.service.canBypassPolicy(
+	target, allowed := ti.service.enforcer.canBypassPolicy(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.UserID,
@@ -220,7 +220,7 @@ func TestEnforceShadowMCPToolAccess_GramHostedURLAllowed(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
+	detail, denied := ti.service.enforcer.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),
@@ -242,7 +242,7 @@ func TestEnforceShadowMCPToolAccess_NonGramURLBlocked(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
+	detail, denied := ti.service.enforcer.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),
@@ -264,7 +264,7 @@ func TestEnforceShadowMCPToolAccess_NoURLServerBlocked(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
+	detail, denied := ti.service.enforcer.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),
@@ -310,7 +310,7 @@ func TestEnforceShadowMCPToolAccess_AllowAllPermitsNonBlockedURL(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
+	detail, denied := ti.service.enforcer.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),
@@ -334,7 +334,7 @@ func TestEnforceShadowMCPToolAccess_AllowAllBlocksListedURL(t *testing.T) {
 
 	// The evidence URL matches the blocked list after canonicalization
 	// (scheme-default port and query string stripped, host lowercased).
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
+	detail, denied := ti.service.enforcer.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),
@@ -359,7 +359,7 @@ func TestEnforceShadowMCPToolAccess_AllowAllPermitsIdentityOnlyEvidence(t *testi
 
 	// Local stdio servers have no URL, so a URL blocklist can never match
 	// them; under permit-by-default they are allowed.
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
+	detail, denied := ti.service.enforcer.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),
@@ -397,7 +397,7 @@ func TestEnforceShadowMCPToolAccess_AllowAllIgnoresBypassGrants(t *testing.T) {
 		Selector:   selector,
 	}))
 
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
+	detail, denied := ti.service.enforcer.enforceShadowMCPToolAccess(
 		ctx,
 		authCtx.ActiveOrganizationID,
 		authCtx.ProjectID.String(),

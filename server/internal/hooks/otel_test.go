@@ -196,14 +196,14 @@ func TestLogs_CachesMultiSessionBatchPerSessionWithoutLeakingIdentity(t *testing
 	require.NoError(t, err)
 
 	var sessionA SessionMetadata
-	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey("claude-session-a"), &sessionA))
+	require.NoError(t, ti.service.enforcer.cache.Get(ctx, sessionCacheKey("claude-session-a"), &sessionA))
 	require.Equal(t, "claude-session-a", sessionA.SessionID)
 	require.Equal(t, "a@example.com", sessionA.UserEmail)
 	require.Equal(t, "claude-org-a", sessionA.ExternalOrgID)
 	require.Equal(t, userID, sessionA.UserID)
 
 	var sessionB SessionMetadata
-	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey("claude-session-b"), &sessionB))
+	require.NoError(t, ti.service.enforcer.cache.Get(ctx, sessionCacheKey("claude-session-b"), &sessionB))
 	require.Equal(t, "claude-session-b", sessionB.SessionID)
 	require.Empty(t, sessionB.UserEmail)
 	require.Empty(t, sessionB.ExternalOrgID)

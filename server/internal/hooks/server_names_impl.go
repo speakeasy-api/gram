@@ -40,13 +40,13 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) ([]*gen.Se
 		return nil, err
 	}
 
-	rows, err := s.repo.ListHooksServerNameOverrides(ctx, *authCtx.ProjectID)
+	rows, err := s.enforcer.repo.ListHooksServerNameOverrides(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(
 			oops.CodeUnexpected,
 			err,
 			"failed to list hooks server name overrides",
-		).LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+		).LogError(ctx, s.enforcer.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
 	}
 
 	result := make([]*gen.ServerNameOverride, len(rows))
@@ -84,7 +84,7 @@ func (s *Service) Upsert(ctx context.Context, payload *gen.UpsertPayload) (*gen.
 		return nil, oops.E(oops.CodeInvalid, nil, "display_name cannot be empty")
 	}
 
-	override, err := s.repo.UpsertHooksServerNameOverride(ctx, repo.UpsertHooksServerNameOverrideParams{
+	override, err := s.enforcer.repo.UpsertHooksServerNameOverride(ctx, repo.UpsertHooksServerNameOverrideParams{
 		ProjectID:     *authCtx.ProjectID,
 		RawServerName: payload.RawServerName,
 		DisplayName:   payload.DisplayName,
@@ -94,7 +94,7 @@ func (s *Service) Upsert(ctx context.Context, payload *gen.UpsertPayload) (*gen.
 			oops.CodeUnexpected,
 			err,
 			"failed to upsert hooks server name override",
-		).LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
+		).LogError(ctx, s.enforcer.logger, attr.SlogProjectID(authCtx.ProjectID.String()))
 	}
 
 	return &gen.ServerNameOverride{
@@ -124,7 +124,7 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 		return oops.E(oops.CodeInvalid, err, "invalid override ID")
 	}
 
-	err = s.repo.DeleteHooksServerNameOverride(ctx, repo.DeleteHooksServerNameOverrideParams{
+	err = s.enforcer.repo.DeleteHooksServerNameOverride(ctx, repo.DeleteHooksServerNameOverrideParams{
 		ID:        overrideUUID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -133,7 +133,7 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 			oops.CodeUnexpected,
 			err,
 			"failed to delete hooks server name override",
-		).LogError(ctx, s.logger, attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogHookServerNameOverrideID(payload.OverrideID))
+		).LogError(ctx, s.enforcer.logger, attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogHookServerNameOverrideID(payload.OverrideID))
 	}
 
 	return nil

@@ -177,7 +177,7 @@ func (s *Service) codexInventoryProvenanceDetail(ctx context.Context, matched *M
 		return ""
 	}
 	switch {
-	case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, orgID):
+	case matched.URL != "" && !s.enforcer.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, orgID):
 		return fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", matched.Name, matched.URL)
 	case matched.URL == "" && matched.Command != "":
 		return fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", matched.Name, matched.Command)

@@ -228,7 +228,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		}
 	}
 
-	logger := s.logger.With(
+	logger := s.enforcer.logger.With(
 		attr.SlogHookSource("claude"),
 		attr.SlogHookEvent(payload.HookEventName),
 		attr.SlogServiceName(serviceName),
@@ -501,7 +501,7 @@ func (s *Service) parseMCPInventoryFromPayload(ctx context.Context, payload *gen
 			if payload.SessionID != nil {
 				sessionID = *payload.SessionID
 			}
-			s.logger.WarnContext(ctx, "cowork mcp inventory has no connector_uuid on any entry",
+			s.enforcer.logger.WarnContext(ctx, "cowork mcp inventory has no connector_uuid on any entry",
 				attr.SlogEvent("claude_hook_cowork_inventory_missing_uuid"),
 				attr.SlogGenAIConversationID(sessionID),
 				attr.SlogValueAny(raw),
@@ -519,8 +519,8 @@ func (s *Service) parseMCPInventoryFromPayload(ctx context.Context, payload *gen
 // self-heals the cache that the best-effort telemetry path later reads.
 func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, entries []MCPServerEntry, variant string) {
 	key := sessionMCPListCacheKey(sessionID)
-	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
-		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
+	if err := s.enforcer.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
+		s.enforcer.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
 		)
@@ -528,8 +528,8 @@ func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, en
 	}
 
 	variantKey := sessionAgentVariantCacheKey(sessionID)
-	if err := s.cache.Set(ctx, variantKey, variant, sessionMCPListTTL); err != nil {
-		s.logger.WarnContext(ctx, "failed to cache session agent variant",
+	if err := s.enforcer.cache.Set(ctx, variantKey, variant, sessionMCPListTTL); err != nil {
+		s.enforcer.logger.WarnContext(ctx, "failed to cache session agent variant",
 			attr.SlogEvent("claude_hook_agent_variant_cache_set_failed"),
 			attr.SlogError(err),
 		)
@@ -610,14 +610,14 @@ func (s *Service) refreshMCPListTTL(ctx context.Context, sessionID string) {
 	if sessionID == "" {
 		return
 	}
-	if err := s.cache.Expire(ctx, sessionMCPListCacheKey(sessionID), sessionMCPListTTL); err != nil {
-		s.logger.WarnContext(ctx, "failed to refresh MCP list TTL",
+	if err := s.enforcer.cache.Expire(ctx, sessionMCPListCacheKey(sessionID), sessionMCPListTTL); err != nil {
+		s.enforcer.logger.WarnContext(ctx, "failed to refresh MCP list TTL",
 			attr.SlogEvent("claude_hook_mcp_list_ttl_refresh_failed"),
 			attr.SlogError(err),
 		)
 	}
-	if err := s.cache.Expire(ctx, sessionAgentVariantCacheKey(sessionID), sessionMCPListTTL); err != nil {
-		s.logger.WarnContext(ctx, "failed to refresh session agent variant TTL",
+	if err := s.enforcer.cache.Expire(ctx, sessionAgentVariantCacheKey(sessionID), sessionMCPListTTL); err != nil {
+		s.enforcer.logger.WarnContext(ctx, "failed to refresh session agent variant TTL",
 			attr.SlogEvent("claude_hook_agent_variant_ttl_refresh_failed"),
 			attr.SlogError(err),
 		)
@@ -660,7 +660,7 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 }
 
 func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
-	logger := s.withAuthContext(ctx, s.logger.With(
+	logger := s.withAuthContext(ctx, s.enforcer.logger.With(
 		attr.SlogHookSource("claude"),
 		attr.SlogHookEvent(payload.HookEventName),
 	))
@@ -673,7 +673,7 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	}
 
 	// Skip persistence for a redelivery (the token was claimed in Claude()).
-	if s.isHookDuplicate(ctx) {
+	if s.enforcer.isHookDuplicate(ctx) {
 		return
 	}
 
@@ -798,7 +798,7 @@ func (s *Service) resolveClaudeSessionMetadata(ctx context.Context, sessionID, u
 func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) {
 	metadata.UserEmail = strings.TrimSpace(metadata.UserEmail)
 	if metadata.UserEmail == "" {
-		s.logger.WarnContext(ctx, "skipping claude hook persistence without user email",
+		s.enforcer.logger.WarnContext(ctx, "skipping claude hook persistence without user email",
 			attr.SlogEvent("claude_hook_persist_no_user_email"),
 			attr.SlogHookSource("claude"),
 			attr.SlogHookEvent(payload.HookEventName),
@@ -817,18 +817,18 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 
 	if isConversationEvent(payload.HookEventName) {
 		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
+			s.enforcer.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
 		}
 	} else {
 		if err := s.persistToolCallEvent(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
+			s.enforcer.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
 		}
 	}
 }
 
 func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (SessionMetadata, error) {
 	var metadata SessionMetadata
-	err := s.cache.Get(ctx, sessionCacheKey(sessionID), &metadata)
+	err := s.enforcer.cache.Get(ctx, sessionCacheKey(sessionID), &metadata)
 	if err != nil {
 		return SessionMetadata{}, fmt.Errorf("get session metadata: %w", err)
 	}
@@ -842,7 +842,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	}
 	// Spend gate runs before any risk-policy evaluation: an over-budget user
 	// gets tool calls denied even mid-turn, for native and MCP tools alike.
-	if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+	if block := s.enforcer.checkSpendGate(ctx, ev.Event); block != nil {
 		auditReason := spendBlockReason("tool call", block)
 		userReason := auditReason
 		if payload.SessionID != nil {
@@ -850,8 +850,8 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
 		}
-		if blockID, err := uuid.NewV7(); err == nil && !s.isHookDuplicate(ctx) && s.repo != nil && strings.TrimSpace(ev.Context.OrganizationID) != "" && ev.Context.ProjectID != uuid.Nil {
-			userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+		if blockID, err := uuid.NewV7(); err == nil && !s.enforcer.isHookDuplicate(ctx) && s.enforcer.repo != nil && strings.TrimSpace(ev.Context.OrganizationID) != "" && ev.Context.ProjectID != uuid.Nil {
+			userReason = appendBlockURL(userReason, s.enforcer.blockViewURL(blockID))
 			userID := ev.Context.User.ID
 			userEmail := ev.Context.User.Email
 			asyncCtx := context.WithoutCancel(ctx)
@@ -861,7 +861,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				if userID == "" {
 					userID = s.resolveUserByEmail(asyncCtx, userEmail, ev.Context.OrganizationID)
 				}
-				s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+				s.enforcer.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
 					Provider:       "claude",
 					OrganizationID: ev.Context.OrganizationID,
 					ProjectID:      ev.Context.ProjectID,
@@ -877,12 +877,12 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		}
 		return constructBlockResponse(payload.HookEventName, userReason), nil
 	}
-	if s.riskScanner != nil && ev.ConversationID != "" {
+	if s.enforcer.riskScanner != nil && ev.ConversationID != "" {
 		// Acknowledged warn is excluded from the enforcement block so it falls
 		// through to the shadow-MCP guard below: an ack clears the risk
 		// challenge but must never bypass unapproved-toolset validation.
-		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil &&
-			(scanResult.Action != "warn" || !s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
+		if scanResult := s.enforcer.scanToolRequestForEnforcement(ctx, ev); scanResult != nil &&
+			(scanResult.Action != "warn" || !s.enforcer.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
 			// Unacknowledged warn → deny + out-of-band acknowledgement link
 			// (challenge). Claude is unified with Cursor/Codex on the link flow
 			// rather than the native permissionDecision "ask", which
@@ -890,7 +890,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			// (missing site URL / cache / user) → fall through to a hard block
 			// (fail-safe): a warn must never silently allow.
 			if scanResult.Action == "warn" {
-				if agentReason, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
+				if agentReason, userReason, ok := s.enforcer.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 					return constructWarnChallengeResponse(payload.HookEventName, agentReason, userReason), nil
 				}
 			}
@@ -907,7 +907,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
 			if blockID, err := uuid.NewV7(); err == nil {
-				userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+				userReason = appendBlockURL(userReason, s.enforcer.blockViewURL(blockID))
 				// Prefer the email from the session metadata fetched above,
 				// falling back to the raw payload when it wasn't cached.
 				userEmail := conv.PtrValOr(payload.UserEmail, "")
@@ -919,7 +919,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				// stays off the deny hot path (a plain `go s.insert(...)` would
 				// evaluate the resolveUserByEmail argument synchronously).
 				go func() {
-					s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+					s.enforcer.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
 						Provider:       "claude",
 						OrganizationID: ev.Context.OrganizationID,
 						ProjectID:      ev.Context.ProjectID,
@@ -976,7 +976,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		// No session yet to derive org/project from. Native tools are already
 		// skipped above; MCP calls must fail closed because buffered telemetry
 		// cannot undo an already-allowed tool call.
-		s.logger.WarnContext(ctx, "claude PreToolUse fired without session id; denying MCP tool call",
+		s.enforcer.logger.WarnContext(ctx, "claude PreToolUse fired without session id; denying MCP tool call",
 			attr.SlogEvent("claude_hook_pretooluse_no_session"),
 		)
 		return denyUnverifiedMCP(denyCodeNoSession)
@@ -993,7 +993,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		// OTEL path with no cached metadata yet. Native tools are already
 		// skipped above; MCP calls must fail closed because buffered telemetry
 		// cannot undo an already-allowed tool call.
-		s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; denying MCP tool call",
+		s.enforcer.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; denying MCP tool call",
 			attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
 			attr.SlogHookSource("claude"),
 			attr.SlogHookEvent(payload.HookEventName),
@@ -1004,7 +1004,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		return denyUnverifiedMCP(denyCodeNoMetadata)
 	}
 	if strings.TrimSpace(metadata.UserEmail) == "" {
-		s.logger.WarnContext(ctx, "claude PreToolUse metadata has no user email; denying MCP tool call",
+		s.enforcer.logger.WarnContext(ctx, "claude PreToolUse metadata has no user email; denying MCP tool call",
 			attr.SlogEvent("claude_hook_pretooluse_no_user_email"),
 			attr.SlogHookSource("claude"),
 			attr.SlogHookEvent(payload.HookEventName),
@@ -1014,7 +1014,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		return denyUnverifiedMCP(denyCodeNoUserEmail)
 	}
 
-	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
+	policy := s.enforcer.lookupShadowMCPBlockingPolicy(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
 	if policy == nil {
 		if output != nil {
 			output.PermissionDecision = &allow
@@ -1033,7 +1033,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	if cacheErr != nil {
 		auditReason := "missing MCP list snapshot for session"
 		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."
-		s.logger.With(
+		s.enforcer.logger.With(
 			attr.SlogHookSource("claude"),
 			attr.SlogHookEvent(payload.HookEventName),
 			attr.SlogOrganizationID(metadata.GramOrgID),
@@ -1057,7 +1057,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		// missing from the inventory, local stdio servers, and unrecognizable
 		// entries are all allowed — the fail-closed reasons below are
 		// block_all concepts. Gram-hosted URLs stay allowed even if listed.
-		if matched != nil && matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID) {
+		if matched != nil && matched.URL != "" && !s.enforcer.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID) {
 			if blockedURL, blocked := shadowmcp.BlockedURLMatch(policy.BlockedURLs, matched.URL); blocked {
 				detail = fmt.Sprintf("MCP server %q is blocked by policy (URL: %s)", serverPrefix, blockedURL)
 			}
@@ -1066,7 +1066,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		switch {
 		case matched == nil:
 			detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
-		case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
+		case matched.URL != "" && !s.enforcer.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
 			detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
 		case matched.URL == "" && matched.Command != "":
 			// Local stdio servers have no URL, so the Gram-hosted check above
@@ -1104,13 +1104,13 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// Bypass grants are a block_all concept: under allow-all the blocked-list
 	// membership above is the whole check.
 	if !policy.IsAllowAll() {
-		if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
+		if _, allowed := s.enforcer.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
 			matchedURL, matchedCommand := "", ""
 			if matched != nil {
 				matchedURL = matched.URL
 				matchedCommand = matched.Command
 			}
-			s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
+			s.enforcer.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
 				attr.SlogEvent("claude_hook_policy_bypass_allow"),
 				attr.SlogToolName(rawToolName),
 				attr.SlogRiskPolicyID(policy.ID),
@@ -1128,7 +1128,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	}
 
 	auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-	userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+	userReason := s.enforcer.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
 		OrganizationID:  metadata.GramOrgID,
 		ProjectID:       metadata.ProjectID,
 		RequesterUserID: metadata.UserID,
@@ -1143,7 +1143,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	if matched != nil {
 		matchedURL = matched.URL
 	}
-	s.logger.With(
+	s.enforcer.logger.With(
 		attr.SlogHookSource("claude"),
 		attr.SlogHookEvent(payload.HookEventName),
 		attr.SlogOrganizationID(metadata.GramOrgID),
@@ -1184,15 +1184,15 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// write, leaving the appended /blocks/<id> link pointing at a page with no
 	// backing row.
 	if projectUUID, parseErr := uuid.Parse(metadata.ProjectID); parseErr != nil {
-		s.logger.WarnContext(ctx, "tool call block: invalid project id; skipping durable block link",
+		s.enforcer.logger.WarnContext(ctx, "tool call block: invalid project id; skipping durable block link",
 			attr.SlogEvent("claude_hook_block_invalid_project"), attr.SlogError(parseErr))
 	} else if blockID, err := uuid.NewV7(); err == nil {
-		userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+		userReason = appendBlockURL(userReason, s.enforcer.blockViewURL(blockID))
 		asyncCtx := context.WithoutCancel(ctx)
 		metaCopy := metadata
 		go func() {
 			resultID, msgID, _ := s.recordShadowMCPBlockFinding(asyncCtx, payload, &metaCopy, policy, matched, serverPrefix, detail)
-			s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+			s.enforcer.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
 				Provider:       "claude",
 				OrganizationID: metaCopy.GramOrgID,
 				ProjectID:      projectUUID,
@@ -1275,25 +1275,25 @@ func (s *Service) recordShadowMCPBlockFinding(
 	serverPrefix string,
 	detail string,
 ) (uuid.UUID, uuid.UUID, bool) {
-	if s.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.isHookDuplicate(ctx) {
+	if s.enforcer.repo == nil || policy == nil || payload.SessionID == nil || payload.ToolUseID == nil || s.enforcer.isHookDuplicate(ctx) {
 		return uuid.Nil, uuid.Nil, false
 	}
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "shadow-mcp block: invalid project id",
+		s.enforcer.logger.WarnContext(ctx, "shadow-mcp block: invalid project id",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
 		return uuid.Nil, uuid.Nil, false
 	}
 	policyID, err := uuid.Parse(policy.ID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "shadow-mcp block: invalid policy id",
+		s.enforcer.logger.WarnContext(ctx, "shadow-mcp block: invalid policy id",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
 		return uuid.Nil, uuid.Nil, false
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
-	msgID, err := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
+	msgID, err := s.enforcer.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
 		ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
 		ChatID:     chatID,
 		ToolCallID: *payload.ToolUseID,
@@ -1303,7 +1303,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 		// tool-call chat_message was never persisted. The ClickHouse path
 		// still records the block; only the Recent Findings surfacing is
 		// skipped.
-		s.logger.DebugContext(ctx, "shadow-mcp block: no chat_message found for tool_use_id; skipping risk_result write",
+		s.enforcer.logger.DebugContext(ctx, "shadow-mcp block: no chat_message found for tool_use_id; skipping risk_result write",
 			attr.SlogEvent("claude_hook_block_finding_no_message"),
 			attr.SlogError(err),
 		)
@@ -1342,7 +1342,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	// table.
 	resultID, err := uuid.NewV7()
 	if err != nil {
-		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",
+		s.enforcer.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
 		return uuid.Nil, uuid.Nil, false
 	}
@@ -1357,8 +1357,8 @@ func (s *Service) recordShadowMCPBlockFinding(
 		Match:             pgtype.Text{String: match, Valid: match != ""},
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
 	}
-	if err := s.repo.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {
-		s.logger.WarnContext(ctx, "shadow-mcp block: failed to insert risk_result",
+	if err := s.enforcer.repo.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {
+		s.enforcer.logger.WarnContext(ctx, "shadow-mcp block: failed to insert risk_result",
 			attr.SlogEvent("claude_hook_block_finding_insert_failed"),
 			attr.SlogError(err),
 		)
@@ -1374,7 +1374,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
-	if s.telemetryLogger == nil || reason == "" || s.isHookDuplicate(ctx) {
+	if s.telemetryLogger == nil || reason == "" || s.enforcer.isHookDuplicate(ctx) {
 		return
 	}
 
@@ -1384,7 +1384,7 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "invalid project ID for Claude block log", attr.SlogError(err))
+		s.enforcer.logger.WarnContext(ctx, "invalid project ID for Claude block log", attr.SlogError(err))
 		return
 	}
 

@@ -67,16 +67,16 @@ func (s *Service) claimHookIdempotency(ctx context.Context, token string, replay
 	// find an unwritten marker (the canceled SETNX returns an error → fail open
 	// → true) and persist a second time. WithoutCancel keeps the marker write
 	// running so the retry actually loses the guard.
-	claimed, err := s.cache.Add(context.WithoutCancel(ctx), hookIdempotencyCacheKey(token), ttl)
+	claimed, err := s.enforcer.cache.Add(context.WithoutCancel(ctx), hookIdempotencyCacheKey(token), ttl)
 	if err != nil {
-		s.logger.WarnContext(ctx, "hook idempotency guard failed; persisting anyway",
+		s.enforcer.logger.WarnContext(ctx, "hook idempotency guard failed; persisting anyway",
 			attr.SlogEvent("hook_idempotency_guard_failed"),
 			attr.SlogError(err),
 		)
 		return true
 	}
 	if !claimed {
-		s.logger.InfoContext(ctx, "skipping duplicate hook delivery",
+		s.enforcer.logger.InfoContext(ctx, "skipping duplicate hook delivery",
 			attr.SlogEvent("hook_idempotency_duplicate"),
 		)
 	}
@@ -93,16 +93,16 @@ func (s *Service) claimBlockedPromptTelemetry(ctx context.Context, payload *gen.
 		return true
 	}
 
-	claimed, err := s.cache.Add(context.WithoutCancel(ctx), blockedPromptTelemetryCacheKey("claude", sessionID, prompt), hookIdempotencyTTL)
+	claimed, err := s.enforcer.cache.Add(context.WithoutCancel(ctx), blockedPromptTelemetryCacheKey("claude", sessionID, prompt), hookIdempotencyTTL)
 	if err != nil {
-		s.logger.WarnContext(ctx, "blocked prompt telemetry guard failed; persisting anyway",
+		s.enforcer.logger.WarnContext(ctx, "blocked prompt telemetry guard failed; persisting anyway",
 			attr.SlogEvent("blocked_prompt_telemetry_guard_failed"),
 			attr.SlogError(err),
 		)
 		return true
 	}
 	if !claimed {
-		s.logger.InfoContext(ctx, "skipping duplicate blocked prompt telemetry",
+		s.enforcer.logger.InfoContext(ctx, "skipping duplicate blocked prompt telemetry",
 			attr.SlogEvent("blocked_prompt_telemetry_duplicate"),
 		)
 	}
@@ -114,11 +114,11 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 	// Use atomic RPUSH operation to append to the list
 	// This eliminates the race condition from read-modify-write
 	ttl := 5 * time.Minute // TTL for buffered hooks. This is very generous. Could be lower since this can trigger through an unauthenticated endpoint.
-	if err := s.cache.ListAppend(ctx, hookPendingCacheKey(sessionID), payload, ttl); err != nil {
+	if err := s.enforcer.cache.ListAppend(ctx, hookPendingCacheKey(sessionID), payload, ttl); err != nil {
 		return fmt.Errorf("append hook to list: %w", err)
 	}
 
-	s.logger.DebugContext(ctx, "Buffered hook in Redis",
+	s.enforcer.logger.DebugContext(ctx, "Buffered hook in Redis",
 		attr.SlogEvent("hook_buffered"),
 	)
 
@@ -140,7 +140,7 @@ func (s *Service) resolveUserByEmail(ctx context.Context, email, orgID string) s
 		return user.ID
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+		s.enforcer.logger.WarnContext(ctx, "failed to resolve hook user by email",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 			attr.SlogAuthUserEmail(email),
@@ -181,7 +181,7 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 			Attributes: attrs,
 		})
 
-		s.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
+		s.enforcer.logger.DebugContext(ctx, "Wrote hook to ClickHouse with metadata",
 			attr.SlogEvent("hook_written"),
 		)
 	}
@@ -284,14 +284,14 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		if jsonBytes, err := json.Marshal(payload.ToolInput); err == nil {
 			attrs[attr.GenAIToolCallArgumentsKey] = string(jsonBytes)
 		} else {
-			s.logger.WarnContext(ctx, "Failed to marshal ToolInput", attr.SlogError(err))
+			s.enforcer.logger.WarnContext(ctx, "Failed to marshal ToolInput", attr.SlogError(err))
 		}
 	}
 	if payload.ToolResponse != nil {
 		if jsonBytes, err := json.Marshal(payload.ToolResponse); err == nil {
 			attrs[attr.GenAIToolCallResultKey] = string(jsonBytes)
 		} else {
-			s.logger.WarnContext(ctx, "Failed to marshal ToolResponse", attr.SlogError(err))
+			s.enforcer.logger.WarnContext(ctx, "Failed to marshal ToolResponse", attr.SlogError(err))
 		}
 	}
 
@@ -328,14 +328,14 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 
 	parsedProjectID, err := uuid.Parse(projectID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "Invalid project ID for metrics", attr.SlogError(err))
+		s.enforcer.logger.ErrorContext(ctx, "Invalid project ID for metrics", attr.SlogError(err))
 		return
 	}
 
 	// Extract metrics from payload
 	metrics, err := extractMetricsForClickHouse(payload)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "Failed to extract metrics", attr.SlogError(err))
+		s.enforcer.logger.ErrorContext(ctx, "Failed to extract metrics", attr.SlogError(err))
 		return
 	}
 
@@ -357,7 +357,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		if err == nil {
 			emailToUserID[email] = user.ID
 		} else if !errors.Is(err, pgx.ErrNoRows) {
-			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+			s.enforcer.logger.WarnContext(ctx, "failed to resolve hook user by email",
 				attr.SlogError(err),
 				attr.SlogOrganizationID(orgID),
 				attr.SlogAuthUserEmail(m.UserEmail),
@@ -468,7 +468,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		})
 	}
 
-	s.logger.DebugContext(ctx, fmt.Sprintf("Wrote %d Claude Code metrics to ClickHouse", len(metrics)),
+	s.enforcer.logger.DebugContext(ctx, fmt.Sprintf("Wrote %d Claude Code metrics to ClickHouse", len(metrics)),
 		attr.SlogEvent("metrics_written"),
 	)
 }
@@ -646,8 +646,8 @@ func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metad
 	var payloads []gen.ClaudePayload
 	key := hookPendingCacheKey(sessionID)
 
-	if err := s.cache.ListRange(ctx, key, 0, -1, &payloads); err != nil {
-		s.logger.DebugContext(ctx, "No pending hooks to flush or error reading list", attr.SlogError(err))
+	if err := s.enforcer.cache.ListRange(ctx, key, 0, -1, &payloads); err != nil {
+		s.enforcer.logger.DebugContext(ctx, "No pending hooks to flush or error reading list", attr.SlogError(err))
 		return
 	}
 
@@ -659,10 +659,10 @@ func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metad
 		s.persistHook(ctx, &payloads[i], metadata)
 	}
 
-	s.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending hooks", len(payloads)))
+	s.enforcer.logger.InfoContext(ctx, fmt.Sprintf("Flushed %d pending hooks", len(payloads)))
 
 	// Delete the list after successful processing
-	if err := s.cache.Delete(ctx, key); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to delete hook buffer", attr.SlogError(err))
+	if err := s.enforcer.cache.Delete(ctx, key); err != nil {
+		s.enforcer.logger.ErrorContext(ctx, "Failed to delete hook buffer", attr.SlogError(err))
 	}
 }

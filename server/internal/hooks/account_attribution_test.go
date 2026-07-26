@@ -421,7 +421,7 @@ func TestClaude_LinksChatToUserAccount(t *testing.T) {
 	// Seed session metadata as the OTEL path would for a personal account: a
 	// non-resolving email, but the device bridge already attributed it to an
 	// employee and the account entity is linked.
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "claude-code",
 		UserEmail:     "personal@gmail.com",

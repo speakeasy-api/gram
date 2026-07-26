@@ -17,7 +17,7 @@ import (
 func TestCodex_PreToolUse_ShadowMCPBlockWithIdentityEvidenceIncludesRequestLink(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := "codex-session-blocked"
 	toolName := "mcp__gram__do_thing"
@@ -43,10 +43,10 @@ func TestCodex_PreToolUse_ShadowMCPBlockWithIdentityEvidenceIncludesRequestLink(
 func TestCodex_PreToolUse_ShadowMCPAllowsGramHostedMetaTool(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := "codex-session-gram-mcp-meta-tool"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -78,10 +78,10 @@ func TestCodex_PreToolUse_ShadowMCPAllowsGramHostedMetaTool(t *testing.T) {
 func TestCodex_PreToolUse_ShadowMCPBlocksExternalMetaTool(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := "codex-session-external-mcp-meta-tool"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -117,7 +117,7 @@ func TestCodex_PreToolUse_ShadowMCPBlocksExternalMetaTool(t *testing.T) {
 func TestCodex_PreToolUse_ShadowMCPBlocksUnverifiedMetaTool(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := "codex-session-unverified-mcp-meta-tool"
 	toolName := "list_mcp_resources"
@@ -150,7 +150,7 @@ func TestCodex_PreToolUse_ShadowMCPBlocksMetaToolMissingServer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestHooksService(t)
-			ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+			ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 			sessionID := "codex-session-missing-meta-server-" + name
 			toolName := "list_mcp_resources"
@@ -183,7 +183,7 @@ func TestCodex_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testing
 	hookUserID := "codex-hook-user"
 	hookUserEmail := "codex-hook-user@example.com"
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, hookUserID, hookUserEmail)
-	ti.service.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
+	ti.service.enforcer.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
 
 	sessionID := "codex-session-specific-user-policy"
 	toolName := "mcp__gram__do_thing"
@@ -226,7 +226,7 @@ func TestCodex_UserPromptSubmit_ScansViaHookEvents(t *testing.T) {
 			Description: "blocked prompt",
 		},
 	}
-	ti.service.riskScanner = scanner
+	ti.service.enforcer.riskScanner = scanner
 
 	sessionID := "codex-session-risk-scan"
 	userEmail := "dev@example.com"
@@ -331,7 +331,7 @@ func TestBuildCodexTelemetryAttributes_EnrichesMCPToolFromInventory(t *testing.T
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := "codex-session-telemetry-inventory"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -369,7 +369,7 @@ func TestBuildCodexTelemetryAttributes_EnrichesMCPMetaToolFromInventory(t *testi
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := "codex-session-telemetry-meta-inventory"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -409,7 +409,7 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := "codex-session-evidence-inventory"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -456,7 +456,7 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	require.Equal(t, "https://chat.example.com/mcp/int-linear", evidence.FullURL)
 	require.NotNil(t, matched)
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -491,7 +491,7 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	require.Empty(t, evidence.FullURL)
 	require.Nil(t, matched, "ambiguous Codex namespaces must not resolve to the first matching inventory row")
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
 		RawLine:       "",
 		Source:        "local",
 		PluginName:    "",
@@ -676,7 +676,7 @@ func TestCodexSessionMetadata_IgnoresCachedUserIDWhenEmailDoesNotResolve(t *test
 
 	sessionID := "codex-session-with-stale-cache"
 	email := "cached@example.com"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "Codex",
 		UserEmail:     email,

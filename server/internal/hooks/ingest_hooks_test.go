@@ -121,7 +121,7 @@ func TestCanonicalSessionMetadata_KeepsCachedCoworkServiceName(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	sessionID := "canonical-cowork-surface"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:   sessionID,
 		ServiceName: "cowork",
 		GramOrgID:   authCtx.ActiveOrganizationID,
@@ -235,7 +235,7 @@ func TestIngestAuthenticated_UsesSuppliedIdentity(t *testing.T) {
 	payload.Data = &gen.HookIngestData{
 		Prompt: &gen.HookPromptData{Text: &prompt},
 	}
-	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+	ti.service.enforcer.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:      "block",
 		PolicyID:    uuid.NewString(),
 		PolicyName:  "authenticated boundary policy",
@@ -276,7 +276,7 @@ func TestIngest_ShadowMCPPolicyUsesCachedSessionIdentityForSharedKey(t *testing.
 
 	cachedUserID := "user_cached_owner"
 	sessionID := "canonical-shadow-mcp-cached-identity"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID: sessionID,
 		UserID:    cachedUserID,
 		UserEmail: "cached-dev@example.com",
@@ -287,7 +287,7 @@ func TestIngest_ShadowMCPPolicyUsesCachedSessionIdentityForSharedKey(t *testing.
 	// The policy only exists for the cached user: a deny proves enforcement
 	// resolved the actor from the session cache rather than running
 	// unattributed.
-	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: cachedUserID}
+	ti.service.enforcer.riskScanner = ingestUserScopedShadowMCPScanner{userID: cachedUserID}
 
 	toolName := "mcp__local_server__search"
 	serverIdentity := "local-server"
@@ -326,7 +326,7 @@ func TestIngest_ShadowMCPPolicyRecoversCachedIdentityForUnresolvableSharedKeyEma
 
 	cachedUserID := "user_cached_owner"
 	sessionID := "canonical-shadow-mcp-unresolvable-email"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID: sessionID,
 		UserID:    cachedUserID,
 		UserEmail: "cached-dev@example.com",
@@ -334,7 +334,7 @@ func TestIngest_ShadowMCPPolicyRecoversCachedIdentityForUnresolvableSharedKeyEma
 		ProjectID: authCtx.ProjectID.String(),
 	}, 0))
 
-	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: cachedUserID}
+	ti.service.enforcer.riskScanner = ingestUserScopedShadowMCPScanner{userID: cachedUserID}
 
 	toolName := "mcp__local_server__search"
 	serverIdentity := "local-server"
@@ -370,7 +370,7 @@ func TestIngest_ShadowMCPPolicyFallsBackToOwnerForUnresolvablePersonalKeyEmail(t
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+	ti.service.enforcer.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
 
 	toolName := "mcp__local_server__search"
 	serverIdentity := "local-server"
@@ -403,7 +403,7 @@ func TestIngest_ShadowMCPPolicyUsesAuthenticatedTokenOwner(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+	ti.service.enforcer.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
 
 	toolName := "mcp__local_server__search"
 	serverIdentity := "local-server"
@@ -450,7 +450,7 @@ func TestIngest_DuplicateDeliveryDoesNotMintSecondBlockRow(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+	ti.service.enforcer.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
 
 	toolName := "mcp__local_server__search"
 	serverIdentity := "local-server"
@@ -569,7 +569,7 @@ func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
 	authCtx.APIKeyName = "plugins-hooks-20260713-104500-c0d3e1"
 	authCtx.OrgWidePluginHooksKey = true
 	remaining := make(chan time.Duration, 1)
-	ti.service.cache = &sessionCacheDeadlineRecorder{Cache: ti.service.cache, remaining: remaining}
+	ti.service.enforcer.cache = &sessionCacheDeadlineRecorder{Cache: ti.service.enforcer.cache, remaining: remaining}
 
 	userID := "user_codex_session_actor"
 	userEmail := "codex-session@example.com"
@@ -583,7 +583,7 @@ func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
 	require.Equal(t, "allow", result.Decision)
 
 	var cached SessionMetadata
-	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey(sessionID), &cached))
+	require.NoError(t, ti.service.enforcer.cache.Get(ctx, sessionCacheKey(sessionID), &cached))
 	require.Equal(t, userID, cached.UserID)
 	require.Equal(t, userEmail, cached.UserEmail)
 	writeBudget := <-remaining
@@ -900,7 +900,7 @@ func TestIngest_BlockedEventDoesNotEmitDerivedSkillRow(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	chClient := enableHookTelemetryLogger(t, ctx, ti)
 	authCtx := hookAuthContext(t, ctx)
-	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+	ti.service.enforcer.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
 
 	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
 	occurredAt := timestamp.Format(time.RFC3339Nano)
@@ -1080,7 +1080,7 @@ func TestIngest_LinksChatToUserAccount(t *testing.T) {
 	// Seed session metadata as the OTEL path would for an attributed personal
 	// account. No ObservedUserEmail: entries cached before the field existed
 	// must still adopt via the UserEmail fallback.
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "claude-code",
 		UserEmail:     "personal@gmail.com",
@@ -1352,7 +1352,7 @@ func TestIngest_StampsAccountAttributionOnTelemetry(t *testing.T) {
 
 	sessionID := "canonical-stamp-" + uuid.NewString()
 	externalOrgID := "stamp-ext-org-" + sessionID
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:         sessionID,
 		ServiceName:       "claude-code",
 		UserEmail:         "personal@gmail.com",

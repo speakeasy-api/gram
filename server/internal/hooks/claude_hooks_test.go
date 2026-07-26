@@ -78,7 +78,7 @@ func TestNormalizeClaudeHookEvent_PrefersAuthContextProjectOverCachedMetadata(t 
 
 	sessionID := uuid.NewString()
 	cachedProjectID := uuid.New()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID: sessionID,
 		ProjectID: cachedProjectID.String(),
 		UserEmail: "cached-scan@example.com",
@@ -106,7 +106,7 @@ func TestNormalizeClaudeHookEvent_AllowsMissingUserEmail(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID: sessionID,
 		ProjectID: uuid.NewString(),
 		UserEmail: "",
@@ -170,7 +170,7 @@ func TestNormalizeClaudeHookEvent_ResolvesAuthContextActorFromCachedEmail(t *tes
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "claude-code",
 		UserEmail:     userEmail,
@@ -207,7 +207,7 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	// lookupShadowMCPBlockingPolicy needs a non-nil scanner that reports a
 	// blocking shadow-MCP policy, otherwise the handler short-circuits to
 	// allow before the cached-MCP-list check runs.
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -248,7 +248,7 @@ func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
@@ -281,7 +281,7 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__plugin_slack_slack__send_message"
@@ -290,7 +290,7 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 
 	// Seed the cache with an entry that resolves the tool's server prefix
 	// but points at a non-Gram host.
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "plugin", PluginName: "slack", Name: "slack", URL: "https://mcp.slack.com/mcp"}},
 		sessionMCPListTTL,
 	))
@@ -321,14 +321,14 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__mise__install_tool"
 	toolUseID := "toolu_local_stdio"
 	userEmail := "claude-local-stdio@example.com"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
@@ -362,13 +362,13 @@ func TestClaude_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testin
 	hookUserID := "claude-hook-user"
 	hookUserEmail := "claude-hook-user@example.com"
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, hookUserID, hookUserEmail)
-	ti.service.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
+	ti.service.enforcer.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__mise__install_tool"
 	toolUseID := "toolu_claude_specific_user_policy"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
@@ -396,14 +396,14 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
 	toolUseID := "toolu_gram_hosted_ok"
 	userEmail := "claude-gram-hosted@example.com"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
 		sessionMCPListTTL,
 	))
@@ -436,7 +436,7 @@ func TestClaude_PreToolUse_EnforcesFromPayloadInventoryWithoutCache(t *testing.T
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
@@ -480,7 +480,7 @@ func TestClaude_PreToolUse_PayloadInventoryBlocksNonGramServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__notion__search"
@@ -520,7 +520,7 @@ func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
@@ -528,7 +528,7 @@ func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
 	userEmail := "claude-fresh-supersedes@example.com"
 
 	// Cache holds a Gram-hosted entry that would allow on its own.
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
 		sessionMCPListTTL,
 	))
@@ -571,14 +571,14 @@ func TestClaude_PreToolUse_StaleReplayDoesNotOverrideCache(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
 	toolUseID := "toolu_stale_replay"
 	userEmail := "claude-stale-replay@example.com"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
 		sessionMCPListTTL,
 	))
@@ -638,7 +638,7 @@ func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testin
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
@@ -647,8 +647,8 @@ func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testin
 
 	// Force a non-miss error specifically on the MCP list key; everything else
 	// (session metadata, auth) still resolves through the real cache.
-	ti.service.cache = mcpGetErrorCache{
-		Cache:   ti.service.cache,
+	ti.service.enforcer.cache = mcpGetErrorCache{
+		Cache:   ti.service.enforcer.cache,
 		failKey: sessionMCPListCacheKey(sessionID),
 		err:     errors.New("redis: connection refused"),
 	}
@@ -720,7 +720,7 @@ func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testi
 	prompt := "hello from auth context project"
 	cachedProjectID := uuid.NewString()
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "claude-code",
 		UserEmail:     localFallbackEmail,
@@ -769,7 +769,7 @@ func TestClaude_RecordHook_BuffersAuthContextCacheMissWithoutPayloadEmail(t *tes
 	require.NotNil(t, result)
 
 	var buffered []gen.ClaudePayload
-	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.NoError(t, ti.service.enforcer.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
 	require.Len(t, buffered, 1)
 	assert.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
@@ -962,7 +962,7 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	// the session metadata. Asserting on the buffer (not just NoError)
 	// is what catches a regression to the early-return shape.
 	var buffered []gen.ClaudePayload
-	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.NoError(t, ti.service.enforcer.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
 	require.Len(t, buffered, 1, "hook should be buffered when plugin auth fails")
 	require.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
@@ -1013,7 +1013,7 @@ func TestClaude_PreToolUse_DeniesMCPWhenResolvedMetadataHasNoUserEmail(t *testin
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
 	toolUseID := "toolu_pretooluse_no_email"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "claude-code",
 		UserEmail:     "",

@@ -65,7 +65,7 @@ func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *g
 
 	parsedProjectID, err := uuid.Parse(projectID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "invalid project ID for Codex OTEL logs", attr.SlogError(err))
+		s.enforcer.logger.ErrorContext(ctx, "invalid project ID for Codex OTEL logs", attr.SlogError(err))
 		return
 	}
 
@@ -158,7 +158,7 @@ func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *g
 	}
 
 	if err := s.telemetryLogger.LogBulk(ctx, params); err != nil {
-		s.logger.ErrorContext(ctx, "failed to write Codex OTEL logs to ClickHouse", attr.SlogError(err))
+		s.enforcer.logger.ErrorContext(ctx, "failed to write Codex OTEL logs to ClickHouse", attr.SlogError(err))
 	}
 }
 
@@ -194,7 +194,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 
 	parsedProjectID, err := uuid.Parse(projectID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "invalid project ID for Codex metrics", attr.SlogError(err))
+		s.enforcer.logger.ErrorContext(ctx, "invalid project ID for Codex metrics", attr.SlogError(err))
 		return
 	}
 
@@ -287,7 +287,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 	}
 
 	if err := s.telemetryLogger.LogBulk(ctx, params); err != nil {
-		s.logger.ErrorContext(ctx, "failed to write Codex OTEL metrics to ClickHouse", attr.SlogError(err))
+		s.enforcer.logger.ErrorContext(ctx, "failed to write Codex OTEL metrics to ClickHouse", attr.SlogError(err))
 	}
 }
 

@@ -36,7 +36,7 @@ func TestBuildTelemetryAttributesWithMetadata_SetsMCPMatchFromCachedList(t *test
 	require.True(t, ok)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
@@ -70,7 +70,7 @@ func TestBuildTelemetryAttributesWithMetadata_HookSourceFromCoworkVariant(t *tes
 	require.True(t, ok)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
 		agentVariantCowork, sessionMCPListTTL))
 
 	// ServiceName is "claude-code" (what cowork reports) — the variant must
@@ -205,7 +205,7 @@ func TestBuildTelemetryAttributesWithMetadata_HookSourceDefaultsWithoutCoworkVar
 	require.True(t, ok)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
 		agentVariantClaudeCode, sessionMCPListTTL))
 
 	metadata := &SessionMetadata{
@@ -266,7 +266,7 @@ func TestBuildTelemetryAttributesWithMetadata_CoworkOverridesSourceWithName(t *t
 
 	sessionID := uuid.NewString()
 	connectorUUID := "a1b2c3d4-e5f6-7890-abcd-ef0123456789"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{
 			Source: "claude.ai", Name: "Slack",
 			URL: "https://mcp.example.com/slack", Transport: "HTTP",
@@ -306,7 +306,7 @@ func TestBuildTelemetryAttributesWithMetadata_CoworkFallsBackToUUIDWhenNoName(t 
 
 	sessionID := uuid.NewString()
 	connectorUUID := "a1b2c3d4-e5f6-7890-abcd-ef0123456789"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{
 			Source: "claude.ai", URL: "https://mcp.example.com/slack",
 			Transport: "HTTP", ConnectorUUID: connectorUUID,
@@ -344,7 +344,7 @@ func TestBuildTelemetryAttributesWithMetadata_ClaudeCodeReplacesSanitizedSourceW
 	require.True(t, ok)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{
 			Source: "claude.ai", Name: "Linear (Speakeasy)",
 			URL: "https://chat.speakeasy.com/mcp/linear", Transport: "HTTP",
@@ -382,7 +382,7 @@ func TestBuildTelemetryAttributesWithMetadata_FallsBackToServerPrefix(t *testing
 	require.True(t, ok)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.enforcer.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "other", URL: "https://other.example.com/mcp", Transport: "HTTP"}},
 		sessionMCPListTTL,
 	))

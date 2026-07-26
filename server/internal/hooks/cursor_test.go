@@ -140,7 +140,7 @@ func TestCursor_BeforeSubmitPrompt_ScansViaCanonicalEventFields(t *testing.T) {
 			Description: "blocked prompt",
 		},
 	}
-	ti.service.riskScanner = scanner
+	ti.service.enforcer.riskScanner = scanner
 
 	prompt := "do something risky"
 	conversationID := "conv-risk-scan"
@@ -311,7 +311,7 @@ func TestCursor_BeforeMCPExecution_ReturnsAllow(t *testing.T) {
 func TestCursor_BeforeMCPExecution_ShadowMCPBlockIncludesRequestLink(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	ti.service.enforcer.riskScanner = stubBlockingShadowMCPScanner{}
 
 	toolName := "list_issues"
 	toolUseID := "toolu_mcp_blocked"
@@ -351,7 +351,7 @@ func TestCursor_BeforeMCPExecution_TargetedShadowMCPPolicyUsesResolvedHookUser(t
 	hookUserID := "cursor-hook-user"
 	hookUserEmail := "cursor-hook-user@example.com"
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, hookUserID, hookUserEmail)
-	ti.service.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
+	ti.service.enforcer.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
 
 	toolName := "list_issues"
 	toolUseID := "toolu_mcp_specific_user_policy"

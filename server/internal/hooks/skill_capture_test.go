@@ -112,7 +112,7 @@ func TestIngest_RecordsExplicitAndInferredSkillObservations(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, result.Effects, "skill_capture")
 
-	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	rows, err := ti.service.enforcer.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 	require.Equal(t, "repo-review", rows[0].SkillName)
@@ -135,7 +135,7 @@ func TestIngest_ScopedSkillNameStoredCanonically(t *testing.T) {
 	_, err := ti.service.Ingest(ctx, payload)
 	require.NoError(t, err)
 
-	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	rows, err := ti.service.enforcer.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "repo-review", rows[0].SkillName)
@@ -155,7 +155,7 @@ func TestIngest_SkillObservationDurableIdempotencyIgnoresRedisDuplicate(t *testi
 	_, err = ti.service.Ingest(ctx, payload)
 	require.NoError(t, err)
 
-	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	rows, err := ti.service.enforcer.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, key, rows[0].IdempotencyKey.String)
@@ -180,7 +180,7 @@ func TestIngest_BlockedInferredSkillIsNotObserved(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+	ti.service.enforcer.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
 
 	toolName, identity := "mcp__local_server__search", "local-server"
 	payload := skillPayload("codex", "tool.requested", "blocked-observation", "repo-review", "")
@@ -190,7 +190,7 @@ func TestIngest_BlockedInferredSkillIsNotObserved(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "deny", result.Decision)
 
-	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	rows, err := ti.service.enforcer.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.Empty(t, rows)
 }
@@ -213,7 +213,7 @@ func TestIngest_OnlyDurableSkillObservationWakesEfficacy(t *testing.T) {
 	_, err = ti.service.Ingest(failedCtx, skillPayload("claude", eventTypeSkillActivated, "failed-session", "repo-review", ""))
 	require.NoError(t, err)
 
-	ti.service.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
+	ti.service.enforcer.riskScanner = ingestUserScopedShadowMCPScanner{userID: authCtx.UserID}
 	toolName, identity := "mcp__local_server__search", "local-server"
 	blocked := skillPayload("codex", "tool.requested", "blocked-session", "repo-review", "")
 	blocked.Data.ToolCall = &gen.HookToolCallData{Name: &toolName, Input: map[string]any{"query": "x"}}
@@ -246,7 +246,7 @@ func TestIngest_EfficacyWakeFailureDoesNotChangeVerdictOrRecording(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, "allow", result.Decision)
 
-	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	rows, err := ti.service.enforcer.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 }
@@ -553,13 +553,13 @@ func TestIngest_RejectsReservedAssistantAdapter(t *testing.T) {
 		require.Equal(t, oops.CodeInvalid, oopsErr.Code, adapter)
 	}
 
-	rows, err := ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	rows, err := ti.service.enforcer.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.Empty(t, rows)
 
 	_, err = ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "honest-session", "honest", rawHash(content)))
 	require.NoError(t, err)
-	rows, err = ti.service.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
+	rows, err = ti.service.enforcer.repo.ListSkillObservations(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "claude", rows[0].Provider)

@@ -39,9 +39,9 @@ func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, orgID string
 		// Without the host list every Gram-hosted entry would read as external
 		// and be recorded as shadow inventory. This capture is best-effort
 		// telemetry, so skipping the batch beats writing wrong rows.
-		trustedHosts, err := s.shadowMCPClient.TrustedMCPHostsForOrg(asyncCtx, orgID)
+		trustedHosts, err := s.enforcer.shadowMCPClient.TrustedMCPHostsForOrg(asyncCtx, orgID)
 		if err != nil {
-			s.logger.WarnContext(asyncCtx, "skipping shadow MCP inventory capture: trusted host resolution failed",
+			s.enforcer.logger.WarnContext(asyncCtx, "skipping shadow MCP inventory capture: trusted host resolution failed",
 				attr.SlogEvent("shadow_mcp_inventory_trusted_hosts_failed"),
 				attr.SlogError(err),
 				attr.SlogOrganizationID(orgID),
@@ -74,7 +74,7 @@ func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, orgID string
 		}
 
 		if err := s.telemetryLogger.UpsertShadowMCPInventoryURLs(asyncCtx, inventoryURLs); err != nil {
-			s.logger.WarnContext(asyncCtx, "shadow MCP inventory URL upsert failed",
+			s.enforcer.logger.WarnContext(asyncCtx, "shadow MCP inventory URL upsert failed",
 				attr.SlogEvent("shadow_mcp_inventory_url_upsert_failed"),
 				attr.SlogError(err),
 				attr.SlogProjectID(projectID),

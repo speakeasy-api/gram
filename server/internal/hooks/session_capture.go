@@ -163,7 +163,7 @@ func (s *Service) sessionAgentVariant(ctx context.Context, sessionID string) str
 		return ""
 	}
 	var variant string
-	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
+	if err := s.enforcer.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
 		return ""
 	}
 	return variant
@@ -273,7 +273,7 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 	}
 	// Spend gate runs before any risk-policy evaluation: an over-budget user
 	// is denied outright.
-	if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+	if block := s.enforcer.checkSpendGate(ctx, ev.Event); block != nil {
 		reason := spendBlockReason("prompt", block)
 		if payload.SessionID != nil && s.claimBlockedPromptTelemetry(ctx, payload) {
 			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
@@ -282,8 +282,8 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 		}
 		return constructBlockResponse(payload.HookEventName, reason), nil
 	}
-	if s.riskScanner != nil && ev.Prompt != "" && ev.ConversationID != "" {
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+	if s.enforcer.riskScanner != nil && ev.Prompt != "" && ev.ConversationID != "" {
+		if scanResult := s.enforcer.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			// Warn (challenge) defers to the tool call: Claude Code can only show
 			// a native [y/n] confirmation at PreToolUse, not at prompt submit.
 			// Never hard-block a warn here — let the prompt through so the
@@ -346,7 +346,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		return fmt.Errorf("check session_capture feature flag: %w", err)
 	}
 	if !enabled {
-		s.logger.DebugContext(ctx, "session capture disabled; skipping Claude chat persistence",
+		s.enforcer.logger.DebugContext(ctx, "session capture disabled; skipping Claude chat persistence",
 			attr.SlogEvent("claude_hook_session_capture_disabled"),
 			attr.SlogOrganizationID(metadata.GramOrgID),
 			attr.SlogProjectID(projectID.String()),
@@ -367,7 +367,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 	}
 
 	// Create the chat and retry.
-	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+	_, upsertErr := s.enforcer.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
 		ID:             chatID,
 		ProjectID:      projectID,
 		OrganizationID: metadata.GramOrgID,
@@ -412,7 +412,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	if content == "" {
-		s.logger.DebugContext(ctx, "skipping empty Claude conversation event",
+		s.enforcer.logger.DebugContext(ctx, "skipping empty Claude conversation event",
 			attr.SlogEvent("claude_hook_conversation_empty"),
 			attr.SlogHookEvent(payload.HookEventName),
 			attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
@@ -461,7 +461,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 			metadata.GramOrgID,
 			projectID.String(),
 		); err != nil {
-			s.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
+			s.enforcer.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
 		}
 	}
 

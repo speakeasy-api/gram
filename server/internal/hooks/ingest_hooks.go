@@ -181,7 +181,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		outcome = hookMetricOutcomeUnauthenticated
-		s.logger.InfoContext(ctx, "unauthenticated hook acknowledged without processing",
+		s.enforcer.logger.InfoContext(ctx, "unauthenticated hook acknowledged without processing",
 			attr.SlogEvent("hooks_ingest_unauthenticated"),
 			attr.SlogHookSource(source),
 			attr.SlogHookEvent(eventType),
@@ -199,7 +199,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 
 	replayed := conv.PtrValOr(payload.Replayed, false)
 
-	logger := s.logger.With(
+	logger := s.enforcer.logger.With(
 		attr.SlogHookSource(source),
 		attr.SlogHookEvent(eventType),
 		attr.SlogToolName(canonicalToolName(payload)),
@@ -231,7 +231,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	if observed {
 		s.signalSkillEfficacy(ctx, *authCtx.ProjectID)
 	}
-	if !s.isHookDuplicate(ctx) {
+	if !s.enforcer.isHookDuplicate(ctx) {
 		// Detach from request cancellation: the idempotency token is already
 		// claimed, so a client disconnect here would otherwise drop the event
 		// for good — the retry gets marked duplicate and skips persistence.
@@ -288,7 +288,7 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 	rawSHA256 := normalizeRawSHA256(conv.PtrValOr(skill.RawSha256, ""))
 	var capture *skillCaptureSignal
 	if rawSHA256 != "" {
-		known, err := s.repo.RememberKnownSkillRawHash(writeCtx, repo.RememberKnownSkillRawHashParams{
+		known, err := s.enforcer.repo.RememberKnownSkillRawHash(writeCtx, repo.RememberKnownSkillRawHashParams{
 			ProjectID: *authCtx.ProjectID,
 			RawSha256: rawSHA256,
 		})
@@ -297,7 +297,7 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 		}
 		capture = &skillCaptureSignal{rawSHA256: rawSHA256, known: known}
 	}
-	written, err := s.repo.InsertSkillObservation(writeCtx, repo.InsertSkillObservationParams{
+	written, err := s.enforcer.repo.InsertSkillObservation(writeCtx, repo.InsertSkillObservationParams{
 		ProjectID:      *authCtx.ProjectID,
 		IdempotencyKey: conv.ToPGTextEmpty(strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, ""))),
 		Provider:       strings.TrimSpace(payload.Source.Adapter),
@@ -353,7 +353,7 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 	settings := map[string]any{}
 	failOpen, failOpenErr := lookup(productfeatures.FeatureHooksFailOpen)
 	if failOpenErr != nil {
-		s.logger.WarnContext(ctx, "failed to resolve hooks fail-open setting for ingest effects",
+		s.enforcer.logger.WarnContext(ctx, "failed to resolve hooks fail-open setting for ingest effects",
 			attr.SlogError(failOpenErr),
 			attr.SlogOrganizationID(orgID),
 		)
@@ -362,7 +362,7 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 	}
 	metadataOnly, metadataErr := lookup(productfeatures.FeatureSkillCaptureMetadataOnly)
 	if metadataErr != nil {
-		s.logger.WarnContext(ctx, "failed to resolve skill capture privacy setting for ingest effects",
+		s.enforcer.logger.WarnContext(ctx, "failed to resolve skill capture privacy setting for ingest effects",
 			attr.SlogError(metadataErr),
 			attr.SlogOrganizationID(orgID),
 		)
@@ -378,7 +378,7 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 	if capture != nil && metadataErr == nil && !metadataOnly {
 		skillsEnabled, skillsErr := lookup(productfeatures.FeatureSkills)
 		if skillsErr != nil {
-			s.logger.WarnContext(ctx, "failed to resolve skills entitlement for ingest effects",
+			s.enforcer.logger.WarnContext(ctx, "failed to resolve skills entitlement for ingest effects",
 				attr.SlogError(skillsErr),
 				attr.SlogOrganizationID(orgID),
 			)
@@ -548,7 +548,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	})
 	decision, err := s.policies.Decide(ctx, typed)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "hook policy pipeline failed; failing open",
+		s.enforcer.logger.ErrorContext(ctx, "hook policy pipeline failed; failing open",
 			attr.SlogError(err),
 			attr.SlogHookSource(strings.TrimSpace(payload.Source.Adapter)),
 			attr.SlogHookEvent(strings.TrimSpace(payload.Event.Type)),
@@ -673,10 +673,10 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	if strings.TrimSpace(payload.Event.Type) == "session.started" &&
 		metadata.SessionID != "" && (metadata.UserID != "" || metadata.UserEmail != "" || metadata.Hostname != "") {
 		cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
-		err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+		err := s.enforcer.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
 		cancel()
 		if err != nil {
-			s.logger.WarnContext(ctx, "failed to cache canonical hook session identity",
+			s.enforcer.logger.WarnContext(ctx, "failed to cache canonical hook session identity",
 				attr.SlogEvent("hooks_ingest_session_cache_failed"),
 				attr.SlogError(err),
 				attr.SlogGenAIConversationID(metadata.SessionID),
@@ -687,7 +687,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	}
 	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
 	if err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp); err != nil {
-		s.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",
+		s.enforcer.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",
 			attr.SlogEvent("hooks_ingest_chat_persist_failed"),
 			attr.SlogError(err),
 			attr.SlogHookSource(payload.Source.Adapter),
@@ -697,7 +697,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 		)
 	}
 	if err := s.persistPromptAttachments(ctx, payload, authCtx, &metadata, timestamp); err != nil {
-		s.logger.WarnContext(ctx, "failed to persist prompt attachments",
+		s.enforcer.logger.WarnContext(ctx, "failed to persist prompt attachments",
 			attr.SlogEvent("hooks_ingest_prompt_attachment_persist_failed"),
 			attr.SlogError(err),
 			attr.SlogHookSource(payload.Source.Adapter),
@@ -1185,7 +1185,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	// because the high-water mark only advances on a successful read.
 	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, metadata.GramOrgID, productfeatures.FeatureSessionCapture)
 	if err != nil {
-		s.logger.WarnContext(ctx, "could not resolve session capture feature flag, skipping prompt attachments",
+		s.enforcer.logger.WarnContext(ctx, "could not resolve session capture feature flag, skipping prompt attachments",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(metadata.GramOrgID),
 		)
@@ -1270,7 +1270,7 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	} else if !isForeignKeyViolation(err) {
 		return fmt.Errorf("insert prompt attachment content parts: %w", err)
 	}
-	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+	_, upsertErr := s.enforcer.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
 		ID:             chatID,
 		ProjectID:      projectID,
 		OrganizationID: metadata.GramOrgID,

@@ -70,10 +70,10 @@ func spendBlockReason(kind string, block *spendrules.Block) string {
 func (s *Service) cursorSpendDenyReason(ctx context.Context, block *spendrules.Block, toolName string, orgID string, projectID uuid.UUID, userID string, conversationID string) (string, string) {
 	auditReason := spendBlockReason("tool call", block)
 	userReason := auditReason
-	if s.isHookDuplicate(ctx) {
+	if s.enforcer.isHookDuplicate(ctx) {
 		return auditReason, userReason
 	}
-	if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
+	if bURL := s.enforcer.recordToolCallBlockAsync(ctx, toolCallBlockParams{
 		Provider:       "cursor",
 		OrganizationID: orgID,
 		ProjectID:      projectID,

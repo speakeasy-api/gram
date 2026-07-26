@@ -41,7 +41,7 @@ func (s *Service) SkillFeedback(ctx context.Context, payload *gen.SkillFeedbackP
 		return oops.E(oops.CodeBadRequest, nil, "invalid feedback outcome")
 	}
 
-	recorder := feedbackrecorder.NewRecorder(s.db, s.logger, s.suggestionSignaler)
+	recorder := feedbackrecorder.NewRecorder(s.db, s.enforcer.logger, s.suggestionSignaler)
 	if _, err := recorder.Record(ctx, feedbackrecorder.RecordInput{
 		ProjectID:      *authCtx.ProjectID,
 		SkillID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -54,7 +54,7 @@ func (s *Service) SkillFeedback(ctx context.Context, payload *gen.SkillFeedbackP
 		UserID:         authCtx.UserID,
 		UserEmail:      conv.PtrValOr(authCtx.Email, ""),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "record skill feedback").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "record skill feedback").LogError(ctx, s.enforcer.logger)
 	}
 	return nil
 }
