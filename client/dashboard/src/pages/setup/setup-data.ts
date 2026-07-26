@@ -174,15 +174,6 @@ exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/
     ],
   },
   {
-    id: "opencode",
-    name: "OpenCode",
-    description: "Open-source terminal coding agent",
-    icon: "opencode",
-    connected: false,
-    available: false,
-    setupSteps: [],
-  },
-  {
     id: "cursor",
     name: "Cursor",
     description: "AI-powered code editor",
