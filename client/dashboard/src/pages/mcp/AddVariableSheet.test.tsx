@@ -6,14 +6,14 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { AddVariableSheet } from "./AddVariableSheet";
 
 afterEach(cleanup);
 
-describe("AddVariableSheet", () => {
-  it("imports variables from a selected dotenv file", async () => {
-    const onAddVariables = vi.fn();
-    render(
+function renderSheet(onAddVariables = vi.fn()) {
+  render(
+    <TooltipProvider>
       <AddVariableSheet
         open
         onOpenChange={() => {}}
@@ -21,8 +21,15 @@ describe("AddVariableSheet", () => {
         availableEnvVarsFromAttached={[]}
         onAddVariables={onAddVariables}
         onLoadFromEnvironment={() => {}}
-      />,
-    );
+      />
+    </TooltipProvider>,
+  );
+}
+
+describe("AddVariableSheet", () => {
+  it("imports variables from a selected dotenv file", async () => {
+    const onAddVariables = vi.fn();
+    renderSheet(onAddVariables);
 
     const file = new File(
       ["# credentials\nAPI_KEY=secret-value\nBASE_URL=https://example.test"],
@@ -57,16 +64,7 @@ describe("AddVariableSheet", () => {
   });
 
   it("reports files without dotenv assignments", async () => {
-    render(
-      <AddVariableSheet
-        open
-        onOpenChange={() => {}}
-        attachedEnvironment={null}
-        availableEnvVarsFromAttached={[]}
-        onAddVariables={() => {}}
-        onLoadFromEnvironment={() => {}}
-      />,
-    );
+    renderSheet();
 
     fireEvent.change(screen.getByLabelText("Import .env file"), {
       target: {
