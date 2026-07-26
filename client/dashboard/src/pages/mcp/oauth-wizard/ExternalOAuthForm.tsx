@@ -185,7 +185,6 @@ export function ExternalOAuthForm({
   };
 
   const handleSlugChange = (value: string) => {
-    clearVerification();
     send({ type: "FIELD_EXTERNAL", key: "slug", value });
   };
 
