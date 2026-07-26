@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -18,9 +19,9 @@ func TestValidateAPIKey(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/v1/models", r.URL.Path)
-		require.Equal(t, "anthropic-key", r.Header.Get("x-api-key"))
-		require.Equal(t, apiVersion, r.Header.Get("anthropic-version"))
+		assert.Equal(t, "/v1/models", r.URL.Path)
+		assert.Equal(t, "anthropic-key", r.Header.Get("x-api-key"))
+		assert.Equal(t, apiVersion, r.Header.Get("anthropic-version"))
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(server.Close)

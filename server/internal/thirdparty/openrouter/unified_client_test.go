@@ -1900,17 +1900,19 @@ func TestChatClient_MakeHTTPRequest_AnthropicCompatibilityEndpoint(t *testing.T)
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/v1/chat/completions", r.URL.Path)
-		require.Equal(t, "Bearer anthropic-key", r.Header.Get("Authorization"))
-		require.Equal(t, anthropicAPIVersion, r.Header.Get("anthropic-version"))
+		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
+		assert.Equal(t, "Bearer anthropic-key", r.Header.Get("Authorization"))
+		assert.Equal(t, anthropicAPIVersion, r.Header.Get("anthropic-version"))
 
 		var body map[string]any
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		require.Equal(t, "claude-sonnet-5", body["model"])
-		require.NotContains(t, body, "session_id")
-		require.NotContains(t, body, "metadata")
-		require.NotContains(t, body, "trace")
-		require.NotContains(t, body, "reasoning")
+		if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&body)) {
+			return
+		}
+		assert.Equal(t, "claude-sonnet-5", body["model"])
+		assert.NotContains(t, body, "session_id")
+		assert.NotContains(t, body, "metadata")
+		assert.NotContains(t, body, "trace")
+		assert.NotContains(t, body, "reasoning")
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(server.Close)
