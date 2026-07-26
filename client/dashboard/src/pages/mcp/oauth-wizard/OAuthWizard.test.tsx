@@ -248,7 +248,10 @@ describe("OAuthWizard — rendering", () => {
 
   it("cancels direct entry instead of navigating to the OAuth chooser", () => {
     const onClose = vi.fn();
-    renderWizard({ initialPath: "external", onClose });
+    renderWizard({
+      initialPath: "external",
+      onClose: () => void onClose(),
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
