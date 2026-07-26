@@ -6,13 +6,12 @@ import (
 	"github.com/speakeasy-api/agenthooks"
 )
 
-// ShadowMCPEvaluator runs the shadow-MCP enforcement primitive: the blocking
-// shadow_mcp policy lookup, the Gram-hosted check, the bypass-grant check,
-// and the access-request link plus block row minting. Empty reasons mean the
-// call is not denied.
-type ShadowMCPEvaluator interface {
-	EvaluateShadowMCP(ctx context.Context, req *Request, actor Actor, toolName string, toolInput any) (auditReason, userReason string)
-}
+// ShadowMCPEvaluateFunc runs the shadow-MCP enforcement primitive: the
+// blocking shadow_mcp policy lookup, the Gram-hosted check, the bypass-grant
+// check, and the access-request link plus block row minting. Empty reasons
+// mean the call is not denied. The hooks Enforcer's EvaluateShadowMCP has
+// this shape.
+type ShadowMCPEvaluateFunc func(ctx context.Context, req *Request, actor Actor, toolName string, toolInput any) (auditReason, userReason string)
 
 // ShadowMCPToolPreGate builds the policy that denies MCP tool calls
 // targeting non-Gram-hosted servers under a blocking shadow_mcp policy,
@@ -22,20 +21,20 @@ type ShadowMCPEvaluator interface {
 // names and server-only mcp__ prefixes the ingest path has never treated as
 // MCP — so the gate fires for exactly the calls the inline evaluation gated
 // and stays neutral (no policy lookup, no side effects) for everything else.
-func ShadowMCPToolPreGate(shadow ShadowMCPEvaluator) func(context.Context, *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
+func ShadowMCPToolPreGate(evaluate ShadowMCPEvaluateFunc) func(context.Context, *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
 	return func(ctx context.Context, ev *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
-		return shadowMCPGate(ctx, shadow, &ev.Event, ev.Tool)
+		return shadowMCPGate(ctx, evaluate, &ev.Event, ev.Tool)
 	}
 }
 
 // shadowMCPGate is the shared evaluation behind ShadowMCPToolPreGate and
 // ShadowMCPPermissionGate.
-func shadowMCPGate(ctx context.Context, shadow ShadowMCPEvaluator, env *agenthooks.Event, tool agenthooks.ToolCall) (agenthooks.ToolPreDecision, error) {
+func shadowMCPGate(ctx context.Context, evaluate ShadowMCPEvaluateFunc, env *agenthooks.Event, tool agenthooks.ToolCall) (agenthooks.ToolPreDecision, error) {
 	req := RequestFromContext(ctx)
 	if req == nil || !mcpToolRequest(env) {
 		return agenthooks.NoDecision(), nil
 	}
-	auditReason, userReason := shadow.EvaluateShadowMCP(ctx, req, ActorFromContext(ctx), tool.Name, toolInputOf(tool))
+	auditReason, userReason := evaluate(ctx, req, ActorFromContext(ctx), tool.Name, toolInputOf(tool))
 	if auditReason == "" {
 		return agenthooks.NoDecision(), nil
 	}

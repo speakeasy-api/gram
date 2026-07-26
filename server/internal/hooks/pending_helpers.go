@@ -34,8 +34,8 @@ func withHookDuplicate(ctx context.Context) context.Context {
 }
 
 // isHookDuplicate reports whether ctx was tagged as a redelivery. It hangs
-// off the Enforcer (rather than Service) so the policies.Deps facade can
-// check it; Service callers reach it through promotion.
+// off the Enforcer (rather than Service) so the policy-facing facade methods
+// can check it; Service callers reach it via s.enforcer.
 func (e *Enforcer) isHookDuplicate(ctx context.Context) bool {
 	dup, _ := ctx.Value(hookDuplicateContextKey{}).(bool)
 	return dup

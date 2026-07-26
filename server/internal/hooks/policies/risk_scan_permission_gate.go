@@ -2,30 +2,22 @@ package policies
 
 import (
 	"context"
-	"time"
 
 	"github.com/speakeasy-api/agenthooks"
-
-	"github.com/speakeasy-api/gram/server/internal/risk"
 )
-
-// PermissionScanner runs the permission-flavored enforcement risk scan over
-// a pre-approval permission request.
-type PermissionScanner interface {
-	ScanPermissionRequest(ctx context.Context, req *Request, actor Actor, toolName string, toolInput any, at time.Time) *risk.ScanResult
-}
 
 // RiskScanPermissionGate builds the policy that scans a pre-approval
 // permission request. It is the permission.request sibling of
-// RiskScanToolPreGate, with the permission-request scan and deny wording.
-func RiskScanPermissionGate(scans PermissionScanner, links BlockPageLinker, warns WarnChallenger) func(context.Context, *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
+// RiskScanToolPreGate, with the permission-flavored scan (the Enforcer's
+// ScanPermissionRequest, same ToolScanFunc shape) and its deny wording.
+func RiskScanPermissionGate(scanPermission ToolScanFunc, appendBlockURL BlockPageLinkFunc, warnAcknowledged WarnAckFunc, warnDenyReason WarnDenyFunc) func(context.Context, *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
 	return func(ctx context.Context, ev *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
 		req := RequestFromContext(ctx)
 		if req == nil {
 			return agenthooks.NoDecision(), nil
 		}
 		actor := ActorFromContext(ctx)
-		scan := scans.ScanPermissionRequest(ctx, req, actor, ev.Tool.Name, toolInputOf(ev.Tool), ev.Time)
-		return riskScanToolDecision(ctx, links, warns, req, actor, scan, ev.Tool.Name, "permission request", ev.Time)
+		scan := scanPermission(ctx, req, actor, ev.Tool.Name, toolInputOf(ev.Tool), ev.Time)
+		return riskScanToolDecision(ctx, appendBlockURL, warnAcknowledged, warnDenyReason, req, actor, scan, ev.Tool.Name, "permission request", ev.Time)
 	}
 }

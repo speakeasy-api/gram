@@ -72,7 +72,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
-	hookpolicies "github.com/speakeasy-api/gram/server/internal/hooks/policies"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -1151,9 +1150,10 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				completionsClient,
 			))
-			// The enforcer is shared by the hooks service (embedded) and the
-			// ingest policy runner: one copy of each enforcement dependency,
-			// read by both at call time.
+			// The enforcer is shared by the hooks service and the ingest
+			// policy runner (its method values are the runner's policy
+			// deps): one copy of each enforcement dependency, read by both
+			// at call time.
 			hooksEnforcer := hooks.NewEnforcer(
 				logger,
 				db,
@@ -1182,7 +1182,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0},
 				serverURL,
 				hooksEnforcer,
-				hookpolicies.NewRunner(logger, hooksEnforcer),
+				newHookPolicyRunner(logger, hooksEnforcer),
 			)
 			hooks.Attach(mux, hooksService)
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, productFeatures, auditLogger, c.String("environment"))

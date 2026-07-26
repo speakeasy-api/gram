@@ -26,7 +26,8 @@ import (
 // Enforcer owns the hook enforcement dependencies and primitives: the risk
 // scans, the shadow-MCP evaluation, and block-page URL minting. It exists
 // apart from Service so cmd can construct it first and hand the same value
-// to both policies.NewRunner (as the runner's policies.Deps) and NewService.
+// to both the policy-runner builder (cmd/gram/hook_policies.go, which wires
+// its method values into the policy constructors) and NewService.
 // Service holds it in its enforcer field, so the legacy per-provider paths
 // read the same fields and methods (s.enforcer.riskScanner,
 // s.enforcer.scanToolRequestForEnforcement, ...) — one copy of each
@@ -72,14 +73,12 @@ func NewEnforcer(
 	}
 }
 
-// The methods below are the policies.Deps facade: Request-shaped adapters
-// over the enforcement primitives, called by the policy stages registered in
-// policies.NewRunner. They project the canonical payload exactly as the old
-// inline stages did (canonicalHookEvent with the middleware-resolved actor
-// and the stage's event time), so a policy written against the interfaces
-// sees byte-identical scanner arguments.
-
-var _ policies.Deps = (*Enforcer)(nil)
+// The methods below are the policy-facing facade: Request-shaped adapters
+// over the enforcement primitives, wired into the policy constructors as
+// method values by the cmd runner builder. They project the canonical
+// payload exactly as the old inline stages did (canonicalHookEvent with the
+// middleware-resolved actor and the stage's event time), so a policy sees
+// byte-identical scanner arguments.
 
 // CheckSpend consults the spend-rule circuit for the actor and renders the
 // deny reason. It owns the whole spend decision the stages act on: the

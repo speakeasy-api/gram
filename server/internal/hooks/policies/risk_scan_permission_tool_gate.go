@@ -14,8 +14,8 @@ import (
 // branch and scanned the same request again with byte-identical scanner
 // arguments. Dropping the second scan would be a semantic change (observably
 // so for any non-deterministic scanner), so it is preserved exactly.
-func RiskScanPermissionToolGate(scans ToolScanner, links BlockPageLinker, warns WarnChallenger) func(context.Context, *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
+func RiskScanPermissionToolGate(scanTool, scanMCPTool ToolScanFunc, appendBlockURL BlockPageLinkFunc, warnAcknowledged WarnAckFunc, warnDenyReason WarnDenyFunc) func(context.Context, *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
 	return func(ctx context.Context, ev *agenthooks.PermissionEvent) (agenthooks.ToolPreDecision, error) {
-		return riskScanToolRequest(ctx, scans, links, warns, &ev.Event, ev.Tool)
+		return riskScanToolRequest(ctx, scanTool, scanMCPTool, appendBlockURL, warnAcknowledged, warnDenyReason, &ev.Event, ev.Tool)
 	}
 }

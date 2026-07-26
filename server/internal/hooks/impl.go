@@ -41,8 +41,9 @@ import (
 type Service struct {
 	// enforcer owns the enforcement dependencies and primitives (logger,
 	// cache, riskScanner, siteURL, block rows, shadow-MCP evaluation, ...).
-	// It is the same *Enforcer the cmd wiring hands to policies.NewRunner,
-	// so a test swapping one of its fields after construction
+	// It is the same *Enforcer whose method values the cmd wiring hands to
+	// the policy constructors (cmd/gram/hook_policies.go), so a test
+	// swapping one of its fields after construction
 	// (ti.service.enforcer.riskScanner = ...) mutates the state the policy
 	// runner's stages read at call time.
 	enforcer           *Enforcer
@@ -64,9 +65,10 @@ type Service struct {
 	suggestionSignaler suggest.Signaler
 	serverURL          *url.URL
 	// policies is the ingest decision pipeline: the agenthooks event router
-	// the canonical Ingest path runs its gating policies on (see
-	// policies.NewRunner for the registration block documenting the run
-	// order). Constructed in cmd from the same Enforcer this Service holds
+	// the canonical Ingest path runs its gating policies on (see the cmd
+	// builder in cmd/gram/hook_policies.go for the registration block
+	// documenting the run order).
+	// Constructed in cmd from the same Enforcer this Service holds
 	// and passed into NewService, so the stages read the dependencies tests
 	// swap (enforcer.riskScanner, enforcer.siteURL, ...) at call time.
 	policies *agenthooks.Runner
