@@ -39,6 +39,6 @@ Skill insights may also show a regression warning when the server's comparison p
 
 ## Restore an earlier version
 
-Version history can restore any valid, non-current version. Restoring makes that historical content current again without changing the immutable historical record. It does not rewrite or remove versions.
+Version history can restore any valid, non-current version. Restoring makes that historical content current again without changing the immutable historical record. Versions are content-addressed, so restore reactivates the existing version rather than creating a duplicate with the same canonical content. It does not rewrite or remove versions.
 
 Explicit distribution pins for plugins and assistants are preserved. A pinned distribution continues to target its selected version; only distributions that follow the current skill version observe the restore.
