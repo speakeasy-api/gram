@@ -31,7 +31,7 @@ function renderSheet(onAddVariables: OnAddVariables = () => {}) {
 
 describe("AddVariableSheet", () => {
   it("imports variables from a selected dotenv file", async () => {
-    const onAddVariables = vi.fn();
+    const onAddVariables = vi.fn<OnAddVariables>();
     renderSheet(onAddVariables);
 
     const file = new File(
