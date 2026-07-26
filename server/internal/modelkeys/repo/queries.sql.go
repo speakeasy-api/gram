@@ -45,11 +45,12 @@ func (q *Queries) GetKeyByIDForUpdate(ctx context.Context, arg GetKeyByIDForUpda
 }
 
 const getKeyForResolution = `-- name: GetKeyForResolution :one
-SELECT api_key_encrypted
+SELECT provider
+     , api_key_encrypted
 FROM model_provider_keys
 WHERE project_id = $1
   AND slot = ANY ($2::text[])
-  AND provider = $3
+  AND provider = ANY ($3::text[])
   AND enabled
   AND deleted IS FALSE
 ORDER BY (slot = $4::text) DESC
@@ -59,20 +60,25 @@ LIMIT 1
 type GetKeyForResolutionParams struct {
 	ProjectID     uuid.UUID
 	Slots         []string
-	Provider      string
+	Providers     []string
 	PreferredSlot string
 }
 
-func (q *Queries) GetKeyForResolution(ctx context.Context, arg GetKeyForResolutionParams) (string, error) {
+type GetKeyForResolutionRow struct {
+	Provider        string
+	ApiKeyEncrypted string
+}
+
+func (q *Queries) GetKeyForResolution(ctx context.Context, arg GetKeyForResolutionParams) (GetKeyForResolutionRow, error) {
 	row := q.db.QueryRow(ctx, getKeyForResolution,
 		arg.ProjectID,
 		arg.Slots,
-		arg.Provider,
+		arg.Providers,
 		arg.PreferredSlot,
 	)
-	var api_key_encrypted string
-	err := row.Scan(&api_key_encrypted)
-	return api_key_encrypted, err
+	var i GetKeyForResolutionRow
+	err := row.Scan(&i.Provider, &i.ApiKeyEncrypted)
+	return i, err
 }
 
 const insertKey = `-- name: InsertKey :one

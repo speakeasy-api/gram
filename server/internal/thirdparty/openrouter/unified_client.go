@@ -36,11 +36,14 @@ type TelemetryLogger interface {
 }
 
 const (
-	DefaultChatModel = "anthropic/claude-sonnet-5"
+	DefaultChatModel    = "anthropic/claude-sonnet-5"
+	AnthropicAPIBaseURL = "https://api.anthropic.com"
+	anthropicAPIVersion = "2023-06-01"
 )
 
-// ChatClient is the single HTTP client for all OpenRouter communication.
-// It applies pluggable strategies for message capture and usage tracking.
+// ChatClient is the single OpenAI-compatible completion client. It routes
+// platform and OpenRouter BYOK keys through OpenRouter, and Anthropic BYOK keys
+// directly to Anthropic while sharing capture and usage tracking strategies.
 type ChatClient struct {
 	logger                 *slog.Logger
 	httpClient             *guardian.HTTPClient
@@ -77,6 +80,7 @@ func NewUnifiedClient(
 
 type initializeRequestResult struct {
 	apiKey         string
+	provider       KeyProvider
 	customerKey    bool
 	requestBody    OpenAIChatRequest
 	captureSession CaptureSession
@@ -111,10 +115,6 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	if keySlot == "" {
 		keySlot = req.UsageSource
 	}
-	resolvedKey, err := c.keyResolver.ResolveKey(ctx, req.OrgID, req.ProjectID, keySlot, req.KeyType.OrDefault())
-	if err != nil {
-		return nil, fmt.Errorf("resolve OpenRouter key: %w", err)
-	}
 
 	// Set defaults
 	temp := float32(1.0)
@@ -138,6 +138,34 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		}
 	} else {
 		return nil, fmt.Errorf("model %s is not allowed and no fallback is available for its provider", model)
+	}
+
+	var (
+		resolvedKey ResolvedKey
+		err         error
+	)
+	if resolver, ok := c.keyResolver.(ModelAwareKeyResolver); ok {
+		resolvedKey, err = resolver.ResolveKeyForModel(ctx, req.OrgID, req.ProjectID, keySlot, req.KeyType.OrDefault(), model)
+	} else {
+		resolvedKey, err = c.keyResolver.ResolveKey(ctx, req.OrgID, req.ProjectID, keySlot, req.KeyType.OrDefault())
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve model provider key: %w", err)
+	}
+
+	// A provider-specific key only applies to models that provider serves. A
+	// project may still select other models, which continue through the
+	// platform OpenRouter key.
+	if !resolvedKey.Provider.SupportsModel(model) {
+		platformKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID, req.KeyType.OrDefault())
+		if err != nil {
+			return nil, fmt.Errorf("resolve platform key for model %s: %w", model, err)
+		}
+		resolvedKey = ResolvedKey{
+			Key:      platformKey,
+			Provider: KeyProviderOpenRouter,
+			Customer: false,
+		}
 	}
 
 	outboundMessages := req.Messages
@@ -195,20 +223,45 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 
 	return &initializeRequestResult{
 		apiKey:         resolvedKey.Key,
+		provider:       resolvedKey.Provider.OrDefault(),
 		customerKey:    resolvedKey.Customer,
 		requestBody:    reqBody,
 		captureSession: captureSession,
 	}, nil
 }
 
-// makeHTTPRequest creates and executes an HTTP request to OpenRouter.
-func (c *ChatClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody OpenAIChatRequest) (*http.Response, error) {
+// makeHTTPRequest creates and executes an OpenAI-compatible completion
+// request against the provider selected by key resolution.
+func (c *ChatClient) makeHTTPRequest(ctx context.Context, provider KeyProvider, apiKey string, reqBody OpenAIChatRequest) (*http.Response, error) {
 	if !IsModelAllowed(reqBody.Model) {
 		return nil, fmt.Errorf("model %s is not allowed", reqBody.Model)
 	}
 
+	endpoint := fmt.Sprintf("%s/v1/chat/completions", OpenRouterBaseURL)
+	outboundBody := reqBody
+	switch provider.OrDefault() {
+	case KeyProviderOpenRouter:
+	case KeyProviderAnthropic:
+		model, ok := strings.CutPrefix(reqBody.Model, "anthropic/")
+		if !ok {
+			return nil, fmt.Errorf("model %s is not supported by Anthropic", reqBody.Model)
+		}
+		endpoint = fmt.Sprintf("%s/v1/chat/completions", AnthropicAPIBaseURL)
+		outboundBody.Model = model
+		// These fields are OpenRouter extensions rather than OpenAI Chat
+		// Completions fields. Gram records the same context in its own
+		// telemetry, so omit them from direct Anthropic requests.
+		outboundBody.Reasoning = nil
+		outboundBody.CacheControl = nil
+		outboundBody.SessionID = ""
+		outboundBody.Metadata = nil
+		outboundBody.Trace = nil
+	default:
+		return nil, fmt.Errorf("unsupported key provider %q", provider)
+	}
+
 	// Marshal request
-	data, err := json.Marshal(reqBody)
+	data, err := json.Marshal(outboundBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
@@ -217,7 +270,7 @@ func (c *ChatClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody
 	httpReq, err := http.NewRequestWithContext(
 		ctx,
 		"POST",
-		fmt.Sprintf("%s/v1/chat/completions", OpenRouterBaseURL),
+		endpoint,
 		bytes.NewReader(data),
 	)
 	if err != nil {
@@ -226,6 +279,9 @@ func (c *ChatClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody
 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	if provider.OrDefault() == KeyProviderAnthropic {
+		httpReq.Header.Set("anthropic-version", anthropicAPIVersion)
+	}
 
 	// Make HTTP call
 	httpResp, err := c.httpClient.Do(httpReq)
@@ -317,8 +373,8 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 // requestCompletion issues a single non-streaming completion request and
 // returns the parsed response alongside the raw body (kept for diagnostics).
 // The response body lifetime is fully contained here so callers can retry.
-func (c *ChatClient) requestCompletion(ctx context.Context, apiKey string, reqBody OpenAIChatRequest) (OpenAIChatResponse, []byte, error) {
-	httpResp, err := c.makeHTTPRequest(ctx, apiKey, reqBody)
+func (c *ChatClient) requestCompletion(ctx context.Context, provider KeyProvider, apiKey string, reqBody OpenAIChatRequest) (OpenAIChatResponse, []byte, error) {
+	httpResp, err := c.makeHTTPRequest(ctx, provider, apiKey, reqBody)
 	if err != nil {
 		return OpenAIChatResponse{}, nil, err
 	}
@@ -364,7 +420,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	)
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		var err error
-		chatResp, body, err = c.requestCompletion(ctx, initResult.apiKey, reqBody)
+		chatResp, body, err = c.requestCompletion(ctx, initResult.provider, initResult.apiKey, reqBody)
 		if err != nil {
 			return nil, err
 		}
@@ -461,7 +517,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	reqBody.Stream = true
 
 	// Make HTTP request
-	httpResp, err := c.makeHTTPRequest(ctx, initResult.apiKey, reqBody)
+	httpResp, err := c.makeHTTPRequest(ctx, initResult.provider, initResult.apiKey, reqBody)
 	if err != nil {
 		return nil, err
 	}

@@ -115,9 +115,39 @@ func TestUpsertKey_RejectsUnknownProvider(t *testing.T) {
 	enableCustomModelKeys(t, ctx, ti.conn)
 
 	_, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, func(p *gen.UpsertKeyPayload) {
-		p.Provider = "anthropic"
+		p.Provider = "not-a-provider"
 	}))
 	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestUpsertKey_CreatesAnthropicKey(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	enableCustomModelKeys(t, ctx, ti.conn)
+
+	key, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, func(p *gen.UpsertKeyPayload) {
+		p.Provider = modelkeys.ProviderAnthropic
+		p.APIKey = "sk-ant-test-key"
+	}))
+	require.NoError(t, err)
+	require.Equal(t, modelkeys.ProviderAnthropic, key.Provider)
+	require.Equal(t, 1, ti.anthropicValidator.calls)
+	require.Equal(t, 0, ti.provisioner.usageCalls)
+}
+
+func TestUpsertKey_RejectsAnthropicKeyTheProviderRejects(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	enableCustomModelKeys(t, ctx, ti.conn)
+	ti.anthropicValidator.err = errors.New("401 unauthorized")
+
+	_, err := ti.service.UpsertKey(ctx, newUpsertPayload(modelkeys.SlotDefault, func(p *gen.UpsertKeyPayload) {
+		p.Provider = modelkeys.ProviderAnthropic
+		p.APIKey = "invalid-anthropic-key"
+	}))
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestUpsertKey_RejectsKeyTheProviderRejects(t *testing.T) {

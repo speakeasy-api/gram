@@ -19,8 +19,8 @@ type UpsertKeyRequestBody struct {
 	// The responsibility slot the key applies to. Use 'default' to cover every
 	// slot without a dedicated override.
 	Slot *string `form:"slot,omitempty" json:"slot,omitempty" xml:"slot,omitempty"`
-	// The model provider the key authenticates with. Supported values include
-	// openrouter.
+	// The model provider the key authenticates with. Supported values are
+	// openrouter and anthropic.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// The provider API key. Stored encrypted at rest; never returned on reads.
 	APIKey *string `form:"api_key,omitempty" json:"api_key,omitempty" xml:"api_key,omitempty"`
@@ -54,8 +54,8 @@ type UpsertKeyResponseBody struct {
 	// The responsibility slot the key applies to. The 'default' slot covers every
 	// slot without a dedicated override.
 	Slot string `form:"slot" json:"slot" xml:"slot"`
-	// The model provider the key authenticates with. Supported values include
-	// openrouter.
+	// The model provider the key authenticates with. Supported values are
+	// openrouter and anthropic.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Whether the key participates in key resolution.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
@@ -75,8 +75,8 @@ type SetKeyEnabledResponseBody struct {
 	// The responsibility slot the key applies to. The 'default' slot covers every
 	// slot without a dedicated override.
 	Slot string `form:"slot" json:"slot" xml:"slot"`
-	// The model provider the key authenticates with. Supported values include
-	// openrouter.
+	// The model provider the key authenticates with. Supported values are
+	// openrouter and anthropic.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Whether the key participates in key resolution.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
@@ -820,8 +820,8 @@ type ModelProviderKeyResponseBody struct {
 	// The responsibility slot the key applies to. The 'default' slot covers every
 	// slot without a dedicated override.
 	Slot string `form:"slot" json:"slot" xml:"slot"`
-	// The model provider the key authenticates with. Supported values include
-	// openrouter.
+	// The model provider the key authenticates with. Supported values are
+	// openrouter and anthropic.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Whether the key participates in key resolution.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`

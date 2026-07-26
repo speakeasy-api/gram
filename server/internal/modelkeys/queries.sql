@@ -1,9 +1,10 @@
 -- name: GetKeyForResolution :one
-SELECT api_key_encrypted
+SELECT provider
+     , api_key_encrypted
 FROM model_provider_keys
 WHERE project_id = @project_id
   AND slot = ANY (@slots::text[])
-  AND provider = @provider
+  AND provider = ANY (@providers::text[])
   AND enabled
   AND deleted IS FALSE
 ORDER BY (slot = @preferred_slot::text) DESC

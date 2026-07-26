@@ -18,7 +18,7 @@ var ModelProviderKey = Type("ModelProviderKey", func() {
 		Format(FormatUUID)
 	})
 	Attribute("slot", String, "The responsibility slot the key applies to. The 'default' slot covers every slot without a dedicated override.")
-	Attribute("provider", String, "The model provider the key authenticates with. Supported values include openrouter.")
+	Attribute("provider", String, "The model provider the key authenticates with. Supported values are openrouter and anthropic.")
 	Attribute("enabled", Boolean, "Whether the key participates in key resolution.")
 	Attribute("created_at", String, "ISO 8601 timestamp when the key was created.", func() {
 		Format(FormatDateTime)
@@ -70,7 +70,7 @@ var _ = Service("modelKeys", func() {
 
 		Payload(func() {
 			Attribute("slot", String, "The responsibility slot the key applies to. Use 'default' to cover every slot without a dedicated override.")
-			Attribute("provider", String, "The model provider the key authenticates with. Supported values include openrouter.")
+			Attribute("provider", String, "The model provider the key authenticates with. Supported values are openrouter and anthropic.")
 			Attribute("api_key", String, "The provider API key. Stored encrypted at rest; never returned on reads.")
 			Attribute("enabled", Boolean, "Whether the key participates in key resolution.", func() {
 				Default(true)
