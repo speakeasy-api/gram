@@ -15,6 +15,7 @@ require (
 	github.com/KimMachineGun/automemlimit v0.7.5
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/Masterminds/squirrel v1.5.4
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/OpenRouterTeam/go-sdk v0.3.0
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/aws/aws-sdk-go-v2 v1.43.0
@@ -130,7 +131,6 @@ require (
 	github.com/Khan/genqlient v0.8.1 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
-	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/PuerkitoBio/rehttp v1.4.0 // indirect
 	github.com/STARRY-S/zip v0.2.1 // indirect
 	github.com/agnivade/levenshtein v1.1.1 // indirect

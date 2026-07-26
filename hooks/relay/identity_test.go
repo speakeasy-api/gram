@@ -2,6 +2,8 @@ package relay
 
 import (
 	"encoding/base64"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -34,61 +36,80 @@ func TestDeviceAgentCommandsEnvOverrideIsExclusive(t *testing.T) {
 	require.Equal(t, []string{"one", "two"}, deviceAgentCommands())
 }
 
-func TestDeviceAgentEmailUsesAdvertisedPath(t *testing.T) {
-	// The daemon advertises its own executable path on startup (the device
-	// agent's HOOK_IDENTITY contract), so discovery works from an arbitrary
-	// IT-chosen install dir with nothing on PATH.
+// startIdentitySocket serves body for GET /v1/identity on a unix socket and
+// returns its path. status lets tests exercise non-200 handling.
+func startIdentitySocket(t *testing.T, status int, body string) string {
+	t.Helper()
 	if runtime.GOOS == "windows" {
-		t.Skip("executable shell fixture is POSIX-only")
+		t.Skip("unix-socket fixture is POSIX-only")
 	}
-	installDir := t.TempDir() // deliberately NOT a well-known location
-	agent := filepath.Join(installDir, "speakeasyd")
-	require.NoError(t, os.WriteFile(agent, []byte("#!/bin/sh\nprintf '%s' '{\"email\":\"advertised@example.com\"}'\n"), 0o700))
-
-	home := t.TempDir()
-	advertDir := filepath.Join(home, "Library", "Application Support", "Speakeasy")
-	if runtime.GOOS != "darwin" {
-		advertDir = filepath.Join(home, ".local", "state", "speakeasy")
-	}
-	require.NoError(t, os.MkdirAll(advertDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(advertDir, "agent-path"), []byte(agent+"\n"), 0o644))
-
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_STATE_HOME", "")
-	t.Setenv("PATH", t.TempDir())
-	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
-	t.Setenv("GRAM_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
-
-	require.Equal(t, agent, deviceAgentCommands()[0])
-	require.Equal(t, "advertised@example.com", deviceAgentEmail(t.Context()))
+	// Not t.TempDir(): it embeds the test name and can blow the ~104-byte
+	// sockaddr_un path limit on macOS.
+	dir, err := os.MkdirTemp("", "sk")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "agent.sock")
+	ln, err := net.Listen("unix", socket)
+	require.NoError(t, err)
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/identity", r.URL.Path)
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	})}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
+	return socket
 }
 
-func TestAdvertisedAgentPathIgnoresBogusContent(t *testing.T) {
+func TestDeviceAgentEmailSocketRescue(t *testing.T) {
+	// A daemon running from a location the exec chain can't guess (no PATH
+	// entry, no well-known dir) is still reachable at its fixed socket path.
+	socket := startIdentitySocket(t, http.StatusOK, `{"v":1,"enrolled":true,"email":"socket@example.com","source":"managed"}`)
+	t.Setenv("SPEAKEASY_SOCKET", socket)
+	t.Setenv("HOME", t.TempDir()) // no well-known installs
+	t.Setenv("PATH", t.TempDir()) // bare "speakeasyd" resolves nowhere
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+
+	require.Equal(t, "socket@example.com", deviceAgentEmail(t.Context()))
+}
+
+func TestDeviceAgentEmailEnvOverrideSilencesSocket(t *testing.T) {
+	// The env override is a complete off switch: even a live, answering
+	// socket must not be consulted.
+	socket := startIdentitySocket(t, http.StatusOK, `{"v":1,"enrolled":true,"email":"socket@example.com","source":"managed"}`)
+	t.Setenv("SPEAKEASY_SOCKET", socket)
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+
+	require.Empty(t, deviceAgentEmail(t.Context()))
+}
+
+func TestSocketIdentityEmailRejectsUnusableResponses(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{"contract version too new", http.StatusOK, `{"v":2,"enrolled":true,"email":"new@example.com"}`},
+		{"not enrolled", http.StatusOK, `{"v":1,"enrolled":false}`},
+		{"invalid email", http.StatusOK, `{"v":1,"enrolled":true,"email":"not-an-email"}`},
+		{"http error", http.StatusInternalServerError, `boom`},
+		{"garbage body", http.StatusOK, `not json`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			socket := startIdentitySocket(t, tc.status, tc.body)
+			t.Setenv("SPEAKEASY_SOCKET", socket)
+			require.Empty(t, socketIdentityEmail(t.Context()))
+		})
+	}
+}
+
+func TestSocketIdentityEmailAbsentSocket(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("fixture layout is POSIX-only")
+		t.Skip("unix-socket fixture is POSIX-only")
 	}
-	home := t.TempDir()
-	advertDir := filepath.Join(home, "Library", "Application Support", "Speakeasy")
-	if runtime.GOOS != "darwin" {
-		advertDir = filepath.Join(home, ".local", "state", "speakeasy")
-	}
-	require.NoError(t, os.MkdirAll(advertDir, 0o755))
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_STATE_HOME", "")
-
-	advert := filepath.Join(advertDir, "agent-path")
-
-	// Relative path: refused.
-	require.NoError(t, os.WriteFile(advert, []byte("speakeasyd\n"), 0o644))
-	require.Empty(t, advertisedAgentPath())
-
-	// Absolute but nonexistent: refused.
-	require.NoError(t, os.WriteFile(advert, []byte(filepath.Join(home, "gone")+"\n"), 0o644))
-	require.Empty(t, advertisedAgentPath())
-
-	// Absent file (an older daemon): refused without error.
-	require.NoError(t, os.Remove(advert))
-	require.Empty(t, advertisedAgentPath())
+	t.Setenv("SPEAKEASY_SOCKET", filepath.Join(t.TempDir(), "nope.sock"))
+	require.Empty(t, socketIdentityEmail(t.Context()))
 }
 
 func TestDeviceAgentEmailFindsAgentOffPATH(t *testing.T) {

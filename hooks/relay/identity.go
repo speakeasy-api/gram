@@ -6,6 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,27 +59,103 @@ func deviceAgentEmail(ctx context.Context) string {
 			return email
 		}
 	}
-	return ""
+	// Rescue tier: a daemon running from a location the exec chain can't
+	// guess still owns a socket at a fixed per-OS path — ask it directly.
+	// The env override is a real off switch and silences this tier too.
+	if strings.TrimSpace(os.Getenv("GRAM_DEVICE_AGENT_COMMANDS")) != "" {
+		return ""
+	}
+	return socketIdentityEmail(ctx)
 }
 
-// deviceAgentCommands returns the device-agent commands to try, in order.
+// socketAgentTimeout bounds the whole socket-rescue request. Only a *hung*
+// daemon ever pays it — a missing socket fails the dial instantly — and hooks
+// must never hold an editor hostage to a wedged one.
+const socketAgentTimeout = 150 * time.Millisecond
+
+// socketIdentityEmail asks the running daemon for identity over its IPC
+// socket (GET /v1/identity — the device agent's api.SocketPath and
+// IdentityResponse contracts; keep the paths below in sync). This is the
+// rescue, not the primary, on purpose: `speakeasyd identity` re-reads the
+// config files per call, while the daemon serves its boot-time snapshot —
+// exec is fresher whenever both are available. One attempt, no retry.
+func socketIdentityEmail(ctx context.Context) string {
+	socket := agentSocketPath()
+	if socket == "" {
+		return ""
+	}
+	requestCtx, cancel := context.WithTimeout(ctx, socketAgentTimeout)
+	defer cancel()
+	client := &http.Client{Transport: &http.Transport{
+		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
+			return dialAgentSocket(dialCtx, socket)
+		},
+	}}
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, "http://speakeasy-agent/v1/identity", nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if err != nil {
+		return ""
+	}
+	var identity struct {
+		V        int    `json:"v"`
+		Enrolled bool   `json:"enrolled"`
+		Email    string `json:"email"`
+	}
+	if json.Unmarshal(body, &identity) != nil {
+		return ""
+	}
+	// Contract rule: a document version newer than we understand is
+	// unreadable, same as the exec path's consumers.
+	if identity.V > 1 || !identity.Enrolled || !validEmail(identity.Email) {
+		return ""
+	}
+	return identity.Email
+}
+
+// agentSocketPath mirrors the device agent's api.SocketPath, including the
+// SPEAKEASY_SOCKET override.
+func agentSocketPath() string {
+	if v := os.Getenv("SPEAKEASY_SOCKET"); v != "" {
+		return v
+	}
+	if runtime.GOOS == "windows" {
+		return `\\.\pipe\speakeasy-agent`
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/tmp/speakeasy-agent.sock"
+	}
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Library", "Application Support", "Speakeasy", "agent.sock")
+	}
+	return filepath.Join(home, ".speakeasy", "agent.sock")
+}
+
+// deviceAgentCommands returns the device-agent commands to exec, in order.
 // GRAM_DEVICE_AGENT_COMMANDS (comma-separated) replaces the default set
-// entirely. The default order — the device agent's HOOK_IDENTITY contract —
-// is: the path the daemon advertises about itself, then a bare PATH lookup,
-// then static well-known install locations for daemons too old to advertise.
-// speakeasyd is typically NOT on PATH (MDM installs place it under the
-// per-user Speakeasy directory without touching PATH, and GUI-spawned hook
-// hosts see a minimal PATH anyway), so a bare lookup alone silently loses
-// managed identity attribution.
+// entirely — and silences the socket rescue in deviceAgentEmail, so it stays
+// a complete off switch. The default is a bare PATH lookup, then static
+// well-known install locations: speakeasyd is typically NOT on PATH (MDM
+// installs place it under the per-user Speakeasy directory without touching
+// PATH, and GUI-spawned hook hosts see a minimal PATH anyway), so a bare
+// lookup alone silently loses managed identity attribution. A daemon running
+// somewhere none of these cover is handled by the socket rescue.
 func deviceAgentCommands() []string {
 	if env := strings.TrimSpace(os.Getenv("GRAM_DEVICE_AGENT_COMMANDS")); env != "" {
 		return strings.Split(env, ",")
 	}
-	var commands []string
-	if advertised := advertisedAgentPath(); advertised != "" {
-		commands = append(commands, advertised)
-	}
-	commands = append(commands, "speakeasyd")
+	commands := []string{"speakeasyd"}
 	home, _ := os.UserHomeDir()
 	var candidates []string
 	switch runtime.GOOS {
@@ -104,56 +183,11 @@ func deviceAgentCommands() []string {
 		candidates = append(candidates, "/usr/local/bin/speakeasyd")
 	}
 	for _, candidate := range candidates {
-		if executableFile(candidate) && candidate != commands[0] {
+		if executableFile(candidate) {
 			commands = append(commands, candidate)
 		}
 	}
 	return commands
-}
-
-// advertisedAgentPath reads the daemon's self-advertisement: on every startup
-// speakeasyd writes its own executable path to a fixed per-OS file (the
-// device agent's core/paths.AgentPathFile — keep the locations in sync). This
-// is the only discovery mode that works regardless of where IT installed the
-// daemon, on every OS. Windows is machine-wide (%ProgramData%) because the
-// daemon runs as LocalSystem there, whose profile dirs per-user hook
-// processes can't see. Returns "" when the file is absent (older daemon),
-// unreadable, or names something that isn't an executable file.
-func advertisedAgentPath() string {
-	var file string
-	switch runtime.GOOS {
-	case "darwin":
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		file = filepath.Join(home, "Library", "Application Support", "Speakeasy", "agent-path")
-	case "windows":
-		programData := os.Getenv("PROGRAMDATA")
-		if programData == "" {
-			programData = `C:\ProgramData`
-		}
-		file = filepath.Join(programData, "Speakeasy", "agent-path")
-	default:
-		stateHome := os.Getenv("XDG_STATE_HOME")
-		if stateHome == "" {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return ""
-			}
-			stateHome = filepath.Join(home, ".local", "state")
-		}
-		file = filepath.Join(stateHome, "speakeasy", "agent-path")
-	}
-	content, err := os.ReadFile(file)
-	if err != nil {
-		return ""
-	}
-	advertised := strings.TrimSpace(string(content))
-	if !filepath.IsAbs(advertised) || !executableFile(advertised) {
-		return ""
-	}
-	return advertised
 }
 
 func executableFile(path string) bool {
