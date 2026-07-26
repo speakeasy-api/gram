@@ -937,7 +937,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 		{
 			name:             "provisioner error",
 			provisionerError: fmt.Errorf("failed to provision key"),
-			expectedError:    "resolve OpenRouter key",
+			expectedError:    "resolve model provider key",
 		},
 		{
 			name:               "start or resume error",
