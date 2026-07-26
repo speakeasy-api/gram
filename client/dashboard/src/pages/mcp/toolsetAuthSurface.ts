@@ -76,6 +76,26 @@ export function toolsetConvertAction(
 }
 
 /**
+ * External OAuth is supported for enabled, public toolset servers whose tools
+ * advertise OAuth or whose attached external MCP source requires it. Keep this
+ * aligned with the legacy OAuth section so the user-sessions surface does not
+ * expose a configuration the serve path cannot use.
+ */
+export function canConfigureExternalOAuth(
+  toolset: Toolset,
+  externalMcpRequiresOAuth: boolean,
+): boolean {
+  const hasOAuthAuthorizationCodeFlow =
+    (toolset.oauthEnablementMetadata?.oauth2SecurityCount ?? 0) > 0;
+
+  return Boolean(
+    toolset.mcpEnabled &&
+    toolset.mcpIsPublic &&
+    (hasOAuthAuthorizationCodeFlow || externalMcpRequiresOAuth),
+  );
+}
+
+/**
  * Whether the public→private flip must be blocked pending OAuth conversion.
  * The backend silently clears external OAuth / OAuth proxy config on any
  * mcp_is_public flip (UpdateToolset in server/internal/toolsets/impl.go).
