@@ -292,9 +292,10 @@ var _ = Service("skills", func() {
 	})
 
 	Method("approveAllSuggestions", func() {
-		Description("Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.")
+		Description("Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.")
 
 		Payload(func() {
+			Attribute("suggestion_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional suggestion IDs to approve. Omitted or empty approves every currently open suggestion.")
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -307,6 +308,7 @@ var _ = Service("skills", func() {
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
+			Body(ApproveAllSkillSuggestionsRequestBody)
 			Response(StatusOK)
 		})
 
@@ -662,6 +664,12 @@ var DismissSkillSuggestionRequestBody = Type("DismissSkillSuggestionRequestBody"
 
 	Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 	Required("id")
+})
+
+var ApproveAllSkillSuggestionsRequestBody = Type("ApproveAllSkillSuggestionsRequestBody", func() {
+	Meta("openapi:typename", "ApproveAllSkillSuggestionsRequestBody")
+
+	Attribute("suggestion_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional suggestion IDs to approve. Omitted or empty approves every currently open suggestion.")
 })
 
 var UpdateSkillRequestBody = Type("UpdateSkillRequestBody", func() {

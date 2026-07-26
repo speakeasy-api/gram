@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -94,6 +95,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func skillsRequestDecoder(r *http.Request) goahttp.Decoder {
+	if r.URL.Path == srv.ApproveAllSuggestionsSkillsPath() && (r.Body == nil || r.Body == http.NoBody) {
+		r.Body = io.NopCloser(strings.NewReader("{}"))
+	}
 	if r.Body != nil {
 		r.Body = http.MaxBytesReader(nil, r.Body, maxSkillsRequestBodyBytes)
 	}

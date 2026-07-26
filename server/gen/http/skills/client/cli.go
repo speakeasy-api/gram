@@ -493,7 +493,15 @@ func BuildDismissSuggestionPayload(skillsDismissSuggestionBody string, skillsDis
 
 // BuildApproveAllSuggestionsPayload builds the payload for the skills
 // approveAllSuggestions endpoint from CLI flags.
-func BuildApproveAllSuggestionsPayload(skillsApproveAllSuggestionsSessionToken string, skillsApproveAllSuggestionsApikeyToken string, skillsApproveAllSuggestionsProjectSlugInput string) (*skills.ApproveAllSuggestionsPayload, error) {
+func BuildApproveAllSuggestionsPayload(skillsApproveAllSuggestionsBody string, skillsApproveAllSuggestionsSessionToken string, skillsApproveAllSuggestionsApikeyToken string, skillsApproveAllSuggestionsProjectSlugInput string) (*skills.ApproveAllSuggestionsPayload, error) {
+	var err error
+	var body ApproveAllSuggestionsRequestBody
+	{
+		err = json.Unmarshal([]byte(skillsApproveAllSuggestionsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"suggestion_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
+		}
+	}
 	var sessionToken *string
 	{
 		if skillsApproveAllSuggestionsSessionToken != "" {
@@ -513,6 +521,12 @@ func BuildApproveAllSuggestionsPayload(skillsApproveAllSuggestionsSessionToken s
 		}
 	}
 	v := &skills.ApproveAllSuggestionsPayload{}
+	if body.SuggestionIds != nil {
+		v.SuggestionIds = make([]string, len(body.SuggestionIds))
+		for i, val := range body.SuggestionIds {
+			v.SuggestionIds[i] = val
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

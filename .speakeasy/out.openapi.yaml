@@ -36593,7 +36593,7 @@ paths:
         name: AddSkillVersion
   /rpc/skills.approveAllSuggestions:
     post:
-      description: Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.
+      description: Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.
       operationId: approveAllSkillSuggestions
       parameters:
         - allowEmptyValue: true
@@ -36617,6 +36617,12 @@ paths:
           schema:
             description: project header
             type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveAllSkillSuggestionsRequestBody'
+        required: false
       responses:
         "200":
           content:
@@ -50219,6 +50225,15 @@ components:
         - status
         - created_at
         - updated_at
+    ApproveAllSkillSuggestionsRequestBody:
+      type: object
+      properties:
+        suggestion_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Optional suggestion IDs to approve. Omitted or empty approves every currently open suggestion.
     ApproveAllSkillSuggestionsResult:
       type: object
       properties:

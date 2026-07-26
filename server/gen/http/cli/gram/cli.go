@@ -2334,6 +2334,7 @@ func ParseEndpoint(
 		skillsDismissSuggestionProjectSlugInputFlag = skillsDismissSuggestionFlags.String("project-slug-input", "", "")
 
 		skillsApproveAllSuggestionsFlags                = flag.NewFlagSet("approve-all-suggestions", flag.ExitOnError)
+		skillsApproveAllSuggestionsBodyFlag             = skillsApproveAllSuggestionsFlags.String("body", "REQUIRED", "")
 		skillsApproveAllSuggestionsSessionTokenFlag     = skillsApproveAllSuggestionsFlags.String("session-token", "", "")
 		skillsApproveAllSuggestionsApikeyTokenFlag      = skillsApproveAllSuggestionsFlags.String("apikey-token", "", "")
 		skillsApproveAllSuggestionsProjectSlugInputFlag = skillsApproveAllSuggestionsFlags.String("project-slug-input", "", "")
@@ -6976,7 +6977,7 @@ func ParseEndpoint(
 				data, err = skillsc.BuildDismissSuggestionPayload(*skillsDismissSuggestionBodyFlag, *skillsDismissSuggestionSessionTokenFlag, *skillsDismissSuggestionApikeyTokenFlag, *skillsDismissSuggestionProjectSlugInputFlag)
 			case "approve-all-suggestions":
 				endpoint = c.ApproveAllSuggestions()
-				data, err = skillsc.BuildApproveAllSuggestionsPayload(*skillsApproveAllSuggestionsSessionTokenFlag, *skillsApproveAllSuggestionsApikeyTokenFlag, *skillsApproveAllSuggestionsProjectSlugInputFlag)
+				data, err = skillsc.BuildApproveAllSuggestionsPayload(*skillsApproveAllSuggestionsBodyFlag, *skillsApproveAllSuggestionsSessionTokenFlag, *skillsApproveAllSuggestionsApikeyTokenFlag, *skillsApproveAllSuggestionsProjectSlugInputFlag)
 			case "get":
 				endpoint = c.Get()
 				data, err = skillsc.BuildGetPayload(*skillsGetIDFlag, *skillsGetSessionTokenFlag, *skillsGetApikeyTokenFlag, *skillsGetProjectSlugInputFlag)
@@ -16762,7 +16763,7 @@ func skillsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-feedback: List all-time outcome counts and recent resolved feedback for a skill. Name-only feedback is excluded.`)
 	fmt.Fprintln(os.Stderr, `    approve-suggestion: Approve an open skill edit suggestion, optionally replacing its proposed SKILL.md content or taking only one of its proposed changes. Stale suggestions are superseded instead.`)
 	fmt.Fprintln(os.Stderr, `    dismiss-suggestion: Idempotently dismiss an open skill edit suggestion. Approved and superseded suggestions conflict.`)
-	fmt.Fprintln(os.Stderr, `    approve-all-suggestions: Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.`)
+	fmt.Fprintln(os.Stderr, `    approve-all-suggestions: Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.`)
 	fmt.Fprintln(os.Stderr, `    get: Get an active skill and its latest version. The implementation requires the skills product feature and skill read scope.`)
 	fmt.Fprintln(os.Stderr, `    list-unknown-activations: List terminal skill activations that could not be attributed to a skill version.`)
 	fmt.Fprintln(os.Stderr, `    list-versions: List immutable versions of an active skill, newest first. The implementation requires the skills product feature and skill read scope.`)
@@ -17006,6 +17007,7 @@ func skillsDismissSuggestionUsage() {
 func skillsApproveAllSuggestionsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] skills approve-all-suggestions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -17013,16 +17015,17 @@ func skillsApproveAllSuggestionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.`)
+	fmt.Fprintln(os.Stderr, `Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills approve-all-suggestions --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skills approve-all-suggestions --body '{\n      \"suggestion_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func skillsGetUsage() {

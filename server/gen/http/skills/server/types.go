@@ -77,6 +77,14 @@ type DismissSuggestionRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
+// ApproveAllSuggestionsRequestBody is the type of the "skills" service
+// "approveAllSuggestions" endpoint HTTP request body.
+type ApproveAllSuggestionsRequestBody struct {
+	// Optional suggestion IDs to approve. Omitted or empty approves every
+	// currently open suggestion.
+	SuggestionIds []string `form:"suggestion_ids,omitempty" json:"suggestion_ids,omitempty" xml:"suggestion_ids,omitempty"`
+}
+
 // ArchiveRequestBody is the type of the "skills" service "archive" endpoint
 // HTTP request body.
 type ArchiveRequestBody struct {
@@ -7618,8 +7626,14 @@ func NewDismissSuggestionPayload(body *DismissSuggestionRequestBody, sessionToke
 
 // NewApproveAllSuggestionsPayload builds a skills service
 // approveAllSuggestions endpoint payload.
-func NewApproveAllSuggestionsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ApproveAllSuggestionsPayload {
+func NewApproveAllSuggestionsPayload(body *ApproveAllSuggestionsRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ApproveAllSuggestionsPayload {
 	v := &skills.ApproveAllSuggestionsPayload{}
+	if body.SuggestionIds != nil {
+		v.SuggestionIds = make([]string, len(body.SuggestionIds))
+		for i, val := range body.SuggestionIds {
+			v.SuggestionIds[i] = val
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -7851,6 +7865,15 @@ func ValidateDismissSuggestionRequestBody(body *DismissSuggestionRequestBody) (e
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsRequestBody runs the validations defined on
+// ApproveAllSuggestionsRequestBody
+func ValidateApproveAllSuggestionsRequestBody(body *ApproveAllSuggestionsRequestBody) (err error) {
+	for _, e := range body.SuggestionIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.suggestion_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }

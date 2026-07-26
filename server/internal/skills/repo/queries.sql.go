@@ -3120,10 +3120,21 @@ JOIN skills s
   ON s.project_id = suggestion.project_id
   AND s.id = suggestion.skill_id
 WHERE suggestion.project_id = $1
-  AND suggestion.status = 'open'
   AND s.archived_at IS NULL
+  AND (
+    (
+      COALESCE(cardinality($2::uuid[]), 0) = 0
+      AND suggestion.status = 'open'
+    )
+    OR suggestion.id = ANY($2::uuid[])
+  )
 ORDER BY suggestion.created_at DESC, suggestion.id DESC
 `
+
+type ListOpenSkillEditSuggestionsForApprovalParams struct {
+	ProjectID     uuid.UUID
+	SuggestionIds []uuid.UUID
+}
 
 type ListOpenSkillEditSuggestionsForApprovalRow struct {
 	ID               uuid.UUID
@@ -3132,8 +3143,8 @@ type ListOpenSkillEditSuggestionsForApprovalRow struct {
 	SkillDisplayName string
 }
 
-func (q *Queries) ListOpenSkillEditSuggestionsForApproval(ctx context.Context, projectID uuid.UUID) ([]ListOpenSkillEditSuggestionsForApprovalRow, error) {
-	rows, err := q.db.Query(ctx, listOpenSkillEditSuggestionsForApproval, projectID)
+func (q *Queries) ListOpenSkillEditSuggestionsForApproval(ctx context.Context, arg ListOpenSkillEditSuggestionsForApprovalParams) ([]ListOpenSkillEditSuggestionsForApprovalRow, error) {
+	rows, err := q.db.Query(ctx, listOpenSkillEditSuggestionsForApproval, arg.ProjectID, arg.SuggestionIds)
 	if err != nil {
 		return nil, err
 	}

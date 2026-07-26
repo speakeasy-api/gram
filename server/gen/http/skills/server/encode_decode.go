@@ -2214,6 +2214,26 @@ func DecodeApproveAllSuggestionsRequest(mux goahttp.Muxer, decoder func(*http.Re
 	return func(r *http.Request) (*skills.ApproveAllSuggestionsPayload, error) {
 		var payload *skills.ApproveAllSuggestionsPayload
 		var (
+			body ApproveAllSuggestionsRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateApproveAllSuggestionsRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
@@ -2230,7 +2250,7 @@ func DecodeApproveAllSuggestionsRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewApproveAllSuggestionsPayload(sessionToken, apikeyToken, projectSlugInput)
+		payload = NewApproveAllSuggestionsPayload(&body, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -381,6 +381,111 @@ func TestSkillsApproveAllSuggestionsContinuesThroughMixedOutcomes(t *testing.T) 
 	require.Equal(t, string(skills.EditSuggestionStatusOpen), preserved.Status)
 }
 
+func TestSkillsApproveAllSuggestionsOnlyProcessesSuppliedIDs(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	suppliedSkill := createSkill(t, ctx, ti, "suggestion-bulk-supplied", "Base.")
+	supplied := createSuggestion(t, ti, suppliedSkill, skillManifest(suppliedSkill.Skill.Name, "Applied.", "applied"), "rationale")
+	remainingSkill := createSkill(t, ctx, ti, "suggestion-bulk-remaining", "Base.")
+	remaining := createSuggestion(t, ti, remainingSkill, skillManifest(remainingSkill.Skill.Name, "Remaining.", "remaining"), "rationale")
+
+	result, err := ti.service.ApproveAllSuggestions(ctx, &gen.ApproveAllSuggestionsPayload{
+		SuggestionIds: []string{supplied.ID.String(), supplied.ID.String()},
+		SessionToken:  nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, supplied.ID.String(), result.Items[0].SuggestionID)
+	require.Equal(t, "applied", result.Items[0].Outcome)
+
+	preserved, err := ti.repo.GetSkillEditSuggestionForUpdate(ctx, repo.GetSkillEditSuggestionForUpdateParams{
+		ProjectID: ti.projectID, ID: remaining.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, string(skills.EditSuggestionStatusOpen), preserved.Status)
+}
+
+func TestSkillsApproveAllSuggestionsRejectsInvalidIDs(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.ApproveAllSuggestions(ctx, &gen.ApproveAllSuggestionsPayload{
+		SuggestionIds: []string{"not-a-uuid"}, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestSkillsApproveAllSuggestionsAcceptsMoreThan500IDs(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	suggestionIDs := make([]string, 501)
+	for i := range suggestionIDs {
+		suggestionIDs[i] = uuid.NewString()
+	}
+
+	result, err := ti.service.ApproveAllSuggestions(ctx, &gen.ApproveAllSuggestionsPayload{
+		SuggestionIds: suggestionIDs, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.Items)
+}
+
+func TestSkillsApproveAllSuggestionsReturnsConflictForSuppliedDismissedSuggestion(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "suggestion-bulk-dismissed", "Base.")
+	suggestion := createSuggestion(t, ti, created, skillManifest(created.Skill.Name, "Proposed.", "proposal"), "rationale")
+	_, err := ti.service.DismissSuggestion(ctx, &gen.DismissSuggestionPayload{
+		ID: suggestion.ID.String(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	dismissed, err := ti.repo.GetSkillEditSuggestionForUpdate(ctx, repo.GetSkillEditSuggestionForUpdateParams{
+		ProjectID: ti.projectID, ID: suggestion.ID,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ApproveAllSuggestions(ctx, &gen.ApproveAllSuggestionsPayload{
+		SuggestionIds: []string{suggestion.ID.String()}, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, suggestion.ID.String(), result.Items[0].SuggestionID)
+	require.Equal(t, "conflict", result.Items[0].Outcome)
+
+	preserved, err := ti.repo.GetSkillEditSuggestionForUpdate(ctx, repo.GetSkillEditSuggestionForUpdateParams{
+		ProjectID: ti.projectID, ID: suggestion.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, dismissed, preserved)
+}
+
+func TestSkillsApproveAllSuggestionsWithoutIDsOnlyProcessesOpenSuggestions(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	openSkill := createSkill(t, ctx, ti, "suggestion-bulk-open-only", "Base.")
+	openSuggestion := createSuggestion(t, ti, openSkill, skillManifest(openSkill.Skill.Name, "Applied.", "applied"), "rationale")
+	dismissedSkill := createSkill(t, ctx, ti, "suggestion-bulk-omitted-dismissed", "Base.")
+	dismissedSuggestion := createSuggestion(t, ti, dismissedSkill, skillManifest(dismissedSkill.Skill.Name, "Dismissed.", "dismissed"), "rationale")
+	_, err := ti.service.DismissSuggestion(ctx, &gen.DismissSuggestionPayload{
+		ID: dismissedSuggestion.ID.String(), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ApproveAllSuggestions(ctx, &gen.ApproveAllSuggestionsPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, openSuggestion.ID.String(), result.Items[0].SuggestionID)
+	require.Equal(t, "applied", result.Items[0].Outcome)
+
+	preserved, err := ti.repo.GetSkillEditSuggestionForUpdate(ctx, repo.GetSkillEditSuggestionForUpdateParams{
+		ProjectID: ti.projectID, ID: dismissedSuggestion.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, string(skills.EditSuggestionStatusDismissed), preserved.Status)
+}
+
 func TestSkillsSuggestionManagementRBACDenied(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

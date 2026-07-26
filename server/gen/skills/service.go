@@ -48,8 +48,9 @@ type Service interface {
 	// Idempotently dismiss an open skill edit suggestion. Approved and superseded
 	// suggestions conflict.
 	DismissSuggestion(context.Context, *DismissSuggestionPayload) (res *types.SkillEditSuggestion, err error)
-	// Snapshot and independently process every open skill edit suggestion in the
-	// project. One conflict or failure does not stop the remaining approvals.
+	// Snapshot and independently process selected skill edit suggestions, or every
+	// open suggestion when no IDs are supplied. One conflict or failure does not
+	// stop the remaining approvals.
 	ApproveAllSuggestions(context.Context, *ApproveAllSuggestionsPayload) (res *ApproveAllSkillSuggestionsResult, err error)
 	// Get an active skill and its latest version. The implementation requires the
 	// skills product feature and skill read scope.
@@ -131,6 +132,9 @@ type ApproveAllSkillSuggestionsResult struct {
 // ApproveAllSuggestionsPayload is the payload type of the skills service
 // approveAllSuggestions method.
 type ApproveAllSuggestionsPayload struct {
+	// Optional suggestion IDs to approve. Omitted or empty approves every
+	// currently open suggestion.
+	SuggestionIds    []string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

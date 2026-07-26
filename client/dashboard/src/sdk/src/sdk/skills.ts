@@ -144,7 +144,7 @@ export class Skills extends ClientSDK {
    * approveAllSuggestions skills
    *
    * @remarks
-   * Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.
+   * Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.
    */
   async approveAllSuggestions(
     request?: ApproveAllSkillSuggestionsRequest | undefined,

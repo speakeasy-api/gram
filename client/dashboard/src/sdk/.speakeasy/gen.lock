@@ -556,6 +556,7 @@ trackedFiles:
   src/models/components/aiintegrationconfig.ts: {}
   src/models/components/aiintegrationschedulestate.ts: {}
   src/models/components/allowedorigin.ts: {}
+  src/models/components/approveallskillsuggestionsrequestbody.ts: {}
   src/models/components/approveallskillsuggestionsresult.ts: {}
   src/models/components/approveshadowmcpapprovalrequestform.ts: {}
   src/models/components/approveskillsuggestionrequestbody.ts: {}
@@ -2614,6 +2615,8 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   approveAllSkillSuggestions:
     speakeasy-default-approve-all-skill-suggestions:
+      requestBody:
+        application/json: {}
       responses:
         "200":
           application/json: {"items": [{"outcome": "superseded", "skill_display_name": "<value>", "skill_id": "390fa6e3-2459-47d0-b839-602a1176d7f1", "skill_name": "<value>", "suggestion_id": "853f27fb-6322-4957-b9cd-eeb87a1ba632"}]}

@@ -539,12 +539,28 @@ func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSug
 	return mv.BuildSkillEditSuggestionView(dismissed, evidence), nil
 }
 
-func (s *Service) ApproveAllSuggestions(ctx context.Context, _ *gen.ApproveAllSuggestionsPayload) (*gen.ApproveAllSkillSuggestionsResult, error) {
+func (s *Service) ApproveAllSuggestions(ctx context.Context, payload *gen.ApproveAllSuggestionsPayload) (*gen.ApproveAllSkillSuggestionsResult, error) {
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := repo.New(s.db).ListOpenSkillEditSuggestionsForApproval(ctx, *authCtx.ProjectID)
+	suggestionIDs := make([]uuid.UUID, 0, len(payload.SuggestionIds))
+	seen := make(map[uuid.UUID]struct{}, len(payload.SuggestionIds))
+	for _, value := range payload.SuggestionIds {
+		id, err := uuid.Parse(value)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "suggestion_ids must contain UUIDs")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		suggestionIDs = append(suggestionIDs, id)
+	}
+	snapshot, err := repo.New(s.db).ListOpenSkillEditSuggestionsForApproval(ctx, repo.ListOpenSkillEditSuggestionsForApprovalParams{
+		ProjectID:     *authCtx.ProjectID,
+		SuggestionIds: suggestionIDs,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "snapshot open skill suggestions").LogError(ctx, logger)
 	}

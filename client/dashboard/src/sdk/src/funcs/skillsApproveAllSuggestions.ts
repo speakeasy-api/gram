@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * approveAllSuggestions skills
  *
  * @remarks
- * Snapshot and independently process every open skill edit suggestion in the project. One conflict or failure does not stop the remaining approvals.
+ * Snapshot and independently process selected skill edit suggestions, or every open suggestion when no IDs are supplied. One conflict or failure does not stop the remaining approvals.
  */
 export function skillsApproveAllSuggestions(
   client: GramCore,
@@ -106,11 +106,16 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON(
+    "body",
+    payload?.ApproveAllSkillSuggestionsRequestBody,
+    { explode: true },
+  );
 
   const path = pathToFunc("/rpc/skills.approveAllSuggestions")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
       explode: false,

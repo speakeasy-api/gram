@@ -75,6 +75,14 @@ type DismissSuggestionRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 }
 
+// ApproveAllSuggestionsRequestBody is the type of the "skills" service
+// "approveAllSuggestions" endpoint HTTP request body.
+type ApproveAllSuggestionsRequestBody struct {
+	// Optional suggestion IDs to approve. Omitted or empty approves every
+	// currently open suggestion.
+	SuggestionIds []string `form:"suggestion_ids,omitempty" json:"suggestion_ids,omitempty" xml:"suggestion_ids,omitempty"`
+}
+
 // ArchiveRequestBody is the type of the "skills" service "archive" endpoint
 // HTTP request body.
 type ArchiveRequestBody struct {
@@ -4371,6 +4379,19 @@ func NewApproveSuggestionRequestBody(p *skills.ApproveSuggestionPayload) *Approv
 func NewDismissSuggestionRequestBody(p *skills.DismissSuggestionPayload) *DismissSuggestionRequestBody {
 	body := &DismissSuggestionRequestBody{
 		ID: p.ID,
+	}
+	return body
+}
+
+// NewApproveAllSuggestionsRequestBody builds the HTTP request body from the
+// payload of the "approveAllSuggestions" endpoint of the "skills" service.
+func NewApproveAllSuggestionsRequestBody(p *skills.ApproveAllSuggestionsPayload) *ApproveAllSuggestionsRequestBody {
+	body := &ApproveAllSuggestionsRequestBody{}
+	if p.SuggestionIds != nil {
+		body.SuggestionIds = make([]string, len(p.SuggestionIds))
+		for i, val := range p.SuggestionIds {
+			body.SuggestionIds[i] = val
+		}
 	}
 	return body
 }

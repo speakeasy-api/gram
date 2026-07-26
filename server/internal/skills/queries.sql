@@ -274,8 +274,14 @@ JOIN skills s
   ON s.project_id = suggestion.project_id
   AND s.id = suggestion.skill_id
 WHERE suggestion.project_id = @project_id
-  AND suggestion.status = 'open'
   AND s.archived_at IS NULL
+  AND (
+    (
+      COALESCE(cardinality(@suggestion_ids::uuid[]), 0) = 0
+      AND suggestion.status = 'open'
+    )
+    OR suggestion.id = ANY(@suggestion_ids::uuid[])
+  )
 ORDER BY suggestion.created_at DESC, suggestion.id DESC;
 
 -- name: GetSkillEditSuggestionDetails :one

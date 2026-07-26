@@ -2244,6 +2244,10 @@ func EncodeApproveAllSuggestionsRequest(encoder func(*http.Request) goahttp.Enco
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		body := NewApproveAllSuggestionsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "approveAllSuggestions", err)
+		}
 		return nil
 	}
 }
