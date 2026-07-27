@@ -4635,13 +4635,18 @@ function chatSessionBackfillSQL(
         ) AS is_claude_tool_result,
         (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
         (
-            hook_source IN ('codex', 'cursor')
+            hook_source = 'opencode'
+            AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
+            AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
+        ) AS is_opencode_usage_row,
+        (
+            hook_source IN ('codex', 'cursor', 'opencode')
             AND toString(attributes.gram.tool.name) != ''
             AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
             AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
         ) AS is_agent_tool_call,
         (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
-        (is_claude_api_request OR is_agent_usage_row) AS is_usage_row,
+        (is_claude_api_request OR is_agent_usage_row OR is_opencode_usage_row) AS is_usage_row,
         (
             (is_claude_tool_result AND toString(attributes.success) = 'false')
             OR (is_agent_tool_call AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
@@ -4651,7 +4656,7 @@ function chatSessionBackfillSQL(
             toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id),
             toString(id)
         ) AS tool_call_dedup_id,
-        if(is_claude_api_request, toString(attributes.prompt.id), toString(attributes.gen_ai.response.id)) AS session_message_id,
+        multiIf(is_claude_api_request, toString(attributes.prompt.id), is_opencode_usage_row, toString(id), toString(attributes.gen_ai.response.id)) AS session_message_id,
         multiIf(
             is_claude_api_request AND toString(attributes.model) != '', toString(attributes.model),
             is_claude_api_request AND toString(attributes.gen_ai.request.model) != '', toString(attributes.gen_ai.request.model),
@@ -4694,7 +4699,7 @@ function chatSessionBackfillSQL(
     WHERE gram_project_id = '${projectId}'
       AND (${timePredicate})
       AND chat_id != ''
-      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_agent_tool_call)
+      AND (is_claude_api_request OR is_claude_tool_result OR is_agent_usage_row OR is_opencode_usage_row OR is_agent_tool_call)
     GROUP BY gram_project_id, time_bucket, chat_id;
   `;
 }

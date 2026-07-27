@@ -651,12 +651,14 @@ WITH
     -- assistant.responded rows, under the canonical gen_ai.usage.* keys that
     -- every fallback branch below already reads. It has no OTEL stream and the
     -- unified ingest path stamps no gram_urn, so provenance anchors on
-    -- hook_source instead. The usage guard mirrors is_codex_api_request: only
-    -- the turn-closing row carries usage, so a session's other opencode rows
-    -- (prompts, tool calls, session lifecycle) contribute nothing. Cost is part
-    -- of the guard so a cost-only turn (no token fields) still counts.
+    -- hook_source instead. The AfterAgentResponse event guard scopes this to the
+    -- turn-closing row: a session's other opencode rows (thoughts,
+    -- usage.reported, tool calls, session lifecycle) are excluded even if they
+    -- carry gen_ai.usage.* fields, so usage is counted once per turn. Cost is
+    -- part of the guard so a cost-only turn (no token fields) still counts.
     (
         toString(attributes.gram.hook.source) = 'opencode'
+        AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_opencode_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
@@ -1024,10 +1026,12 @@ WITH
     (greatest(toInt64OrZero(toString(attributes.input_token_count)), 0) - codex_cache_read_tokens) AS codex_input_tokens,
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost')) AS is_agent_usage_row,
     -- opencode usage rides on its unified-ingest assistant.responded rows,
-    -- anchored on hook_source because that path stamps no gram_urn; see
-    -- attribute_metrics_summaries_mv above.
+    -- anchored on hook_source because that path stamps no gram_urn, and gated on
+    -- the AfterAgentResponse event so thoughts/usage.reported/tool-call rows are
+    -- not double-counted as usage turns; see attribute_metrics_summaries_mv above.
     (
         hook_source = 'opencode'
+        AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_opencode_usage_row,
     (
