@@ -17,6 +17,7 @@ import (
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
 	adminchatanalysisc "github.com/speakeasy-api/gram/server/gen/http/admin_chat_analysis/client"
+	adminexternalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/admin_external_credentials/client"
 	adminremotesessionsc "github.com/speakeasy-api/gram/server/gen/http/admin_remote_sessions/client"
 	agentc "github.com/speakeasy-api/gram/server/gen/http/agent/client"
 	aiintegrationsc "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/client"
@@ -121,6 +122,7 @@ func UsageCommands() []string {
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|trigger-analysis)",
+		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
@@ -1361,6 +1363,32 @@ func ParseEndpoint(
 
 		adminChatAnalysisTriggerAnalysisFlags            = flag.NewFlagSet("trigger-analysis", flag.ExitOnError)
 		adminChatAnalysisTriggerAnalysisSessionTokenFlag = adminChatAnalysisTriggerAnalysisFlags.String("session-token", "", "")
+
+		adminExternalCredentialsFlags = flag.NewFlagSet("admin-external-credentials", flag.ContinueOnError)
+
+		adminExternalCredentialsCreateGcpIamPlatformCredentialFlags            = flag.NewFlagSet("create-gcp-iam-platform-credential", flag.ExitOnError)
+		adminExternalCredentialsCreateGcpIamPlatformCredentialBodyFlag         = adminExternalCredentialsCreateGcpIamPlatformCredentialFlags.String("body", "REQUIRED", "")
+		adminExternalCredentialsCreateGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsCreateGcpIamPlatformCredentialFlags.String("session-token", "", "")
+
+		adminExternalCredentialsListPlatformExternalCredentialsFlags            = flag.NewFlagSet("list-platform-external-credentials", flag.ExitOnError)
+		adminExternalCredentialsListPlatformExternalCredentialsProviderFlag     = adminExternalCredentialsListPlatformExternalCredentialsFlags.String("provider", "", "")
+		adminExternalCredentialsListPlatformExternalCredentialsSessionTokenFlag = adminExternalCredentialsListPlatformExternalCredentialsFlags.String("session-token", "", "")
+
+		adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags            = flag.NewFlagSet("update-gcp-iam-platform-credential", flag.ExitOnError)
+		adminExternalCredentialsUpdateGcpIamPlatformCredentialBodyFlag         = adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags.String("body", "REQUIRED", "")
+		adminExternalCredentialsUpdateGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags.String("session-token", "", "")
+
+		adminExternalCredentialsGetGcpIamPlatformCredentialFlags            = flag.NewFlagSet("get-gcp-iam-platform-credential", flag.ExitOnError)
+		adminExternalCredentialsGetGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsGetGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
+		adminExternalCredentialsGetGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsGetGcpIamPlatformCredentialFlags.String("session-token", "", "")
+
+		adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags            = flag.NewFlagSet("verify-gcp-iam-platform-credential", flag.ExitOnError)
+		adminExternalCredentialsVerifyGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
+		adminExternalCredentialsVerifyGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.String("session-token", "", "")
+
+		adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags            = flag.NewFlagSet("delete-gcp-iam-platform-credential", flag.ExitOnError)
+		adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
+		adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("session-token", "", "")
 
 		pluginsFlags = flag.NewFlagSet("plugins", flag.ContinueOnError)
 
@@ -3156,6 +3184,14 @@ func ParseEndpoint(
 	adminChatAnalysisUpsertWorkUnitsSettingsFlags.Usage = adminChatAnalysisUpsertWorkUnitsSettingsUsage
 	adminChatAnalysisTriggerAnalysisFlags.Usage = adminChatAnalysisTriggerAnalysisUsage
 
+	adminExternalCredentialsFlags.Usage = adminExternalCredentialsUsage
+	adminExternalCredentialsCreateGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsCreateGcpIamPlatformCredentialUsage
+	adminExternalCredentialsListPlatformExternalCredentialsFlags.Usage = adminExternalCredentialsListPlatformExternalCredentialsUsage
+	adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsUpdateGcpIamPlatformCredentialUsage
+	adminExternalCredentialsGetGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsGetGcpIamPlatformCredentialUsage
+	adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsVerifyGcpIamPlatformCredentialUsage
+	adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage
+
 	pluginsFlags.Usage = pluginsUsage
 	pluginsListPluginsFlags.Usage = pluginsListPluginsUsage
 	pluginsGetPluginFlags.Usage = pluginsGetPluginUsage
@@ -3550,6 +3586,8 @@ func ParseEndpoint(
 			svcf = packagesFlags
 		case "admin-chat-analysis":
 			svcf = adminChatAnalysisFlags
+		case "admin-external-credentials":
+			svcf = adminExternalCredentialsFlags
 		case "plugins":
 			svcf = pluginsFlags
 		case "features":
@@ -4417,6 +4455,28 @@ func ParseEndpoint(
 
 			case "trigger-analysis":
 				epf = adminChatAnalysisTriggerAnalysisFlags
+
+			}
+
+		case "admin-external-credentials":
+			switch epn {
+			case "create-gcp-iam-platform-credential":
+				epf = adminExternalCredentialsCreateGcpIamPlatformCredentialFlags
+
+			case "list-platform-external-credentials":
+				epf = adminExternalCredentialsListPlatformExternalCredentialsFlags
+
+			case "update-gcp-iam-platform-credential":
+				epf = adminExternalCredentialsUpdateGcpIamPlatformCredentialFlags
+
+			case "get-gcp-iam-platform-credential":
+				epf = adminExternalCredentialsGetGcpIamPlatformCredentialFlags
+
+			case "verify-gcp-iam-platform-credential":
+				epf = adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags
+
+			case "delete-gcp-iam-platform-credential":
+				epf = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags
 
 			}
 
@@ -6119,6 +6179,28 @@ func ParseEndpoint(
 			case "trigger-analysis":
 				endpoint = c.TriggerAnalysis()
 				data, err = adminchatanalysisc.BuildTriggerAnalysisPayload(*adminChatAnalysisTriggerAnalysisSessionTokenFlag)
+			}
+		case "admin-external-credentials":
+			c := adminexternalcredentialsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-gcp-iam-platform-credential":
+				endpoint = c.CreateGcpIamPlatformCredential()
+				data, err = adminexternalcredentialsc.BuildCreateGcpIamPlatformCredentialPayload(*adminExternalCredentialsCreateGcpIamPlatformCredentialBodyFlag, *adminExternalCredentialsCreateGcpIamPlatformCredentialSessionTokenFlag)
+			case "list-platform-external-credentials":
+				endpoint = c.ListPlatformExternalCredentials()
+				data, err = adminexternalcredentialsc.BuildListPlatformExternalCredentialsPayload(*adminExternalCredentialsListPlatformExternalCredentialsProviderFlag, *adminExternalCredentialsListPlatformExternalCredentialsSessionTokenFlag)
+			case "update-gcp-iam-platform-credential":
+				endpoint = c.UpdateGcpIamPlatformCredential()
+				data, err = adminexternalcredentialsc.BuildUpdateGcpIamPlatformCredentialPayload(*adminExternalCredentialsUpdateGcpIamPlatformCredentialBodyFlag, *adminExternalCredentialsUpdateGcpIamPlatformCredentialSessionTokenFlag)
+			case "get-gcp-iam-platform-credential":
+				endpoint = c.GetGcpIamPlatformCredential()
+				data, err = adminexternalcredentialsc.BuildGetGcpIamPlatformCredentialPayload(*adminExternalCredentialsGetGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsGetGcpIamPlatformCredentialSessionTokenFlag)
+			case "verify-gcp-iam-platform-credential":
+				endpoint = c.VerifyGcpIamPlatformCredential()
+				data, err = adminexternalcredentialsc.BuildVerifyGcpIamPlatformCredentialPayload(*adminExternalCredentialsVerifyGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsVerifyGcpIamPlatformCredentialSessionTokenFlag)
+			case "delete-gcp-iam-platform-credential":
+				endpoint = c.DeleteGcpIamPlatformCredential()
+				data, err = adminexternalcredentialsc.BuildDeleteGcpIamPlatformCredentialPayload(*adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag)
 			}
 		case "plugins":
 			c := pluginsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -12417,6 +12499,142 @@ func adminChatAnalysisTriggerAnalysisUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-chat-analysis trigger-analysis --session-token \"abc123\"")
+}
+
+// adminExternalCredentialsUsage displays the usage of the
+// admin-external-credentials command and its subcommands.
+func adminExternalCredentialsUsage() {
+	fmt.Fprintln(os.Stderr, `Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin-external-credentials COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-gcp-iam-platform-credential: Create a platform GCP IAM external credential (organization_id NULL, project_id NULL). Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    list-platform-external-credentials: List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    update-gcp-iam-platform-credential: Replace a platform GCP IAM external credential's configuration. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    get-gcp-iam-platform-credential: Get a platform GCP IAM external credential by ID. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    verify-gcp-iam-platform-credential: Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Ephemeral: nothing is persisted. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    delete-gcp-iam-platform-credential: Soft-delete a platform GCP IAM external credential by ID. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s admin-external-credentials COMMAND --help\n", os.Args[0])
+}
+func adminExternalCredentialsCreateGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials create-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a platform GCP IAM external credential (organization_id NULL, project_id NULL). Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials create-gcp-iam-platform-credential --body '{\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func adminExternalCredentialsListPlatformExternalCredentialsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials list-platform-external-credentials", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials list-platform-external-credentials --provider \"gcp_iam\" --session-token \"abc123\"")
+}
+
+func adminExternalCredentialsUpdateGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials update-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a platform GCP IAM external credential's configuration. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials update-gcp-iam-platform-credential --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"impersonate_service_account\": \"abc123\",\n      \"name\": \"abc123\",\n      \"wif_pool_id\": \"abc123\",\n      \"wif_project_number\": \"abc123\",\n      \"wif_provider_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func adminExternalCredentialsGetGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials get-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a platform GCP IAM external credential by ID. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials get-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func adminExternalCredentialsVerifyGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials verify-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Ephemeral: nothing is persisted. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials verify-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-external-credentials delete-gcp-iam-platform-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a platform GCP IAM external credential by ID. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials delete-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 // pluginsUsage displays the usage of the plugins command and its subcommands.

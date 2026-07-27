@@ -64,6 +64,12 @@ trackedFiles:
   src/funcs/adminChatAnalysisGetSettings.ts: {}
   src/funcs/adminChatAnalysisTriggerAnalysis.ts: {}
   src/funcs/adminChatAnalysisUpsertWorkUnitsSettings.ts: {}
+  src/funcs/adminExternalCredentialsCreateGcpIam.ts: {}
+  src/funcs/adminExternalCredentialsDeleteGcpIam.ts: {}
+  src/funcs/adminExternalCredentialsGetGcpIam.ts: {}
+  src/funcs/adminExternalCredentialsList.ts: {}
+  src/funcs/adminExternalCredentialsUpdateGcpIam.ts: {}
+  src/funcs/adminExternalCredentialsVerifyGcpIam.ts: {}
   src/funcs/adminRemoteSessionsCreateGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsCreateGlobalIssuer.ts: {}
   src/funcs/adminRemoteSessionsDeleteGlobalClient.ts: {}
@@ -1188,6 +1194,7 @@ trackedFiles:
   src/models/components/validatekeyproject.ts: {}
   src/models/components/validatekeyresult.ts: {}
   src/models/components/verifyonboardinghookssetupresult.ts: {}
+  src/models/components/verifyplatformcredentialresult.ts: {}
   src/models/components/verifyurlform.ts: {}
   src/models/components/verifyurlresult.ts: {}
   src/models/components/workosdomainverificationintentoptions.ts: {}
@@ -1239,6 +1246,7 @@ trackedFiles:
   src/models/operations/createdeployment.ts: {}
   src/models/operations/createenvironment.ts: {}
   src/models/operations/creategcpiamcredential.ts: {}
+  src/models/operations/creategcpiamplatformcredential.ts: {}
   src/models/operations/creategcpkmskey.ts: {}
   src/models/operations/createglobalremotesessionclient.ts: {}
   src/models/operations/createglobalremotesessionissuer.ts: {}
@@ -1283,6 +1291,7 @@ trackedFiles:
   src/models/operations/deletedomain.ts: {}
   src/models/operations/deleteenvironment.ts: {}
   src/models/operations/deletegcpiamcredential.ts: {}
+  src/models/operations/deletegcpiamplatformcredential.ts: {}
   src/models/operations/deletegcpkmskey.ts: {}
   src/models/operations/deleteglobalremotesessionclient.ts: {}
   src/models/operations/deleteglobalremotesessionissuer.ts: {}
@@ -1349,6 +1358,7 @@ trackedFiles:
   src/models/operations/getdomain.ts: {}
   src/models/operations/getemployeedataflowgraph.ts: {}
   src/models/operations/getgcpiamcredential.ts: {}
+  src/models/operations/getgcpiamplatformcredential.ts: {}
   src/models/operations/getgcpkmskey.ts: {}
   src/models/operations/getglobalremotesessionclient.ts: {}
   src/models/operations/getglobalremotesessionissuer.ts: {}
@@ -1473,6 +1483,7 @@ trackedFiles:
   src/models/operations/listorganizationremotesessionissuers.ts: {}
   src/models/operations/listorganizationusers.ts: {}
   src/models/operations/listpackages.ts: {}
+  src/models/operations/listplatformexternalcredentials.ts: {}
   src/models/operations/listplugins.ts: {}
   src/models/operations/listprojects.ts: {}
   src/models/operations/listremotemcpserverheaders.ts: {}
@@ -1611,6 +1622,7 @@ trackedFiles:
   src/models/operations/updatedomain.ts: {}
   src/models/operations/updateenvironment.ts: {}
   src/models/operations/updategcpiamcredential.ts: {}
+  src/models/operations/updategcpiamplatformcredential.ts: {}
   src/models/operations/updategcpkmskey.ts: {}
   src/models/operations/updateglobalremotesessionclient.ts: {}
   src/models/operations/updateglobalremotesessionissuer.ts: {}
@@ -1656,6 +1668,7 @@ trackedFiles:
   src/models/operations/upsertshadowmcpinventorypolicybypass.ts: {}
   src/models/operations/upsertskillefficacysettings.ts: {}
   src/models/operations/validateapikey.ts: {}
+  src/models/operations/verifygcpiamplatformcredential.ts: {}
   src/models/operations/verifyonboardinghookssetup.ts: {}
   src/models/operations/verifyremotemcpurl.ts: {}
   src/react-query/_context.tsx: {}
@@ -1731,6 +1744,7 @@ trackedFiles:
   src/react-query/createDeployment.ts: {}
   src/react-query/createEnvironment.ts: {}
   src/react-query/createGcpIamCredential.ts: {}
+  src/react-query/createGcpIamPlatformCredential.ts: {}
   src/react-query/createGcpKmsKey.ts: {}
   src/react-query/createGlobalRemoteSessionClient.ts: {}
   src/react-query/createGlobalRemoteSessionIssuer.ts: {}
@@ -1766,6 +1780,7 @@ trackedFiles:
   src/react-query/deleteDomain.ts: {}
   src/react-query/deleteEnvironment.ts: {}
   src/react-query/deleteGcpIamCredential.ts: {}
+  src/react-query/deleteGcpIamPlatformCredential.ts: {}
   src/react-query/deleteGcpKmsKey.ts: {}
   src/react-query/deleteGlobalRemoteSessionClient.ts: {}
   src/react-query/deleteGlobalRemoteSessionIssuer.ts: {}
@@ -1826,6 +1841,8 @@ trackedFiles:
   src/react-query/getEmployeeDataFlowGraph.ts: {}
   src/react-query/getGcpIamCredential.core.ts: {}
   src/react-query/getGcpIamCredential.ts: {}
+  src/react-query/getGcpIamPlatformCredential.core.ts: {}
+  src/react-query/getGcpIamPlatformCredential.ts: {}
   src/react-query/getGcpKmsKey.core.ts: {}
   src/react-query/getGcpKmsKey.ts: {}
   src/react-query/getHooksSummary.core.ts: {}
@@ -1966,6 +1983,8 @@ trackedFiles:
   src/react-query/listOrganizationUsers.ts: {}
   src/react-query/listPackages.core.ts: {}
   src/react-query/listPackages.ts: {}
+  src/react-query/listPlatformExternalCredentials.core.ts: {}
+  src/react-query/listPlatformExternalCredentials.ts: {}
   src/react-query/listProjects.core.ts: {}
   src/react-query/listProjects.ts: {}
   src/react-query/listResources.core.ts: {}
@@ -2264,6 +2283,7 @@ trackedFiles:
   src/react-query/updateDomain.ts: {}
   src/react-query/updateEnvironment.ts: {}
   src/react-query/updateGcpIamCredential.ts: {}
+  src/react-query/updateGcpIamPlatformCredential.ts: {}
   src/react-query/updateGcpKmsKey.ts: {}
   src/react-query/updateGlobalRemoteSessionClient.ts: {}
   src/react-query/updateGlobalRemoteSessionIssuer.ts: {}
@@ -2319,6 +2339,7 @@ trackedFiles:
   src/react-query/userSessions.ts: {}
   src/react-query/validateAPIKey.core.ts: {}
   src/react-query/validateAPIKey.ts: {}
+  src/react-query/verifyGcpIamPlatformCredential.ts: {}
   src/react-query/verifyOnboardingHooksSetup.core.ts: {}
   src/react-query/verifyOnboardingHooksSetup.ts: {}
   src/react-query/verifyRemoteMcpURL.ts: {}
@@ -2327,6 +2348,7 @@ trackedFiles:
   src/sdk/access.ts: {}
   src/sdk/actorattributes.ts: {}
   src/sdk/adminchatanalysis.ts: {}
+  src/sdk/adminexternalcredentials.ts: {}
   src/sdk/adminremotesessions.ts: {}
   src/sdk/agent.ts: {}
   src/sdk/aiintegrations.ts: {}
@@ -2863,6 +2885,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createGcpIamPlatformCredential:
+    speakeasy-default-create-gcp-iam-platform-credential:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-01-26T10:20:03.638Z", "id": "f5854630-4491-4edc-96ce-6079d342b936", "name": "<value>", "organization_id": "<id>", "provider": "aws_iam", "updated_at": "2025-04-20T02:05:39.861Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   createGcpKmsKey:
     speakeasy-default-create-gcp-kms-key:
       requestBody:
@@ -3334,6 +3367,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deleteGcpIamPlatformCredential:
+    speakeasy-default-delete-gcp-iam-platform-credential:
+      parameters:
+        query:
+          id: "78e7f63a-096c-45ee-8140-84ed49aa76ab"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   deleteGcpKmsKey:
     speakeasy-default-delete-gcp-kms-key:
       parameters:
@@ -4025,6 +4068,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getGcpIamPlatformCredential:
+    speakeasy-default-get-gcp-iam-platform-credential:
+      parameters:
+        query:
+          id: "61755bd6-135a-47fb-a13f-f239986a25f6"
+      responses:
+        "200":
+          application/json: {"created_at": "2026-11-18T05:26:51.757Z", "id": "557aa7b1-8ccb-4ddc-945a-d0587faa4905", "name": "<value>", "organization_id": "<id>", "provider": "gcp_iam", "updated_at": "2024-05-28T12:32:42.150Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getGcpKmsKey:
     speakeasy-default-get-gcp-kms-key:
       parameters:
@@ -5367,6 +5422,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listPlatformExternalCredentials:
+    speakeasy-default-list-platform-external-credentials:
+      responses:
+        "200":
+          application/json: {"credentials": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listPlugins:
     speakeasy-default-list-plugins:
       responses:
@@ -6883,6 +6947,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updateGcpIamPlatformCredential:
+    speakeasy-default-update-gcp-iam-platform-credential:
+      requestBody:
+        application/json: {"id": "84a0a88c-3346-480e-aa0d-4a0681c629b0", "name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-03-31T17:45:13.219Z", "id": "f61dc172-6ef9-49fe-a863-1735816047b5", "name": "<value>", "organization_id": "<id>", "provider": "aws_iam", "updated_at": "2024-03-10T07:08:35.301Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   updateGcpKmsKey:
     speakeasy-default-update-gcp-kms-key:
       requestBody:
@@ -7401,6 +7476,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  verifyGcpIamPlatformCredential:
+    speakeasy-default-verify-gcp-iam-platform-credential:
+      parameters:
+        query:
+          id: "7f16108f-a96b-45fd-8a18-aea6f1a7e5ba"
+      responses:
+        "200":
+          application/json: {"verified": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   verifyOnboardingHooksSetup:
     speakeasy-default-verify-onboarding-hooks-setup:
       responses:

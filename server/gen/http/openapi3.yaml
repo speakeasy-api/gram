@@ -3924,6 +3924,537 @@ paths:
             x-speakeasy-name-override: upsertWorkUnitsSettings
             x-speakeasy-react-hook:
                 name: UpsertChatAnalysisSettings
+    /rpc/adminExternalCredentials.createGcpIam:
+        post:
+            description: Create a platform GCP IAM external credential (organization_id NULL, project_id NULL). Requires platform admin.
+            operationId: createGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateGcpIamCredentialForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createGcpIamPlatformCredential adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: createGcpIam
+            x-speakeasy-react-hook:
+                name: CreateGcpIamPlatformCredential
+    /rpc/adminExternalCredentials.deleteGcpIam:
+        delete:
+            description: Soft-delete a platform GCP IAM external credential by ID. Requires platform admin.
+            operationId: deleteGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the credential to delete.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the credential to delete.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteGcpIamPlatformCredential adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: deleteGcpIam
+            x-speakeasy-react-hook:
+                name: DeleteGcpIamPlatformCredential
+    /rpc/adminExternalCredentials.getGcpIam:
+        get:
+            description: Get a platform GCP IAM external credential by ID. Requires platform admin.
+            operationId: getGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the credential to get.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the credential to get.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getGcpIamPlatformCredential adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: getGcpIam
+            x-speakeasy-react-hook:
+                name: GetGcpIamPlatformCredential
+    /rpc/adminExternalCredentials.list:
+        get:
+            description: List the platform external credentials (provider-independent summary). Optionally filter by provider. Requires platform admin.
+            operationId: listPlatformExternalCredentials
+            parameters:
+                - allowEmptyValue: true
+                  description: Only return credentials for this provider.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Only return credentials for this provider.
+                    enum:
+                        - aws_iam
+                        - gcp_iam
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExternalCredentialsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listPlatformExternalCredentials adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: ListPlatformExternalCredentials
+    /rpc/adminExternalCredentials.updateGcpIam:
+        post:
+            description: Replace a platform GCP IAM external credential's configuration. Requires platform admin.
+            operationId: updateGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateGcpIamCredentialRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateGcpIamPlatformCredential adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: updateGcpIam
+            x-speakeasy-react-hook:
+                name: UpdateGcpIamPlatformCredential
+    /rpc/adminExternalCredentials.verifyGcpIam:
+        post:
+            description: 'Run a live ''who am I'' probe against a platform GCP IAM credential''s resolved identity and report the effective principal. Ephemeral: nothing is persisted. Requires platform admin.'
+            operationId: verifyGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the credential to verify.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the credential to verify.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VerifyPlatformCredentialResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: verifyGcpIamPlatformCredential adminExternalCredentials
+            tags:
+                - adminExternalCredentials
+            x-speakeasy-name-override: verifyGcpIam
+            x-speakeasy-react-hook:
+                name: VerifyGcpIamPlatformCredential
     /rpc/adminRemoteSessions.createGlobalClient:
         post:
             description: Register a global remote_session_client under an existing global remote_session_issuer. Caller supplies client_id and optional client_secret obtained out-of-band from the upstream issuer. Requires platform admin.
@@ -67048,6 +67579,28 @@ components:
                 - events
                 - latest_unix_nano
                 - total_count
+        VerifyPlatformCredentialResult:
+            type: object
+            properties:
+                detail:
+                    type: string
+                    description: Human-readable detail about the probe outcome (e.g. why the principal is unavailable, or the failure reason).
+                identity_source:
+                    type: string
+                    description: How the identity was resolved. Lets the caller tell an in-cluster attached identity apart from local Application Default Credentials or an impersonated service account.
+                    enum:
+                        - metadata_server
+                        - application_default_credentials
+                        - impersonation
+                principal:
+                    type: string
+                    description: The effective principal the identity resolves to (e.g. a service-account email). May be empty when the resolution source cannot report it.
+                verified:
+                    type: boolean
+                    description: Whether the credential's identity resolved successfully.
+            description: Result of a live 'who am I' probe against a platform credential's resolved identity.
+            required:
+                - verified
         VerifyURLForm:
             type: object
             properties:
@@ -67253,6 +67806,8 @@ tags:
       description: Manages packages in Gram.
     - name: adminChatAnalysis
       description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
+    - name: adminExternalCredentials
+      description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
     - name: plugins
       description: Manage distributable plugin bundles of MCP servers and hooks.
     - name: features
