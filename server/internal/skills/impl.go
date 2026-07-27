@@ -324,8 +324,8 @@ func (s *Service) recordVersion(
 		}); deleteErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, deleteErr, "promote captured skill version to manual").LogError(ctx, logger)
 		}
-		if supersedeErr := supersedeOpenSuggestionAfterBaseChange(ctx, queries, *authCtx.ProjectID, skill.ID); supersedeErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, supersedeErr, "supersede stale skill suggestion").LogError(ctx, logger)
+		if replayErr := ReplayOpenSuggestionOntoBase(ctx, queries, *authCtx.ProjectID, skill.ID); replayErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, replayErr, "replay open skill suggestion").LogError(ctx, logger)
 		}
 
 		state, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
@@ -376,8 +376,8 @@ func (s *Service) recordVersion(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update skill after adding version").LogError(ctx, logger)
 	}
-	if err := supersedeOpenSuggestionAfterBaseChange(ctx, queries, *authCtx.ProjectID, skill.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "supersede stale skill suggestion").LogError(ctx, logger)
+	if err := ReplayOpenSuggestionOntoBase(ctx, queries, *authCtx.ProjectID, skill.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "replay open skill suggestion").LogError(ctx, logger)
 	}
 
 	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)

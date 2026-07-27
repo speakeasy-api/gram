@@ -44,13 +44,11 @@ type SkillEditSuggestion struct {
 	ProjectID          uuid.UUID
 	SkillID            uuid.UUID
 	BaseVersionID      uuid.UUID
-	ProposedContent    string
+	ProposedDiff       string
 	Rationale          string
 	Status             string
-	FeedbackCount      int64
 	ScoredSessionCount int64
 	ApprovedByUserID   pgtype.Text
-	ResultingVersionID uuid.NullUUID
 	ApprovedAt         pgtype.Timestamptz
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz

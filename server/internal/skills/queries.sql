@@ -168,18 +168,16 @@ INSERT INTO skill_edit_suggestions (
   project_id,
   skill_id,
   base_version_id,
-  proposed_content,
+  proposed_diff,
   rationale,
-  feedback_count,
   scored_session_count
 )
 SELECT
   s.project_id,
   s.id,
   sv.id,
-  @proposed_content,
+  @proposed_diff,
   @rationale,
-  @feedback_count,
   @scored_session_count
 FROM skills s
 JOIN skill_versions sv
@@ -192,9 +190,8 @@ RETURNING *;
 
 -- name: UpdateOpenSkillEditSuggestion :one
 UPDATE skill_edit_suggestions suggestion
-SET proposed_content = @proposed_content,
+SET proposed_diff = @proposed_diff,
     rationale = @rationale,
-    feedback_count = @feedback_count,
     scored_session_count = @scored_session_count,
     updated_at = clock_timestamp()
 FROM skills s
@@ -222,8 +219,7 @@ WITH latest AS (
   LIMIT 1
 )
 UPDATE skill_edit_suggestions suggestion
-SET feedback_count = @feedback_count,
-    scored_session_count = @scored_session_count,
+SET scored_session_count = @scored_session_count,
     updated_at = clock_timestamp()
 FROM latest
 WHERE suggestion.project_id = @project_id
@@ -237,20 +233,18 @@ INSERT INTO skill_edit_suggestions (
   project_id,
   skill_id,
   base_version_id,
-  proposed_content,
+  proposed_diff,
   rationale,
   status,
-  feedback_count,
   scored_session_count
 )
 SELECT
   s.project_id,
   s.id,
   sv.id,
-  sv.content,
+  '',
   @rationale,
   'superseded',
-  @feedback_count,
   @scored_session_count
 FROM skills s
 JOIN skill_versions sv
@@ -260,6 +254,42 @@ WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL
 RETURNING *;
+
+-- name: LinkSkillEditSuggestionFeedback :execrows
+INSERT INTO skill_edit_suggestion_feedback (
+  project_id,
+  suggestion_id,
+  feedback_id
+)
+SELECT
+  feedback.project_id,
+  @suggestion_id,
+  feedback.id
+FROM skill_feedback feedback
+WHERE feedback.project_id = @project_id
+  AND feedback.id = ANY(@feedback_ids::uuid[])
+ON CONFLICT DO NOTHING;
+
+-- name: CountSkillEditSuggestionFeedback :one
+SELECT COUNT(*)
+FROM skill_edit_suggestion_feedback link
+WHERE link.project_id = @project_id
+  AND link.suggestion_id = @suggestion_id;
+
+-- name: RebaseOpenSkillEditSuggestion :one
+UPDATE skill_edit_suggestions suggestion
+SET base_version_id = @base_version_id,
+    proposed_diff = @proposed_diff,
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE suggestion.project_id = @project_id
+  AND suggestion.skill_id = @skill_id
+  AND suggestion.id = @id
+  AND suggestion.status = 'open'
+  AND s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+  AND s.archived_at IS NULL
+RETURNING suggestion.*;
 
 -- name: SupersedeOpenSkillEditSuggestion :one
 UPDATE skill_edit_suggestions suggestion

@@ -212,9 +212,8 @@ func TestCapturedVersionDoesNotOutrankManualDistribution(t *testing.T) {
 	ctx, ti := newTestService(t)
 	manual := createSkill(t, ctx, ti, "distribution-priority", "Manual version.")
 	open, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent:    skillManifest("distribution-priority", "Suggested.", "suggested"),
+		ProposedDiff:       diffTo(t, manual.Version.Content, skillManifest("distribution-priority", "Suggested.", "suggested")),
 		Rationale:          "evidence",
-		FeedbackCount:      1,
 		ScoredSessionCount: 1,
 		BaseVersionID:      uuid.MustParse(manual.Version.ID),
 		ProjectID:          ti.projectID,

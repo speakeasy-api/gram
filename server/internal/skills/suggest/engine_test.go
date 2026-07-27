@@ -244,12 +244,11 @@ func TestFirstNonRegressionScoresWaitForWeeklyFloor(t *testing.T) {
 	require.Equal(t, "base_reset", reason)
 }
 
-func TestEvidenceRationaleIncludesServerCountsAndClampsRunes(t *testing.T) {
+func TestClampRationaleTrimsWithoutSplittingRunes(t *testing.T) {
 	t.Parallel()
 
-	rationale := evidenceRationale(120, strings.Repeat("界", 200), 7, trend{CurrentCount: 18, PreviousCount: 12})
-	require.Contains(t, rationale, "feedback=7")
-	require.Contains(t, rationale, "current-base scored sessions=18")
+	rationale := clampRationale(120, "  "+strings.Repeat("界", 200)+"  ")
+	require.Equal(t, strings.Repeat("界", 120), rationale)
 	require.LessOrEqual(t, utf8.RuneCountInString(rationale), 120)
 }
 
@@ -312,26 +311,10 @@ func TestValidateGenerationRejectsEmptyRationale(t *testing.T) {
 	require.ErrorContains(t, err, "rationale is empty")
 }
 
-func TestValidateGenerationRejectsMissingEvidenceLabels(t *testing.T) {
+func TestValidateGenerationClearsDeclinedProposal(t *testing.T) {
 	t.Parallel()
 
-	for _, rationale := range []string{
-		"Transcripts: none. Trend: stable.",
-		"Feedback: mixed. Trend: stable.",
-		"Feedback: mixed. Transcripts: none.",
-		"Feedbackless evidence, transcripted sessions, and trending scores.",
-	} {
-		generation := Generation{Decision: DecisionPropose, ProposedSkillMD: "proposal", Rationale: rationale}
-		err := validateGeneration(&generation)
-		require.ErrorIs(t, err, ErrModelFailure, rationale)
-		require.ErrorContains(t, err, "evidence label", rationale)
-	}
-}
-
-func TestValidateGenerationAcceptsCaseInsensitiveEvidenceLabels(t *testing.T) {
-	t.Parallel()
-
-	generation := Generation{Decision: DecisionDecline, ProposedSkillMD: "ignored", Rationale: "feedback: mixed. TRANSCRIPTS: none. trend: stable."}
+	generation := Generation{Decision: DecisionDecline, ProposedSkillMD: "ignored", Rationale: "The skill already covers this."}
 	require.NoError(t, validateGeneration(&generation))
 	require.Empty(t, generation.ProposedSkillMD)
 }
@@ -339,8 +322,8 @@ func TestValidateGenerationAcceptsCaseInsensitiveEvidenceLabels(t *testing.T) {
 func suggestionWatermark(baseID uuid.UUID, status string, scored int64, updated time.Time) *repo.SkillEditSuggestion {
 	return &repo.SkillEditSuggestion{
 		ID: uuid.New(), ProjectID: uuid.Nil, SkillID: uuid.Nil, BaseVersionID: baseID,
-		ProposedContent: "", Rationale: "", Status: status, FeedbackCount: 0, ScoredSessionCount: scored,
-		ApprovedByUserID: pgtype.Text{}, ResultingVersionID: uuid.NullUUID{}, ApprovedAt: pgtype.Timestamptz{},
+		ProposedDiff: "", Rationale: "", Status: status, ScoredSessionCount: scored,
+		ApprovedByUserID: pgtype.Text{}, ApprovedAt: pgtype.Timestamptz{},
 		CreatedAt: pgtype.Timestamptz{}, UpdatedAt: pgtype.Timestamptz{Time: updated, Valid: true},
 	}
 }

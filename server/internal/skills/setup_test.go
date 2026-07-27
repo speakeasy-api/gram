@@ -30,6 +30,7 @@ import (
 	projectrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -169,6 +170,34 @@ func createProjectContext(t *testing.T, ctx context.Context, ti *testInstance, g
 
 func skillManifest(name, description, body string) string {
 	return fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s\n", name, description, body)
+}
+
+func diffTo(t *testing.T, base, proposed string) string {
+	t.Helper()
+
+	diff, err := skilldiff.Unified(base, proposed)
+	require.NoError(t, err)
+	require.NotEmpty(t, diff)
+	return diff
+}
+
+func applyDiff(t *testing.T, base, diff string) string {
+	t.Helper()
+
+	applied, err := skilldiff.Apply(base, diff)
+	require.NoError(t, err)
+	return applied
+}
+
+func suggestionFeedbackCount(t *testing.T, ctx context.Context, ti *testInstance, suggestionID uuid.UUID) int64 {
+	t.Helper()
+
+	count, err := ti.repo.CountSkillEditSuggestionFeedback(ctx, repo.CountSkillEditSuggestionFeedbackParams{
+		ProjectID:    ti.projectID,
+		SuggestionID: suggestionID,
+	})
+	require.NoError(t, err)
+	return count
 }
 
 func createSkill(t *testing.T, ctx context.Context, ti *testInstance, name, description string) *gen.RecordSkillResult {

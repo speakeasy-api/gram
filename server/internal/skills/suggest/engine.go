@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -128,6 +129,11 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 	}
 	if err != nil {
 		return Result{}, fmt.Errorf("resolve suggestion base: %w", err)
+	}
+	// Replay before deciding, so the rollup either carries an open suggestion
+	// onto the current version or retires it.
+	if err := skills.ReplayOpenSuggestionOntoBase(ctx, queries, in.ProjectID, in.SkillID); err != nil {
+		return Result{}, fmt.Errorf("replay open skill suggestion before analysis: %w", err)
 	}
 	project, err := projectsrepo.New(e.db).GetProjectByID(ctx, in.ProjectID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -279,7 +285,7 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 		}
 	}
 
-	rationale := evidenceRationale(e.config.MaxRationaleRunes, generation.Rationale, len(feedback), computedTrend)
+	rationale := clampRationale(e.config.MaxRationaleRunes, generation.Rationale)
 	return e.persist(ctx, in, base.BaseVersionID, snapshotSuggestion(latest), skill.Name, generation, rationale, computedTrend.CurrentCount, unreviewedCount, feedback)
 }
 
@@ -357,17 +363,15 @@ func shouldWake(config Config, evidence wakeEvidence) (bool, string) {
 	return true, "weekly_floor"
 }
 
-func evidenceRationale(maxRunes int, modelRationale string, feedbackCount int, evidence trend) string {
-	prefix := fmt.Sprintf("**Evidence:** feedback=%d; current-base scored sessions=%d; predecessor scored sessions=%d.\n\n", feedbackCount, evidence.CurrentCount, evidence.PreviousCount)
-	remaining := maxRunes - utf8.RuneCountInString(prefix)
-	if remaining <= 0 {
-		return string([]rune(prefix)[:maxRunes])
-	}
+// clampRationale keeps the reviewer-facing summary within its storage budget
+// without splitting a multi-byte rune.
+func clampRationale(maxRunes int, modelRationale string) string {
 	rationale := strings.TrimSpace(modelRationale)
-	if utf8.RuneCountInString(rationale) > remaining {
-		rationale = string([]rune(rationale)[:remaining])
+	if utf8.RuneCountInString(rationale) > maxRunes {
+		rationale = strings.TrimSpace(string([]rune(rationale)[:maxRunes]))
 	}
-	return prefix + rationale
+
+	return rationale
 }
 
 func snapshotSuggestion(suggestion *repo.SkillEditSuggestion) *suggestionSnapshot {
@@ -436,16 +440,33 @@ func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUI
 		}
 	}
 	if dismissedDuringInference {
-		if _, err := queries.UpdateLatestSkillEditSuggestionWatermark(ctx, repo.UpdateLatestSkillEditSuggestionWatermarkParams{
-			FeedbackCount: consumed, ScoredSessionCount: clampUint64ToInt64(scoredCount),
-			ProjectID: in.ProjectID, SkillID: in.SkillID, BaseVersionID: expectedBase,
-		}); err != nil {
+		watermark, err := queries.UpdateLatestSkillEditSuggestionWatermark(ctx, repo.UpdateLatestSkillEditSuggestionWatermarkParams{
+			ScoredSessionCount: clampUint64ToInt64(scoredCount),
+			ProjectID:          in.ProjectID, SkillID: in.SkillID, BaseVersionID: expectedBase,
+		})
+		if err != nil {
 			return Result{}, fmt.Errorf("update dismissed skill suggestion watermark: %w", err)
+		}
+		if err := linkFeedback(ctx, queries, in.ProjectID, watermark.ID, ids); err != nil {
+			return Result{}, err
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return Result{}, fmt.Errorf("commit dismissed skill suggestion watermark: %w", err)
 		}
 		return Result{Kind: ResultDeclined, Reenqueue: false, FeedbackConsumed: consumed, SuggestionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
+	}
+
+	var proposedDiff string
+	if generation.Decision == DecisionPropose {
+		proposedDiff, err = skilldiff.Unified(base.BaseContent, generation.ProposedSkillMD)
+		if err != nil {
+			return Result{}, fmt.Errorf("render proposed skill diff: %w", err)
+		}
+		// A proposal that renders as no change leaves nothing to review.
+		if strings.TrimSpace(proposedDiff) == "" {
+			generation.Decision = DecisionDecline
+			rationale = "The proposed edit was canonically unchanged from the current skill."
+		}
 	}
 
 	suggestionID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
@@ -454,7 +475,7 @@ func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUI
 		switch {
 		case openErr == nil && open.BaseVersionID == expectedBase:
 			updated, err := queries.UpdateOpenSkillEditSuggestion(ctx, repo.UpdateOpenSkillEditSuggestionParams{
-				ProposedContent: generation.ProposedSkillMD, Rationale: rationale, FeedbackCount: consumed,
+				ProposedDiff: proposedDiff, Rationale: rationale,
 				ScoredSessionCount: clampUint64ToInt64(scoredCount), ProjectID: in.ProjectID, SkillID: in.SkillID, BaseVersionID: expectedBase,
 			})
 			if err != nil {
@@ -471,7 +492,7 @@ func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUI
 		}
 		if !suggestionID.Valid {
 			created, err := queries.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-				ProposedContent: generation.ProposedSkillMD, Rationale: rationale, FeedbackCount: consumed,
+				ProposedDiff: proposedDiff, Rationale: rationale,
 				ScoredSessionCount: clampUint64ToInt64(scoredCount), BaseVersionID: expectedBase, ProjectID: in.ProjectID, SkillID: in.SkillID,
 			})
 			if err != nil {
@@ -479,20 +500,31 @@ func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUI
 			}
 			suggestionID = uuid.NullUUID{UUID: created.ID, Valid: true}
 		}
+		if err := linkFeedback(ctx, queries, in.ProjectID, suggestionID.UUID, ids); err != nil {
+			return Result{}, err
+		}
 	} else if latest != nil && latest.BaseVersionID == expectedBase {
-		if _, err := queries.UpdateLatestSkillEditSuggestionWatermark(ctx, repo.UpdateLatestSkillEditSuggestionWatermarkParams{
-			FeedbackCount: consumed, ScoredSessionCount: clampUint64ToInt64(scoredCount),
-			ProjectID: in.ProjectID, SkillID: in.SkillID, BaseVersionID: expectedBase,
-		}); err != nil {
+		watermark, err := queries.UpdateLatestSkillEditSuggestionWatermark(ctx, repo.UpdateLatestSkillEditSuggestionWatermarkParams{
+			ScoredSessionCount: clampUint64ToInt64(scoredCount),
+			ProjectID:          in.ProjectID, SkillID: in.SkillID, BaseVersionID: expectedBase,
+		})
+		if err != nil {
 			return Result{}, fmt.Errorf("update skill suggestion watermark: %w", err)
 		}
+		if err := linkFeedback(ctx, queries, in.ProjectID, watermark.ID, ids); err != nil {
+			return Result{}, err
+		}
 	} else {
-		if _, err := queries.CreateSkillEditSuggestionWatermark(ctx, repo.CreateSkillEditSuggestionWatermarkParams{
-			Rationale: "Automated analysis completed without a proposed edit.", FeedbackCount: consumed,
+		watermark, err := queries.CreateSkillEditSuggestionWatermark(ctx, repo.CreateSkillEditSuggestionWatermarkParams{
+			Rationale:          "Automated analysis completed without a proposed edit.",
 			ScoredSessionCount: clampUint64ToInt64(scoredCount), BaseVersionID: expectedBase,
 			ProjectID: in.ProjectID, SkillID: in.SkillID,
-		}); err != nil {
+		})
+		if err != nil {
 			return Result{}, fmt.Errorf("create skill suggestion watermark: %w", err)
+		}
+		if err := linkFeedback(ctx, queries, in.ProjectID, watermark.ID, ids); err != nil {
+			return Result{}, err
 		}
 	}
 
@@ -504,6 +536,21 @@ func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUI
 		return Result{Kind: ResultDeclined, Reenqueue: reenqueue, FeedbackConsumed: consumed, SuggestionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
 	}
 	return Result{Kind: ResultProposed, Reenqueue: reenqueue, FeedbackConsumed: consumed, SuggestionID: suggestionID}, nil
+}
+
+// linkFeedback records which feedback rows an analysis pass consumed, which is
+// what the reviewer expands to see the evidence behind a suggestion.
+func linkFeedback(ctx context.Context, queries *repo.Queries, projectID, suggestionID uuid.UUID, feedbackIDs []uuid.UUID) error {
+	if len(feedbackIDs) == 0 {
+		return nil
+	}
+	if _, err := queries.LinkSkillEditSuggestionFeedback(ctx, repo.LinkSkillEditSuggestionFeedbackParams{
+		SuggestionID: suggestionID, ProjectID: projectID, FeedbackIds: feedbackIDs,
+	}); err != nil {
+		return fmt.Errorf("link skill suggestion feedback: %w", err)
+	}
+
+	return nil
 }
 
 func nonnegativeInt64(value int64) uint64 {

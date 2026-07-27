@@ -123,7 +123,7 @@ func CaptureSkillContent(ctx context.Context, db *pgxpool.Pool, projectID uuid.U
 		if err != nil {
 			return nil, fmt.Errorf("sync captured skill summary: %w", err)
 		}
-		if err := supersedeOpenSuggestionAfterBaseChange(ctx, queries, projectID, skill.ID); err != nil {
+		if err := ReplayOpenSuggestionOntoBase(ctx, queries, projectID, skill.ID); err != nil {
 			return nil, err
 		}
 	}

@@ -344,6 +344,25 @@ func (q *Queries) CountScoredSkillEvaluationsAfter(ctx context.Context, arg Coun
 	return count, err
 }
 
+const countSkillEditSuggestionFeedback = `-- name: CountSkillEditSuggestionFeedback :one
+SELECT COUNT(*)
+FROM skill_edit_suggestion_feedback link
+WHERE link.project_id = $1
+  AND link.suggestion_id = $2
+`
+
+type CountSkillEditSuggestionFeedbackParams struct {
+	ProjectID    uuid.UUID
+	SuggestionID uuid.UUID
+}
+
+func (q *Queries) CountSkillEditSuggestionFeedback(ctx context.Context, arg CountSkillEditSuggestionFeedbackParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSkillEditSuggestionFeedback, arg.ProjectID, arg.SuggestionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSkillEfficacyOrgSpendForProject = `-- name: CountSkillEfficacyOrgSpendForProject :one
 SELECT count(*) AS spend
 FROM skill_efficacy_evaluations e
@@ -789,9 +808,8 @@ INSERT INTO skill_edit_suggestions (
   project_id,
   skill_id,
   base_version_id,
-  proposed_content,
+  proposed_diff,
   rationale,
-  feedback_count,
   scored_session_count
 )
 SELECT
@@ -800,22 +818,20 @@ SELECT
   sv.id,
   $1,
   $2,
-  $3,
-  $4
+  $3
 FROM skills s
 JOIN skill_versions sv
   ON sv.skill_id = s.id
-  AND sv.id = $5
-WHERE s.project_id = $6
-  AND s.id = $7
+  AND sv.id = $4
+WHERE s.project_id = $5
+  AND s.id = $6
   AND s.archived_at IS NULL
-RETURNING id, project_id, skill_id, base_version_id, proposed_content, rationale, status, feedback_count, scored_session_count, approved_by_user_id, resulting_version_id, approved_at, created_at, updated_at
+RETURNING id, project_id, skill_id, base_version_id, proposed_diff, rationale, status, scored_session_count, approved_by_user_id, approved_at, created_at, updated_at
 `
 
 type CreateSkillEditSuggestionParams struct {
-	ProposedContent    string
+	ProposedDiff       string
 	Rationale          string
-	FeedbackCount      int64
 	ScoredSessionCount int64
 	BaseVersionID      uuid.UUID
 	ProjectID          uuid.UUID
@@ -824,9 +840,8 @@ type CreateSkillEditSuggestionParams struct {
 
 func (q *Queries) CreateSkillEditSuggestion(ctx context.Context, arg CreateSkillEditSuggestionParams) (SkillEditSuggestion, error) {
 	row := q.db.QueryRow(ctx, createSkillEditSuggestion,
-		arg.ProposedContent,
+		arg.ProposedDiff,
 		arg.Rationale,
-		arg.FeedbackCount,
 		arg.ScoredSessionCount,
 		arg.BaseVersionID,
 		arg.ProjectID,
@@ -838,13 +853,11 @@ func (q *Queries) CreateSkillEditSuggestion(ctx context.Context, arg CreateSkill
 		&i.ProjectID,
 		&i.SkillID,
 		&i.BaseVersionID,
-		&i.ProposedContent,
+		&i.ProposedDiff,
 		&i.Rationale,
 		&i.Status,
-		&i.FeedbackCount,
 		&i.ScoredSessionCount,
 		&i.ApprovedByUserID,
-		&i.ResultingVersionID,
 		&i.ApprovedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -857,34 +870,31 @@ INSERT INTO skill_edit_suggestions (
   project_id,
   skill_id,
   base_version_id,
-  proposed_content,
+  proposed_diff,
   rationale,
   status,
-  feedback_count,
   scored_session_count
 )
 SELECT
   s.project_id,
   s.id,
   sv.id,
-  sv.content,
+  '',
   $1,
   'superseded',
-  $2,
-  $3
+  $2
 FROM skills s
 JOIN skill_versions sv
   ON sv.skill_id = s.id
-  AND sv.id = $4
-WHERE s.project_id = $5
-  AND s.id = $6
+  AND sv.id = $3
+WHERE s.project_id = $4
+  AND s.id = $5
   AND s.archived_at IS NULL
-RETURNING id, project_id, skill_id, base_version_id, proposed_content, rationale, status, feedback_count, scored_session_count, approved_by_user_id, resulting_version_id, approved_at, created_at, updated_at
+RETURNING id, project_id, skill_id, base_version_id, proposed_diff, rationale, status, scored_session_count, approved_by_user_id, approved_at, created_at, updated_at
 `
 
 type CreateSkillEditSuggestionWatermarkParams struct {
 	Rationale          string
-	FeedbackCount      int64
 	ScoredSessionCount int64
 	BaseVersionID      uuid.UUID
 	ProjectID          uuid.UUID
@@ -894,7 +904,6 @@ type CreateSkillEditSuggestionWatermarkParams struct {
 func (q *Queries) CreateSkillEditSuggestionWatermark(ctx context.Context, arg CreateSkillEditSuggestionWatermarkParams) (SkillEditSuggestion, error) {
 	row := q.db.QueryRow(ctx, createSkillEditSuggestionWatermark,
 		arg.Rationale,
-		arg.FeedbackCount,
 		arg.ScoredSessionCount,
 		arg.BaseVersionID,
 		arg.ProjectID,
@@ -906,13 +915,11 @@ func (q *Queries) CreateSkillEditSuggestionWatermark(ctx context.Context, arg Cr
 		&i.ProjectID,
 		&i.SkillID,
 		&i.BaseVersionID,
-		&i.ProposedContent,
+		&i.ProposedDiff,
 		&i.Rationale,
 		&i.Status,
-		&i.FeedbackCount,
 		&i.ScoredSessionCount,
 		&i.ApprovedByUserID,
-		&i.ResultingVersionID,
 		&i.ApprovedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1127,7 +1134,7 @@ WHERE suggestion.project_id = $1
   AND s.project_id = suggestion.project_id
   AND s.id = suggestion.skill_id
   AND s.archived_at IS NULL
-RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_diff, suggestion.rationale, suggestion.status, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
 `
 
 type DismissSkillEditSuggestionParams struct {
@@ -1144,13 +1151,11 @@ func (q *Queries) DismissSkillEditSuggestion(ctx context.Context, arg DismissSki
 		&i.ProjectID,
 		&i.SkillID,
 		&i.BaseVersionID,
-		&i.ProposedContent,
+		&i.ProposedDiff,
 		&i.Rationale,
 		&i.Status,
-		&i.FeedbackCount,
 		&i.ScoredSessionCount,
 		&i.ApprovedByUserID,
-		&i.ResultingVersionID,
 		&i.ApprovedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1475,7 +1480,7 @@ func (q *Queries) GetAssistantForDistribution(ctx context.Context, arg GetAssist
 }
 
 const getLatestSkillEditSuggestion = `-- name: GetLatestSkillEditSuggestion :one
-SELECT suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+SELECT suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_diff, suggestion.rationale, suggestion.status, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
 FROM skill_edit_suggestions suggestion
 JOIN skills s
   ON s.project_id = suggestion.project_id
@@ -1500,13 +1505,11 @@ func (q *Queries) GetLatestSkillEditSuggestion(ctx context.Context, arg GetLates
 		&i.ProjectID,
 		&i.SkillID,
 		&i.BaseVersionID,
-		&i.ProposedContent,
+		&i.ProposedDiff,
 		&i.Rationale,
 		&i.Status,
-		&i.FeedbackCount,
 		&i.ScoredSessionCount,
 		&i.ApprovedByUserID,
-		&i.ResultingVersionID,
 		&i.ApprovedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1543,7 +1546,7 @@ func (q *Queries) GetLatestValidSkillVersion(ctx context.Context, arg GetLatestV
 }
 
 const getOpenSkillEditSuggestion = `-- name: GetOpenSkillEditSuggestion :one
-SELECT suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+SELECT suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_diff, suggestion.rationale, suggestion.status, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
 FROM skill_edit_suggestions suggestion
 JOIN skills s
   ON s.project_id = suggestion.project_id
@@ -1567,13 +1570,11 @@ func (q *Queries) GetOpenSkillEditSuggestion(ctx context.Context, arg GetOpenSki
 		&i.ProjectID,
 		&i.SkillID,
 		&i.BaseVersionID,
-		&i.ProposedContent,
+		&i.ProposedDiff,
 		&i.Rationale,
 		&i.Status,
-		&i.FeedbackCount,
 		&i.ScoredSessionCount,
 		&i.ApprovedByUserID,
-		&i.ResultingVersionID,
 		&i.ApprovedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2416,6 +2417,36 @@ func (q *Queries) InsertSkillShareLink(ctx context.Context, arg InsertSkillShare
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const linkSkillEditSuggestionFeedback = `-- name: LinkSkillEditSuggestionFeedback :execrows
+INSERT INTO skill_edit_suggestion_feedback (
+  project_id,
+  suggestion_id,
+  feedback_id
+)
+SELECT
+  feedback.project_id,
+  $1,
+  feedback.id
+FROM skill_feedback feedback
+WHERE feedback.project_id = $2
+  AND feedback.id = ANY($3::uuid[])
+ON CONFLICT DO NOTHING
+`
+
+type LinkSkillEditSuggestionFeedbackParams struct {
+	SuggestionID uuid.UUID
+	ProjectID    uuid.UUID
+	FeedbackIds  []uuid.UUID
+}
+
+func (q *Queries) LinkSkillEditSuggestionFeedback(ctx context.Context, arg LinkSkillEditSuggestionFeedbackParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkSkillEditSuggestionFeedback, arg.SuggestionID, arg.ProjectID, arg.FeedbackIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listActiveMachineLatestVersions = `-- name: ListActiveMachineLatestVersions :many
@@ -4208,6 +4239,56 @@ func (q *Queries) PromoteObservedSkillToManual(ctx context.Context, arg PromoteO
 	return i, err
 }
 
+const rebaseOpenSkillEditSuggestion = `-- name: RebaseOpenSkillEditSuggestion :one
+UPDATE skill_edit_suggestions suggestion
+SET base_version_id = $1,
+    proposed_diff = $2,
+    updated_at = clock_timestamp()
+FROM skills s
+WHERE suggestion.project_id = $3
+  AND suggestion.skill_id = $4
+  AND suggestion.id = $5
+  AND suggestion.status = 'open'
+  AND s.project_id = suggestion.project_id
+  AND s.id = suggestion.skill_id
+  AND s.archived_at IS NULL
+RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_diff, suggestion.rationale, suggestion.status, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+`
+
+type RebaseOpenSkillEditSuggestionParams struct {
+	BaseVersionID uuid.UUID
+	ProposedDiff  string
+	ProjectID     uuid.UUID
+	SkillID       uuid.UUID
+	ID            uuid.UUID
+}
+
+func (q *Queries) RebaseOpenSkillEditSuggestion(ctx context.Context, arg RebaseOpenSkillEditSuggestionParams) (SkillEditSuggestion, error) {
+	row := q.db.QueryRow(ctx, rebaseOpenSkillEditSuggestion,
+		arg.BaseVersionID,
+		arg.ProposedDiff,
+		arg.ProjectID,
+		arg.SkillID,
+		arg.ID,
+	)
+	var i SkillEditSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SkillID,
+		&i.BaseVersionID,
+		&i.ProposedDiff,
+		&i.Rationale,
+		&i.Status,
+		&i.ScoredSessionCount,
+		&i.ApprovedByUserID,
+		&i.ApprovedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const recordSkillEfficacyEvaluationAttempt = `-- name: RecordSkillEfficacyEvaluationAttempt :one
 UPDATE skill_efficacy_evaluations
 SET attempts = attempts + 1,
@@ -4729,7 +4810,7 @@ WHERE suggestion.project_id = $1
   AND s.project_id = suggestion.project_id
   AND s.id = suggestion.skill_id
   AND s.archived_at IS NULL
-RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_diff, suggestion.rationale, suggestion.status, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
 `
 
 type SupersedeOpenSkillEditSuggestionParams struct {
@@ -4746,13 +4827,11 @@ func (q *Queries) SupersedeOpenSkillEditSuggestion(ctx context.Context, arg Supe
 		&i.ProjectID,
 		&i.SkillID,
 		&i.BaseVersionID,
-		&i.ProposedContent,
+		&i.ProposedDiff,
 		&i.Rationale,
 		&i.Status,
-		&i.FeedbackCount,
 		&i.ScoredSessionCount,
 		&i.ApprovedByUserID,
-		&i.ResultingVersionID,
 		&i.ApprovedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -4804,27 +4883,25 @@ WITH latest AS (
   JOIN skills s
     ON s.project_id = suggestion.project_id
     AND s.id = suggestion.skill_id
-  WHERE suggestion.project_id = $3
-    AND suggestion.skill_id = $4
-    AND suggestion.base_version_id = $5
+  WHERE suggestion.project_id = $2
+    AND suggestion.skill_id = $3
+    AND suggestion.base_version_id = $4
     AND s.archived_at IS NULL
   ORDER BY suggestion.created_at DESC, suggestion.id DESC
   LIMIT 1
 )
 UPDATE skill_edit_suggestions suggestion
-SET feedback_count = $1,
-    scored_session_count = $2,
+SET scored_session_count = $1,
     updated_at = clock_timestamp()
 FROM latest
-WHERE suggestion.project_id = $3
-  AND suggestion.skill_id = $4
-  AND suggestion.base_version_id = $5
+WHERE suggestion.project_id = $2
+  AND suggestion.skill_id = $3
+  AND suggestion.base_version_id = $4
   AND suggestion.id = latest.id
-RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_diff, suggestion.rationale, suggestion.status, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
 `
 
 type UpdateLatestSkillEditSuggestionWatermarkParams struct {
-	FeedbackCount      int64
 	ScoredSessionCount int64
 	ProjectID          uuid.UUID
 	SkillID            uuid.UUID
@@ -4833,7 +4910,6 @@ type UpdateLatestSkillEditSuggestionWatermarkParams struct {
 
 func (q *Queries) UpdateLatestSkillEditSuggestionWatermark(ctx context.Context, arg UpdateLatestSkillEditSuggestionWatermarkParams) (SkillEditSuggestion, error) {
 	row := q.db.QueryRow(ctx, updateLatestSkillEditSuggestionWatermark,
-		arg.FeedbackCount,
 		arg.ScoredSessionCount,
 		arg.ProjectID,
 		arg.SkillID,
@@ -4845,13 +4921,11 @@ func (q *Queries) UpdateLatestSkillEditSuggestionWatermark(ctx context.Context, 
 		&i.ProjectID,
 		&i.SkillID,
 		&i.BaseVersionID,
-		&i.ProposedContent,
+		&i.ProposedDiff,
 		&i.Rationale,
 		&i.Status,
-		&i.FeedbackCount,
 		&i.ScoredSessionCount,
 		&i.ApprovedByUserID,
-		&i.ResultingVersionID,
 		&i.ApprovedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -4861,26 +4935,24 @@ func (q *Queries) UpdateLatestSkillEditSuggestionWatermark(ctx context.Context, 
 
 const updateOpenSkillEditSuggestion = `-- name: UpdateOpenSkillEditSuggestion :one
 UPDATE skill_edit_suggestions suggestion
-SET proposed_content = $1,
+SET proposed_diff = $1,
     rationale = $2,
-    feedback_count = $3,
-    scored_session_count = $4,
+    scored_session_count = $3,
     updated_at = clock_timestamp()
 FROM skills s
-WHERE suggestion.project_id = $5
-  AND suggestion.skill_id = $6
-  AND suggestion.base_version_id = $7
+WHERE suggestion.project_id = $4
+  AND suggestion.skill_id = $5
+  AND suggestion.base_version_id = $6
   AND suggestion.status = 'open'
   AND s.project_id = suggestion.project_id
   AND s.id = suggestion.skill_id
   AND s.archived_at IS NULL
-RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_content, suggestion.rationale, suggestion.status, suggestion.feedback_count, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.resulting_version_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
+RETURNING suggestion.id, suggestion.project_id, suggestion.skill_id, suggestion.base_version_id, suggestion.proposed_diff, suggestion.rationale, suggestion.status, suggestion.scored_session_count, suggestion.approved_by_user_id, suggestion.approved_at, suggestion.created_at, suggestion.updated_at
 `
 
 type UpdateOpenSkillEditSuggestionParams struct {
-	ProposedContent    string
+	ProposedDiff       string
 	Rationale          string
-	FeedbackCount      int64
 	ScoredSessionCount int64
 	ProjectID          uuid.UUID
 	SkillID            uuid.UUID
@@ -4889,9 +4961,8 @@ type UpdateOpenSkillEditSuggestionParams struct {
 
 func (q *Queries) UpdateOpenSkillEditSuggestion(ctx context.Context, arg UpdateOpenSkillEditSuggestionParams) (SkillEditSuggestion, error) {
 	row := q.db.QueryRow(ctx, updateOpenSkillEditSuggestion,
-		arg.ProposedContent,
+		arg.ProposedDiff,
 		arg.Rationale,
-		arg.FeedbackCount,
 		arg.ScoredSessionCount,
 		arg.ProjectID,
 		arg.SkillID,
@@ -4903,13 +4974,11 @@ func (q *Queries) UpdateOpenSkillEditSuggestion(ctx context.Context, arg UpdateO
 		&i.ProjectID,
 		&i.SkillID,
 		&i.BaseVersionID,
-		&i.ProposedContent,
+		&i.ProposedDiff,
 		&i.Rationale,
 		&i.Status,
-		&i.FeedbackCount,
 		&i.ScoredSessionCount,
 		&i.ApprovedByUserID,
-		&i.ResultingVersionID,
 		&i.ApprovedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,

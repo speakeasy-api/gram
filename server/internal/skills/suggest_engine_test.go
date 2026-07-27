@@ -160,8 +160,8 @@ func TestSuggestionEngineProposesAndUpdatesOneOpenRow(t *testing.T) {
 	firstProposal := skillManifest(created.Skill.Name, "Improved.", "raw first proposal  ")
 	secondProposal := skillManifest(created.Skill.Name, "Improved again.", "raw second proposal  ")
 	completion := &suggestionCompletionStub{responses: []string{
-		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Feedback: repeated failures. Transcripts: none. Trend: no scores."}`, firstProposal),
-		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Feedback: new failures. Transcripts: none. Trend: no scores."}`, secondProposal),
+		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Agents keep missing the escalation step."}`, firstProposal),
+		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Agents keep missing the escalation step."}`, secondProposal),
 	}}
 	insights := &suggestionInsightsStub{}
 	config := suggest.DefaultConfig()
@@ -180,8 +180,8 @@ func TestSuggestionEngineProposesAndUpdatesOneOpenRow(t *testing.T) {
 	firstSuggestion, err := ti.repo.GetLatestSkillEditSuggestion(ctx, repo.GetLatestSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID)})
 	require.NoError(t, err)
 	require.Equal(t, first.SuggestionID.UUID, firstSuggestion.ID)
-	require.Equal(t, firstProposal, firstSuggestion.ProposedContent)
-	require.Equal(t, int64(50), firstSuggestion.FeedbackCount)
+	require.Equal(t, firstProposal, applyDiff(t, created.Version.Content, firstSuggestion.ProposedDiff))
+	require.Equal(t, int64(50), suggestionFeedbackCount(t, ctx, ti, firstSuggestion.ID))
 	require.Equal(t, int64(50), first.FeedbackConsumed)
 	remaining, err := ti.repo.CountUnreviewedSkillFeedback(ctx, repo.CountUnreviewedSkillFeedbackParams{ProjectID: ti.projectID, SkillName: created.Skill.Name})
 	require.NoError(t, err)
@@ -199,7 +199,8 @@ func TestSuggestionEngineProposesAndUpdatesOneOpenRow(t *testing.T) {
 	secondSuggestion, err := ti.repo.GetLatestSkillEditSuggestion(ctx, repo.GetLatestSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID)})
 	require.NoError(t, err)
 	require.Equal(t, firstSuggestion.ID, secondSuggestion.ID)
-	require.Equal(t, secondProposal, secondSuggestion.ProposedContent)
+	require.Equal(t, secondProposal, applyDiff(t, created.Version.Content, secondSuggestion.ProposedDiff))
+	require.Equal(t, int64(55), suggestionFeedbackCount(t, ctx, ti, secondSuggestion.ID))
 	require.Equal(t, int64(5), second.FeedbackConsumed)
 
 	requests := completion.Requests()
@@ -225,8 +226,8 @@ func TestSuggestionEngineDeclineConsumesAllLoadedFeedback(t *testing.T) {
 	createSuggestionFeedback(t, ti, created.Skill.Name, 5)
 	createSkillFeedback(t, ti, ti.projectID, created.Skill.Name, "positive evidence")
 	completion := &suggestionCompletionStub{responses: []string{
-		`{"decision":"decline","proposed_skill_md":"","rationale":"Feedback: inconclusive. Transcripts: none. Trend: no scores."}`,
-		`{"decision":"decline","proposed_skill_md":"","rationale":"Feedback: still inconclusive. Transcripts: none. Trend: no scores."}`,
+		`{"decision":"decline","proposed_skill_md":"","rationale":"Agents keep missing the escalation step."}`,
+		`{"decision":"decline","proposed_skill_md":"","rationale":"Agents keep missing the escalation step."}`,
 	}}
 	engine := newSuggestionEngine(t, ti, suggest.DefaultConfig(), &suggestionInsightsStub{}, completion)
 
@@ -243,7 +244,8 @@ func TestSuggestionEngineDeclineConsumesAllLoadedFeedback(t *testing.T) {
 	watermark, err := ti.repo.GetLatestSkillEditSuggestion(ctx, repo.GetLatestSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID)})
 	require.NoError(t, err)
 	require.Equal(t, string(skills.EditSuggestionStatusSuperseded), watermark.Status)
-	require.Equal(t, created.Version.Content, watermark.ProposedContent)
+	require.Empty(t, watermark.ProposedDiff)
+	require.Equal(t, int64(6), suggestionFeedbackCount(t, ctx, ti, watermark.ID))
 
 	second, err := engine.Run(ctx, suggest.RunInput{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID), Now: now.Add(24 * time.Hour)})
 	require.NoError(t, err)
@@ -266,7 +268,7 @@ func TestSuggestionEngineCanonicalNoOpIsTerminalDecline(t *testing.T) {
 	activateSuggestionSkill(t, ctx, ti, created.Skill.Name, now)
 	createSuggestionFeedback(t, ti, created.Skill.Name, 5)
 	baseContent := skillManifest(created.Skill.Name, "Base.", "# "+created.Skill.Name)
-	completion := &suggestionCompletionStub{responses: []string{fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Feedback: edit. Transcripts: none. Trend: no scores."}`, baseContent)}}
+	completion := &suggestionCompletionStub{responses: []string{fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Agents keep missing the escalation step."}`, baseContent)}}
 	engine := newSuggestionEngine(t, ti, suggest.DefaultConfig(), &suggestionInsightsStub{}, completion)
 
 	result, err := engine.Run(ctx, suggest.RunInput{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID), Now: now})
@@ -284,15 +286,15 @@ func TestSuggestionEngineDeclinePreservesOpenSuggestion(t *testing.T) {
 	skillID := uuid.MustParse(created.Skill.ID)
 	baseID := uuid.MustParse(created.Version.ID)
 	open, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent: skillManifest(created.Skill.Name, "Existing proposal.", "existing proposal"),
-		Rationale:       "existing rationale", FeedbackCount: 2, ScoredSessionCount: 3,
+		ProposedDiff: diffTo(t, created.Version.Content, skillManifest(created.Skill.Name, "Existing proposal.", "existing proposal")),
+		Rationale:    "existing rationale", ScoredSessionCount: 3,
 		BaseVersionID: baseID, ProjectID: ti.projectID, SkillID: skillID,
 	})
 	require.NoError(t, err)
 	now := time.Now().UTC()
 	activateSuggestionSkill(t, ctx, ti, created.Skill.Name, now)
 	createSuggestionFeedback(t, ti, created.Skill.Name, 5)
-	completion := &suggestionCompletionStub{responses: []string{`{"decision":"decline","proposed_skill_md":"","rationale":"Feedback: inconclusive. Transcripts: none. Trend: no scores."}`}}
+	completion := &suggestionCompletionStub{responses: []string{`{"decision":"decline","proposed_skill_md":"","rationale":"Agents keep missing the escalation step."}`}}
 	engine := newSuggestionEngine(t, ti, suggest.DefaultConfig(), &suggestionInsightsStub{}, completion)
 
 	result, err := engine.Run(ctx, suggest.RunInput{ProjectID: ti.projectID, SkillID: skillID, Now: now})
@@ -301,10 +303,10 @@ func TestSuggestionEngineDeclinePreservesOpenSuggestion(t *testing.T) {
 	preserved, err := ti.repo.GetOpenSkillEditSuggestion(ctx, repo.GetOpenSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: skillID})
 	require.NoError(t, err)
 	require.Equal(t, open.ID, preserved.ID)
-	require.Equal(t, open.ProposedContent, preserved.ProposedContent)
+	require.Equal(t, open.ProposedDiff, preserved.ProposedDiff)
 	require.Equal(t, open.Rationale, preserved.Rationale)
 	require.Equal(t, string(skills.EditSuggestionStatusOpen), preserved.Status)
-	require.Equal(t, int64(5), preserved.FeedbackCount)
+	require.Equal(t, int64(5), suggestionFeedbackCount(t, ctx, ti, preserved.ID))
 }
 
 func TestSuggestionEngineCountsNewScoredSessionsOutsideRollingTrend(t *testing.T) {
@@ -315,8 +317,8 @@ func TestSuggestionEngineCountsNewScoredSessionsOutsideRollingTrend(t *testing.T
 	skillID := uuid.MustParse(created.Skill.ID)
 	baseID := uuid.MustParse(created.Version.ID)
 	_, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent: skillManifest(created.Skill.Name, "Existing.", "existing"), Rationale: "existing",
-		FeedbackCount: 0, ScoredSessionCount: 20, BaseVersionID: baseID, ProjectID: ti.projectID, SkillID: skillID,
+		ProposedDiff: diffTo(t, created.Version.Content, skillManifest(created.Skill.Name, "Existing.", "existing")), Rationale: "existing",
+		ScoredSessionCount: 20, BaseVersionID: baseID, ProjectID: ti.projectID, SkillID: skillID,
 	})
 	require.NoError(t, err)
 	latest, err := ti.repo.GetLatestSkillEditSuggestion(ctx, repo.GetLatestSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: skillID})
@@ -339,7 +341,7 @@ func TestSuggestionEngineCountsNewScoredSessionsOutsideRollingTrend(t *testing.T
 	config.ActivityWindow = 30 * 24 * time.Hour
 	now := latest.UpdatedAt.Time.Add(config.SuggestionFloor)
 	activateSuggestionSkill(t, ctx, ti, created.Skill.Name, now)
-	completion := &suggestionCompletionStub{responses: []string{`{"decision":"decline","proposed_skill_md":"","rationale":"Feedback: none. Transcripts: none. Trend: new sessions replaced expired sessions in the rolling trend."}`}}
+	completion := &suggestionCompletionStub{responses: []string{`{"decision":"decline","proposed_skill_md":"","rationale":"Agents keep missing the escalation step."}`}}
 	insights := &suggestionInsightsStub{rows: []telemetryrepo.SkillInsightBucket{{SkillVersionID: baseID.String(), ScoredSessions: 20, ScoreSum: 16}}}
 	engine := newSuggestionEngine(t, ti, config, insights, completion)
 
@@ -365,8 +367,8 @@ func TestSuggestionEngineInvalidProposalRetriesOnceThenConsumesFeedback(t *testi
 	createSuggestionFeedback(t, ti, created.Skill.Name, 5)
 	invalid := skillManifest("wrong-name", "Wrong.", "wrong")
 	completion := &suggestionCompletionStub{responses: []string{
-		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Feedback: edit. Transcripts: none. Trend: no scores."}`, invalid),
-		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Feedback: edit. Transcripts: none. Trend: no scores."}`, invalid),
+		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Agents keep missing the escalation step."}`, invalid),
+		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Agents keep missing the escalation step."}`, invalid),
 	}}
 	engine := newSuggestionEngine(t, ti, suggest.DefaultConfig(), &suggestionInsightsStub{}, completion)
 
@@ -390,8 +392,8 @@ func TestSuggestionEngineInvalidProposalRetryCanPropose(t *testing.T) {
 	invalid := skillManifest("wrong-name", "Wrong.", "wrong")
 	valid := skillManifest(created.Skill.Name, "Corrected.", "corrected proposal")
 	completion := &suggestionCompletionStub{responses: []string{
-		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Feedback: edit. Transcripts: none. Trend: no scores."}`, invalid),
-		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Feedback: edit. Transcripts: none. Trend: no scores."}`, valid),
+		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Agents keep missing the escalation step."}`, invalid),
+		fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Agents keep missing the escalation step."}`, valid),
 	}}
 	engine := newSuggestionEngine(t, ti, suggest.DefaultConfig(), &suggestionInsightsStub{}, completion)
 
@@ -401,7 +403,7 @@ func TestSuggestionEngineInvalidProposalRetryCanPropose(t *testing.T) {
 	require.True(t, result.SuggestionID.Valid)
 	stored, err := ti.repo.GetLatestSkillEditSuggestion(ctx, repo.GetLatestSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID)})
 	require.NoError(t, err)
-	require.Equal(t, valid, stored.ProposedContent)
+	require.Equal(t, valid, applyDiff(t, created.Version.Content, stored.ProposedDiff))
 	require.Len(t, completion.Requests(), 2)
 }
 
@@ -496,9 +498,8 @@ func TestSuggestionEngineSupersedesStaleOpenBeforeInsert(t *testing.T) {
 	skillID := uuid.MustParse(created.Skill.ID)
 	oldBaseID := uuid.MustParse(created.Version.ID)
 	stale, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent:    skillManifest(created.Skill.Name, "Stale.", "stale"),
+		ProposedDiff:       diffTo(t, created.Version.Content, skillManifest(created.Skill.Name, "Stale.", "stale")),
 		Rationale:          "stale",
-		FeedbackCount:      1,
 		ScoredSessionCount: 1,
 		BaseVersionID:      oldBaseID,
 		ProjectID:          ti.projectID,
@@ -517,7 +518,7 @@ func TestSuggestionEngineSupersedesStaleOpenBeforeInsert(t *testing.T) {
 	activateSuggestionSkill(t, ctx, ti, created.Skill.Name, now)
 	createSuggestionFeedback(t, ti, created.Skill.Name, 5)
 	proposal := skillManifest(created.Skill.Name, "Proposed.", "new proposal")
-	completion := &suggestionCompletionStub{responses: []string{fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Feedback: edit. Transcripts: none. Trend: no scores."}`, proposal)}}
+	completion := &suggestionCompletionStub{responses: []string{fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Agents keep missing the escalation step."}`, proposal)}}
 	insights := &suggestionInsightsStub{}
 	engine := newSuggestionEngine(t, ti, suggest.DefaultConfig(), insights, completion)
 
@@ -534,9 +535,8 @@ func TestSuggestionEngineSupersedesStaleOpenBeforeInsert(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, result.SuggestionID.UUID, latestStale.ID)
 	_, err = ti.repo.UpdateOpenSkillEditSuggestion(ctx, repo.UpdateOpenSkillEditSuggestionParams{
-		ProposedContent:    "cannot-update-stale",
+		ProposedDiff:       "cannot-update-stale",
 		Rationale:          "cannot-update-stale",
-		FeedbackCount:      0,
 		ScoredSessionCount: 0,
 		ProjectID:          ti.projectID,
 		SkillID:            skillID,
@@ -555,7 +555,7 @@ func TestSuggestionEngineBaseRaceReenqueuesAndConsumesNothing(t *testing.T) {
 	createSuggestionFeedback(t, ti, created.Skill.Name, 5)
 	proposal := skillManifest(created.Skill.Name, "Proposed.", "proposal")
 	completion := &suggestionCompletionStub{
-		responses: []string{fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Feedback: edit. Transcripts: none. Trend: no scores."}`, proposal)},
+		responses: []string{fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Agents keep missing the escalation step."}`, proposal)},
 		before: func(call int) {
 			if call != 0 {
 				return
@@ -589,8 +589,8 @@ func TestSuggestionEngineDismissalRaceConsumesEvidenceWithoutReenqueue(t *testin
 	created := createSkill(t, ctx, ti, "engine-suggestion-race", "Base.")
 	skillID := uuid.MustParse(created.Skill.ID)
 	open, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent: skillManifest(created.Skill.Name, "Existing.", "existing"), Rationale: "existing",
-		FeedbackCount: 1, ScoredSessionCount: 0, BaseVersionID: uuid.MustParse(created.Version.ID),
+		ProposedDiff: diffTo(t, created.Version.Content, skillManifest(created.Skill.Name, "Existing.", "existing")), Rationale: "existing",
+		ScoredSessionCount: 0, BaseVersionID: uuid.MustParse(created.Version.ID),
 		ProjectID: ti.projectID, SkillID: skillID,
 	})
 	require.NoError(t, err)
@@ -599,7 +599,7 @@ func TestSuggestionEngineDismissalRaceConsumesEvidenceWithoutReenqueue(t *testin
 	createSuggestionFeedback(t, ti, created.Skill.Name, 5)
 	proposal := skillManifest(created.Skill.Name, "Proposed.", "proposal")
 	completion := &suggestionCompletionStub{
-		responses: []string{fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Feedback: edit. Transcripts: none. Trend: no scores."}`, proposal)},
+		responses: []string{fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Agents keep missing the escalation step."}`, proposal)},
 		before: func(call int) {
 			if call != 0 {
 				return
@@ -624,7 +624,7 @@ func TestSuggestionEngineDismissalRaceConsumesEvidenceWithoutReenqueue(t *testin
 	require.NoError(t, err)
 	require.Equal(t, open.ID, dismissed.ID)
 	require.Equal(t, string(skills.EditSuggestionStatusDismissed), dismissed.Status)
-	require.Equal(t, int64(5), dismissed.FeedbackCount)
+	require.Equal(t, int64(5), suggestionFeedbackCount(t, ctx, ti, dismissed.ID))
 	_, err = ti.repo.GetOpenSkillEditSuggestion(ctx, repo.GetOpenSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: skillID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
@@ -642,8 +642,8 @@ func TestSuggestionEngineOtherSuggestionRaceReenqueuesAndConsumesNothing(t *test
 	skillID := uuid.MustParse(created.Skill.ID)
 	baseID := uuid.MustParse(created.Version.ID)
 	_, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent: skillManifest(created.Skill.Name, "Existing.", "existing"), Rationale: "existing",
-		FeedbackCount: 1, ScoredSessionCount: 0, BaseVersionID: baseID, ProjectID: ti.projectID, SkillID: skillID,
+		ProposedDiff: diffTo(t, created.Version.Content, skillManifest(created.Skill.Name, "Existing.", "existing")), Rationale: "existing",
+		ScoredSessionCount: 0, BaseVersionID: baseID, ProjectID: ti.projectID, SkillID: skillID,
 	})
 	require.NoError(t, err)
 	now := time.Now().UTC()
@@ -651,14 +651,14 @@ func TestSuggestionEngineOtherSuggestionRaceReenqueuesAndConsumesNothing(t *test
 	createSuggestionFeedback(t, ti, created.Skill.Name, 5)
 	proposal := skillManifest(created.Skill.Name, "Proposed.", "proposal")
 	completion := &suggestionCompletionStub{
-		responses: []string{fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Feedback: edit. Transcripts: none. Trend: no scores."}`, proposal)},
+		responses: []string{fmt.Sprintf(`{"decision":"propose","proposed_skill_md":%q,"rationale":"Agents keep missing the escalation step."}`, proposal)},
 		before: func(call int) {
 			if call != 0 {
 				return
 			}
 			_, updateErr := ti.repo.UpdateOpenSkillEditSuggestion(ctx, repo.UpdateOpenSkillEditSuggestionParams{
-				ProposedContent: skillManifest(created.Skill.Name, "Changed elsewhere.", "changed"), Rationale: "changed",
-				FeedbackCount: 1, ScoredSessionCount: 0, ProjectID: ti.projectID, SkillID: skillID, BaseVersionID: baseID,
+				ProposedDiff: diffTo(t, created.Version.Content, skillManifest(created.Skill.Name, "Changed elsewhere.", "changed")), Rationale: "changed",
+				ScoredSessionCount: 0, ProjectID: ti.projectID, SkillID: skillID, BaseVersionID: baseID,
 			})
 			require.NoError(t, updateErr)
 		},
@@ -706,4 +706,115 @@ func TestSuggestionEngineMissingValidBaseIsSkipped(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, suggest.ResultSkipped, result.Kind)
 	require.Empty(t, completion.Requests())
+}
+
+func replayableSkill(name, description, firstLine, lastLine string) string {
+	return fmt.Sprintf(
+		"---\nname: %s\ndescription: %s\n---\n\n%s\nLine two.\nLine three.\nLine four.\nLine five.\nLine six.\nLine seven.\nLine eight.\nLine nine.\n%s\n",
+		name, description, firstLine, lastLine,
+	)
+}
+
+func TestSuggestionEngineReplaysOpenSuggestionOntoNewerVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	name := "engine-replay"
+	created, err := ti.service.Create(ctx, &gen.CreatePayload{
+		Content:          replayableSkill(name, "Base.", "Line one.", "Line ten."),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	skillID := uuid.MustParse(created.Skill.ID)
+
+	open, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
+		ProposedDiff:       diffTo(t, created.Version.Content, replayableSkill(name, "Base.", "Line one.", "Line ten, with detail.")),
+		Rationale:          "The last step needs detail.",
+		ScoredSessionCount: 0,
+		BaseVersionID:      uuid.MustParse(created.Version.ID),
+		ProjectID:          ti.projectID,
+		SkillID:            skillID,
+	})
+	require.NoError(t, err)
+
+	// A later version edits a line the suggestion does not touch.
+	moved, err := ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID:               created.Skill.ID,
+		Content:          replayableSkill(name, "Base.", "Line one, revised.", "Line ten."),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	activateSuggestionSkill(t, ctx, ti, name, now)
+	completion := &suggestionCompletionStub{}
+	engine := newSuggestionEngine(t, ti, suggest.DefaultConfig(), &suggestionInsightsStub{}, completion)
+
+	result, err := engine.Run(ctx, suggest.RunInput{ProjectID: ti.projectID, SkillID: skillID, Now: now})
+	require.NoError(t, err)
+	require.Equal(t, suggest.ResultSkipped, result.Kind)
+	require.Empty(t, completion.Requests())
+
+	replayed, err := ti.repo.GetOpenSkillEditSuggestion(ctx, repo.GetOpenSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: skillID})
+	require.NoError(t, err)
+	require.Equal(t, open.ID, replayed.ID)
+	require.Equal(t, uuid.MustParse(moved.Version.ID), replayed.BaseVersionID)
+	require.Equal(t,
+		replayableSkill(name, "Base.", "Line one, revised.", "Line ten, with detail."),
+		applyDiff(t, moved.Version.Content, replayed.ProposedDiff),
+	)
+}
+
+func TestSuggestionEngineRetiresOpenSuggestionThatNoLongerApplies(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	name := "engine-retire"
+	created, err := ti.service.Create(ctx, &gen.CreatePayload{
+		Content:          replayableSkill(name, "Base.", "Line one.", "Line ten."),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	skillID := uuid.MustParse(created.Skill.ID)
+
+	open, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
+		ProposedDiff:       diffTo(t, created.Version.Content, replayableSkill(name, "Base.", "Line one.", "Line ten, with detail.")),
+		Rationale:          "The last step needs detail.",
+		ScoredSessionCount: 0,
+		BaseVersionID:      uuid.MustParse(created.Version.ID),
+		ProjectID:          ti.projectID,
+		SkillID:            skillID,
+	})
+	require.NoError(t, err)
+
+	// A later version rewrites the very line the suggestion edits.
+	_, err = ti.service.AddVersion(ctx, &gen.AddVersionPayload{
+		ID:               created.Skill.ID,
+		Content:          replayableSkill(name, "Base.", "Line one.", "Line ten, rewritten by hand."),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	activateSuggestionSkill(t, ctx, ti, name, now)
+	completion := &suggestionCompletionStub{}
+	engine := newSuggestionEngine(t, ti, suggest.DefaultConfig(), &suggestionInsightsStub{}, completion)
+
+	_, err = engine.Run(ctx, suggest.RunInput{ProjectID: ti.projectID, SkillID: skillID, Now: now})
+	require.NoError(t, err)
+
+	_, err = ti.repo.GetOpenSkillEditSuggestion(ctx, repo.GetOpenSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: skillID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	retired, err := ti.repo.GetLatestSkillEditSuggestion(ctx, repo.GetLatestSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: skillID})
+	require.NoError(t, err)
+	require.Equal(t, open.ID, retired.ID)
+	require.Equal(t, string(skills.EditSuggestionStatusSuperseded), retired.Status)
 }

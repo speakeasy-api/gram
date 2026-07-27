@@ -98,9 +98,8 @@ func TestSkillEditSuggestionLifecycleAndTenantIsolation(t *testing.T) {
 	baseID := uuid.MustParse(created.Version.ID)
 
 	suggestion, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent:    skillManifest("suggestion-lifecycle", "Proposed.", "proposal one"),
+		ProposedDiff:       diffTo(t, created.Version.Content, skillManifest("suggestion-lifecycle", "Proposed.", "proposal one")),
 		Rationale:          "first rationale",
-		FeedbackCount:      2,
 		ScoredSessionCount: 3,
 		BaseVersionID:      baseID,
 		ProjectID:          ti.projectID,
@@ -109,9 +108,8 @@ func TestSkillEditSuggestionLifecycleAndTenantIsolation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(skills.EditSuggestionStatusOpen), suggestion.Status)
 	_, err = ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent:    "second open",
+		ProposedDiff:       "second open",
 		Rationale:          "second open",
-		FeedbackCount:      0,
 		ScoredSessionCount: 0,
 		BaseVersionID:      baseID,
 		ProjectID:          ti.projectID,
@@ -120,9 +118,8 @@ func TestSkillEditSuggestionLifecycleAndTenantIsolation(t *testing.T) {
 	require.Error(t, err)
 
 	updated, err := ti.repo.UpdateOpenSkillEditSuggestion(ctx, repo.UpdateOpenSkillEditSuggestionParams{
-		ProposedContent:    skillManifest("suggestion-lifecycle", "Proposed again.", "proposal two"),
+		ProposedDiff:       diffTo(t, created.Version.Content, skillManifest("suggestion-lifecycle", "Proposed again.", "proposal two")),
 		Rationale:          "updated rationale",
-		FeedbackCount:      4,
 		ScoredSessionCount: 5,
 		ProjectID:          ti.projectID,
 		SkillID:            skillID,
@@ -130,7 +127,6 @@ func TestSkillEditSuggestionLifecycleAndTenantIsolation(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, suggestion.ID, updated.ID)
-	require.Equal(t, int64(4), updated.FeedbackCount)
 	require.Equal(t, int64(5), updated.ScoredSessionCount)
 
 	open, err := ti.repo.GetOpenSkillEditSuggestion(ctx, repo.GetOpenSkillEditSuggestionParams{ProjectID: ti.projectID, SkillID: skillID})
@@ -141,9 +137,8 @@ func TestSkillEditSuggestionLifecycleAndTenantIsolation(t *testing.T) {
 	_, err = ti.repo.GetOpenSkillEditSuggestion(ctx, repo.GetOpenSkillEditSuggestionParams{ProjectID: otherProjectID, SkillID: skillID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	_, err = ti.repo.UpdateOpenSkillEditSuggestion(ctx, repo.UpdateOpenSkillEditSuggestionParams{
-		ProposedContent:    "cross-tenant",
+		ProposedDiff:       "cross-tenant",
 		Rationale:          "cross-tenant",
-		FeedbackCount:      0,
 		ScoredSessionCount: 0,
 		ProjectID:          otherProjectID,
 		SkillID:            skillID,
