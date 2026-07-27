@@ -11,7 +11,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/throttle"
 )
@@ -42,8 +41,8 @@ func isSpendRelevantURN(urn string) bool {
 }
 
 // UsageTrigger turns spend-relevant telemetry writes into debounced per-actor
-// evaluation signals. It observes the telemetry logger, throttles per raw actor
-// identity, and only signals organizations that currently have spend gate rules.
+// evaluation signals. It observes the telemetry logger, throttles per Gram user
+// ID, and only signals organizations that currently have spend gate rules.
 type UsageTrigger struct {
 	logger   *slog.Logger
 	cache    cache.Cache
@@ -84,7 +83,7 @@ func (t *UsageTrigger) OnTelemetryLogsWritten(ctx context.Context, params []tele
 			UserID:         p.UserInfo.UserID(),
 			Email:          p.UserInfo.Email(),
 		}
-		if signal.UserID == "" && signal.Email == "" {
+		if signal.UserID == "" {
 			continue
 		}
 		key := usageSignalKey(signal)
@@ -99,7 +98,7 @@ func (t *UsageTrigger) OnTelemetryLogsWritten(ctx context.Context, params []tele
 }
 
 func usageSignalKey(signal ActorEvaluationSignal) string {
-	return signal.OrganizationID + ":" + signal.UserID + ":" + conv.NormalizeEmail(signal.Email)
+	return signal.OrganizationID + ":" + signal.UserID
 }
 
 // signalAsync fires a leading-edge signal off the telemetry write path. The

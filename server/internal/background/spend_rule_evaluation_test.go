@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	spend_rules "github.com/speakeasy-api/gram/server/internal/background/activities/spend_rules"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
 )
 
 func TestSpendRuleEvaluationWorkflowContinuesWithRemainingOrgs(t *testing.T) {
@@ -109,6 +110,21 @@ func TestSpendRuleOrgEvaluationWorkflowID(t *testing.T) {
 
 	require.Equal(t, "v1:spend-rule-eval:org_01HZ", buildSpendRuleOrgEvaluationWorkflowID("org_01HZ"))
 	require.Equal(t, "v1:spend-rule-eval/signal", spendRuleOrgEvaluationDebounceSignal("org_01HZ"))
+}
+
+func TestSpendRuleActorEvaluationWorkflowIDUsesUserIDOnly(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "v1:spend-rule-actor-eval:org_01HZ:user_123", buildSpendRuleActorEvaluationWorkflowID(spendrules.ActorEvaluationSignal{
+		OrganizationID: "org_01HZ",
+		UserID:         "user_123",
+		Email:          "ada@acme.com",
+	}))
+	require.Equal(t, "v1:spend-rule-actor-eval:org_01HZ:user_123", buildSpendRuleActorEvaluationWorkflowID(spendrules.ActorEvaluationSignal{
+		OrganizationID: "org_01HZ",
+		UserID:         "user_123",
+		Email:          "other@acme.com",
+	}))
 }
 
 func TestSpendRuleOrgEvaluationWorkflowDebounced_CompletesWithoutSignals(t *testing.T) {

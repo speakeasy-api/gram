@@ -34,10 +34,18 @@ func (s *usageSignalerStub) Calls() []spendrules.ActorEvaluationSignal {
 }
 
 func usageRow(organizationID, urn string) telemetry.LogParams {
-	return usageRowWithEmail(organizationID, urn, "ada@acme.com")
+	return usageRowWithIdentity(organizationID, urn, "user_ada", "ada@acme.com")
 }
 
 func usageRowWithEmail(organizationID, urn, email string) telemetry.LogParams {
+	return usageRowWithUserInfo(organizationID, urn, telemetry.UserInfoByEmail(email))
+}
+
+func usageRowWithIdentity(organizationID, urn, userID, email string) telemetry.LogParams {
+	return usageRowWithUserInfo(organizationID, urn, telemetry.UserInfoByIDAndEmail(userID, email))
+}
+
+func usageRowWithUserInfo(organizationID, urn string, userInfo telemetry.UserInfo) telemetry.LogParams {
 	return telemetry.LogParams{
 		Timestamp: time.Now(),
 		ToolInfo: telemetry.ToolInfo{
@@ -49,7 +57,7 @@ func usageRowWithEmail(organizationID, urn, email string) telemetry.LogParams {
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
-		UserInfo:   telemetry.UserInfoByEmail(email),
+		UserInfo:   userInfo,
 		Attributes: nil,
 	}
 }
@@ -93,7 +101,7 @@ func TestUsageTriggerSignalsOrgWithGateSnapshot(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return len(sig.Calls()) == 1
 	}, 2*time.Second, 5*time.Millisecond)
-	require.Equal(t, []spendrules.ActorEvaluationSignal{{OrganizationID: "org_123", UserID: "", Email: "ada@acme.com"}}, sig.Calls())
+	require.Equal(t, []spendrules.ActorEvaluationSignal{{OrganizationID: "org_123", UserID: "user_ada", Email: "ada@acme.com"}}, sig.Calls())
 }
 
 func TestUsageTriggerIgnoresIrrelevantRows(t *testing.T) {
@@ -135,6 +143,24 @@ func TestUsageTriggerSkipsOrgWithoutGateSnapshot(t *testing.T) {
 	require.Empty(t, sig.Calls())
 }
 
+func TestUsageTriggerSkipsRowsWithoutUserID(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	cacheImpl := newGateCache()
+	writeTestGateRules(t, ctx, cacheImpl, "org_123")
+
+	sig := &usageSignalerStub{}
+	trigger := spendrules.NewUsageTrigger(testenv.NewLogger(t), cacheImpl, sig, time.Hour)
+	t.Cleanup(func() { _ = trigger.Shutdown(context.Background()) })
+
+	trigger.OnTelemetryLogsWritten(ctx, []telemetry.LogParams{
+		usageRowWithEmail("org_123", "claude-code:otel:logs", "ada@acme.com"),
+	})
+
+	require.Empty(t, sig.Calls())
+}
+
 func TestUsageTriggerDedupesOrgsWithinBatch(t *testing.T) {
 	t.Parallel()
 
@@ -158,12 +184,12 @@ func TestUsageTriggerDedupesOrgsWithinBatch(t *testing.T) {
 		return len(sig.Calls()) == 2
 	}, 2*time.Second, 5*time.Millisecond)
 	require.ElementsMatch(t, []spendrules.ActorEvaluationSignal{
-		{OrganizationID: "org_a", UserID: "", Email: "ada@acme.com"},
-		{OrganizationID: "org_b", UserID: "", Email: "ada@acme.com"},
+		{OrganizationID: "org_a", UserID: "user_ada", Email: "ada@acme.com"},
+		{OrganizationID: "org_b", UserID: "user_ada", Email: "ada@acme.com"},
 	}, sig.Calls())
 }
 
-func TestUsageTriggerDedupesNormalizedActorWithinBatch(t *testing.T) {
+func TestUsageTriggerDedupesUserIDWithinBatch(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -175,14 +201,14 @@ func TestUsageTriggerDedupesNormalizedActorWithinBatch(t *testing.T) {
 	t.Cleanup(func() { _ = trigger.Shutdown(context.Background()) })
 
 	trigger.OnTelemetryLogsWritten(ctx, []telemetry.LogParams{
-		usageRowWithEmail("org_123", "claude-code:otel:logs", " Ada@Acme.com "),
-		usageRowWithEmail("org_123", "codex:usage:metrics", "ada@acme.com"),
+		usageRowWithIdentity("org_123", "claude-code:otel:logs", "user_ada", " Ada@Acme.com "),
+		usageRowWithIdentity("org_123", "codex:usage:metrics", "user_ada", "other@acme.com"),
 	})
 
 	require.Eventually(t, func() bool {
 		return len(sig.Calls()) == 1
 	}, 2*time.Second, 5*time.Millisecond)
-	require.Equal(t, []spendrules.ActorEvaluationSignal{{OrganizationID: "org_123", UserID: "", Email: " Ada@Acme.com "}}, sig.Calls())
+	require.Equal(t, []spendrules.ActorEvaluationSignal{{OrganizationID: "org_123", UserID: "user_ada", Email: " Ada@Acme.com "}}, sig.Calls())
 }
 
 func TestUsageTriggerThrottlesAndFlushesTrailingEdge(t *testing.T) {
@@ -202,13 +228,13 @@ func TestUsageTriggerThrottlesAndFlushesTrailingEdge(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return len(sig.Calls()) == 1
 	}, 2*time.Second, 5*time.Millisecond)
-	require.Equal(t, []spendrules.ActorEvaluationSignal{{OrganizationID: "org_123", UserID: "", Email: "ada@acme.com"}}, sig.Calls())
+	require.Equal(t, []spendrules.ActorEvaluationSignal{{OrganizationID: "org_123", UserID: "user_ada", Email: "ada@acme.com"}}, sig.Calls())
 
 	// Shutdown flushes the pending trailing signal while Temporal would
 	// still be reachable.
 	require.NoError(t, trigger.Shutdown(ctx))
 	require.Equal(t, []spendrules.ActorEvaluationSignal{
-		{OrganizationID: "org_123", UserID: "", Email: "ada@acme.com"},
-		{OrganizationID: "org_123", UserID: "", Email: "ada@acme.com"},
+		{OrganizationID: "org_123", UserID: "user_ada", Email: "ada@acme.com"},
+		{OrganizationID: "org_123", UserID: "user_ada", Email: "ada@acme.com"},
 	}, sig.Calls())
 }

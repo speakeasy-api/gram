@@ -148,9 +148,9 @@ func SpendRuleOrgEvaluationWorkflowDebounced(ctx workflow.Context, organizationI
 	)(ctx, organizationID)
 }
 
-// SpendRuleActorEvaluationWorkflow refreshes one actor's spend cache. Identity
-// resolution is owned by the activity: signals may carry a Gram user ID, an
-// email, or both, and unresolved actors are skipped.
+// SpendRuleActorEvaluationWorkflow refreshes one actor's spend cache. Signals
+// are keyed by stable Gram user ID; email remains optional metadata the
+// activity can use when loading ClickHouse spend.
 func SpendRuleActorEvaluationWorkflow(ctx workflow.Context, signal spendrules.ActorEvaluationSignal) error {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: spendRuleEvaluationActivityTimeout,
@@ -173,11 +173,7 @@ func SpendRuleActorEvaluationWorkflow(ctx workflow.Context, signal spendrules.Ac
 }
 
 func buildSpendRuleActorEvaluationWorkflowID(signal spendrules.ActorEvaluationSignal) string {
-	key := signal.UserID
-	if key == "" {
-		key = signal.Email
-	}
-	return "v1:spend-rule-actor-eval:" + signal.OrganizationID + ":" + key
+	return "v1:spend-rule-actor-eval:" + signal.OrganizationID + ":" + signal.UserID
 }
 
 func spendRuleActorEvaluationDebounceSignal(spendrules.ActorEvaluationSignal) string {
@@ -232,6 +228,9 @@ func (e *TemporalSpendRuleEvaluator) Signal(ctx context.Context, organizationID 
 }
 
 func (e *TemporalSpendRuleEvaluator) SignalActor(ctx context.Context, signal spendrules.ActorEvaluationSignal) error {
+	if signal.UserID == "" {
+		return nil
+	}
 	id := buildSpendRuleActorEvaluationWorkflowID(signal)
 	_, err := e.TemporalEnv.Client().SignalWithStartWorkflow(
 		ctx,
