@@ -130,14 +130,6 @@ func TestAssistantSkillToolsExposesCatalog(t *testing.T) {
 	}
 }
 
-func TestDevSkillFeedbackToolsetExposesOnlyFeedback(t *testing.T) {
-	t.Parallel()
-
-	toolset := DevSkillFeedbackToolset(nil)
-	require.Equal(t, platformtools.SkillFeedbackPlatformToolsetSlug, toolset.Slug)
-	require.Equal(t, []string{platformtools.ToolNameSkillFeedback}, toolNames(toolset.Tools))
-}
-
 func toolNames(tools []platformtools.ExternalTool) []string {
 	out := make([]string, 0, len(tools))
 	for _, tool := range tools {

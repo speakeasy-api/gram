@@ -795,7 +795,6 @@ func newStartCommand() *cli.Command {
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 			feedbackRecorder := feedbackrecorder.NewRecorder(db, logger, nil)
 			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, feedbackRecorder, platformskills.WithEfficacySignaler(efficacySignaler))
-			devSkillFeedbackToolset := platformtoolsruntime.DevSkillFeedbackToolset(feedbackRecorder)
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
 			// mcpService captures this map by reference now; the remaining
 			// insights tools (chat/orgs/risk/deployments/skills) are merged in once
@@ -878,7 +877,6 @@ func newStartCommand() *cli.Command {
 				assistantPlatformExtras,
 				platformFeatureChecker,
 				platformToolsets,
-				&devSkillFeedbackToolset,
 				identityResolver,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 				remoteChallengeManager,

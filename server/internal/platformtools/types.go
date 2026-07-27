@@ -43,7 +43,6 @@ const (
 // Skill tool names are externally specified by the skills RFC.
 const (
 	ToolNameSkillsLoad            = "skills_load"
-	ToolNameSkillFeedback         = "skill_feedback"
 	ToolNamePlatformSkillFeedback = "platform_skill_feedback"
 )
 

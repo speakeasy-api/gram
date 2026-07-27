@@ -133,7 +133,7 @@ func (cl *client) uploadSkillContent(ctx context.Context, c creds, rawSHA256, co
 		Body: components.UploadSkillContentPayload{
 			Content:       content,
 			RawSha256:     rawSHA256,
-			SchemaVersion: components.SchemaVersionHookSkillContentV1,
+			SchemaVersion: components.UploadSkillContentPayloadSchemaVersionHookSkillContentV1,
 		},
 	}
 	security := &operations.UploadSkillContentSecurity{

@@ -126,13 +126,6 @@ func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, recorder *feedba
 	}
 }
 
-func DevSkillFeedbackToolset(recorder *feedbackrecorder.Recorder) platformtools.Toolset {
-	return platformtools.NewSkillFeedbackToolset(platformtools.ExternalTool{
-		Executor:        platformskills.NewDevFeedbackTool(recorder),
-		RequiredFeature: "",
-	})
-}
-
 // TriggerExternalTools returns the assistant self-config trigger tools
 // (list + configure). Both variants pin target_kind/target_ref to the calling
 // assistant principal and strip those fields from the schema so the LLM

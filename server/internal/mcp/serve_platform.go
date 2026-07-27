@@ -13,12 +13,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"goa.design/goa/v3/security"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -36,10 +34,7 @@ import (
 // platformtools.PlatformToolsetURL.
 const PlatformToolsetRoute = "/platform/mcp/{toolsetSlug}"
 
-const (
-	skillFeedbackRoute          = "/platform/mcp/skill-feedback"
-	platformToolsetMaxBodyBytes = 1 << 20
-)
+const platformToolsetMaxBodyBytes = 1 << 20
 
 // ServePlatformToolset is the runtime-only entrypoint for platform toolsets:
 // only the assistant token is accepted, so user OAuth/API keys/chat sessions
@@ -79,64 +74,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	if err := s.authorizePlatformToolset(ctx, slug, authCtx); err != nil {
 		return err
 	}
-	return s.servePlatformToolsetRequest(w, r.WithContext(ctx), authCtx, toolset)
-}
 
-// ServeSkillFeedback exposes the fixed dev feedback toolset only to generated
-// plugin hooks keys. Consumer keys and assistant runtime tokens never reach
-// protocol dispatch.
-func (s *Service) ServeSkillFeedback(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
-
-	token := httpheaders.AuthorizationBearerToken(r)
-	if token == "" {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	keyScheme := &security.APIKeyScheme{
-		Name:           constants.KeySecurityScheme,
-		Scopes:         []string{"consumer", "producer", "chat", "hooks"},
-		RequiredScopes: []string{"hooks"},
-	}
-	authedCtx, err := s.auth.Authorize(ctx, token, keyScheme)
-	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "failed to authorize skill feedback request").LogError(ctx, s.logger)
-	}
-	projectScheme := &security.APIKeyScheme{
-		Name:           constants.ProjectSlugSecuritySchema,
-		Scopes:         []string{},
-		RequiredScopes: []string{"hooks"},
-	}
-	authedCtx, err = s.auth.Authorize(authedCtx, r.Header.Get(constants.ProjectHeader), projectScheme)
-	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "failed to authorize skill feedback project").LogError(ctx, s.logger)
-	}
-
-	authCtx, ok := contextvalues.GetAuthContext(authedCtx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "no project auth context").LogError(ctx, s.logger)
-	}
-	if !authCtx.OrgWidePluginHooksKey {
-		return oops.E(oops.CodeForbidden, nil, "skill feedback requires a generated plugin hooks key")
-	}
-	if s.skillFeedbackToolset == nil || s.skillFeedbackToolset.Slug != platformtools.SkillFeedbackPlatformToolsetSlug {
-		return oops.E(oops.CodeNotFound, nil, "skill feedback toolset not found")
-	}
-
-	r.Header.Del("Gram-Chat-ID")
-	return s.servePlatformToolsetRequest(w, r.WithContext(authedCtx), authCtx, *s.skillFeedbackToolset)
-}
-
-func (s *Service) servePlatformToolsetRequest(
-	w http.ResponseWriter,
-	r *http.Request,
-	authCtx *contextvalues.AuthContext,
-	toolset platformtools.Toolset,
-) error {
-	ctx := r.Context()
 	r.Body = http.MaxBytesReader(w, r.Body, platformToolsetMaxBodyBytes)
 
 	bodyBytes, err := io.ReadAll(r.Body)
@@ -160,9 +98,6 @@ func (s *Service) servePlatformToolsetRequest(
 	}
 	if req.JSONRPC != "2.0" {
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)
-	}
-	if req.Method == "initialize" && toolset.Slug == platformtools.SkillFeedbackPlatformToolsetSlug {
-		w.Header().Set("Mcp-Session-Id", parseMcpSessionID(r.Header))
 	}
 
 	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"))
@@ -458,10 +393,6 @@ func (s *Service) callPlatformToolsetTool(
 		}
 		logAttrs.RecordToolsetSlug(platformToolsetSlug)
 		logAttrs.RecordMCPURL(mcpURL)
-		userInfo := tm.UserInfoByID(authCtx.UserID)
-		if authCtx.OrgWidePluginHooksKey {
-			userInfo = tm.UserInfoByID("")
-		}
 		s.telemLogger.Log(ctx, tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{
@@ -473,7 +404,7 @@ func (s *Service) callPlatformToolsetTool(
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
 			},
-			UserInfo:   userInfo,
+			UserInfo:   tm.UserInfoByID(authCtx.UserID),
 			Attributes: logAttrs,
 		})
 	}()

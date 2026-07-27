@@ -34,39 +34,20 @@ type feedbackInput struct {
 type Feedback struct {
 	db         *pgxpool.Pool
 	recorder   *feedbackrecorder.Recorder
-	assistant  bool
 	descriptor core.ToolDescriptor
 }
 
 func NewAssistantFeedbackTool(db *pgxpool.Pool, recorder *feedbackrecorder.Recorder) *Feedback {
-	return newFeedbackTool(db, recorder, true)
-}
-
-func NewDevFeedbackTool(recorder *feedbackrecorder.Recorder) *Feedback {
-	return newFeedbackTool(nil, recorder, false)
-}
-
-func newFeedbackTool(db *pgxpool.Pool, recorder *feedbackrecorder.Recorder, assistant bool) *Feedback {
-	name := platformtools.ToolNameSkillFeedback
-	handlerName := "feedback"
-	description := "Record feedback only after materially relying on a skill while completing a task."
-	if assistant {
-		name = platformtools.ToolNamePlatformSkillFeedback
-		handlerName = "assistant_feedback"
-		description = "Record feedback only after materially relying on a loaded skill while completing a task. Call skills_load for that skill first."
-	}
-
 	readOnly, destructive, idempotent, openWorld := false, false, false, false
 	minSkillLength, maxSkillLength, maxNoteLength := 1, 64, 4000
 	return &Feedback{
-		db:        db,
-		recorder:  recorder,
-		assistant: assistant,
+		db:       db,
+		recorder: recorder,
 		descriptor: core.ToolDescriptor{
 			SourceSlug:  "skills",
-			HandlerName: handlerName,
-			Name:        name,
-			Description: description,
+			HandlerName: "assistant_feedback",
+			Name:        platformtools.ToolNamePlatformSkillFeedback,
+			Description: "Record feedback only after materially relying on a loaded skill while completing a task. Call skills_load for that skill first.",
 			InputSchema: core.BuildInputSchema[feedbackInput](
 				core.WithPropertyMutator("skill", func(prop *jsonschema.Schema) {
 					prop.MinLength = &minSkillLength
@@ -124,51 +105,39 @@ func (t *Feedback) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		return oops.E(oops.CodeBadRequest, nil, "feedback note must be at most 4000 Unicode characters")
 	}
 
-	record := feedbackrecorder.RecordInput{
+	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	if !ok {
+		return oops.E(oops.CodeUnauthorized, nil, "skill feedback requires an assistant principal")
+	}
+	if principal.ThreadID == uuid.Nil {
+		return oops.E(oops.CodeUnauthorized, nil, "skill feedback requires an assistant thread")
+	}
+
+	observation, err := assistantrepo.New(t.db).GetAssistantSkillFeedbackObservation(ctx, assistantrepo.GetAssistantSkillFeedbackObservationParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: principal.AssistantID,
+		ThreadID:    principal.ThreadID,
+		SkillName:   input.Skill,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeBadRequest, nil, "no loaded observation for this skill; call skills_load for this skill before submitting feedback")
+	case err != nil:
+		return fmt.Errorf("resolve assistant skill observation: %w", err)
+	}
+
+	if _, err := t.recorder.Record(ctx, feedbackrecorder.RecordInput{
 		ProjectID:      *authCtx.ProjectID,
-		SkillID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		SkillVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		SkillName:      input.Skill,
-		Source:         domainskills.FeedbackSourceDev,
+		SkillID:        uuid.NullUUID{UUID: observation.SkillID, Valid: true},
+		SkillVersionID: uuid.NullUUID{UUID: observation.SkillVersionID, Valid: true},
+		SkillName:      observation.SkillName,
+		Source:         domainskills.FeedbackSourceAssistant,
 		Outcome:        input.Outcome,
 		Note:           note,
-		SessionID:      "",
-		UserID:         "",
-		UserEmail:      "",
-	}
-
-	if t.assistant {
-		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
-		if !ok {
-			return oops.E(oops.CodeUnauthorized, nil, "skill feedback requires an assistant principal")
-		}
-		if principal.ThreadID == uuid.Nil {
-			return oops.E(oops.CodeUnauthorized, nil, "skill feedback requires an assistant thread")
-		}
-
-		observation, err := assistantrepo.New(t.db).GetAssistantSkillFeedbackObservation(ctx, assistantrepo.GetAssistantSkillFeedbackObservationParams{
-			ProjectID:   *authCtx.ProjectID,
-			AssistantID: principal.AssistantID,
-			ThreadID:    principal.ThreadID,
-			SkillName:   input.Skill,
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return oops.E(oops.CodeBadRequest, nil, "no loaded observation for this skill; call skills_load for this skill before submitting feedback")
-		case err != nil:
-			return fmt.Errorf("resolve assistant skill observation: %w", err)
-		}
-
-		record.SkillID = uuid.NullUUID{UUID: observation.SkillID, Valid: true}
-		record.SkillVersionID = uuid.NullUUID{UUID: observation.SkillVersionID, Valid: true}
-		record.SkillName = observation.SkillName
-		record.Source = domainskills.FeedbackSourceAssistant
-		record.SessionID = observation.ChatID.String()
-		record.UserID = authCtx.UserID
-		record.UserEmail = conv.PtrValOr(authCtx.Email, "")
-	}
-
-	if _, err := t.recorder.Record(ctx, record); err != nil {
+		SessionID:      observation.ChatID.String(),
+		UserID:         authCtx.UserID,
+		UserEmail:      conv.PtrValOr(authCtx.Email, ""),
+	}); err != nil {
 		return fmt.Errorf("record skill feedback: %w", err)
 	}
 	return core.EncodeResult(wr, map[string]bool{"recorded": true})

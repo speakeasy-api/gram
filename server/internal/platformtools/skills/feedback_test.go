@@ -277,7 +277,7 @@ func TestAssistantFeedbackRejectsMissingOrCrossScopedObservation(t *testing.T) {
 func TestFeedbackSchemaRequiresOutcomeButNotNote(t *testing.T) {
 	t.Parallel()
 
-	descriptor := NewDevFeedbackTool(nil).Descriptor()
+	descriptor := NewAssistantFeedbackTool(nil, nil).Descriptor()
 	require.JSONEq(t, `{
 		"type":"object",
 		"additionalProperties":false,
@@ -293,7 +293,7 @@ func TestFeedbackSchemaRequiresOutcomeButNotNote(t *testing.T) {
 func TestFeedbackRejectsInvalidOutcomeBeforeRecorder(t *testing.T) {
 	t.Parallel()
 
-	tool := NewDevFeedbackTool(nil)
+	tool := NewAssistantFeedbackTool(nil, nil)
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ProjectID: &projectID})
 	err := tool.Call(ctx, skillToolCallEnv(""), bytes.NewBufferString(`{"skill":"feedback-skill","outcome":"unknown"}`), &bytes.Buffer{})
@@ -305,7 +305,7 @@ func TestFeedbackRejectsInvalidOutcomeBeforeRecorder(t *testing.T) {
 func TestFeedbackRejectsOversizedNoteBeforeRecorder(t *testing.T) {
 	t.Parallel()
 
-	tool := NewDevFeedbackTool(nil)
+	tool := NewAssistantFeedbackTool(nil, nil)
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ProjectID: &projectID})
 	payload := `{"skill":"feedback-skill","outcome":"helped","note":"` + strings.Repeat("界", 4001) + `"}`

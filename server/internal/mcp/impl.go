@@ -121,7 +121,6 @@ type Service struct {
 	platformExtras         []platformtools.ExternalTool
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
-	skillFeedbackToolset   *platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
 	// userSessionSigner mints the SessionClaims JWT issued at /token.
@@ -259,7 +258,6 @@ func NewService(
 	platformExtras []platformtools.ExternalTool,
 	platformFeatureChecker platformtools.FeatureChecker,
 	platformToolsets map[string]platformtools.Toolset,
-	skillFeedbackToolset *platformtools.Toolset,
 	identityResolver IdentityResolver,
 	userSessionSigner *usersessions.Signer,
 	remoteChallengeMgr *remotesessions.ChallengeManager,
@@ -330,7 +328,6 @@ func NewService(
 		platformExtras:         platformExtras,
 		platformFeatureChecker: platformFeatureChecker,
 		platformToolsets:       platformToolsets,
-		skillFeedbackToolset:   skillFeedbackToolset,
 		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](
 			logger.With(attr.SlogCacheNamespace("authn_challenge")),
 			cacheImpl,
@@ -351,7 +348,6 @@ func NewService(
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
-	o11y.AttachHandler(mux, "POST", skillFeedbackRoute, oops.ErrHandle(service.logger, service.ServeSkillFeedback).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)

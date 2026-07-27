@@ -165,13 +165,13 @@ func main() {
 
 	s := sdk.New()
 
-	res, err := s.Hooks.UploadSkillContent(ctx, operations.UploadSkillContentRequest{
-		Body: components.UploadSkillContentPayload{
-			Content:       "<value>",
-			RawSha256:     "<value>",
-			SchemaVersion: components.SchemaVersionHookSkillContentV1,
+	res, err := s.Hooks.SkillFeedback(ctx, operations.SkillFeedbackRequest{
+		Body: components.SkillFeedbackPayload{
+			Outcome:       components.OutcomeMisleading,
+			SchemaVersion: components.SkillFeedbackPayloadSchemaVersionHookSkillFeedbackV1,
+			Skill:         "<value>",
 		},
-	}, sdk.Pointer(operations.UploadSkillContentSecurity{}))
+	}, sdk.Pointer(operations.SkillFeedbackSecurity{}))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -192,6 +192,7 @@ func main() {
 ### [Hooks](docs/sdks/hooks/README.md)
 
 * [Ingest](docs/sdks/hooks/README.md#ingest) - ingest hooks
+* [SkillFeedback](docs/sdks/hooks/README.md#skillfeedback) - skillFeedback hooks
 * [UploadSkillContent](docs/sdks/hooks/README.md#uploadskillcontent) - uploadSkillContent hooks
 
 </details>

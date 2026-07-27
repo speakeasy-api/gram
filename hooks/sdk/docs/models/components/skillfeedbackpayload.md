@@ -1,0 +1,13 @@
+# SkillFeedbackPayload
+
+Agent-volunteered feedback about a distributed skill.
+
+
+## Fields
+
+| Field                                                                                                        | Type                                                                                                         | Required                                                                                                     | Description                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `Note`                                                                                                       | `*string`                                                                                                    | :heavy_minus_sign:                                                                                           | Optional concise context about the outcome.                                                                  |
+| `Outcome`                                                                                                    | [components.Outcome](../../models/components/outcome.md)                                                     | :heavy_check_mark:                                                                                           | How the skill affected the task.                                                                             |
+| `SchemaVersion`                                                                                              | [components.SkillFeedbackPayloadSchemaVersion](../../models/components/skillfeedbackpayloadschemaversion.md) | :heavy_check_mark:                                                                                           | Contract version.                                                                                            |
+| `Skill`                                                                                                      | `string`                                                                                                     | :heavy_check_mark:                                                                                           | Canonical name of the skill that was used.                                                                   |

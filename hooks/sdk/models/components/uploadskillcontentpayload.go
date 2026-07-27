@@ -7,27 +7,27 @@ import (
 	"fmt"
 )
 
-// SchemaVersion - Contract version.
-type SchemaVersion string
+// UploadSkillContentPayloadSchemaVersion - Contract version.
+type UploadSkillContentPayloadSchemaVersion string
 
 const (
-	SchemaVersionHookSkillContentV1 SchemaVersion = "hook.skill-content.v1"
+	UploadSkillContentPayloadSchemaVersionHookSkillContentV1 UploadSkillContentPayloadSchemaVersion = "hook.skill-content.v1"
 )
 
-func (e SchemaVersion) ToPointer() *SchemaVersion {
+func (e UploadSkillContentPayloadSchemaVersion) ToPointer() *UploadSkillContentPayloadSchemaVersion {
 	return &e
 }
-func (e *SchemaVersion) UnmarshalJSON(data []byte) error {
+func (e *UploadSkillContentPayloadSchemaVersion) UnmarshalJSON(data []byte) error {
 	var v string
 	if err := json.Unmarshal(data, &v); err != nil {
 		return err
 	}
 	switch v {
 	case "hook.skill-content.v1":
-		*e = SchemaVersion(v)
+		*e = UploadSkillContentPayloadSchemaVersion(v)
 		return nil
 	default:
-		return fmt.Errorf("invalid value for SchemaVersion: %v", v)
+		return fmt.Errorf("invalid value for UploadSkillContentPayloadSchemaVersion: %v", v)
 	}
 }
 
@@ -38,7 +38,7 @@ type UploadSkillContentPayload struct {
 	// Lowercase SHA-256 of the raw content.
 	RawSha256 string `json:"raw_sha256"`
 	// Contract version.
-	SchemaVersion SchemaVersion `json:"schema_version"`
+	SchemaVersion UploadSkillContentPayloadSchemaVersion `json:"schema_version"`
 }
 
 func (u *UploadSkillContentPayload) GetContent() string {
@@ -55,9 +55,9 @@ func (u *UploadSkillContentPayload) GetRawSha256() string {
 	return u.RawSha256
 }
 
-func (u *UploadSkillContentPayload) GetSchemaVersion() SchemaVersion {
+func (u *UploadSkillContentPayload) GetSchemaVersion() UploadSkillContentPayloadSchemaVersion {
 	if u == nil {
-		return SchemaVersion("")
+		return UploadSkillContentPayloadSchemaVersion("")
 	}
 	return u.SchemaVersion
 }

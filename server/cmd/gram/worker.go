@@ -739,7 +739,6 @@ func newWorkerCommand() *cli.Command {
 				assistantPlatformExtras,
 				platformFeatureChecker,
 				nil,
-				nil,
 				identityResolver,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 				remoteChallengeManager,
