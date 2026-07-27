@@ -109,7 +109,8 @@ JOIN mcp_servers AS s
 WHERE e.id = @mcp_endpoint_id::uuid
   AND e.custom_domain_id = @custom_domain_id::uuid
   AND e.deleted IS FALSE
-  AND p.organization_id = @organization_id;
+  AND p.organization_id = @organization_id
+FOR SHARE OF s;
 
 -- name: ClearRootMcpEndpoint :exec
 UPDATE mcp_endpoints

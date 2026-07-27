@@ -88,8 +88,11 @@ func customDomainReconcileSignal(params CustomDomainReconcileParams) string {
 func (c *CustomDomainRegistrationClient) ExecuteCustomDomainReconcile(ctx context.Context, customDomainID uuid.UUID) (client.WorkflowRun, error) {
 	params := CustomDomainReconcileParams{CustomDomainID: customDomainID}
 	id := CustomDomainReconcileWorkflowID(customDomainID)
+	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+
 	run, err := c.TemporalEnv.Client().SignalWithStartWorkflow(
-		ctx,
+		signalCtx,
 		id,
 		customDomainReconcileSignal(params),
 		"reconcile",

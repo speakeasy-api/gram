@@ -400,6 +400,7 @@ WHERE e.id = $1::uuid
   AND e.custom_domain_id = $2::uuid
   AND e.deleted IS FALSE
   AND p.organization_id = $3
+FOR SHARE OF s
 `
 
 type GetEligibleRootMcpEndpointParams struct {

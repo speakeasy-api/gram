@@ -687,16 +687,14 @@ func (s *Service) reconcileCustomDomains(ctx context.Context, customDomainIDs []
 	if s.temporalEnv == nil {
 		return nil
 	}
+	var reconcileErrors []error
 	for _, customDomainID := range customDomainIDs {
-		run, err := (&background.CustomDomainRegistrationClient{TemporalEnv: s.temporalEnv}).ExecuteCustomDomainReconcile(ctx, customDomainID)
+		_, err := (&background.CustomDomainRegistrationClient{TemporalEnv: s.temporalEnv}).ExecuteCustomDomainReconcile(ctx, customDomainID)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "start custom domain reconciliation").LogError(ctx, s.logger)
-		}
-		if err := run.Get(ctx, nil); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "custom domain reconciliation failed").LogError(ctx, s.logger)
+			reconcileErrors = append(reconcileErrors, oops.E(oops.CodeUnexpected, err, "start custom domain reconciliation").LogError(ctx, s.logger))
 		}
 	}
-	return nil
+	return errors.Join(reconcileErrors...)
 }
 
 // validateSlugPrefix enforces that slugs not bound to a custom domain must be

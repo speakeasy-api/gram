@@ -3,6 +3,7 @@ package mcpservers_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,7 +16,160 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+func TestUpdateMcpServer_DisableSerializesWithRootSelection(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name         string
+		existingRoot bool
+	}{
+		{name: "existing root reapply", existingRoot: true},
+		{name: "non-root selection", existingRoot: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+			server, remoteID, domainID, endpointID := createPublicServerWithRoot(t, ctx, ti, "disable-race-"+uuid.NewString()[:8])
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			if !tc.existingRoot {
+				require.NoError(t, customdomainsrepo.New(ti.conn).ClearRootMcpEndpoint(ctx, domainID))
+			}
+
+			setterTx := testenv.BeginTx(t, ctx, ti.conn)
+			domainRepo := customdomainsrepo.New(setterTx)
+			_, err := domainRepo.LockCustomDomainByID(ctx, domainID)
+			require.NoError(t, err)
+			_, err = domainRepo.LockRootMcpEndpointSelection(ctx, customdomainsrepo.LockRootMcpEndpointSelectionParams{
+				CustomDomainID: domainID,
+				McpEndpointID:  uuid.NullUUID{UUID: endpointID, Valid: true},
+			})
+			require.NoError(t, err)
+			_, err = domainRepo.GetEligibleRootMcpEndpoint(ctx, customdomainsrepo.GetEligibleRootMcpEndpointParams{
+				McpEndpointID:  endpointID,
+				CustomDomainID: domainID,
+				OrganizationID: authCtx.ActiveOrganizationID,
+			})
+			require.NoError(t, err)
+			require.NoError(t, domainRepo.ClearRootMcpEndpoint(ctx, domainID))
+			require.NoError(t, domainRepo.SetRootMcpEndpoint(ctx, customdomainsrepo.SetRootMcpEndpointParams{
+				McpEndpointID:  endpointID,
+				CustomDomainID: domainID,
+			}))
+
+			disabled := make(chan error, 1)
+			go func() {
+				_, updateErr := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+					ID:                server.ID,
+					Name:              nil,
+					EnvironmentID:     nil,
+					RemoteMcpServerID: &remoteID,
+					ToolsetID:         nil,
+					Visibility:        types.McpServerVisibility("disabled"),
+				})
+				disabled <- updateErr
+			}()
+
+			select {
+			case updateErr := <-disabled:
+				require.Failf(t, "disable returned before root selection committed", "error: %v", updateErr)
+			case <-time.After(100 * time.Millisecond):
+			}
+
+			require.NoError(t, setterTx.Commit(ctx))
+			select {
+			case updateErr := <-disabled:
+				require.NoError(t, updateErr)
+			case <-time.After(5 * time.Second):
+				require.Fail(t, "disable deadlocked with root selection")
+			}
+			requireRootCleared(t, ctx, ti, domainID, endpointID)
+		})
+	}
+}
+
+func TestUpdateMcpServer_DisableClearsNewlyCommittedRoot(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	server, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name:              "new root disable race",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "new-root-disable-race.example.com",
+		IpAllowlist:    []string{},
+	})
+	require.NoError(t, err)
+
+	setterTx := testenv.BeginTx(t, ctx, ti.conn)
+	endpoint, err := mcpendpointsrepo.New(setterTx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+		McpServerID:    uuid.MustParse(server.ID),
+		Slug:           "new-root",
+	})
+	require.NoError(t, err)
+	domainRepo := customdomainsrepo.New(setterTx)
+	_, err = domainRepo.LockCustomDomainByID(ctx, domain.ID)
+	require.NoError(t, err)
+	_, err = domainRepo.LockRootMcpEndpointSelection(ctx, customdomainsrepo.LockRootMcpEndpointSelectionParams{
+		CustomDomainID: domain.ID,
+		McpEndpointID:  uuid.NullUUID{UUID: endpoint.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = domainRepo.GetEligibleRootMcpEndpoint(ctx, customdomainsrepo.GetEligibleRootMcpEndpointParams{
+		McpEndpointID:  endpoint.ID,
+		CustomDomainID: domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, domainRepo.SetRootMcpEndpoint(ctx, customdomainsrepo.SetRootMcpEndpointParams{
+		McpEndpointID:  endpoint.ID,
+		CustomDomainID: domain.ID,
+	}))
+
+	disabled := make(chan error, 1)
+	go func() {
+		_, updateErr := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+			ID:                server.ID,
+			Name:              nil,
+			EnvironmentID:     nil,
+			RemoteMcpServerID: &remoteID,
+			ToolsetID:         nil,
+			Visibility:        types.McpServerVisibility("disabled"),
+		})
+		disabled <- updateErr
+	}()
+
+	select {
+	case updateErr := <-disabled:
+		require.Failf(t, "disable returned before new root committed", "error: %v", updateErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	require.NoError(t, setterTx.Commit(ctx))
+	select {
+	case updateErr := <-disabled:
+		require.NoError(t, updateErr)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "disable deadlocked with new root selection")
+	}
+	requireRootCleared(t, ctx, ti, domain.ID, endpoint.ID)
+	requireLatestServerRootAutoClearAudit(t, ctx, ti, endpoint.ID)
+}
 
 func TestUpdateMcpServer_DisableClearsRootAndReenableDoesNotRestore(t *testing.T) {
 	t.Parallel()
