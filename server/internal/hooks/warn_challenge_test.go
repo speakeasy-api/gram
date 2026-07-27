@@ -257,3 +257,141 @@ func TestClaude_UserPromptSubmit_Block_Blocks(t *testing.T) {
 	require.NotNil(t, result.Reason)
 	assert.Contains(t, *result.Reason, "secret policy")
 }
+
+func TestIngest_CanonicalWarnChallengesEveryAdapterAndEvent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	adapters := []string{"claude", "cursor", "codex", "opencode"}
+	eventKinds := []string{"prompt", "tool", "mcp", "permission"}
+
+	for _, adapter := range adapters {
+		for _, eventKind := range eventKinds {
+			scanner := &stubResultScanner{result: &risk.ScanResult{
+				Action:          "warn",
+				PolicyID:        uuid.NewString(),
+				PolicyName:      "danger",
+				Description:     "requires review",
+				RuleID:          "dangerous-operation",
+				Entity:          "destructive",
+				MatchedValue:    "rm -rf /tmp/warn",
+				CallFingerprint: "canonical-warn-fingerprint",
+			}}
+			ti.service.riskScanner = scanner
+			payload := canonicalWarnTestPayload(t, adapter, eventKind, adapter+"-"+eventKind+"-"+uuid.NewString())
+
+			result, err := ti.service.Ingest(ctx, payload)
+			require.NoErrorf(t, err, "%s %s warn request", adapter, eventKind)
+			require.NotNilf(t, result, "%s %s warn request", adapter, eventKind)
+			require.Equalf(t, "deny", result.Decision, "%s %s warn request", adapter, eventKind)
+			require.NotNilf(t, result.Message, "%s %s warn request", adapter, eventKind)
+			require.Containsf(t, *result.Message, "risk-policy-challenge/acknowledge", "%s %s warn request", adapter, eventKind)
+			require.Containsf(t, *result.Message, "ack_token=", "%s %s warn request", adapter, eventKind)
+			require.Truef(t, scanner.recordedChallenge, "%s %s warn request", adapter, eventKind)
+
+			scanner.acknowledged = true
+			scanner.recordedChallenge = false
+
+			retryResult, err := ti.service.Ingest(ctx, payload)
+			require.NoErrorf(t, err, "%s %s acknowledged retry", adapter, eventKind)
+			require.NotNilf(t, retryResult, "%s %s acknowledged retry", adapter, eventKind)
+			require.Equalf(t, "allow", retryResult.Decision, "%s %s acknowledged retry", adapter, eventKind)
+			require.Nilf(t, retryResult.Message, "%s %s acknowledged retry", adapter, eventKind)
+			require.Falsef(t, scanner.recordedChallenge, "%s %s acknowledged retry", adapter, eventKind)
+		}
+	}
+}
+
+func TestIngest_CanonicalWarnFallsBackToBlockWithoutAckLink(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.siteURL = nil
+	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+		Action:          "warn",
+		PolicyID:        uuid.NewString(),
+		PolicyName:      "danger",
+		Description:     "requires review",
+		RuleID:          "dangerous-operation",
+		Entity:          "destructive",
+		MatchedValue:    "rm -rf /tmp/warn",
+		CallFingerprint: "canonical-warn-fallback",
+	}}
+	payload := canonicalWarnTestPayload(t, "opencode", "prompt", "warn-fallback-"+uuid.NewString())
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+	require.NotNil(t, result.Message)
+	require.NotContains(t, *result.Message, "risk-policy-challenge/acknowledge")
+	require.NotContains(t, *result.Message, "ack_token=")
+}
+
+func TestIngest_CanonicalBlockBehaviorUnchanged(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+		Action:      "block",
+		PolicyID:    uuid.NewString(),
+		PolicyName:  "hard block",
+		Description: "must not run",
+	}}
+	payload := canonicalWarnTestPayload(t, "opencode", "prompt", "block-regression-"+uuid.NewString())
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+	require.NotNil(t, result.Message)
+	require.Contains(t, *result.Message, "hard block")
+	require.NotContains(t, *result.Message, "ack_token=")
+}
+
+func canonicalWarnTestPayload(t *testing.T, adapter, eventKind, sessionID string) *gen.IngestPayload {
+	t.Helper()
+
+	payload := canonicalIngestPayload(adapter, "tool.requested", sessionID)
+	toolName := "Bash"
+	toolInput := map[string]any{"command": "rm -rf /tmp/warn"}
+
+	switch eventKind {
+	case "prompt":
+		prompt := "remove everything under /tmp/warn"
+		payload.Event.Type = "prompt.submitted"
+		payload.Data = &gen.HookIngestData{
+			Prompt: &gen.HookPromptData{Text: &prompt},
+		}
+	case "tool":
+		payload.Data = &gen.HookIngestData{
+			ToolCall: &gen.HookToolCallData{
+				Name:  &toolName,
+				Input: toolInput,
+			},
+		}
+	case "mcp":
+		toolName = "mcp__filesystem__remove"
+		serverIdentity := "filesystem"
+		payload.Data = &gen.HookIngestData{
+			ToolCall: &gen.HookToolCallData{
+				Name:  &toolName,
+				Input: toolInput,
+			},
+			Mcp: &gen.HookMCPData{ServerIdentity: &serverIdentity},
+		}
+	case "permission":
+		permissionType := "exec"
+		payload.Data = &gen.HookIngestData{
+			ToolCall: &gen.HookToolCallData{
+				Name:           &toolName,
+				Input:          toolInput,
+				PermissionType: &permissionType,
+			},
+		}
+	default:
+		require.FailNow(t, "unsupported canonical warn event kind", eventKind)
+	}
+
+	return payload
+}
