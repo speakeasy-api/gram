@@ -959,8 +959,8 @@ const ORG_ROUTE_STRUCTURE = {
     component: DeviceAgent,
   },
   deviceIntegrations: {
-    title: "Device Integrations",
-    url: "device-integrations",
+    title: "MDM Integrations",
+    url: "mdm-integrations",
     icon: "puzzle",
     component: DeviceIntegrations,
   },

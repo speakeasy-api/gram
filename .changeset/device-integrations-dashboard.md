@@ -2,7 +2,7 @@
 "dashboard": minor
 ---
 
-Add the Device Integrations dashboard: an org-level catalog page listing MDM
+Add the MDM Integrations dashboard: an org-level catalog page listing MDM
 and compliance providers from the backend registry, with a credential sheet
 rendered from each provider's field spec (secret values masked and
 write-only), a save → test-connection → enable flow, and per-schedule sync
