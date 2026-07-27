@@ -345,7 +345,13 @@ func BuildListManagedDevicesPayload(deviceIntegrationsListManagedDevicesProvider
 
 // BuildGetCoveragePayload builds the payload for the deviceIntegrations
 // getCoverage endpoint from CLI flags.
-func BuildGetCoveragePayload(deviceIntegrationsGetCoverageApikeyToken string, deviceIntegrationsGetCoverageSessionToken string) (*deviceintegrations.GetCoveragePayload, error) {
+func BuildGetCoveragePayload(deviceIntegrationsGetCoverageProvider string, deviceIntegrationsGetCoverageApikeyToken string, deviceIntegrationsGetCoverageSessionToken string) (*deviceintegrations.GetCoveragePayload, error) {
+	var provider *string
+	{
+		if deviceIntegrationsGetCoverageProvider != "" {
+			provider = &deviceIntegrationsGetCoverageProvider
+		}
+	}
 	var apikeyToken *string
 	{
 		if deviceIntegrationsGetCoverageApikeyToken != "" {
@@ -359,6 +365,7 @@ func BuildGetCoveragePayload(deviceIntegrationsGetCoverageApikeyToken string, de
 		}
 	}
 	v := &deviceintegrations.GetCoveragePayload{}
+	v.Provider = provider
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

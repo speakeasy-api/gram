@@ -52,6 +52,7 @@ func (q *Queries) ClearAutoPauses(ctx context.Context, deviceIntegrationConfigID
 }
 
 const countUnmanagedAgentUsers = `-- name: CountUnmanagedAgentUsers :one
+
 SELECT count(*)
 FROM device_agent_syncs das
 WHERE das.organization_id = $1
@@ -64,11 +65,19 @@ WHERE das.organization_id = $1
     WHERE d.organization_id = das.organization_id
       AND d.missing_since IS NULL
       AND LOWER(d.user_email) = LOWER(das.email)
+      AND ($2::text IS NULL OR c.provider = $2::text)
   )
 `
 
-func (q *Queries) CountUnmanagedAgentUsers(ctx context.Context, organizationID string) (int64, error) {
-	row := q.db.QueryRow(ctx, countUnmanagedAgentUsers, organizationID)
+type CountUnmanagedAgentUsersParams struct {
+	OrganizationID string
+	Provider       pgtype.Text
+}
+
+// When scoped to one provider, "unmanaged" means no managed device from THAT
+// provider — an agent user covered only by a different MDM still counts.
+func (q *Queries) CountUnmanagedAgentUsers(ctx context.Context, arg CountUnmanagedAgentUsersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUnmanagedAgentUsers, arg.OrganizationID, arg.Provider)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -236,11 +245,13 @@ LEFT JOIN device_agent_syncs das
   ON das.organization_id = d.organization_id
  AND LOWER(das.email) = LOWER(d.user_email)
 WHERE d.organization_id = $2
+  AND ($3::text IS NULL OR c.provider = $3::text)
 `
 
 type GetCoverageCountsParams struct {
 	ActiveCutoff   pgtype.Timestamptz
 	OrganizationID string
+	Provider       pgtype.Text
 }
 
 type GetCoverageCountsRow struct {
@@ -267,7 +278,7 @@ type GetCoverageCountsRow struct {
 // Naming is deliberate: the heartbeat attests the assigned USER runs the
 // agent somewhere, not that this device runs it.
 func (q *Queries) GetCoverageCounts(ctx context.Context, arg GetCoverageCountsParams) (GetCoverageCountsRow, error) {
-	row := q.db.QueryRow(ctx, getCoverageCounts, arg.ActiveCutoff, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, getCoverageCounts, arg.ActiveCutoff, arg.OrganizationID, arg.Provider)
 	var i GetCoverageCountsRow
 	err := row.Scan(
 		&i.Missing,

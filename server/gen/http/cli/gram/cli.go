@@ -797,6 +797,7 @@ func ParseEndpoint(
 		deviceIntegrationsListManagedDevicesSessionTokenFlag   = deviceIntegrationsListManagedDevicesFlags.String("session-token", "", "")
 
 		deviceIntegrationsGetCoverageFlags            = flag.NewFlagSet("get-coverage", flag.ExitOnError)
+		deviceIntegrationsGetCoverageProviderFlag     = deviceIntegrationsGetCoverageFlags.String("provider", "", "")
 		deviceIntegrationsGetCoverageApikeyTokenFlag  = deviceIntegrationsGetCoverageFlags.String("apikey-token", "", "")
 		deviceIntegrationsGetCoverageSessionTokenFlag = deviceIntegrationsGetCoverageFlags.String("session-token", "", "")
 
@@ -5712,7 +5713,7 @@ func ParseEndpoint(
 				data, err = deviceintegrationsc.BuildListManagedDevicesPayload(*deviceIntegrationsListManagedDevicesProviderFlag, *deviceIntegrationsListManagedDevicesCoverageBucketFlag, *deviceIntegrationsListManagedDevicesCursorFlag, *deviceIntegrationsListManagedDevicesLimitFlag, *deviceIntegrationsListManagedDevicesApikeyTokenFlag, *deviceIntegrationsListManagedDevicesSessionTokenFlag)
 			case "get-coverage":
 				endpoint = c.GetCoverage()
-				data, err = deviceintegrationsc.BuildGetCoveragePayload(*deviceIntegrationsGetCoverageApikeyTokenFlag, *deviceIntegrationsGetCoverageSessionTokenFlag)
+				data, err = deviceintegrationsc.BuildGetCoveragePayload(*deviceIntegrationsGetCoverageProviderFlag, *deviceIntegrationsGetCoverageApikeyTokenFlag, *deviceIntegrationsGetCoverageSessionTokenFlag)
 			}
 		case "domains":
 			c := domainsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -9548,7 +9549,7 @@ func deviceIntegrationsUsage() {
 	fmt.Fprintln(os.Stderr, `    set-schedule-enabled: Enable or disable one sync schedule of a provider's device integration. Disabling records user intent on the schedule; only re-enabling clears it — config saves do not.`)
 	fmt.Fprintln(os.Stderr, `    retry-schedule: Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak.`)
 	fmt.Fprintln(os.Stderr, `    list-managed-devices: Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.`)
-	fmt.Fprintln(os.Stderr, `    get-coverage: Summarize agent coverage across the org's connected MDM inventories.`)
+	fmt.Fprintln(os.Stderr, `    get-coverage: Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s device-integrations COMMAND --help\n", os.Args[0])
@@ -9758,21 +9759,23 @@ func deviceIntegrationsListManagedDevicesUsage() {
 func deviceIntegrationsGetCoverageUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] device-integrations get-coverage", os.Args[0])
+	fmt.Fprint(os.Stderr, " -provider STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Summarize agent coverage across the org's connected MDM inventories.`)
+	fmt.Fprintln(os.Stderr, `Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -provider STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations get-coverage --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "device-integrations get-coverage --provider \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // domainsUsage displays the usage of the domains command and its subcommands.

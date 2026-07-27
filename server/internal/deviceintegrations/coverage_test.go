@@ -85,6 +85,7 @@ func TestCoverageBucketsAndUnmanagedAgents(t *testing.T) {
 	counts, err := store.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
 		ActiveCutoff:   cutoff,
 		OrganizationID: orgID,
+		Provider:       conv.PtrToPGTextEmpty(nil),
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), counts.AgentActive)
@@ -95,11 +96,32 @@ func TestCoverageBucketsAndUnmanagedAgents(t *testing.T) {
 	require.Equal(t, int64(1), counts.Missing)
 	require.Equal(t, int64(6), counts.Total)
 
-	unmanaged, err := store.repo.CountUnmanagedAgentUsers(ctx, orgID)
+	unmanaged, err := store.repo.CountUnmanagedAgentUsers(ctx, repo.CountUnmanagedAgentUsersParams{
+		OrganizationID: orgID,
+		Provider:       conv.PtrToPGTextEmpty(nil),
+	})
 	require.NoError(t, err)
 	// shadow@ has no device; stale@ and active@ have devices; gone@ has only
 	// a missing device, which does not count as managed.
 	require.Equal(t, int64(1), unmanaged)
+
+	// Provider scoping: counts collapse to the named provider's devices, and
+	// "unmanaged" means unmanaged BY THAT provider — users covered only by a
+	// different MDM count as unmanaged for it.
+	scoped, err := store.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
+		ActiveCutoff:   cutoff,
+		OrganizationID: orgID,
+		Provider:       conv.PtrToPGTextEmpty(conv.PtrEmpty(testSinkProviderID)),
+	})
+	require.NoError(t, err)
+	require.Zero(t, scoped.Total, "no devices belong to the sink provider")
+
+	scopedUnmanaged, err := store.repo.CountUnmanagedAgentUsers(ctx, repo.CountUnmanagedAgentUsersParams{
+		OrganizationID: orgID,
+		Provider:       conv.PtrToPGTextEmpty(conv.PtrEmpty(testSinkProviderID)),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), scopedUnmanaged, "all agent users are unmanaged from the sink provider's view")
 }
 
 func TestCoverageExcludesSoftDeletedConfigs(t *testing.T) {
@@ -116,6 +138,7 @@ func TestCoverageExcludesSoftDeletedConfigs(t *testing.T) {
 	counts, err := store.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
 		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
 		OrganizationID: orgID,
+		Provider:       conv.PtrToPGTextEmpty(nil),
 	})
 	require.NoError(t, err)
 	require.Zero(t, counts.Total, "disconnected integrations disappear from coverage")

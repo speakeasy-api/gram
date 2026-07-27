@@ -248,7 +248,11 @@ JOIN device_integration_configs c
 LEFT JOIN device_agent_syncs das
   ON das.organization_id = d.organization_id
  AND LOWER(das.email) = LOWER(d.user_email)
-WHERE d.organization_id = @organization_id;
+WHERE d.organization_id = @organization_id
+  AND (sqlc.narg('provider')::text IS NULL OR c.provider = sqlc.narg('provider')::text);
+
+-- When scoped to one provider, "unmanaged" means no managed device from THAT
+-- provider — an agent user covered only by a different MDM still counts.
 
 -- name: CountUnmanagedAgentUsers :one
 SELECT count(*)
@@ -263,6 +267,7 @@ WHERE das.organization_id = @organization_id
     WHERE d.organization_id = das.organization_id
       AND d.missing_since IS NULL
       AND LOWER(d.user_email) = LOWER(das.email)
+      AND (sqlc.narg('provider')::text IS NULL OR c.provider = sqlc.narg('provider')::text)
   );
 
 -- ListManagedDevices pages the org's device inventory newest-first by id

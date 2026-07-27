@@ -59,7 +59,7 @@ export type DeviceIntegrationCoverageQueryError =
  * getCoverage deviceIntegrations
  *
  * @remarks
- * Summarize agent coverage across the org's connected MDM inventories.
+ * Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.
  */
 export function useDeviceIntegrationCoverage(
   request?: GetDeviceIntegrationCoverageRequest | undefined,
@@ -88,7 +88,7 @@ export function useDeviceIntegrationCoverage(
  * getCoverage deviceIntegrations
  *
  * @remarks
- * Summarize agent coverage across the org's connected MDM inventories.
+ * Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.
  */
 export function useDeviceIntegrationCoverageSuspense(
   request?: GetDeviceIntegrationCoverageRequest | undefined,
@@ -117,6 +117,7 @@ export function setDeviceIntegrationCoverageData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
+      provider?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
@@ -132,6 +133,7 @@ export function invalidateDeviceIntegrationCoverage(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
+      provider?: string | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]

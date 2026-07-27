@@ -436,7 +436,7 @@ var _ = Service("deviceIntegrations", func() {
 	})
 
 	Method("getCoverage", func() {
-		Description("Summarize agent coverage across the org's connected MDM inventories.")
+		Description("Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.")
 
 		Security(security.ByKey, func() {
 			Scope("consumer")
@@ -446,12 +446,14 @@ var _ = Service("deviceIntegrations", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
+			Attribute("provider", String, "Optionally scope coverage to one provider (e.g. jamf).")
 		})
 
 		Result(Coverage)
 
 		HTTP(func() {
 			GET("/rpc/deviceIntegrations.getCoverage")
+			Param("provider")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)

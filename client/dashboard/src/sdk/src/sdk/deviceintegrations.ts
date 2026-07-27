@@ -106,7 +106,7 @@ export class DeviceIntegrations extends ClientSDK {
    * getCoverage deviceIntegrations
    *
    * @remarks
-   * Summarize agent coverage across the org's connected MDM inventories.
+   * Summarize agent coverage across the org's connected MDM inventories, optionally scoped to one provider.
    */
   async getCoverage(
     request?: GetDeviceIntegrationCoverageRequest | undefined,
