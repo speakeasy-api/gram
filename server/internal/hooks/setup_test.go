@@ -206,6 +206,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		shadowMCPClient,
 		chatWriter,
 		efficacySignals,
+		nil,
 		serverURL,
 		siteURL,
 		"test-jwt-secret",

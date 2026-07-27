@@ -1103,6 +1103,7 @@ func newStartCommand() *cli.Command {
 				shadowMCPClient,
 				chatWriter,
 				efficacySignaler,
+				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0},
 				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),

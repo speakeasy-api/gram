@@ -41,7 +41,7 @@ func (s *Service) SkillFeedback(ctx context.Context, payload *gen.SkillFeedbackP
 		return oops.E(oops.CodeBadRequest, nil, "invalid feedback outcome")
 	}
 
-	recorder := feedbackrecorder.NewRecorder(s.db, s.logger, s.efficacySignaler)
+	recorder := feedbackrecorder.NewRecorder(s.db, s.logger, s.suggestionSignaler)
 	if _, err := recorder.Record(ctx, feedbackrecorder.RecordInput{
 		ProjectID:      *authCtx.ProjectID,
 		SkillID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
