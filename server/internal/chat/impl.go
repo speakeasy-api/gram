@@ -1861,13 +1861,9 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 	}
 
 	if chat.Summary.Valid && strings.TrimSpace(chat.Summary.String) != "" && !payload.Regenerate {
-		generatedAt := chat.SummaryGeneratedAt.Time.Format(time.RFC3339)
-		if !chat.SummaryGeneratedAt.Valid {
-			generatedAt = chat.UpdatedAt.Time.Format(time.RFC3339)
-		}
 		return &gen.SummarizeChatResult{
 			Summary:            chat.Summary.String,
-			SummaryGeneratedAt: generatedAt,
+			SummaryGeneratedAt: chat.SummaryGeneratedAt.Time.Format(time.RFC3339),
 			Cached:             true,
 		}, nil
 	}
