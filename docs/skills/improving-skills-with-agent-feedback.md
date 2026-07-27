@@ -23,13 +23,14 @@ Because a suggestion stores a diff rather than a whole manifest, it survives lat
 
 ## Review a suggested edit
 
-The skill detail page shows a suggested edit as a diff between the current and proposed manifests, with a review marker beside each changed line. A marker shows a count when more than one proposed change lands on the same line. Expanding a marker shows the summary, how many sessions asked for the change, and an expander for the agent reports it was built from. Project members with skill write access can:
+The skill detail page shows a suggested edit as a diff between the current and proposed manifests, with a review marker beside each proposed change. Expanding a marker shows the summary, how many sessions asked for the change, and an expander for the agent reports it was built from. Project members with skill write access can:
 
-- **Apply to draft** to apply the diff to the current version as a new immutable version.
-- **Apply with edits** to adjust the complete proposed manifest before applying it. The normal manifest validation and 65,536-byte UTF-8 limit still apply.
-- **Dismiss** to close the suggestion without changing the skill.
+- **Apply** to take just that change. Gram records a new immutable version carrying only it, and the suggestion stays open proposing whatever is left, now measured against the version you just created. Applying the last remaining change closes the suggestion.
+- **Apply all** to review every change the suggestion still proposes and take them as one new version. From there you can also adjust the complete proposed manifest before applying it, or dismiss the suggestion without changing the skill. The normal manifest validation and 65,536-byte UTF-8 limit still apply.
 
-Approval applies the diff to the version that is current at that moment. If the diff no longer applies, Gram reports a conflict or supersedes the suggestion rather than applying it over newer work.
+There is no draft state. Every apply records a new version immediately, and that version becomes the one agents load, so plugin distributions that are not pinned to a specific version pick it up.
+
+Approval applies the change to the version that is current at that moment. If the change no longer applies, Gram reports a conflict or supersedes the suggestion rather than applying it over newer work.
 
 After every suggestion page has loaded, the skills list can approve the exact set shown in the confirmation dialog. Suggestions created after the dialog opens are not included. There is no dashboard batch limit. Bulk approval processes each confirmed suggestion independently. A selected suggestion that is no longer open is reported as a conflict. The API returns applied, superseded, conflicting, and failed item outcomes. The dashboard also computes a skipped count as the number of confirmed IDs absent from the response, which can happen when an ID is missing or archived as the snapshot is processed. Review the reported counts instead of assuming every suggestion was applied. If the request fails, refresh and review the current state before retrying because some edits may already have been applied.
 

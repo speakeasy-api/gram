@@ -1,3 +1,4 @@
+import type { ApproveSkillSuggestionResultOutcome } from "@gram/client/models/components/approveskillsuggestionresult.js";
 import {
   act,
   cleanup,
@@ -206,7 +207,7 @@ describe("SkillManifestDialog", () => {
 
   it("submits edited suggestion content through approve instead of add version", async () => {
     const onSuggestionApproved =
-      vi.fn<(outcome: "applied" | "superseded") => void>();
+      vi.fn<(outcome: ApproveSkillSuggestionResultOutcome) => void>();
     testState.approveSuggestion.mutateAsync.mockResolvedValue({
       outcome: "applied",
     });

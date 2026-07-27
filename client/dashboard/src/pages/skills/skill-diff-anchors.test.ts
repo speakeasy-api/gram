@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupHunksByAnchor, parseSkillDiffHunks } from "./skill-diff-anchors";
+import { parseSkillDiffHunks } from "./skill-diff-anchors";
 
 const replacement = `--- a/SKILL.md
 +++ b/SKILL.md
@@ -61,31 +61,5 @@ describe("parseSkillDiffHunks", () => {
   it("ignores file headers and empty diffs", () => {
     expect(parseSkillDiffHunks("")).toEqual([]);
     expect(parseSkillDiffHunks("--- a/SKILL.md\n+++ b/SKILL.md\n")).toEqual([]);
-  });
-});
-
-describe("groupHunksByAnchor", () => {
-  it("collapses hunks sharing a diff line into one marker", () => {
-    const anchors = groupHunksByAnchor([
-      { side: "additions", line: 15, removed: ["a"], added: ["b"] },
-      { side: "additions", line: 3, removed: [], added: ["c"] },
-      { side: "additions", line: 15, removed: [], added: ["d"] },
-    ]);
-
-    expect(anchors.map((anchor) => [anchor.line, anchor.hunks.length])).toEqual(
-      [
-        [3, 1],
-        [15, 2],
-      ],
-    );
-  });
-
-  it("keeps the same line on opposite sides apart", () => {
-    const anchors = groupHunksByAnchor([
-      { side: "additions", line: 4, removed: [], added: ["a"] },
-      { side: "deletions", line: 4, removed: ["b"], added: [] },
-    ]);
-
-    expect(anchors).toHaveLength(2);
   });
 });

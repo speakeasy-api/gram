@@ -4,6 +4,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Textarea } from "@/components/moon/textarea";
 import { Type } from "@/components/ui/type";
 import { useQueryState } from "nuqs";
+import type { ApproveSkillSuggestionResultOutcome } from "@gram/client/models/components/approveskillsuggestionresult.js";
 import type { RecordSkillResult } from "@gram/client/models/components/recordskillresult.js";
 import { useAddSkillVersionMutation } from "@gram/client/react-query/addSkillVersion.js";
 import { useApproveSkillSuggestionMutation } from "@gram/client/react-query/approveSkillSuggestion.js";
@@ -60,7 +61,7 @@ export function SkillManifestDialog({
   skillId?: string;
   derivedFromVersionId?: string;
   suggestionId?: string;
-  onSuggestionApproved?: (outcome: "applied" | "superseded") => void;
+  onSuggestionApproved?: (outcome: ApproveSkillSuggestionResultOutcome) => void;
   initialContent?: string;
 }): JSX.Element {
   const copy = MODE_COPY[mode];

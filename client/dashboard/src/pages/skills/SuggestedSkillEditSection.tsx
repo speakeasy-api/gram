@@ -5,22 +5,19 @@ import { Type } from "@/components/ui/type";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { lazy, Suspense, useMemo, useState } from "react";
-import {
-  groupHunksByAnchor,
-  parseSkillDiffHunks,
-  type SkillDiffAnchor,
-} from "./skill-diff-anchors";
+import { parseSkillDiffHunks, type SkillDiffHunk } from "./skill-diff-anchors";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import type { SkillTextDiffProps } from "./SkillTextDiff";
 import {
   SkillSuggestionComment,
   SkillSuggestionMarker,
 } from "./SkillSuggestionComment";
+import { SkillSuggestionReviewDialog } from "./SkillSuggestionReviewDialog";
 import { useSkillSuggestionReview } from "./use-skill-suggestion";
 
 // lazy() erases the component's generic, so the annotation type is pinned here.
 const SkillTextDiff = lazy(() => import("./SkillTextDiff")) as (
-  props: SkillTextDiffProps<SkillDiffAnchor>,
+  props: SkillTextDiffProps<SkillDiffHunk>,
 ) => JSX.Element;
 
 export function SuggestedSkillEditSection({
@@ -32,26 +29,26 @@ export function SuggestedSkillEditSection({
 }): JSX.Element | null {
   const review = useSkillSuggestionReview(skillId);
   const [editOpen, setEditOpen] = useState(false);
-  const [openAnchor, setOpenAnchor] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [openHunk, setOpenHunk] = useState<number | null>(null);
 
   const suggestion = review.suggestion;
-  const anchors = useMemo(() => {
+  const hunks = useMemo(() => {
     if (!suggestion?.appliesCleanly) return [];
-    return groupHunksByAnchor(parseSkillDiffHunks(suggestion.proposedDiff));
+    return parseSkillDiffHunks(suggestion.proposedDiff);
   }, [suggestion]);
 
   if (!review.isPending && !review.loadError && !suggestion) return null;
 
-  const renderAnchor = (anchor: SkillDiffAnchor): JSX.Element | null => {
-    if (!suggestion) return null;
-    const key = `${anchor.side}:${anchor.line}`;
-    if (openAnchor !== key) {
+  // Each hunk is applied on its own, so a comment only ever speaks for the
+  // change it is attached to.
+  const renderHunk = (index: number): JSX.Element => {
+    if (!suggestion || openHunk !== index) {
       return (
         <div className="px-4 py-1.5">
           <SkillSuggestionMarker
-            count={anchor.hunks.length}
             open={false}
-            onToggle={() => setOpenAnchor(key)}
+            onToggle={() => setOpenHunk(index)}
           />
         </div>
       );
@@ -60,13 +57,12 @@ export function SuggestedSkillEditSection({
       <div className="px-4">
         <SkillSuggestionComment
           suggestion={suggestion}
+          changeCount={hunks.length}
           actions={{
             disabled: review.actionsDisabled,
             approving: review.approving,
-            dismissing: review.dismissing,
-            onApprove: () => void review.approve(),
-            onDismiss: () => void review.dismiss(),
-            onEdit: () => setEditOpen(true),
+            onApply: () => void review.approve(index),
+            onApplyAll: () => setReviewOpen(true),
           }}
         />
       </div>
@@ -78,8 +74,8 @@ export function SuggestedSkillEditSection({
       <SettingsSection.Header>
         <SettingsSection.Title>Suggested edit</SettingsSection.Title>
         <SettingsSection.Description>
-          Analysis of agent feedback proposed this change. Open a comment beside
-          a changed line to see why it was proposed and act on it.
+          Analysis of agent feedback proposed these changes. Open the comment
+          beside a change to see why it was proposed and apply it on its own.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -128,13 +124,13 @@ export function SuggestedSkillEditSection({
                 newContent={suggestion.proposedContent}
                 oldLabel="Current SKILL.md"
                 newLabel="Proposed SKILL.md"
-                lineAnnotations={anchors.map((anchor) => ({
-                  side: anchor.side,
-                  lineNumber: anchor.line,
-                  metadata: anchor,
+                lineAnnotations={hunks.map((hunk) => ({
+                  side: hunk.side,
+                  lineNumber: hunk.line,
+                  metadata: hunk,
                 }))}
                 renderAnnotation={(annotation) =>
-                  renderAnchor(annotation.metadata)
+                  renderHunk(hunks.indexOf(annotation.metadata))
                 }
               />
             </Suspense>
@@ -142,15 +138,37 @@ export function SuggestedSkillEditSection({
         </SettingsSection.Body>
       </SettingsSection.Panel>
       {suggestion && (
-        <SkillManifestDialog
-          key={editOpen ? suggestion.id : "closed"}
-          mode="approve-suggestion"
-          open={editOpen}
-          onOpenChange={setEditOpen}
-          suggestionId={suggestion.id}
-          initialContent={suggestion.proposedContent}
-          onSuggestionApproved={review.hide}
-        />
+        <>
+          <SkillSuggestionReviewDialog
+            suggestion={suggestion}
+            currentContent={latestVersion.content}
+            changeCount={hunks.length}
+            open={reviewOpen}
+            onOpenChange={setReviewOpen}
+            busy={review.actionsDisabled}
+            onApplyAll={() => {
+              setReviewOpen(false);
+              void review.approve();
+            }}
+            onEdit={() => {
+              setReviewOpen(false);
+              setEditOpen(true);
+            }}
+            onDismiss={() => {
+              setReviewOpen(false);
+              void review.dismiss();
+            }}
+          />
+          <SkillManifestDialog
+            key={editOpen ? suggestion.id : "closed"}
+            mode="approve-suggestion"
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            suggestionId={suggestion.id}
+            initialContent={suggestion.proposedContent}
+            onSuggestionApproved={review.hide}
+          />
+        </>
       )}
     </SettingsSection>
   );

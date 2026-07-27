@@ -14,33 +14,25 @@ import { useState } from "react";
 export type SkillSuggestionActions = {
   disabled: boolean;
   approving: boolean;
-  dismissing: boolean;
-  onApprove: () => void;
-  onEdit: () => void;
-  onDismiss: () => void;
+  /** Applies just the change this comment is attached to. */
+  onApply: () => void;
+  /** Opens the review of every change the suggestion still proposes. */
+  onApplyAll: () => void;
 };
 
-/**
- * Collapsed gutter marker for a manifest line the suggestion touches. The count
- * only shows when more than one proposed change lands on the same line.
- */
+/** Collapsed marker for one proposed change in the diff. */
 export function SkillSuggestionMarker({
-  count,
   open,
   onToggle,
 }: {
-  count: number;
   open: boolean;
   onToggle: () => void;
 }): JSX.Element {
-  const label =
-    count === 1 ? "1 suggested change" : `${count} suggested changes`;
-
   return (
     <button
       type="button"
       aria-expanded={open}
-      aria-label={label}
+      aria-label="Suggested change"
       onClick={onToggle}
       className={cn(
         "border-border bg-background text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-sans text-xs transition-colors",
@@ -48,16 +40,18 @@ export function SkillSuggestionMarker({
       )}
     >
       <Icon name="message-square" className="h-3.5 w-3.5" />
-      {count > 1 && <span className="font-medium">{count}</span>}
     </button>
   );
 }
 
 export function SkillSuggestionComment({
   suggestion,
+  changeCount,
   actions,
 }: {
   suggestion: SkillEditSuggestion;
+  /** How many changes the suggestion still proposes across the manifest. */
+  changeCount: number;
   actions: SkillSuggestionActions;
 }): JSX.Element {
   const project = useProject();
@@ -88,8 +82,8 @@ export function SkillSuggestionComment({
 
       <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
         <Type small muted>
-          Applying updates the working draft only. Changes reach members when
-          you promote this skill.
+          Applying records a new version of this skill and makes it the latest
+          one agents load.
         </Type>
         <RequireScope
           scope="skill:write"
@@ -98,28 +92,22 @@ export function SkillSuggestionComment({
           reason="You need write access to review suggested edits."
         >
           <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={actions.disabled}
-              onClick={actions.onDismiss}
-            >
-              {actions.dismissing ? "Dismissing..." : "Dismiss"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={actions.disabled}
-              onClick={actions.onEdit}
-            >
-              Apply with edits
-            </Button>
+            {changeCount > 1 && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={actions.disabled}
+                onClick={actions.onApplyAll}
+              >
+                Apply all
+              </Button>
+            )}
             <Button
               size="sm"
               disabled={actions.disabled}
-              onClick={actions.onApprove}
+              onClick={actions.onApply}
             >
-              {actions.approving ? "Applying..." : "Apply to draft"}
+              {actions.approving ? "Applying..." : "Apply"}
             </Button>
           </div>
         </RequireScope>

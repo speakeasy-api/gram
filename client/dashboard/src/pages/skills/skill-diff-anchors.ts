@@ -62,26 +62,3 @@ export function parseSkillDiffHunks(diff: string): SkillDiffHunk[] {
     (hunk) => hunk.removed.length > 0 || hunk.added.length > 0,
   );
 }
-
-export type SkillDiffAnchor = {
-  side: SkillDiffSide;
-  line: number;
-  hunks: SkillDiffHunk[];
-};
-
-/** Groups hunks that resolve to the same diff line into one marker. */
-export function groupHunksByAnchor(hunks: SkillDiffHunk[]): SkillDiffAnchor[] {
-  const byPosition = new Map<string, SkillDiffAnchor>();
-
-  for (const hunk of hunks) {
-    const key = `${hunk.side}:${hunk.line}`;
-    const existing = byPosition.get(key);
-    if (existing) {
-      existing.hunks.push(hunk);
-    } else {
-      byPosition.set(key, { side: hunk.side, line: hunk.line, hunks: [hunk] });
-    }
-  }
-
-  return [...byPosition.values()].sort((a, b) => a.line - b.line);
-}
