@@ -6,17 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"net"
-	"net/url"
 	"path"
 	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 )
@@ -910,6 +906,8 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 		}
 
 		entry := codexMCPServer{
+			Command:           "",
+			Args:              nil,
 			URL:               s.MCPURL,
 			BearerTokenEnvVar: "",
 			HTTPHeaders:       nil,
@@ -933,15 +931,20 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 
 		mcpServers[keys[i]] = entry
 	}
-	if feedbackURL, headers, ok := skillFeedbackMCPConfig(p, cfg); ok {
+	if bundleSkillFeedbackMCP(p) {
 		// Codex trims invalid edge characters when forming keys, so a
 		// non-exact display name can still occupy the reserved key.
 		if _, exists := mcpServers[skillFeedbackMCPServerName]; !exists {
 			mcpServers[skillFeedbackMCPServerName] = codexMCPServer{
-				URL:               feedbackURL,
+				Command:           "bash",
+				Args:              skillFeedbackMCPArgs(`${PLUGIN_ROOT}`),
+				URL:               "",
 				BearerTokenEnvVar: "",
-				HTTPHeaders:       headers,
+				HTTPHeaders:       nil,
 				EnvHTTPHeaders:    nil,
+			}
+			if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+				return err
 			}
 		}
 	}
@@ -1690,15 +1693,22 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 
 		mcpServers[s.DisplayName] = claudeMCPServer{
 			Type:    "http",
+			Command: "",
+			Args:    nil,
 			URL:     s.MCPURL,
 			Headers: headers,
 		}
 	}
-	if feedbackURL, headers, ok := skillFeedbackMCPConfig(p, cfg); ok {
+	if bundleSkillFeedbackMCP(p) {
 		mcpServers[skillFeedbackMCPServerName] = claudeMCPServer{
-			Type:    "http",
-			URL:     feedbackURL,
-			Headers: headers,
+			Type:    "stdio",
+			Command: "bash",
+			Args:    skillFeedbackMCPArgs(`${CLAUDE_PLUGIN_ROOT}`),
+			URL:     "",
+			Headers: nil,
+		}
+		if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+			return err
 		}
 	}
 	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
@@ -1719,19 +1729,29 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 // published repo — refuse anything that isn't a plain lowercase slug rather
 // than trust the invariant across the DB boundary.
 func emitPluginSkills(files map[string][]byte, subdir string, p PluginInfo) {
+	footer := ""
+	if bundleSkillFeedbackMCP(p) {
+		footer = skillFeedbackFooter
+	}
 	for _, sk := range p.Skills {
 		if !domainskills.ValidSpecName(sk.Name) {
 			continue
 		}
-		files[path.Join(subdir, "skills", sk.Name, "SKILL.md")] = []byte(sk.Content)
+		files[path.Join(subdir, "skills", sk.Name, "SKILL.md")] = []byte(strings.TrimRight(sk.Content, "\n") + footer + "\n")
 	}
 }
 
 const skillFeedbackMCPServerName = "speakeasy-skill-feedback"
 
-// skillFeedbackMCPConfig uses the same name predicate as emitPluginSkills, so
-// feedback is bundled exactly when this feature package carries a skill.
-func skillFeedbackMCPConfig(p PluginInfo, cfg GenerateConfig) (string, map[string]string, bool) {
+// skillFeedbackFooter is appended to every distributed SKILL.md that ships
+// alongside the bundled feedback MCP server. Discovery otherwise depends on
+// the agent noticing the tool in tools/list on its own.
+const skillFeedbackFooter = "\n\nAfter materially relying on this skill, record the outcome with the `skill_feedback` tool (speakeasy-skill-feedback MCP server)."
+
+// bundleSkillFeedbackMCP uses the same name predicate as emitPluginSkills, so
+// feedback is bundled exactly when this feature package carries a skill. A
+// customer server that already claims the reserved name wins.
+func bundleSkillFeedbackMCP(p PluginInfo) bool {
 	hasSkill := false
 	for _, skill := range p.Skills {
 		if domainskills.ValidSpecName(skill.Name) {
@@ -1740,41 +1760,31 @@ func skillFeedbackMCPConfig(p PluginInfo, cfg GenerateConfig) (string, map[strin
 		}
 	}
 	if !hasSkill {
-		return "", nil, false
+		return false
 	}
 	for _, server := range p.Servers {
 		if server.DisplayName == skillFeedbackMCPServerName {
-			return "", nil, false
+			return false
 		}
 	}
-
-	hooksKey := strings.TrimSpace(cfg.HooksAPIKey)
-	projectSlug := strings.TrimSpace(cfg.ProjectSlug)
-	base, err := url.Parse(strings.TrimSpace(cfg.ServerURL))
-	if hooksKey == "" || projectSlug == "" || err != nil || base.Host == "" || base.Hostname() == "" {
-		return "", nil, false
-	}
-	if base.Scheme != "https" {
-		ip := net.ParseIP(base.Hostname())
-		if base.Scheme != "http" || (base.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback())) {
-			return "", nil, false
-		}
-	}
-
-	return platformtools.PlatformToolsetURL(base, platformtools.SkillFeedbackPlatformToolsetSlug), map[string]string{
-		"Authorization":         "Bearer " + hooksKey,
-		constants.ProjectHeader: projectSlug,
-	}, true
+	return true
 }
 
-func needsSkillFeedbackMCPKey(plugins []PluginInfo, cfg GenerateConfig) bool {
-	cfg.HooksAPIKey = fingerprintHooksKeySentinel
-	for _, plugin := range plugins {
-		if _, _, ok := skillFeedbackMCPConfig(plugin, cfg); ok {
-			return true
-		}
+// skillFeedbackMCPArgs builds the argv for the bundled stdio feedback server:
+// the plugin-root bootstrap script downloads the pinned hooks binary and
+// forwards to its skill-feedback subcommand. root is the harness's plugin-root
+// placeholder (e.g. ${CLAUDE_PLUGIN_ROOT}), which the harness substitutes when
+// it spawns the server, so the entry works wherever the plugin is installed.
+func skillFeedbackMCPArgs(root string) []string {
+	return []string{
+		root + "/hooks/bootstrap.sh",
+		"--config=" + root + "/speakeasy.json",
+		"skill-feedback",
 	}
-	return false
+}
+
+func needsSkillFeedbackHooksKey(plugins []PluginInfo) bool {
+	return slices.ContainsFunc(plugins, bundleSkillFeedbackMCP)
 }
 
 func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
@@ -1814,14 +1824,21 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		}
 
 		mcpServers[s.DisplayName] = cursorMCPServer{
+			Command: "",
+			Args:    nil,
 			URL:     s.MCPURL,
 			Headers: headers,
 		}
 	}
-	if feedbackURL, headers, ok := skillFeedbackMCPConfig(p, cfg); ok {
+	if bundleSkillFeedbackMCP(p) {
 		mcpServers[skillFeedbackMCPServerName] = cursorMCPServer{
-			URL:     feedbackURL,
-			Headers: headers,
+			Command: "bash",
+			Args:    skillFeedbackMCPArgs(`${CURSOR_PLUGIN_ROOT}`),
+			URL:     "",
+			Headers: nil,
+		}
+		if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+			return err
 		}
 	}
 	mcpJSON, err := marshalJSON(cursorMCPConfig{MCPServers: mcpServers})
@@ -1889,7 +1906,9 @@ type claudeMCPConfig struct {
 
 type claudeMCPServer struct {
 	Type    string            `json:"type"`
-	URL     string            `json:"url"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	URL     string            `json:"url,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
@@ -1915,7 +1934,9 @@ type cursorMCPConfig struct {
 }
 
 type cursorMCPServer struct {
-	URL     string            `json:"url"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	URL     string            `json:"url,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
@@ -2020,7 +2041,9 @@ type codexMCPConfig struct {
 }
 
 type codexMCPServer struct {
-	URL               string            `json:"url"`
+	Command           string            `json:"command,omitempty"`
+	Args              []string          `json:"args,omitempty"`
+	URL               string            `json:"url,omitempty"`
 	BearerTokenEnvVar string            `json:"bearer_token_env_var,omitempty"`
 	HTTPHeaders       map[string]string `json:"http_headers,omitempty"`
 	EnvHTTPHeaders    map[string]string `json:"env_http_headers,omitempty"`

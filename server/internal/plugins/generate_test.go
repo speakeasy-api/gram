@@ -1916,42 +1916,80 @@ func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 	files, err := generateMCPFiles(plugins, cfg)
 	require.NoError(t, err)
 
-	require.Equal(t, []byte(content), files["engineering-tools/skills/release-notes/SKILL.md"])
-	require.Equal(t, []byte(content), files[cursorPluginRoot+"/engineering-tools-cursor/skills/release-notes/SKILL.md"])
-	require.Equal(t, []byte(content), files["engineering-tools-codex/skills/release-notes/SKILL.md"])
+	distributed := strings.TrimRight(content, "\n") + skillFeedbackFooter + "\n"
+	require.Equal(t, []byte(distributed), files["engineering-tools/skills/release-notes/SKILL.md"])
+	require.Equal(t, []byte(distributed), files[cursorPluginRoot+"/engineering-tools-cursor/skills/release-notes/SKILL.md"])
+	require.Equal(t, []byte(distributed), files["engineering-tools-codex/skills/release-notes/SKILL.md"])
 	for p := range files {
 		require.NotContains(t, p, "escape", "invalid skill names must be dropped, not emitted as paths")
 	}
 
-	expectedURL := "https://app.getgram.ai/platform/mcp/skill-feedback"
-	expectedHeaders := map[string]string{
-		"Authorization": "Bearer gram_hooks_feedback",
-		"Gram-Project":  "acme",
-	}
-
 	var claude claudeMCPConfig
 	require.NoError(t, json.Unmarshal(files["engineering-tools/.mcp.json"], &claude))
-	require.Equal(t, claudeMCPServer{Type: "http", URL: expectedURL, Headers: expectedHeaders}, claude.MCPServers[skillFeedbackMCPServerName])
+	require.Equal(t, claudeMCPServer{
+		Type:    "stdio",
+		Command: "bash",
+		Args:    skillFeedbackMCPArgs("${CLAUDE_PLUGIN_ROOT}"),
+		URL:     "",
+		Headers: nil,
+	}, claude.MCPServers[skillFeedbackMCPServerName])
 
 	var cursor cursorMCPConfig
 	require.NoError(t, json.Unmarshal(files[cursorPluginRoot+"/engineering-tools-cursor/mcp.json"], &cursor))
-	require.Equal(t, cursorMCPServer{URL: expectedURL, Headers: expectedHeaders}, cursor.MCPServers[skillFeedbackMCPServerName])
+	require.Equal(t, cursorMCPServer{
+		Command: "bash",
+		Args:    skillFeedbackMCPArgs("${CURSOR_PLUGIN_ROOT}"),
+		URL:     "",
+		Headers: nil,
+	}, cursor.MCPServers[skillFeedbackMCPServerName])
 
 	var codex codexMCPConfig
 	require.NoError(t, json.Unmarshal(files["engineering-tools-codex/.mcp.json"], &codex))
 	require.Equal(t, codexMCPServer{
-		URL:               expectedURL,
+		Command:           "bash",
+		Args:              skillFeedbackMCPArgs("${PLUGIN_ROOT}"),
+		URL:               "",
 		BearerTokenEnvVar: "",
-		HTTPHeaders:       expectedHeaders,
+		HTTPHeaders:       nil,
 		EnvHTTPHeaders:    nil,
 	}, codex.MCPServers[skillFeedbackMCPServerName])
 	feedbackJSON, err := json.Marshal(codex.MCPServers[skillFeedbackMCPServerName])
 	require.NoError(t, err)
+	require.NotContains(t, string(feedbackJSON), "url")
 	require.NotContains(t, string(feedbackJSON), "bearer_token_env_var")
-	require.NotContains(t, string(feedbackJSON), "env_http_headers")
+	require.NotContains(t, string(feedbackJSON), "http_headers")
+
+	// The stdio server rides the plugin-local bootstrap script and deployment
+	// identity, so skill-carrying feature plugins ship both.
+	for _, subdir := range []string{"engineering-tools", cursorPluginRoot + "/engineering-tools-cursor", "engineering-tools-codex"} {
+		require.Contains(t, files, subdir+"/hooks/bootstrap.sh")
+		require.Contains(t, string(files[subdir+"/speakeasy.json"]), "gram_hooks_feedback")
+	}
 }
 
-func TestGenerateMCPFilesOmitsSkillFeedbackWithoutSkillOrKey(t *testing.T) {
+func TestGenerateMCPFilesOmitsSkillFeedbackWithoutSkill(t *testing.T) {
+	t.Parallel()
+	withoutSkill := PluginInfo{
+		Name:   "Engineering Tools",
+		Slug:   "engineering-tools",
+		Skills: []PluginSkillInfo{{Name: "../escape", Content: "invalid"}},
+	}
+	files, err := generateMCPFiles([]PluginInfo{withoutSkill}, GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_hooks_feedback",
+		ProjectSlug: "acme",
+	})
+	require.NoError(t, err)
+	for p, content := range files {
+		require.NotContains(t, string(content), skillFeedbackMCPServerName)
+		require.NotContains(t, p, "speakeasy.json", "plugins without skills must not carry the hooks runtime")
+	}
+}
+
+// The ZIP download path generates with no hooks key. The stdio server still
+// ships — the binary falls back to cached or browser-login credentials — so
+// downloaded packages keep the feedback loop.
+func TestGenerateSinglePluginPackageBundlesSkillFeedbackWithoutKey(t *testing.T) {
 	t.Parallel()
 	withSkill := PluginInfo{
 		Name:   "Engineering Tools",
@@ -1964,70 +2002,13 @@ func TestGenerateMCPFilesOmitsSkillFeedbackWithoutSkillOrKey(t *testing.T) {
 			ProjectSlug: "acme",
 		}, platform)
 		require.NoError(t, err)
-		for _, content := range files {
-			require.NotContains(t, string(content), skillFeedbackMCPServerName)
+		mcpPath := ".mcp.json"
+		if platform == "cursor" {
+			mcpPath = "mcp.json"
 		}
-	}
-
-	withoutSkill := withSkill
-	withoutSkill.Skills = []PluginSkillInfo{{Name: "../escape", Content: "invalid"}}
-	files, err := generateMCPFiles([]PluginInfo{withoutSkill}, GenerateConfig{
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_hooks_feedback",
-		ProjectSlug: "acme",
-	})
-	require.NoError(t, err)
-	for _, content := range files {
-		require.NotContains(t, string(content), skillFeedbackMCPServerName)
-	}
-}
-
-func TestGenerateSinglePluginPackageOmitsSkillFeedbackForUnsafeServerURLs(t *testing.T) {
-	t.Parallel()
-	plugin := PluginInfo{
-		Name:   "Engineering Tools",
-		Slug:   "engineering-tools",
-		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
-	}
-	for _, serverURL := range []string{
-		"http://example.com",
-		"https:///missing-host",
-		"ftp://localhost",
-	} {
-		files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{
-			ServerURL:   serverURL,
-			HooksAPIKey: "gram_hooks_feedback",
-			ProjectSlug: "acme",
-		}, "claude")
-		require.NoError(t, err)
-
-		var config claudeMCPConfig
-		require.NoError(t, json.Unmarshal(files[".mcp.json"], &config))
-		require.NotContains(t, config.MCPServers, skillFeedbackMCPServerName, serverURL)
-	}
-}
-
-func TestGenerateSinglePluginPackageEmitsSkillFeedbackForLoopbackHTTP(t *testing.T) {
-	t.Parallel()
-	plugin := PluginInfo{
-		Name:   "Engineering Tools",
-		Slug:   "engineering-tools",
-		Skills: []PluginSkillInfo{{Name: "release-notes", Content: "v1"}},
-	}
-	for serverURL, expectedURL := range map[string]string{
-		"http://localhost:8080///": "http://localhost:8080/platform/mcp/skill-feedback",
-		"http://127.0.0.1:8080///": "http://127.0.0.1:8080/platform/mcp/skill-feedback",
-	} {
-		files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{
-			ServerURL:   serverURL,
-			HooksAPIKey: "gram_hooks_feedback",
-			ProjectSlug: "acme",
-		}, "claude")
-		require.NoError(t, err)
-
-		var config claudeMCPConfig
-		require.NoError(t, json.Unmarshal(files[".mcp.json"], &config))
-		require.Equal(t, expectedURL, config.MCPServers[skillFeedbackMCPServerName].URL)
+		require.Contains(t, string(files[mcpPath]), skillFeedbackMCPServerName, platform)
+		require.Contains(t, files, "hooks/bootstrap.sh", platform)
+		require.Contains(t, files, "speakeasy.json", platform)
 	}
 }
 
