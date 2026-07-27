@@ -162,6 +162,17 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
 		}
 
+		if registryID == builtInRegistryID {
+			search := ""
+			if payload.Search != nil {
+				search = *payload.Search
+			}
+			return &gen.ListCatalogResult{
+				Servers:    listBuiltInCatalog(search),
+				NextCursor: nil,
+			}, nil
+		}
+
 		registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -212,6 +223,12 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		allServers = append(allServers, result.Servers...)
 	}
 
+	search := ""
+	if payload.Search != nil {
+		search = *payload.Search
+	}
+	allServers = mergeBuiltInCatalog(allServers, search)
+
 	// Cap at 100 servers for v0. Multi-registry pagination is tracked in
 	// AGE-2153; until then anything past the cap is silently dropped, so warn.
 	if len(allServers) > 100 {
@@ -241,6 +258,14 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 	registryID, err := uuid.Parse(payload.RegistryID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
+	}
+
+	if registryID == builtInRegistryID {
+		details := getBuiltInCatalogDetails(payload.ServerSpecifier)
+		if details == nil {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return details, nil
 	}
 
 	registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)

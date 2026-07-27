@@ -29,6 +29,16 @@ interface ServerMeta {
       }[];
     };
   };
+  "com.getgram/catalog"?: {
+    provider?: string;
+    setupDocumentationUrl?: string;
+    requiredApis?: string[];
+    requiredMcpServices?: string[];
+    requiredScopes?: string[];
+    oauthClientOwnership?: string;
+    migrationFromCommunityMcp?: string;
+    supportsCombinedAssistants?: boolean;
+  };
 }
 
 // The catalog list returns `ExternalMCPServerEntry` (no tools). `tools` is
