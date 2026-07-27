@@ -1,0 +1,20 @@
+client/dashboard/src/pages/chatLogs/ChatTranscript.tsx
+  s_d91d1a4a046c46::t_5fb849952f053b 594-610,614-620
+  s_d91d1a4a046c46::t_1e2d287fdf110f 507-519
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "6a86f08bf7328be8b80820c6665121e501336280",
+  "prompts": {},
+  "sessions": {
+    "s_d91d1a4a046c46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa265-7139-7c02-9009-a76952cd8302",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
