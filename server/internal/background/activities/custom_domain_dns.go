@@ -15,6 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
+// customDomainProbeTimeout bounds the HTTPS probe so a black-holed domain
+// cannot consume the health check activity's full start-to-close timeout.
+const customDomainProbeTimeout = 10 * time.Second
+
 func checkCustomDomainRouting(ctx context.Context, resolver dns.Resolver, domain, expectedTarget string) (customdomains.HealthIssue, error) {
 	normalizedExpectedTarget := normalizeDNSName(expectedTarget)
 	cname, cnameErr := resolver.LookupCNAME(ctx, domain)
@@ -66,7 +70,7 @@ func normalizeDNSName(name string) string {
 // success: the signal is that something terminated TLS for this hostname, not
 // what it said.
 func probeCustomDomainHTTPS(ctx context.Context, client *guardian.HTTPClient, domain string) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, customDomainProbeTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+domain+"/mcp", nil)
