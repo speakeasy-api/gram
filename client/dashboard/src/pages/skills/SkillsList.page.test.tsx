@@ -21,7 +21,7 @@ const testState = vi.hoisted(() => ({
   insightsData: { insights: [] } as { insights: unknown[] } | undefined,
   insightsRefetch: vi.fn().mockResolvedValue(undefined),
   skills: [] as Array<Record<string, unknown>>,
-  unknownEnabled: false,
+  unknownActivations: [] as Array<Record<string, unknown>>,
   suggestionFetchNextPage: vi.fn().mockResolvedValue(undefined),
   suggestionRefetch: vi.fn().mockResolvedValue(undefined),
   suggestionHasNextPage: false,
@@ -134,23 +134,18 @@ vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
   invalidateAllSkillEfficacyInsights: testState.invalidateEfficacy,
 }));
 vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
-  useUnknownSkillActivationsInfinite: (
-    _request: unknown,
-    _security: unknown,
-    options?: { enabled?: boolean },
-  ) => {
-    testState.unknownEnabled = options?.enabled ?? true;
-    return {
-      data: { pages: [{ result: { activations: [] } }] },
-      isPending: false,
-      isFetchingNextPage: false,
-      isFetchNextPageError: false,
-      hasNextPage: false,
-      error: null,
-      fetchNextPage: vi.fn(),
-      refetch: vi.fn(),
-    };
-  },
+  useUnknownSkillActivationsInfinite: () => ({
+    data: {
+      pages: [{ result: { activations: testState.unknownActivations } }],
+    },
+    isPending: false,
+    isFetchingNextPage: false,
+    isFetchNextPageError: false,
+    hasNextPage: false,
+    error: null,
+    fetchNextPage: vi.fn(),
+    refetch: vi.fn(),
+  }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -260,7 +255,7 @@ beforeEach(() => {
   testState.insightsRefetch.mockReset();
   testState.insightsRefetch.mockResolvedValue(undefined);
   testState.skills = makeSkills(250);
-  testState.unknownEnabled = false;
+  testState.unknownActivations = [];
   testState.suggestionFetchNextPage.mockReset().mockResolvedValue(undefined);
   testState.suggestionRefetch.mockReset().mockResolvedValue(undefined);
   testState.suggestionHasNextPage = false;
@@ -325,15 +320,32 @@ describe("SkillsList pagination surfaces", () => {
     expect(screen.queryByText("No matching skills.")).toBeNull();
   });
 
-  it("loads unknown activations only when requested", () => {
+  it("hides unknown activations when none exist", () => {
     render(<SkillsList />);
 
-    expect(testState.unknownEnabled).toBe(false);
+    expect(screen.queryByText("Unknown activations")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "View unknown activations" }),
+    ).toBeNull();
+  });
+
+  it("offers unknown activations after finding one", () => {
+    testState.unknownActivations = [
+      {
+        id: "activation_a",
+        skillName: "unmatched-skill",
+        provider: "claude-code",
+        source: "hook",
+        reason: "unresolved_hash",
+        seenAt: new Date("2026-07-16T00:00:00Z"),
+      },
+    ];
+    render(<SkillsList />);
+
     fireEvent.click(
       screen.getByRole("button", { name: "View unknown activations" }),
     );
-    expect(testState.unknownEnabled).toBe(true);
-    expect(screen.getByText("No unknown activations found.")).toBeTruthy();
+    expect(screen.getByText("unmatched-skill")).toBeTruthy();
   });
 
   it("loads every skill page before presenting a sorted view", async () => {
