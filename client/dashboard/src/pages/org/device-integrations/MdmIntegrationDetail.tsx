@@ -165,7 +165,7 @@ function MdmIntegrationDetailInner({
         <Page.Section.Body>
           <Stack gap={4}>
             {coverageError ? (
-              <Type muted>
+              <Type muted role="alert">
                 Coverage could not be loaded. It will retry automatically.
               </Type>
             ) : null}
