@@ -12,13 +12,16 @@ vi.mock("@openrouter/ai-sdk-provider", () => ({
 }));
 
 vi.mock("ai", () => ({
-  generateObject: vi.fn(async () => ({
-    object: {
+  generateText: vi.fn(async () => ({
+    output: {
       from: "2026-01-01T00:00:00",
       to: "2026-01-01T23:59:59",
       label: "Jan 1",
     },
   })),
+  Output: {
+    object: vi.fn((opts: unknown) => opts),
+  },
 }));
 
 // Avoid pulling Datadog RUM (and its window access) into the Node test env.
