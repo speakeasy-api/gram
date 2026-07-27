@@ -1082,19 +1082,44 @@ func execCodexInstallScript(t *testing.T, script []byte, home string) {
 
 	bashPath, err := exec.LookPath("bash")
 	require.NoError(t, err, "bash is required to run the generated install script")
-	pythonPath, err := exec.LookPath("python3")
-	require.NoError(t, err, "python3 is required by the generated install script")
 
-	scriptPath := filepath.Join(t.TempDir(), "install.sh")
+	scriptDir := t.TempDir()
+	scriptPath := filepath.Join(scriptDir, "install.sh")
 	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
 
 	cmd := exec.Command(bashPath, scriptPath)
+	// Run from outside the repository so nothing the script executes can pick
+	// up repo-local configuration by walking up from the working directory.
+	cmd.Dir = scriptDir
 	cmd.Env = []string{
 		"HOME=" + home,
-		"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
+		"PATH=" + realPythonBinDir(t) + ":/usr/bin:/bin",
 	}
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "install script failed: %s", out)
+}
+
+// realPythonBinDir returns a directory whose only entry is a python3 symlink
+// pointing at the real interpreter. exec.LookPath can resolve python3 to a
+// version-manager shim (e.g. mise), and putting the shim directory on the
+// subprocess PATH breaks the test's isolation twice over: the directory holds
+// shims for every managed tool (including codex, defeating the stub), and each
+// shim re-execs the manager, which under the scrubbed HOME cannot see the
+// user's per-machine trust state and refuses to run at all. Asking the
+// interpreter for sys.executable pierces any shim.
+func realPythonBinDir(t *testing.T) string {
+	t.Helper()
+
+	pythonPath, err := exec.LookPath("python3")
+	require.NoError(t, err, "python3 is required by the generated install script")
+	out, err := exec.Command(pythonPath, "-c", "import sys; print(sys.executable)").Output()
+	require.NoError(t, err, "resolve the real python3 interpreter")
+	realPython := strings.TrimSpace(string(out))
+	require.NotEmpty(t, realPython, "sys.executable must not be empty")
+
+	dir := t.TempDir()
+	require.NoError(t, os.Symlink(realPython, filepath.Join(dir, "python3")))
+	return dir
 }
 
 func seededCodexInstallConfig(plugin, marketplace string, approvals []codexHookApproval) string {
