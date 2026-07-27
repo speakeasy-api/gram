@@ -25,6 +25,11 @@ var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:\s*<message-context>.*?</mes
 
 // StripLeadingEnvelopes removes any leading harness framing so downstream LLM
 // prompts (titles, session summaries) see only the human-authored turn text.
+// When no allowlisted envelope is present the input is returned unchanged so
+// intentional leading/trailing whitespace (e.g. indented pasted code) is kept.
 func StripLeadingEnvelopes(s string) string {
+	if !leadingEnvelopeRE.MatchString(s) {
+		return s
+	}
 	return strings.TrimSpace(leadingEnvelopeRE.ReplaceAllString(s, ""))
 }

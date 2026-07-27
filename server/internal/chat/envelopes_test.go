@@ -37,6 +37,13 @@ func TestStripLeadingEnvelopesLeavesPlainTextUntouched(t *testing.T) {
 	require.Equal(t, "just a normal message", chat.StripLeadingEnvelopes("just a normal message"))
 }
 
+func TestStripLeadingEnvelopesPreservesWhitespaceWhenNoEnvelope(t *testing.T) {
+	t.Parallel()
+
+	input := "  indented code\n  next line  "
+	require.Equal(t, input, chat.StripLeadingEnvelopes(input))
+}
+
 // Only known harness envelopes are stripped. A message that legitimately opens
 // with user markup (a <details> block, a pasted snippet, etc.) must survive — a
 // fully-generic <tag>…</tag> match would eat it and distort the prompt.
