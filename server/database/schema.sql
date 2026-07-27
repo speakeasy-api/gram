@@ -380,7 +380,6 @@ CREATE TABLE IF NOT EXISTS skill_edit_suggestions (
   skill_id uuid NOT NULL,
   base_version_id uuid NOT NULL,
 
-  proposed_diff TEXT NOT NULL,
   rationale TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'open',
   scored_session_count bigint NOT NULL DEFAULT 0,
@@ -393,8 +392,7 @@ CREATE TABLE IF NOT EXISTS skill_edit_suggestions (
   CONSTRAINT skill_edit_suggestions_pkey PRIMARY KEY (id),
   CONSTRAINT skill_edit_suggestions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT skill_edit_suggestions_project_id_skill_id_fkey FOREIGN KEY (project_id, skill_id) REFERENCES skills (project_id, id) ON DELETE NO ACTION,
-  CONSTRAINT skill_edit_suggestions_skill_id_base_version_id_fkey FOREIGN KEY (skill_id, base_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION,
-  CONSTRAINT skill_edit_suggestions_proposed_diff_size_check CHECK (octet_length(proposed_diff) <= 131072)
+  CONSTRAINT skill_edit_suggestions_skill_id_base_version_id_fkey FOREIGN KEY (skill_id, base_version_id) REFERENCES skill_versions (skill_id, id) ON DELETE NO ACTION
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS skill_edit_suggestions_skill_id_open_key
@@ -408,18 +406,38 @@ CREATE INDEX IF NOT EXISTS skill_edit_suggestions_project_id_skill_id_created_at
 ON skill_edit_suggestions (project_id, skill_id, created_at DESC);
 
 -- Evidence linking each suggestion to the feedback rows it was generated from.
-CREATE TABLE IF NOT EXISTS skill_edit_suggestion_feedback (
+CREATE TABLE IF NOT EXISTS skill_edit_suggestion_changes (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   suggestion_id uuid NOT NULL,
+
+  proposed_diff TEXT NOT NULL,
+  rationale TEXT NOT NULL,
+  position integer NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT skill_edit_suggestion_changes_pkey PRIMARY KEY (id),
+  CONSTRAINT skill_edit_suggestion_changes_project_id_suggestion_id_fkey FOREIGN KEY (project_id, suggestion_id) REFERENCES skill_edit_suggestions (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_edit_suggestion_changes_proposed_diff_size_check CHECK (octet_length(proposed_diff) <= 131072)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS skill_edit_suggestion_changes_project_id_id_key ON skill_edit_suggestion_changes (project_id, id);
+
+CREATE INDEX IF NOT EXISTS skill_edit_suggestion_changes_suggestion_position_idx ON skill_edit_suggestion_changes (project_id, suggestion_id, position);
+
+CREATE TABLE IF NOT EXISTS skill_edit_suggestion_feedback (
+  project_id uuid NOT NULL,
+  change_id uuid NOT NULL,
   feedback_id uuid NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT skill_edit_suggestion_feedback_pkey PRIMARY KEY (suggestion_id, feedback_id),
-  CONSTRAINT skill_edit_suggestion_feedback_project_id_suggestion_id_fkey FOREIGN KEY (project_id, suggestion_id) REFERENCES skill_edit_suggestions (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT skill_edit_suggestion_feedback_pkey PRIMARY KEY (change_id, feedback_id),
+  CONSTRAINT skill_edit_suggestion_feedback_project_id_change_id_fkey FOREIGN KEY (project_id, change_id) REFERENCES skill_edit_suggestion_changes (project_id, id) ON DELETE CASCADE,
   CONSTRAINT skill_edit_suggestion_feedback_project_id_feedback_id_fkey FOREIGN KEY (project_id, feedback_id) REFERENCES skill_feedback (project_id, id) ON DELETE CASCADE
 );
-
 CREATE INDEX IF NOT EXISTS skill_edit_suggestion_feedback_project_id_feedback_id_idx
 ON skill_edit_suggestion_feedback (project_id, feedback_id);
 

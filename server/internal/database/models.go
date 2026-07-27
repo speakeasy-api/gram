@@ -1780,7 +1780,6 @@ type SkillEditSuggestion struct {
 	ProjectID          uuid.UUID
 	SkillID            uuid.UUID
 	BaseVersionID      uuid.UUID
-	ProposedDiff       string
 	Rationale          string
 	Status             string
 	ScoredSessionCount int64
@@ -1790,11 +1789,22 @@ type SkillEditSuggestion struct {
 	UpdatedAt          pgtype.Timestamptz
 }
 
-type SkillEditSuggestionFeedback struct {
+type SkillEditSuggestionChange struct {
+	ID           uuid.UUID
 	ProjectID    uuid.UUID
 	SuggestionID uuid.UUID
-	FeedbackID   uuid.UUID
+	ProposedDiff string
+	Rationale    string
+	Position     int32
 	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type SkillEditSuggestionFeedback struct {
+	ProjectID  uuid.UUID
+	ChangeID   uuid.UUID
+	FeedbackID uuid.UUID
+	CreatedAt  pgtype.Timestamptz
 }
 
 type SkillEfficacyEvaluation struct {
