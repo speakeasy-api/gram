@@ -13,7 +13,11 @@ import (
 // non-secret arguments survive so the evidence stays matchable server-side.
 
 var (
-	secretParamRE    = regexp.MustCompile(`(?i)(key|token|secret|password|passwd|credential|auth)`)
+	// `auth` as a bare substring masks benign params like `author=alice`, so it
+	// only matches as a bounded segment or the full `authorization` name; the
+	// other keywords stay substring matches so concatenated forms like `apikey`
+	// still redact. Kept in lockstep with the opencode hook's SECRET_PARAM.
+	secretParamRE    = regexp.MustCompile(`(?i)(key|token|secret|password|passwd|credential)|(^|[^a-z])auth([^a-z]|$)|authorization`)
 	signatureParamRE = regexp.MustCompile(`(?i)^(sig|signature|x-amz-signature|x-goog-signature)$`)
 )
 

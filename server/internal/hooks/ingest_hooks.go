@@ -414,7 +414,9 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	// Every other adapter keeps today's behavior (warn defers to its
 	// ask-capable legacy handler). MVP; ack/retry challenge deferred; universal
 	// warn parity on the canonical path is tracked in DNO-648.
-	isOpencode := strings.TrimSpace(payload.Source.Adapter) == "opencode"
+	// Match case-insensitively, mirroring the adapter validation (isReservedAssistantAdapter),
+	// so warn->deny enforcement holds regardless of how the sender cases "opencode".
+	isOpencode := strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "opencode")
 	switch strings.TrimSpace(payload.Event.Type) {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{

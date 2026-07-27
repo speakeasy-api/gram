@@ -108,7 +108,13 @@ export function redactMcpCommand(command: readonly string[]): string {
 // drop user:pass@ and the fragment, mask secret/signature-named query values,
 // keep host/path/benign params matchable. Fail-open: an unparseable url is
 // returned unchanged (observability over strictness, as the relay does).
-const SECRET_PARAM = /(key|token|secret|password|passwd|credential|auth)/i;
+// `auth` as a bare substring masks benign params like `author=alice`, so it
+// only matches as a bounded segment (auth, x-auth-token) or the full
+// `authorization` name; the other keywords stay substring matches so
+// concatenated forms like `apikey`/`accesstoken` still redact. Kept in lockstep
+// with the Go relay's secretParamRE (hooks/relay/redact.go).
+const SECRET_PARAM =
+  /(key|token|secret|password|passwd|credential)|(^|[^a-z])auth([^a-z]|$)|authorization/i;
 const SIGNATURE_PARAM = /^(sig|signature|x-amz-signature|x-goog-signature)$/i;
 
 export function redactUrl(raw: string): string {

@@ -31,12 +31,16 @@ export async function send(body: IngestBody): Promise<Verdict | undefined> {
   // already warned once). Fail-open: drop the event rather than throw.
   if (!isSecureUrl(url)) return undefined;
 
+  // One 5s budget spans both attempts + backoff so the block path can't hold
+  // the agent for ~10s: each attempt gets only the time left before the shared
+  // deadline, and we bail if there's no budget for a retry. A timeout fails
+  // open, so the ceiling stays "agent waits ≤5s then proceeds."
+  const deadline = Date.now() + TIMEOUT_MS;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    // ponytail: shared 5s timeout on the block path; split budget if it drags
-    // tool calls. Enforcement now rides this round-trip, but a timeout fails
-    // open, so the ceiling is "agent waits ≤5s then proceeds."
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return undefined;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), remaining);
     try {
       const res = await fetch(`${url}/rpc/hooks.ingest`, {
         method: "POST",
@@ -66,7 +70,10 @@ export async function send(body: IngestBody): Promise<Verdict | undefined> {
     if (attempt < MAX_ATTEMPTS) {
       // ponytail: fixed jittered backoff, no exponential curve — revisit if
       // ingest starts throttling under a bigger retry budget.
-      await sleep(RETRY_BASE_MS + Math.random() * RETRY_BASE_MS);
+      const backoff = RETRY_BASE_MS + Math.random() * RETRY_BASE_MS;
+      // Skip the retry entirely if the backoff would blow the shared deadline.
+      if (Date.now() + backoff >= deadline) return undefined;
+      await sleep(backoff);
     }
   }
   return undefined;
