@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -77,6 +78,8 @@ func newTestSpendRulesService(t *testing.T) (context.Context, *testInstance) {
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -87,6 +90,8 @@ func newTestSpendRulesService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	sig := &signalerStub{}
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagBudgets, authCtx.ActiveOrganizationID, true)
 
 	svc := spendrules.NewService(
 		logger,
@@ -98,6 +103,7 @@ func newTestSpendRulesService(t *testing.T) (context.Context, *testInstance) {
 		audit.NewLogger(),
 		celEng,
 		cache.NewRedisCacheAdapter(redisClient),
+		flags,
 		sig,
 	)
 

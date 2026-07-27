@@ -11,6 +11,7 @@ import (
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
@@ -136,17 +137,19 @@ func TestGateEvaluatesRuleCELAgainstCachedUsage(t *testing.T) {
 	actors := testActors()
 	// Future window: the block must fire on cached usage, not be skipped as an
 	// already-reset window.
+	windowStart := time.Now().UTC().Add(-time.Hour)
 	windowEnd := time.Now().UTC().AddDate(0, 0, 7)
 	writeGateRules(t, ctx, cacheImpl, "org_123", spendrules.GateRule{
-		RuleURN:    "spend_rule:engineering:v1",
-		RuleName:   "Engineering budget",
-		Action:     spendrules.ActionBlock,
-		TargetExpr: `department_name == "Engineering"`,
-		RuleExpr:   `used_pct >= warn_at_pct`,
-		LimitUSD:   100,
-		WarnAtPct:  80,
-		WindowKind: spendrules.WindowMonthly,
-		WindowEnd:  windowEnd,
+		RuleURN:     "spend_rule:engineering:v1",
+		RuleName:    "Engineering budget",
+		Action:      spendrules.ActionBlock,
+		TargetExpr:  `department_name == "Engineering"`,
+		RuleExpr:    `used_pct >= warn_at_pct`,
+		LimitUSD:    100,
+		WarnAtPct:   80,
+		WindowKind:  spendrules.WindowMonthly,
+		WindowStart: windowStart,
+		WindowEnd:   windowEnd,
 	})
 	writeGateActor(t, ctx, cacheImpl, "org_123", actors[0], chrepo.ActorWindowSpendRow{
 		Email:       "ada@acme.com",
@@ -171,14 +174,15 @@ func TestGateSkipsExpiredWindow(t *testing.T) {
 	cacheImpl := newGateCache()
 	actors := testActors()
 	writeGateRules(t, ctx, cacheImpl, "org_123", spendrules.GateRule{
-		RuleURN:    "spend_rule:engineering:v1",
-		RuleName:   "Engineering budget",
-		Action:     spendrules.ActionBlock,
-		TargetExpr: `department_name == "Engineering"`,
-		RuleExpr:   `used_pct >= warn_at_pct`,
-		LimitUSD:   100,
-		WarnAtPct:  80,
-		WindowKind: spendrules.WindowMonthly,
+		RuleURN:     "spend_rule:engineering:v1",
+		RuleName:    "Engineering budget",
+		Action:      spendrules.ActionBlock,
+		TargetExpr:  `department_name == "Engineering"`,
+		RuleExpr:    `used_pct >= warn_at_pct`,
+		LimitUSD:    100,
+		WarnAtPct:   80,
+		WindowKind:  spendrules.WindowMonthly,
+		WindowStart: time.Now().UTC().Add(-2 * time.Hour),
 		// Window already ended: the actor entry's spend belongs to a window that
 		// has reset, so the block must lift even though the cached usage breaches.
 		WindowEnd: time.Now().UTC().Add(-time.Hour),
@@ -203,15 +207,16 @@ func TestGateEvaluatesTargetCELBeforeRuleCEL(t *testing.T) {
 	cacheImpl := newGateCache()
 	actors := testActors()
 	writeGateRules(t, ctx, cacheImpl, "org_123", spendrules.GateRule{
-		RuleURN:    "spend_rule:engineering:v1",
-		RuleName:   "Engineering budget",
-		Action:     spendrules.ActionBlock,
-		TargetExpr: `department_name == "Engineering"`,
-		RuleExpr:   `spend_usd >= limit_usd`,
-		LimitUSD:   100,
-		WarnAtPct:  80,
-		WindowKind: spendrules.WindowMonthly,
-		WindowEnd:  time.Now().UTC().AddDate(0, 0, 7),
+		RuleURN:     "spend_rule:engineering:v1",
+		RuleName:    "Engineering budget",
+		Action:      spendrules.ActionBlock,
+		TargetExpr:  `department_name == "Engineering"`,
+		RuleExpr:    `spend_usd >= limit_usd`,
+		LimitUSD:    100,
+		WarnAtPct:   80,
+		WindowKind:  spendrules.WindowMonthly,
+		WindowStart: time.Now().UTC().Add(-time.Hour),
+		WindowEnd:   time.Now().UTC().AddDate(0, 0, 7),
 	})
 	writeGateActor(t, ctx, cacheImpl, "org_123", actors[1], chrepo.ActorWindowSpendRow{
 		Email:       "sam@acme.com",
@@ -222,6 +227,38 @@ func TestGateEvaluatesTargetCELBeforeRuleCEL(t *testing.T) {
 	gate := newTestGate(t, cacheImpl)
 
 	block, err := gate.CheckBlocked(ctx, "org_123", "user_sam")
+	require.NoError(t, err)
+	require.Nil(t, block)
+}
+
+func TestGateSkipsActorComputedBeforeWindowStart(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	cacheImpl := newGateCache()
+	actors := testActors()
+	windowStart := time.Now().UTC().Add(time.Hour)
+	writeGateRules(t, ctx, cacheImpl, "org_123", spendrules.GateRule{
+		RuleURN:     "spend_rule:engineering:v1",
+		RuleName:    "Engineering budget",
+		Action:      spendrules.ActionBlock,
+		TargetExpr:  `department_name == "Engineering"`,
+		RuleExpr:    `spend_usd >= limit_usd`,
+		LimitUSD:    100,
+		WarnAtPct:   80,
+		WindowKind:  spendrules.WindowMonthly,
+		WindowStart: windowStart,
+		WindowEnd:   windowStart.AddDate(0, 1, 0),
+	})
+	require.NoError(t, spendrules.WriteGateActor(ctx, cacheImpl, "org_123", spendrules.NewGateActor(actors[0], chrepo.ActorWindowSpendRow{
+		Email:       "ada@acme.com",
+		DailyCost:   0,
+		WeeklyCost:  0,
+		MonthlyCost: 150,
+	}, windowStart.Add(-time.Second))))
+
+	gate := newTestGate(t, cacheImpl)
+	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada")
 	require.NoError(t, err)
 	require.Nil(t, block)
 }
@@ -273,4 +310,55 @@ func TestGateEmptyRulesAllow(t *testing.T) {
 	block, err := gate.CheckBlocked(ctx, "org_123", "user_ada")
 	require.NoError(t, err)
 	require.Nil(t, block)
+}
+
+func TestWriteGateActorNoopCacheDoesNotFail(t *testing.T) {
+	t.Parallel()
+
+	actor := testActors()[0]
+	err := spendrules.WriteGateActor(t.Context(), cache.NoopCache, "org_123", spendrules.NewGateActor(actor, spendrules.EmptyActorSpend(actor.Email), time.Now().UTC()))
+	require.NoError(t, err)
+}
+
+func TestWriteGateRulesFallbackSkipsOlderPayload(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	cacheImpl := newGateCache()
+	newer := spendrules.GateRules{
+		SourceUpdatedAt: time.Date(2026, time.July, 2, 0, 0, 0, 0, time.UTC),
+		Rules: []spendrules.GateRule{{
+			RuleURN:     "spend_rule:newer:v1",
+			RuleName:    "Newer",
+			Action:      spendrules.ActionBlock,
+			TargetExpr:  `true`,
+			RuleExpr:    `spend_usd >= limit_usd`,
+			LimitUSD:    100,
+			WarnAtPct:   80,
+			WindowKind:  spendrules.WindowMonthly,
+			WindowStart: time.Now().UTC().Add(-time.Hour),
+			WindowEnd:   time.Now().UTC().Add(time.Hour),
+		}},
+	}
+	older := spendrules.GateRules{
+		SourceUpdatedAt: time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC),
+		Rules: []spendrules.GateRule{{
+			RuleURN:     "spend_rule:older:v1",
+			RuleName:    "Older",
+			Action:      spendrules.ActionBlock,
+			TargetExpr:  `true`,
+			RuleExpr:    `spend_usd >= limit_usd`,
+			LimitUSD:    100,
+			WarnAtPct:   80,
+			WindowKind:  spendrules.WindowMonthly,
+			WindowStart: time.Now().UTC().Add(-time.Hour),
+			WindowEnd:   time.Now().UTC().Add(time.Hour),
+		}},
+	}
+	require.NoError(t, spendrules.WriteGateRules(ctx, cacheImpl, "org_123", newer))
+	require.NoError(t, spendrules.WriteGateRules(ctx, cacheImpl, "org_123", older))
+
+	var cached spendrules.GateRules
+	require.NoError(t, cacheImpl.Get(ctx, "spend_gate:rules:org_123", &cached))
+	require.Equal(t, "spend_rule:newer:v1", cached.Rules[0].RuleURN)
 }

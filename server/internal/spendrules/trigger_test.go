@@ -34,6 +34,10 @@ func (s *usageSignalerStub) Calls() []spendrules.ActorEvaluationSignal {
 }
 
 func usageRow(organizationID, urn string) telemetry.LogParams {
+	return usageRowWithEmail(organizationID, urn, "ada@acme.com")
+}
+
+func usageRowWithEmail(organizationID, urn, email string) telemetry.LogParams {
 	return telemetry.LogParams{
 		Timestamp: time.Now(),
 		ToolInfo: telemetry.ToolInfo{
@@ -45,7 +49,7 @@ func usageRow(organizationID, urn string) telemetry.LogParams {
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
-		UserInfo:   telemetry.UserInfoByEmail("ada@acme.com"),
+		UserInfo:   telemetry.UserInfoByEmail(email),
 		Attributes: nil,
 	}
 }
@@ -56,15 +60,16 @@ func writeTestGateRules(t *testing.T, ctx context.Context, cacheImpl *gateCache,
 	t.Helper()
 
 	writeGateRules(t, ctx, cacheImpl, organizationID, spendrules.GateRule{
-		RuleURN:    "spend_rule:engineering:v1",
-		RuleName:   "Engineering budget",
-		Action:     spendrules.ActionBlock,
-		TargetExpr: `department_name == "Engineering"`,
-		RuleExpr:   `used_pct >= warn_at_pct`,
-		LimitUSD:   100,
-		WarnAtPct:  80,
-		WindowKind: spendrules.WindowMonthly,
-		WindowEnd:  time.Now().UTC().AddDate(0, 0, 7),
+		RuleURN:     "spend_rule:engineering:v1",
+		RuleName:    "Engineering budget",
+		Action:      spendrules.ActionBlock,
+		TargetExpr:  `department_name == "Engineering"`,
+		RuleExpr:    `used_pct >= warn_at_pct`,
+		LimitUSD:    100,
+		WarnAtPct:   80,
+		WindowKind:  spendrules.WindowMonthly,
+		WindowStart: time.Now().UTC().Add(-time.Hour),
+		WindowEnd:   time.Now().UTC().AddDate(0, 0, 7),
 	})
 }
 
@@ -156,6 +161,28 @@ func TestUsageTriggerDedupesOrgsWithinBatch(t *testing.T) {
 		{OrganizationID: "org_a", UserID: "", Email: "ada@acme.com"},
 		{OrganizationID: "org_b", UserID: "", Email: "ada@acme.com"},
 	}, sig.Calls())
+}
+
+func TestUsageTriggerDedupesNormalizedActorWithinBatch(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	cacheImpl := newGateCache()
+	writeTestGateRules(t, ctx, cacheImpl, "org_123")
+
+	sig := &usageSignalerStub{}
+	trigger := spendrules.NewUsageTrigger(testenv.NewLogger(t), cacheImpl, sig, time.Hour)
+	t.Cleanup(func() { _ = trigger.Shutdown(context.Background()) })
+
+	trigger.OnTelemetryLogsWritten(ctx, []telemetry.LogParams{
+		usageRowWithEmail("org_123", "claude-code:otel:logs", " Ada@Acme.com "),
+		usageRowWithEmail("org_123", "codex:usage:metrics", "ada@acme.com"),
+	})
+
+	require.Eventually(t, func() bool {
+		return len(sig.Calls()) == 1
+	}, 2*time.Second, 5*time.Millisecond)
+	require.Equal(t, []spendrules.ActorEvaluationSignal{{OrganizationID: "org_123", UserID: "", Email: " Ada@Acme.com "}}, sig.Calls())
 }
 
 func TestUsageTriggerThrottlesAndFlushesTrailingEdge(t *testing.T) {

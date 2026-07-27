@@ -27,7 +27,7 @@ const EvaluationInterval = 30 * time.Second
 // write or evaluator refresh. It must comfortably exceed one scheduled sweep so
 // a slow-but-progressing reconciler does not let entries expire and enforcement
 // fail open between cycles.
-const spendGateTTL = 4 * EvaluationInterval
+const spendGateTTL = 30 * time.Minute
 
 // maxGatePrograms bounds the compiled-CEL cache. Rule edits mint new target
 // and rule expressions over a long-lived gate process, so the cache is flushed
@@ -48,15 +48,16 @@ type Block struct {
 // on rule mutations so the hook gate can evaluate the same CEL predicates as
 // background evaluation without touching Postgres or ClickHouse.
 type GateRule struct {
-	RuleURN    string    `json:"rule_urn"`
-	RuleName   string    `json:"rule_name"`
-	Action     string    `json:"action"`
-	TargetExpr string    `json:"target_expr"`
-	RuleExpr   string    `json:"rule_expr"`
-	LimitUSD   float64   `json:"limit_usd"`
-	WarnAtPct  int32     `json:"warn_at_pct"`
-	WindowKind string    `json:"window_kind"`
-	WindowEnd  time.Time `json:"window_end"`
+	RuleURN     string    `json:"rule_urn"`
+	RuleName    string    `json:"rule_name"`
+	Action      string    `json:"action"`
+	TargetExpr  string    `json:"target_expr"`
+	RuleExpr    string    `json:"rule_expr"`
+	LimitUSD    float64   `json:"limit_usd"`
+	WarnAtPct   int32     `json:"warn_at_pct"`
+	WindowKind  string    `json:"window_kind"`
+	WindowStart time.Time `json:"window_start"`
+	WindowEnd   time.Time `json:"window_end"`
 }
 
 type GateRules struct {
@@ -157,9 +158,14 @@ func (g *Gate) CheckBlocked(ctx context.Context, organizationID, userID string) 
 		}
 
 		// The actor entry holds spend for the window that was current when the
-		// evaluator last wrote it. Once that window has ended, the block must
-		// lift immediately (spend resets to zero for the new window) rather than
-		// keep denying on stale spend until the next refresh.
+		// evaluator last wrote it. If rules have advanced to a newer window,
+		// ignore the stale actor entry until the next refresh.
+		if !rule.WindowStart.IsZero() && actor.ComputedAt.Before(rule.WindowStart) {
+			continue
+		}
+
+		// Once the rule window has ended, the block must lift immediately
+		// rather than keep denying on stale spend until the next refresh.
 		if !rule.WindowEnd.IsZero() && !now.Before(rule.WindowEnd) {
 			continue
 		}
@@ -293,6 +299,17 @@ func WriteGateRules(ctx context.Context, cacheImpl cache.Cache, organizationID s
 		}
 		return nil
 	}
+	var current GateRules
+	err := cacheImpl.Get(ctx, key, &current)
+	if err == nil && current.SourceUpdatedAt.After(rules.SourceUpdatedAt) {
+		return nil
+	}
+	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+		if cacheImpl == cache.NoopCache {
+			return nil
+		}
+		return fmt.Errorf("read spend gate rules for write: %w", err)
+	}
 	if err := cacheImpl.Set(ctx, key, rules, spendGateTTL); err != nil {
 		return fmt.Errorf("write spend gate rules: %w", err)
 	}
@@ -347,6 +364,9 @@ func WriteGateActor(ctx context.Context, cacheImpl cache.Cache, organizationID s
 		return nil
 	}
 	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+		if cacheImpl == cache.NoopCache {
+			return nil
+		}
 		return fmt.Errorf("read spend gate actor for write: %w", err)
 	}
 	if err := cacheImpl.Set(ctx, key, actor, spendGateTTL); err != nil {

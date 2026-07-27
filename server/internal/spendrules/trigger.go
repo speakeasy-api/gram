@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/throttle"
 )
@@ -59,9 +60,7 @@ func NewUsageTrigger(logger *slog.Logger, cacheImpl cache.Cache, signaler ActorE
 		signaler: signaler,
 		throttle: nil,
 	}
-	t.throttle = throttle.New(cooldown, func(signal ActorEvaluationSignal) string {
-		return signal.OrganizationID + ":" + signal.UserID + ":" + strings.ToLower(signal.Email)
-	}, func(signal ActorEvaluationSignal) error {
+	t.throttle = throttle.New(cooldown, usageSignalKey, func(signal ActorEvaluationSignal) error {
 		// Trailing edge fires from a timer goroutine after the request
 		// context that suppressed it is gone. Bound it so a stuck Redis or
 		// Temporal call cannot outlive the graceful-shutdown flush.
@@ -88,7 +87,7 @@ func (t *UsageTrigger) OnTelemetryLogsWritten(ctx context.Context, params []tele
 		if signal.UserID == "" && signal.Email == "" {
 			continue
 		}
-		key := organizationID + ":" + signal.UserID + ":" + strings.ToLower(signal.Email)
+		key := usageSignalKey(signal)
 		if _, ok := seen[key]; ok {
 			continue
 		}
@@ -97,6 +96,10 @@ func (t *UsageTrigger) OnTelemetryLogsWritten(ctx context.Context, params []tele
 			t.signalAsync(ctx, signal)
 		}
 	}
+}
+
+func usageSignalKey(signal ActorEvaluationSignal) string {
+	return signal.OrganizationID + ":" + signal.UserID + ":" + conv.NormalizeEmail(signal.Email)
 }
 
 // signalAsync fires a leading-edge signal off the telemetry write path. The

@@ -54,15 +54,16 @@ func seedSpendBlock(t *testing.T, ctx context.Context, ti *testInstance, organiz
 	require.NoError(t, spendrules.WriteGateRules(ctx, ti.spendGateCache, organizationID, spendrules.GateRules{
 		SourceUpdatedAt: time.Now().UTC(),
 		Rules: []spendrules.GateRule{{
-			RuleURN:    ruleURN,
-			RuleName:   "Intern hard limit",
-			Action:     spendrules.ActionBlock,
-			TargetExpr: `true`,
-			RuleExpr:   `spend_usd >= limit_usd`,
-			LimitUSD:   100,
-			WarnAtPct:  80,
-			WindowKind: spendrules.WindowMonthly,
-			WindowEnd:  time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+			RuleURN:     ruleURN,
+			RuleName:    "Intern hard limit",
+			Action:      spendrules.ActionBlock,
+			TargetExpr:  `true`,
+			RuleExpr:    `spend_usd >= limit_usd`,
+			LimitUSD:    100,
+			WarnAtPct:   80,
+			WindowKind:  spendrules.WindowMonthly,
+			WindowStart: time.Now().UTC().Add(-time.Hour),
+			WindowEnd:   time.Now().UTC().AddDate(0, 0, 7),
 		}},
 	}))
 	for _, email := range emails {

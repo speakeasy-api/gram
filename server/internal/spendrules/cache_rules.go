@@ -17,20 +17,21 @@ func BuildGateRules(rows []repo.SpendRule, now time.Time) (GateRules, error) {
 		if row.UpdatedAt.Valid && row.UpdatedAt.Time.After(sourceUpdatedAt) {
 			sourceUpdatedAt = row.UpdatedAt.Time
 		}
-		_, windowEnd, err := WindowBounds(row.WindowKind, now)
+		windowStart, windowEnd, err := WindowBounds(row.WindowKind, now)
 		if err != nil {
 			return GateRules{}, fmt.Errorf("window bounds for rule %s: %w", row.ID, err)
 		}
 		rules = append(rules, GateRule{
-			RuleURN:    urn.NewSpendRule(row.Slug, row.Version).String(),
-			RuleName:   row.Name,
-			Action:     row.Action,
-			TargetExpr: row.TargetExpr,
-			RuleExpr:   row.RuleExpr,
-			LimitUSD:   row.LimitUsdCents.USD(),
-			WarnAtPct:  row.WarnAtPct,
-			WindowKind: row.WindowKind,
-			WindowEnd:  windowEnd,
+			RuleURN:     urn.NewSpendRule(row.Slug, row.Version).String(),
+			RuleName:    row.Name,
+			Action:      row.Action,
+			TargetExpr:  row.TargetExpr,
+			RuleExpr:    row.RuleExpr,
+			LimitUSD:    row.LimitUsdCents.USD(),
+			WarnAtPct:   row.WarnAtPct,
+			WindowKind:  row.WindowKind,
+			WindowStart: windowStart,
+			WindowEnd:   windowEnd,
 		})
 	}
 	if sourceUpdatedAt.IsZero() {
