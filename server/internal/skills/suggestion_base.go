@@ -14,9 +14,9 @@ import (
 )
 
 // ReplayOpenSuggestionOntoBase repoints an open suggestion at the skill's
-// current base version. Because a suggestion stores a diff rather than a whole
-// manifest, it survives edits it does not overlap; it is superseded only when
-// its diff no longer applies or the newer version already carries the edit.
+// current base version. Because each proposed change stores its own diff, a
+// change survives edits it does not overlap and is dropped on its own when it
+// no longer applies; the suggestion is superseded only once nothing is left.
 func ReplayOpenSuggestionOntoBase(ctx context.Context, queries *repo.Queries, projectID, skillID uuid.UUID) error {
 	base, err := queries.ResolveSkillSuggestionBase(ctx, repo.ResolveSkillSuggestionBaseParams{ProjectID: projectID, SkillID: skillID})
 	switch {
@@ -36,14 +36,41 @@ func ReplayOpenSuggestionOntoBase(ctx context.Context, queries *repo.Queries, pr
 		return nil
 	}
 
-	replayed, err := replayDiff(base.BaseContent, open.ProposedDiff)
-	switch {
-	case err != nil:
-		return err
-	case replayed != "":
+	changes, err := queries.ListSkillEditSuggestionChanges(ctx, repo.ListSkillEditSuggestionChangesParams{
+		ProjectID:     projectID,
+		SuggestionIds: []uuid.UUID{open.ID},
+	})
+	if err != nil {
+		return fmt.Errorf("list skill suggestion changes for replay: %w", err)
+	}
+
+	remaining := 0
+	for _, change := range changes {
+		replayed, err := replayDiff(base.BaseContent, change.ProposedDiff)
+		if err != nil {
+			return err
+		}
+		if replayed == "" {
+			if err := queries.DeleteSkillEditSuggestionChange(ctx, repo.DeleteSkillEditSuggestionChangeParams{ProjectID: projectID, ID: change.ID}); err != nil {
+				return fmt.Errorf("drop replayed skill suggestion change: %w", err)
+			}
+			continue
+		}
+		remaining++
+		if replayed == change.ProposedDiff {
+			continue
+		}
+		if err := queries.RebaseSkillEditSuggestionChange(ctx, repo.RebaseSkillEditSuggestionChangeParams{
+			ProposedDiff: replayed, ProjectID: projectID, ID: change.ID,
+		}); err != nil {
+			return fmt.Errorf("replay skill suggestion change onto current version: %w", err)
+		}
+	}
+
+	if remaining > 0 {
 		if _, err := queries.RebaseOpenSkillEditSuggestion(ctx, repo.RebaseOpenSkillEditSuggestionParams{
-			BaseVersionID: base.BaseVersionID, ProposedDiff: replayed,
-			ProjectID: projectID, SkillID: skillID, ID: open.ID,
+			BaseVersionID: base.BaseVersionID,
+			ProjectID:     projectID, SkillID: skillID, ID: open.ID,
 		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("replay open skill suggestion onto current version: %w", err)
 		}
@@ -61,8 +88,8 @@ func ReplayOpenSuggestionOntoBase(ctx context.Context, queries *repo.Queries, pr
 }
 
 // replayDiff re-renders a stored diff against newer content. It returns an
-// empty diff when the suggestion has nothing left to propose, either because
-// the edit conflicts with the newer content or because it is already applied.
+// empty diff when the change has nothing left to propose, either because it
+// conflicts with the newer content or because it is already applied.
 func replayDiff(baseContent, proposedDiff string) (string, error) {
 	proposed, err := skilldiff.Apply(baseContent, proposedDiff)
 	if errors.Is(err, skilldiff.ErrConflict) {

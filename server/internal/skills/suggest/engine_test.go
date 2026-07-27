@@ -305,8 +305,8 @@ func TestBuildPromptRejectsOversizedBaseWithoutCallingModel(t *testing.T) {
 func TestValidateGenerationRejectsEmptyRationale(t *testing.T) {
 	t.Parallel()
 
-	generation := Generation{Decision: DecisionDecline, ProposedSkillMD: "", Rationale: "  "}
-	err := validateGeneration(&generation)
+	generation := Generation{Decision: DecisionDecline, Changes: nil, Rationale: "  "}
+	err := validateGeneration(&generation, 0)
 	require.ErrorIs(t, err, ErrModelFailure)
 	require.ErrorContains(t, err, "rationale is empty")
 }
@@ -314,15 +314,33 @@ func TestValidateGenerationRejectsEmptyRationale(t *testing.T) {
 func TestValidateGenerationClearsDeclinedProposal(t *testing.T) {
 	t.Parallel()
 
-	generation := Generation{Decision: DecisionDecline, ProposedSkillMD: "ignored", Rationale: "The skill already covers this."}
-	require.NoError(t, validateGeneration(&generation))
-	require.Empty(t, generation.ProposedSkillMD)
+	generation := Generation{
+		Decision:  DecisionDecline,
+		Changes:   []GeneratedChange{{Find: "a", Replace: "b", Rationale: "ignored", Evidence: nil}},
+		Rationale: "The skill already covers this.",
+	}
+	require.NoError(t, validateGeneration(&generation, 1))
+	require.Empty(t, generation.Changes)
+}
+
+func TestValidateGenerationDropsEvidenceOutsideTheSuppliedFeedback(t *testing.T) {
+	t.Parallel()
+
+	generation := Generation{
+		Decision: DecisionPropose,
+		Changes: []GeneratedChange{{
+			Find: "a", Replace: "b", Rationale: "why", Evidence: []int{2, 0, 9, 2, 1},
+		}},
+		Rationale: "why",
+	}
+	require.NoError(t, validateGeneration(&generation, 2))
+	require.Equal(t, []int{2, 1}, generation.Changes[0].Evidence)
 }
 
 func suggestionWatermark(baseID uuid.UUID, status string, scored int64, updated time.Time) *repo.SkillEditSuggestion {
 	return &repo.SkillEditSuggestion{
 		ID: uuid.New(), ProjectID: uuid.Nil, SkillID: uuid.Nil, BaseVersionID: baseID,
-		ProposedDiff: "", Rationale: "", Status: status, ScoredSessionCount: scored,
+		Rationale: "", Status: status, ScoredSessionCount: scored,
 		ApprovedByUserID: pgtype.Text{}, ApprovedAt: pgtype.Timestamptz{},
 		CreatedAt: pgtype.Timestamptz{}, UpdatedAt: pgtype.Timestamptz{Time: updated, Valid: true},
 	}

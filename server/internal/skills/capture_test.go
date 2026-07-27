@@ -211,7 +211,7 @@ func TestCapturedVersionDoesNotOutrankManualDistribution(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	manual := createSkill(t, ctx, ti, "distribution-priority", "Manual version.")
-	open, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
+	open, err := seedSuggestion(t, ctx, ti, seedSuggestionParams{
 		ProposedDiff:       diffTo(t, manual.Version.Content, skillManifest("distribution-priority", "Suggested.", "suggested")),
 		Rationale:          "evidence",
 		ScoredSessionCount: 1,

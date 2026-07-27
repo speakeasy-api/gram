@@ -168,7 +168,6 @@ INSERT INTO skill_edit_suggestions (
   project_id,
   skill_id,
   base_version_id,
-  proposed_diff,
   rationale,
   scored_session_count
 )
@@ -176,7 +175,6 @@ SELECT
   s.project_id,
   s.id,
   sv.id,
-  @proposed_diff,
   @rationale,
   @scored_session_count
 FROM skills s
@@ -190,8 +188,7 @@ RETURNING *;
 
 -- name: UpdateOpenSkillEditSuggestion :one
 UPDATE skill_edit_suggestions suggestion
-SET proposed_diff = @proposed_diff,
-    rationale = @rationale,
+SET rationale = @rationale,
     scored_session_count = @scored_session_count,
     updated_at = clock_timestamp()
 FROM skills s
@@ -233,7 +230,6 @@ INSERT INTO skill_edit_suggestions (
   project_id,
   skill_id,
   base_version_id,
-  proposed_diff,
   rationale,
   status,
   scored_session_count
@@ -242,7 +238,6 @@ SELECT
   s.project_id,
   s.id,
   sv.id,
-  '',
   @rationale,
   'superseded',
   @scored_session_count
@@ -258,12 +253,12 @@ RETURNING *;
 -- name: LinkSkillEditSuggestionFeedback :execrows
 INSERT INTO skill_edit_suggestion_feedback (
   project_id,
-  suggestion_id,
+  change_id,
   feedback_id
 )
 SELECT
   feedback.project_id,
-  @suggestion_id,
+  @change_id,
   feedback.id
 FROM skill_feedback feedback
 WHERE feedback.project_id = @project_id
@@ -273,13 +268,84 @@ ON CONFLICT DO NOTHING;
 -- name: CountSkillEditSuggestionFeedback :one
 SELECT COUNT(*)
 FROM skill_edit_suggestion_feedback link
+JOIN skill_edit_suggestion_changes change
+  ON change.project_id = link.project_id
+  AND change.id = link.change_id
 WHERE link.project_id = @project_id
-  AND link.suggestion_id = @suggestion_id;
+  AND change.suggestion_id = @suggestion_id;
+
+-- name: CreateSkillEditSuggestionChange :one
+INSERT INTO skill_edit_suggestion_changes (
+  project_id,
+  suggestion_id,
+  proposed_diff,
+  rationale,
+  position
+)
+SELECT
+  suggestion.project_id,
+  suggestion.id,
+  @proposed_diff,
+  @rationale,
+  @position
+FROM skill_edit_suggestions suggestion
+WHERE suggestion.project_id = @project_id
+  AND suggestion.id = @suggestion_id
+RETURNING *;
+
+-- name: DeleteSkillEditSuggestionChanges :exec
+DELETE FROM skill_edit_suggestion_changes
+WHERE project_id = @project_id
+  AND suggestion_id = @suggestion_id;
+
+-- name: DeleteSkillEditSuggestionChange :exec
+DELETE FROM skill_edit_suggestion_changes
+WHERE project_id = @project_id
+  AND id = @id;
+
+-- name: RebaseSkillEditSuggestionChange :exec
+UPDATE skill_edit_suggestion_changes
+SET proposed_diff = @proposed_diff,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND id = @id;
+
+-- name: ListSkillEditSuggestionChanges :many
+SELECT
+  change.*,
+  (
+    SELECT COUNT(*)
+    FROM skill_edit_suggestion_feedback link
+    WHERE link.project_id = change.project_id
+      AND link.change_id = change.id
+  )::bigint AS feedback_count,
+  (
+    SELECT COUNT(DISTINCT feedback.session_id)
+    FROM skill_edit_suggestion_feedback link
+    JOIN skill_feedback feedback
+      ON feedback.project_id = link.project_id
+      AND feedback.id = link.feedback_id
+    WHERE link.project_id = change.project_id
+      AND link.change_id = change.id
+      AND feedback.session_id IS NOT NULL
+  )::bigint AS feedback_session_count
+FROM skill_edit_suggestion_changes change
+WHERE change.project_id = @project_id
+  AND change.suggestion_id = ANY(@suggestion_ids::uuid[])
+ORDER BY change.suggestion_id, change.position, change.id;
+
+-- name: GetSkillEditSuggestionChange :one
+SELECT change.*, suggestion.skill_id, suggestion.base_version_id, suggestion.status
+FROM skill_edit_suggestion_changes change
+JOIN skill_edit_suggestions suggestion
+  ON suggestion.project_id = change.project_id
+  AND suggestion.id = change.suggestion_id
+WHERE change.project_id = @project_id
+  AND change.id = @id;
 
 -- name: RebaseOpenSkillEditSuggestion :one
 UPDATE skill_edit_suggestions suggestion
 SET base_version_id = @base_version_id,
-    proposed_diff = @proposed_diff,
     updated_at = clock_timestamp()
 FROM skills s
 WHERE suggestion.project_id = @project_id

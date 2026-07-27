@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
-	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -252,13 +251,14 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 		return Result{}, err
 	}
 
+	var resolved []resolvedChange
 	if generation.Decision == DecisionPropose {
-		validated, validationErr := skills.ValidateSkillSuggestion(generation.ProposedSkillMD, skill.Name, base.BaseCanonicalSha256)
+		var failure error
+		_, resolved, failure = resolveGeneration(base, skill.Name, generation)
 		switch {
-		case validationErr == nil:
-			generation.ProposedSkillMD = validated.Content
-		case errors.Is(validationErr, skills.ErrSkillSuggestionNoOp):
-			generation = Generation{Decision: DecisionDecline, ProposedSkillMD: "", Rationale: "The proposed edit was canonically unchanged from the current skill."}
+		case failure == nil:
+		case errors.Is(failure, skills.ErrSkillSuggestionNoOp):
+			generation = Generation{Decision: DecisionDecline, Changes: nil, Rationale: "The proposed edit was canonically unchanged from the current skill."}
 		default:
 			generation, err = e.generator.Generate(ctx, GenerateInput{
 				OrganizationID:  project.OrganizationID,
@@ -268,25 +268,24 @@ func (e *Engine) Run(ctx context.Context, in RunInput) (Result, error) {
 				Feedback:        feedback,
 				Trend:           computedTrend,
 				Transcripts:     transcripts,
-				ValidationError: validationErr.Error(),
+				ValidationError: failure.Error(),
 			})
 			if err != nil {
 				return Result{}, err
 			}
 			if generation.Decision == DecisionPropose {
-				validated, validationErr = skills.ValidateSkillSuggestion(generation.ProposedSkillMD, skill.Name, base.BaseCanonicalSha256)
-				if validationErr != nil {
-					e.logger.WarnContext(ctx, "discarding invalid corrected skill suggestion", attr.SlogError(validationErr), attr.SlogProjectID(in.ProjectID.String()), attr.SlogResourceID(in.SkillID.String()))
-					generation = Generation{Decision: DecisionDecline, ProposedSkillMD: "", Rationale: "The proposed edit remained invalid after one correction attempt."}
-				} else {
-					generation.ProposedSkillMD = validated.Content
+				_, resolved, failure = resolveGeneration(base, skill.Name, generation)
+				if failure != nil {
+					e.logger.WarnContext(ctx, "discarding invalid corrected skill suggestion", attr.SlogError(failure), attr.SlogProjectID(in.ProjectID.String()), attr.SlogResourceID(in.SkillID.String()))
+					generation = Generation{Decision: DecisionDecline, Changes: nil, Rationale: "The proposed edit remained invalid after one correction attempt."}
+					resolved = nil
 				}
 			}
 		}
 	}
 
 	rationale := clampRationale(e.config.MaxRationaleRunes, generation.Rationale)
-	return e.persist(ctx, in, base.BaseVersionID, snapshotSuggestion(latest), skill.Name, generation, rationale, computedTrend.CurrentCount, unreviewedCount, feedback)
+	return e.persist(ctx, in, base.BaseVersionID, snapshotSuggestion(latest), skill.Name, generation, resolved, rationale, computedTrend.CurrentCount, unreviewedCount, feedback)
 }
 
 func summarizeTrend(config Config, base repo.ResolveSkillSuggestionBaseRow, buckets []telemetryrepo.SkillInsightBucket) trend {
@@ -391,7 +390,7 @@ func suggestionSnapshotMatches(expected *suggestionSnapshot, actual *repo.SkillE
 	return expected.id == actual.ID && expected.status == actual.Status && expected.baseVersionID == actual.BaseVersionID && expected.updatedAt.Equal(actual.UpdatedAt.Time)
 }
 
-func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUID, expectedLatest *suggestionSnapshot, skillName string, generation Generation, rationale string, scoredCount uint64, totalUnreviewed int64, feedback []repo.SkillFeedback) (Result, error) {
+func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUID, expectedLatest *suggestionSnapshot, skillName string, generation Generation, resolved []resolvedChange, rationale string, scoredCount uint64, totalUnreviewed int64, feedback []repo.SkillFeedback) (Result, error) {
 	tx, err := e.db.Begin(ctx)
 	if err != nil {
 		return Result{}, fmt.Errorf("begin suggestion transaction: %w", err)
@@ -440,33 +439,16 @@ func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUI
 		}
 	}
 	if dismissedDuringInference {
-		watermark, err := queries.UpdateLatestSkillEditSuggestionWatermark(ctx, repo.UpdateLatestSkillEditSuggestionWatermarkParams{
+		if _, err := queries.UpdateLatestSkillEditSuggestionWatermark(ctx, repo.UpdateLatestSkillEditSuggestionWatermarkParams{
 			ScoredSessionCount: clampUint64ToInt64(scoredCount),
 			ProjectID:          in.ProjectID, SkillID: in.SkillID, BaseVersionID: expectedBase,
-		})
-		if err != nil {
+		}); err != nil {
 			return Result{}, fmt.Errorf("update dismissed skill suggestion watermark: %w", err)
-		}
-		if err := linkFeedback(ctx, queries, in.ProjectID, watermark.ID, ids); err != nil {
-			return Result{}, err
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return Result{}, fmt.Errorf("commit dismissed skill suggestion watermark: %w", err)
 		}
 		return Result{Kind: ResultDeclined, Reenqueue: false, FeedbackConsumed: consumed, SuggestionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
-	}
-
-	var proposedDiff string
-	if generation.Decision == DecisionPropose {
-		proposedDiff, err = skilldiff.Unified(base.BaseContent, generation.ProposedSkillMD)
-		if err != nil {
-			return Result{}, fmt.Errorf("render proposed skill diff: %w", err)
-		}
-		// A proposal that renders as no change leaves nothing to review.
-		if strings.TrimSpace(proposedDiff) == "" {
-			generation.Decision = DecisionDecline
-			rationale = "The proposed edit was canonically unchanged from the current skill."
-		}
 	}
 
 	suggestionID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
@@ -475,7 +457,7 @@ func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUI
 		switch {
 		case openErr == nil && open.BaseVersionID == expectedBase:
 			updated, err := queries.UpdateOpenSkillEditSuggestion(ctx, repo.UpdateOpenSkillEditSuggestionParams{
-				ProposedDiff: proposedDiff, Rationale: rationale,
+				Rationale:          rationale,
 				ScoredSessionCount: clampUint64ToInt64(scoredCount), ProjectID: in.ProjectID, SkillID: in.SkillID, BaseVersionID: expectedBase,
 			})
 			if err != nil {
@@ -492,7 +474,7 @@ func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUI
 		}
 		if !suggestionID.Valid {
 			created, err := queries.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-				ProposedDiff: proposedDiff, Rationale: rationale,
+				Rationale:          rationale,
 				ScoredSessionCount: clampUint64ToInt64(scoredCount), BaseVersionID: expectedBase, ProjectID: in.ProjectID, SkillID: in.SkillID,
 			})
 			if err != nil {
@@ -500,31 +482,23 @@ func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUI
 			}
 			suggestionID = uuid.NullUUID{UUID: created.ID, Valid: true}
 		}
-		if err := linkFeedback(ctx, queries, in.ProjectID, suggestionID.UUID, ids); err != nil {
+		if err := writeChanges(ctx, queries, in.ProjectID, suggestionID.UUID, resolved, feedback); err != nil {
 			return Result{}, err
 		}
 	} else if latest != nil && latest.BaseVersionID == expectedBase {
-		watermark, err := queries.UpdateLatestSkillEditSuggestionWatermark(ctx, repo.UpdateLatestSkillEditSuggestionWatermarkParams{
+		if _, err := queries.UpdateLatestSkillEditSuggestionWatermark(ctx, repo.UpdateLatestSkillEditSuggestionWatermarkParams{
 			ScoredSessionCount: clampUint64ToInt64(scoredCount),
 			ProjectID:          in.ProjectID, SkillID: in.SkillID, BaseVersionID: expectedBase,
-		})
-		if err != nil {
+		}); err != nil {
 			return Result{}, fmt.Errorf("update skill suggestion watermark: %w", err)
 		}
-		if err := linkFeedback(ctx, queries, in.ProjectID, watermark.ID, ids); err != nil {
-			return Result{}, err
-		}
 	} else {
-		watermark, err := queries.CreateSkillEditSuggestionWatermark(ctx, repo.CreateSkillEditSuggestionWatermarkParams{
+		if _, err := queries.CreateSkillEditSuggestionWatermark(ctx, repo.CreateSkillEditSuggestionWatermarkParams{
 			Rationale:          "Automated analysis completed without a proposed edit.",
 			ScoredSessionCount: clampUint64ToInt64(scoredCount), BaseVersionID: expectedBase,
 			ProjectID: in.ProjectID, SkillID: in.SkillID,
-		})
-		if err != nil {
+		}); err != nil {
 			return Result{}, fmt.Errorf("create skill suggestion watermark: %w", err)
-		}
-		if err := linkFeedback(ctx, queries, in.ProjectID, watermark.ID, ids); err != nil {
-			return Result{}, err
 		}
 	}
 
@@ -538,16 +512,54 @@ func (e *Engine) persist(ctx context.Context, in RunInput, expectedBase uuid.UUI
 	return Result{Kind: ResultProposed, Reenqueue: reenqueue, FeedbackConsumed: consumed, SuggestionID: suggestionID}, nil
 }
 
-// linkFeedback records which feedback rows an analysis pass consumed, which is
-// what the reviewer expands to see the evidence behind a suggestion.
-func linkFeedback(ctx context.Context, queries *repo.Queries, projectID, suggestionID uuid.UUID, feedbackIDs []uuid.UUID) error {
-	if len(feedbackIDs) == 0 {
-		return nil
-	}
-	if _, err := queries.LinkSkillEditSuggestionFeedback(ctx, repo.LinkSkillEditSuggestionFeedbackParams{
-		SuggestionID: suggestionID, ProjectID: projectID, FeedbackIds: feedbackIDs,
+// writeChanges replaces a suggestion's proposed changes with the ones this pass
+// produced, attaching to each change only the feedback the model cited for it.
+// A reviewer reads those reports as the reason that change exists, so evidence
+// the model did not tie to a change is deliberately left off rather than
+// spread across all of them.
+func writeChanges(
+	ctx context.Context,
+	queries *repo.Queries,
+	projectID uuid.UUID,
+	suggestionID uuid.UUID,
+	changes []resolvedChange,
+	feedback []repo.SkillFeedback,
+) error {
+	if err := queries.DeleteSkillEditSuggestionChanges(ctx, repo.DeleteSkillEditSuggestionChangesParams{
+		ProjectID: projectID, SuggestionID: suggestionID,
 	}); err != nil {
-		return fmt.Errorf("link skill suggestion feedback: %w", err)
+		return fmt.Errorf("clear previous skill suggestion changes: %w", err)
+	}
+
+	for i, change := range changes {
+		created, err := queries.CreateSkillEditSuggestionChange(ctx, repo.CreateSkillEditSuggestionChangeParams{
+			ProposedDiff: change.Diff,
+			Rationale:    change.Rationale,
+			Position:     int32(i),
+			ProjectID:    projectID,
+			SuggestionID: suggestionID,
+		})
+		if err != nil {
+			return fmt.Errorf("create skill suggestion change: %w", err)
+		}
+
+		ids := make([]uuid.UUID, 0, len(change.Evidence))
+		for _, ref := range change.Evidence {
+			if ref < 1 || ref > len(feedback) {
+				continue
+			}
+			ids = append(ids, feedback[ref-1].ID)
+		}
+		if len(ids) == 0 {
+			continue
+		}
+		if _, err := queries.LinkSkillEditSuggestionFeedback(ctx, repo.LinkSkillEditSuggestionFeedbackParams{
+			ChangeID:    created.ID,
+			ProjectID:   projectID,
+			FeedbackIds: ids,
+		}); err != nil {
+			return fmt.Errorf("link skill suggestion change feedback: %w", err)
+		}
 	}
 
 	return nil
@@ -566,4 +578,23 @@ func clampUint64ToInt64(value uint64) int64 {
 		return int64(maxInt64)
 	}
 	return int64(value)
+}
+
+// resolveGeneration turns a proposal into the manifest it produces and the
+// per-change edits behind it, rejecting anything that does not survive the
+// normal manifest validation.
+func resolveGeneration(base repo.ResolveSkillSuggestionBaseRow, skillName string, generation Generation) (string, []resolvedChange, error) {
+	content, resolved, err := resolveChanges(base.BaseContent, generation.Changes)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(resolved) == 0 {
+		return "", nil, fmt.Errorf("proposed changes left the skill unchanged: %w", skills.ErrSkillSuggestionNoOp)
+	}
+	validated, err := skills.ValidateSkillSuggestion(content, skillName, base.BaseCanonicalSha256)
+	if err != nil {
+		return "", nil, fmt.Errorf("validate proposed changes: %w", err)
+	}
+
+	return validated.Content, resolved, nil
 }
