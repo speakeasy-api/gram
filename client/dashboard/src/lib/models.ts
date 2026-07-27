@@ -9,6 +9,11 @@ export type AvailableModel = {
 
 export const AVAILABLE_MODELS: AvailableModel[] = [
   {
+    value: "anthropic/claude-opus-5",
+    label: "Claude Opus 5",
+    expensive: true,
+  },
+  {
     value: "anthropic/claude-fable-5",
     label: "Claude Fable 5",
     expensive: true,
@@ -70,9 +75,9 @@ export const AVAILABLE_MODELS: AvailableModel[] = [
 // Default model used across in-app chat surfaces (playground, MCP test chat,
 // chat window) when the user has not picked one explicitly. Kept next to
 // AVAILABLE_MODELS so the default is easy to discover and adjust.
-export const DEFAULT_MODEL: Model = "anthropic/claude-sonnet-5";
+export const DEFAULT_MODEL: Model = "anthropic/claude-opus-5";
 
 // Default model assigned to newly created assistants (onboarding flow). Tracked
 // separately from DEFAULT_MODEL so the assistant default can move independently
 // of the general in-app chat default.
-export const DEFAULT_ASSISTANT_MODEL: Model = "anthropic/claude-sonnet-5";
+export const DEFAULT_ASSISTANT_MODEL: Model = "anthropic/claude-opus-5";
