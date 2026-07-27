@@ -74,6 +74,18 @@ func newTestChatServiceRBACDisabled(t *testing.T) *chatTestInstance {
 
 func newTestChatServiceWithRBAC(t *testing.T, isRBACEnabled authz.IsRBACEnabled) *chatTestInstance {
 	t.Helper()
+	return newTestChatServiceWithOptions(t, isRBACEnabled, nil)
+}
+
+// newTestChatServiceWithCompletion builds a chat service with a custom
+// OpenRouter completion client (e.g. a mock for summarize tests).
+func newTestChatServiceWithCompletion(t *testing.T, completionClient openrouter.CompletionClient) *chatTestInstance {
+	t.Helper()
+	return newTestChatServiceWithOptions(t, authztest.RBACAlwaysEnabled, completionClient)
+}
+
+func newTestChatServiceWithOptions(t *testing.T, isRBACEnabled authz.IsRBACEnabled, completionClient openrouter.CompletionClient) *chatTestInstance {
+	t.Helper()
 
 	ctx := t.Context()
 
@@ -114,59 +126,6 @@ func newTestChatServiceWithRBAC(t *testing.T, isRBACEnabled authz.IsRBACEnabled)
 	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, suffix, billingClient)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, isRBACEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, nil, nil, nil, nil, nil, authzEngine, nil, billingClient, audit.NewLogger())
-
-	return &chatTestInstance{
-		service:   svc,
-		sessions:  mgr,
-		conn:      conn,
-		projectID: project.ID,
-		orgID:     orgID,
-	}
-}
-
-// newTestChatServiceWithCompletion builds a chat service with a custom
-// OpenRouter completion client (e.g. a mock for summarize tests).
-func newTestChatServiceWithCompletion(t *testing.T, completionClient openrouter.CompletionClient) *chatTestInstance {
-	t.Helper()
-
-	ctx := t.Context()
-
-	logger := testenv.NewLogger(t)
-	tp := testenv.NewTracerProvider(t)
-
-	conn, err := infra.CloneTestDatabase(t, "chattest")
-	require.NoError(t, err)
-
-	orgID := fmt.Sprintf("org-%s", uuid.NewString()[:8])
-
-	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
-		ID:          orgID,
-		Name:        "Test Org",
-		Slug:        orgID,
-		WorkosID:    pgtype.Text{},
-		Whitelisted: pgtype.Bool{},
-	})
-	require.NoError(t, err)
-
-	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
-		Name:           "Test Project",
-		Slug:           fmt.Sprintf("chat-%s", uuid.NewString()[:8]),
-		OrganizationID: orgID,
-	})
-	require.NoError(t, err)
-
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	billingClient := billing.NewStubClient(logger, tp)
-	suffix := cache.Suffix("gram-local-" + uuid.NewString()[:8])
-	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, suffix, billingClient)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, nil, authzEngine, nil, billingClient, audit.NewLogger())
 
 	return &chatTestInstance{

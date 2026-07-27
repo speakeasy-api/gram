@@ -17,7 +17,7 @@ import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Pin } from "lucide-react";
-import { useCallback, useState, type MouseEvent, type KeyboardEvent } from "react";
+import { useCallback, useState, type MouseEvent } from "react";
 import { toast } from "sonner";
 
 interface ChatLogsTableProps {
@@ -87,7 +87,7 @@ function SessionPinButton({
   const queryClient = useQueryClient();
   const setPinned = useChatSetPinnedMutation();
 
-  const toggle = (e: MouseEvent | KeyboardEvent) => {
+  const toggle = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setPinned.mutate(
@@ -104,28 +104,22 @@ function SessionPinButton({
   };
 
   return (
-    <span
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
       aria-label={pinned ? "Unpin session" : "Pin session"}
       title={pinned ? "Unpin session" : "Pin session"}
-      aria-disabled={setPinned.isPending}
+      disabled={setPinned.isPending}
       onClick={toggle}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          toggle(e);
-        }
-      }}
       className={cn(
         "hover:bg-muted text-muted-foreground hover:text-foreground rounded-md p-1 transition-all",
         pinned
           ? "text-foreground opacity-100"
           : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
-        setPinned.isPending && "pointer-events-none opacity-50",
+        setPinned.isPending && "opacity-50",
       )}
     >
       <Pin className={cn("size-4", pinned && "fill-current")} aria-hidden />
-    </span>
+    </button>
   );
 }
 
@@ -152,14 +146,9 @@ function CopyButton({
   );
 
   return (
-    <span
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
       onClick={handleCopy}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ")
-          handleCopy(e as unknown as React.MouseEvent);
-      }}
       className={cn(
         "cursor-pointer rounded p-0.5 transition-colors",
         "opacity-50 hover:opacity-100",
@@ -168,6 +157,7 @@ function CopyButton({
         className,
       )}
       title={`Copy ${label}`}
+      aria-label={`Copy ${label}`}
     >
       <Icon
         name={copied ? "check" : "copy"}
@@ -176,7 +166,7 @@ function CopyButton({
           copied ? "text-emerald-500" : "text-muted-foreground",
         )}
       />
-    </span>
+    </button>
   );
 }
 
@@ -265,16 +255,22 @@ export function ChatLogsTable({
                 },
               ]}
             >
-              <button
-                onClick={() => onSelectChat(chat)}
+              {/* Stretched select control under content; pin/delete/copy sit above
+                  it (z-20) so interactive controls are never nested in a button. */}
+              <div
                 className={cn(
-                  "group w-full px-5 py-4 text-left transition-all duration-150",
+                  "group relative w-full px-5 py-4 transition-all duration-150",
                   "hover:bg-muted/50",
-                  "focus-visible:bg-muted/50 focus:outline-none",
                   isSelected && "bg-primary/3 hover:bg-primary/5",
                 )}
               >
-                <div className="flex items-center gap-5">
+                <button
+                  type="button"
+                  onClick={() => onSelectChat(chat)}
+                  aria-label={`Open session ${getTraceId(chat.id)}`}
+                  className="absolute inset-0 z-10 focus:outline-none"
+                />
+                <div className="pointer-events-none relative z-20 flex items-center gap-5">
                   {/* Left: Risk findings indicator */}
                   <div className="shrink-0">
                     <RiskIndicator count={riskCount} size={44} />
@@ -287,7 +283,9 @@ export function ChatLogsTable({
                       <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                         {getTraceId(chat.id)}
                       </span>
-                      <CopyButton value={chat.id} label="Chat ID" />
+                      <span className="pointer-events-auto">
+                        <CopyButton value={chat.id} label="Chat ID" />
+                      </span>
                       <span className="text-muted-foreground/40">·</span>
                       <span className="text-muted-foreground text-sm">
                         Created {format(chat.createdAt, "MMM d, HH:mm")}
@@ -359,29 +357,19 @@ export function ChatLogsTable({
                   </div>
 
                   {/* Right: Pin + Delete + Chevron */}
-                  <div className="flex shrink-0 items-center gap-1 pt-2">
+                  <div className="pointer-events-auto flex shrink-0 items-center gap-1 pt-2">
                     <SessionPinButton
                       chatId={chat.id}
                       pinned={Boolean(chat.pinned)}
                     />
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteConfirmId(chat.id);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.stopPropagation();
-                          setDeleteConfirmId(chat.id);
-                        }
-                      }}
-                      className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 opacity-0 transition-all group-hover:opacity-100"
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmId(chat.id)}
+                      className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 opacity-0 transition-all group-hover:opacity-100 focus-visible:opacity-100"
                       aria-label="Delete chat"
                     >
                       <Icon name="trash-2" className="size-4" />
-                    </span>
+                    </button>
                     <Icon
                       name="chevron-right"
                       className={cn(
@@ -393,7 +381,7 @@ export function ChatLogsTable({
                     />
                   </div>
                 </div>
-              </button>
+              </div>
             </TableRowContextMenu>
           );
         })}

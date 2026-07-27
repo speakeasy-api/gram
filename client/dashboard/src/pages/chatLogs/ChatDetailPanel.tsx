@@ -21,6 +21,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -830,29 +831,48 @@ function SessionSummarySection({
   chatId: string;
   summary?: string;
   summaryGeneratedAt?: Date;
-  onSummaryChange: (summary: string, generatedAt: Date) => void;
+  onSummaryChange: (
+    summary: string,
+    generatedAt: Date,
+    forChatId: string,
+  ) => void;
 }) {
   const queryClient = useQueryClient();
   const summarize = useSummarizeChatMutation();
   const [expanded, setExpanded] = useState(true);
   const hasSummary = Boolean(summary?.trim());
+  // Track the active session so a late summarize response cannot apply to a
+  // different chat after the panel navigates away.
+  const activeChatIdRef = useRef(chatId);
+  activeChatIdRef.current = chatId;
 
   const runSummarize = (regenerate: boolean) => {
+    const requestedChatId = chatId;
     summarize.mutate(
       {
         request: {
-          summarizeRequestBody: { id: chatId, regenerate },
+          summarizeRequestBody: { id: requestedChatId, regenerate },
         },
       },
       {
         onSuccess: (result) => {
-          onSummaryChange(result.summary, result.summaryGeneratedAt);
+          if (activeChatIdRef.current !== requestedChatId) {
+            return;
+          }
+          onSummaryChange(
+            result.summary,
+            result.summaryGeneratedAt,
+            requestedChatId,
+          );
           void queryClient.invalidateQueries({
-            queryKey: ["chat", chatId, "transcript"],
+            queryKey: ["chat", requestedChatId, "transcript"],
           });
           void invalidateAllListChats(queryClient);
         },
         onError: (error) => {
+          if (activeChatIdRef.current !== requestedChatId) {
+            return;
+          }
           toast.error(error.message || "Failed to summarize session");
         },
       },
@@ -1479,10 +1499,14 @@ function ChatDetailPanel({
       />
 
       <SessionSummarySection
+        key={chatId}
         chatId={chatId}
         summary={summary}
         summaryGeneratedAt={summaryGeneratedAt}
-        onSummaryChange={(nextSummary, generatedAt) => {
+        onSummaryChange={(nextSummary, generatedAt, forChatId) => {
+          if (forChatId !== chatId) {
+            return;
+          }
           setLocalSummary(nextSummary);
           setLocalSummaryGeneratedAt(generatedAt);
         }}
