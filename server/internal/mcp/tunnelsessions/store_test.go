@@ -15,12 +15,6 @@ func newTestStore(t *testing.T, ttl time.Duration, liveCap int) *Store {
 	return NewStore(client, ttl, liveCap)
 }
 
-func mustReserve(t *testing.T, store *Store, tunnelID, mcpServerID, sid string) {
-	t.Helper()
-	_, err := store.Reserve(t.Context(), tunnelID, mcpServerID, sid)
-	require.NoError(t, err)
-}
-
 func TestMintSessionIDShapeAndUniqueness(t *testing.T) {
 	t.Parallel()
 
@@ -61,7 +55,7 @@ func TestReserveCommitResolveRoundTrip(t *testing.T) {
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
-	mustReserve(t, store, tunnelID, "server-1", sid)
+	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
 	session := Session{BackendSessionID: "backend-abc", GatewayAddr: "10.0.0.1:9000", AgentSessionID: "agent-1"}
 	require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", sid, session))
 
@@ -97,7 +91,7 @@ func TestResolveIsNamespacedByTunnelAndServer(t *testing.T) {
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
-	mustReserve(t, store, tunnelID, "server-1", sid)
+	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
 	require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"}))
 
 	_, err = store.Resolve(t.Context(), tunnelID+"-other", "server-1", sid, true)
@@ -111,46 +105,20 @@ func TestRollbackReleasesCapacitySlot(t *testing.T) {
 
 	store := newTestStore(t, time.Hour, 1)
 	tunnelID := t.Name()
-	sid, err := MintSessionID()
-	require.NoError(t, err)
-
-	mustReserve(t, store, tunnelID, "server-1", sid)
-	require.NoError(t, store.Rollback(t.Context(), tunnelID, "server-1", sid))
-
-	count, err := store.ActiveCount(t.Context(), tunnelID)
-	require.NoError(t, err)
-	require.Zero(t, count)
-}
-
-// Reserve at cap must evict the earliest-expiry session — dropping its
-// mapping and killing its reservation — rather than reject the newcomer.
-func TestReserveAtCapEvictsOldestSession(t *testing.T) {
-	t.Parallel()
-
-	store := newTestStore(t, time.Hour, 1)
-	tunnelID := t.Name()
 	first, err := MintSessionID()
 	require.NoError(t, err)
 	second, err := MintSessionID()
 	require.NoError(t, err)
 
-	evicted, err := store.Reserve(t.Context(), tunnelID, "server-1", first)
-	require.NoError(t, err)
-	require.Zero(t, evicted)
-	session := Session{BackendSessionID: "backend-1", GatewayAddr: "gw-1", AgentSessionID: "agent-1"}
-	require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", first, session))
+	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", first))
 
-	evicted, err = store.Reserve(t.Context(), tunnelID, "server-1", second)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, evicted)
+	err = store.Reserve(t.Context(), tunnelID, "server-1", second)
+	var capErr *CapacityError
+	require.ErrorAs(t, err, &capErr)
+	require.GreaterOrEqual(t, capErr.RetryAfter, time.Second)
 
-	_, err = store.Resolve(t.Context(), tunnelID, "server-1", first, true)
-	require.ErrorIs(t, err, ErrNotFound)
-	require.ErrorIs(t, store.Commit(t.Context(), tunnelID, "server-1", first, session), ErrReservationLost)
-
-	count, err := store.ActiveCount(t.Context(), tunnelID)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, count)
+	require.NoError(t, store.Rollback(t.Context(), tunnelID, "server-1", first))
+	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", second))
 }
 
 func TestReservePrunesExpiredSessions(t *testing.T) {
@@ -165,19 +133,11 @@ func TestReservePrunesExpiredSessions(t *testing.T) {
 	second, err := MintSessionID()
 	require.NoError(t, err)
 
-	mustReserve(t, store, tunnelID, "server-1", first)
+	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", first))
 
-	// An expired slot is pruned, not evicted: the newcomer admits with an
-	// eviction count of zero once the first reservation ages out.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		count, err := store.ActiveCount(t.Context(), tunnelID)
-		assert.NoError(c, err)
-		assert.Zero(c, count)
+		assert.NoError(c, store.Reserve(t.Context(), tunnelID, "server-1", second))
 	}, 5*time.Second, 20*time.Millisecond)
-
-	evicted, err := store.Reserve(t.Context(), tunnelID, "server-1", second)
-	require.NoError(t, err)
-	require.Zero(t, evicted)
 }
 
 func TestDeleteRemovesMappingAndSlot(t *testing.T) {
@@ -188,7 +148,7 @@ func TestDeleteRemovesMappingAndSlot(t *testing.T) {
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
-	mustReserve(t, store, tunnelID, "server-1", sid)
+	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
 	require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"}))
 	require.NoError(t, store.Delete(t.Context(), tunnelID, "server-1", sid))
 
@@ -209,7 +169,7 @@ func TestPurgeDropsAllTunnelSessions(t *testing.T) {
 	for range 3 {
 		sid, err := MintSessionID()
 		require.NoError(t, err)
-		mustReserve(t, store, tunnelID, "server-1", sid)
+		require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
 		require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"}))
 		sids = append(sids, sid)
 	}
@@ -233,7 +193,7 @@ func TestResolveWithoutRefreshDoesNotExtendSession(t *testing.T) {
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
-	mustReserve(t, store, tunnelID, "server-1", sid)
+	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
 	require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"}))
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -252,7 +212,7 @@ func TestCommitRequiresLiveReservation(t *testing.T) {
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
-	mustReserve(t, store, tunnelID, "server-1", sid)
+	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
 	require.NoError(t, store.Purge(t.Context(), tunnelID))
 
 	err = store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"})
@@ -276,7 +236,7 @@ func TestCommitRealignsLiveSetToMappingTTL(t *testing.T) {
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
-	mustReserve(t, store, tunnelID, "server-1", sid)
+	require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
 	require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"}))
 
 	deadline := time.Now().Add(1200 * time.Millisecond)
@@ -300,7 +260,7 @@ func TestPurgeIsAtomicAcrossMembers(t *testing.T) {
 	for range 4 {
 		sid, err := MintSessionID()
 		require.NoError(t, err)
-		mustReserve(t, store, tunnelID, "server-1", sid)
+		require.NoError(t, store.Reserve(t.Context(), tunnelID, "server-1", sid))
 		require.NoError(t, store.Commit(t.Context(), tunnelID, "server-1", sid, Session{BackendSessionID: "b", GatewayAddr: "a", AgentSessionID: "s"}))
 		sids = append(sids, sid)
 	}

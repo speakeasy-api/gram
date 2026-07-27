@@ -37,6 +37,17 @@ const MaxBackendSessionIDLength = 512
 // re-initialize.
 var ErrNotFound = errors.New("tunnel session not found")
 
+// CapacityError is returned by Reserve when the tunnel is at its live
+// anonymous-session cap. RetryAfter is the time until the earliest tracked
+// session expires — the soonest a slot could free without a DELETE.
+type CapacityError struct {
+	RetryAfter time.Duration
+}
+
+func (e *CapacityError) Error() string {
+	return fmt.Sprintf("tunnel is at its anonymous session capacity (retry in %s)", e.RetryAfter)
+}
+
 // Session is the Redis-stored mapping value for one Gram-owned anonymous MCP
 // session.
 type Session struct {
@@ -88,13 +99,7 @@ func IsSessionID(value string) bool {
 }
 
 func mappingKey(tunnelID, mcpServerID, sid string) string {
-	return mappingKeyPrefix(tunnelID) + liveMember(mcpServerID, sid)
-}
-
-// mappingKeyPrefix is the prefix a live-set member name is appended to; the
-// reserve (eviction) and purge scripts receive it as an ARGV.
-func mappingKeyPrefix(tunnelID string) string {
-	return "tunnelsess:map:" + tunnelID + ":"
+	return "tunnelsess:map:" + tunnelID + ":" + mcpServerID + ":" + sid
 }
 
 func liveSetKey(tunnelID string) string {
@@ -105,26 +110,19 @@ func liveMember(mcpServerID, sid string) string {
 	return mcpServerID + ":" + sid
 }
 
-// reserveScript prunes expired members, evicts the earliest-expiry members
-// (least-recently-refreshed) when the cap is reached, and admits the new
-// member in one atomic step. ARGV[6] is the mapping-key prefix evicted member
-// names are appended to. Returns the number of evicted sessions.
+// reserveScript prunes expired members, enforces the live cap, and admits the
+// new member in one atomic step. Returns {1} on admit or {0, earliest_expiry_ms}
+// on capacity rejection.
 var reserveScript = redis.NewScript(`
 redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
 local count = redis.call('ZCARD', KEYS[1])
-local cap = tonumber(ARGV[2])
-local evicted = 0
-if count >= cap then
-  local victims = redis.call('ZRANGE', KEYS[1], 0, count - cap)
-  for i = 1, #victims do
-    redis.call('DEL', ARGV[6] .. victims[i])
-    redis.call('ZREM', KEYS[1], victims[i])
-  end
-  evicted = #victims
+if count >= tonumber(ARGV[2]) then
+  local first = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
+  return {0, first[2]}
 end
 redis.call('ZADD', KEYS[1], ARGV[3], ARGV[4])
 redis.call('PEXPIRE', KEYS[1], ARGV[5])
-return evicted
+return {1, '0'}
 `)
 
 // resolveRefreshScript loads a mapping and, when present, slides both the
@@ -184,27 +182,31 @@ return #members
 const reservationTTL = 10 * time.Minute
 
 // Reserve admits sid into the tunnel's live-session set ahead of the
-// initialize forward. At the per-tunnel cap it atomically evicts the
-// earliest-expiry sessions instead of rejecting: evicted clients see 404 on
-// their next request and re-initialize. Returns the number of sessions
-// evicted. The reservation holds a capacity slot only; the mapping is
-// written by Commit once the initialize succeeds. Callers must Rollback on
-// every non-commit path.
-func (s *Store) Reserve(ctx context.Context, tunnelID, mcpServerID, sid string) (int64, error) {
+// initialize forward, enforcing the per-tunnel cap atomically. The
+// reservation holds a capacity slot only; the mapping is written by Commit
+// once the initialize succeeds. Callers must Rollback on every non-commit
+// path.
+func (s *Store) Reserve(ctx context.Context, tunnelID, mcpServerID, sid string) error {
 	now := time.Now()
-	evicted, err := reserveScript.Run(ctx, s.redis,
+	res, err := reserveScript.Run(ctx, s.redis,
 		[]string{liveSetKey(tunnelID)},
 		now.UnixMilli(),
 		s.liveCap,
 		now.Add(min(reservationTTL, s.ttl)).UnixMilli(),
 		liveMember(mcpServerID, sid),
 		s.ttl.Milliseconds(),
-		mappingKeyPrefix(tunnelID),
-	).Int64()
+	).Int64Slice()
 	if err != nil {
-		return 0, fmt.Errorf("reserve tunnel session slot: %w", err)
+		return fmt.Errorf("reserve tunnel session slot: %w", err)
 	}
-	return evicted, nil
+	if len(res) != 2 {
+		return fmt.Errorf("reserve tunnel session slot: unexpected script result length %d", len(res))
+	}
+	if res[0] == 1 {
+		return nil
+	}
+	retryAfter := max(time.Duration(res[1]-now.UnixMilli())*time.Millisecond, time.Second)
+	return &CapacityError{RetryAfter: retryAfter}
 }
 
 // ErrReservationLost is returned by Commit when the reservation's live-set
@@ -315,7 +317,7 @@ func (s *Store) Purge(ctx context.Context, tunnelID string) error {
 // (single Lua) so it cannot interleave with a concurrent Commit.
 func Purge(ctx context.Context, redisClient *redis.Client, tunnelID string) error {
 	// mappingKey prefix a member is appended to: keep in sync with mappingKey.
-	prefix := mappingKeyPrefix(tunnelID)
+	prefix := "tunnelsess:map:" + tunnelID + ":"
 	if err := purgeScript.Run(ctx, redisClient, []string{liveSetKey(tunnelID)}, prefix).Err(); err != nil {
 		return fmt.Errorf("purge tunnel sessions: %w", err)
 	}

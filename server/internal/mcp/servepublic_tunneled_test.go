@@ -388,10 +388,7 @@ func TestServePublic_Tunneled_StripsBackendChallenge(t *testing.T) {
 	require.Empty(t, w.Header().Get(wire.HeaderTunnelAgentSession), "internal tunnel headers must not leak")
 }
 
-// An initialize at the live-session cap must evict the least-recently-used
-// session instead of rejecting: the newcomer serves, the evicted session 404s
-// so its client re-initializes.
-func TestServePublic_Tunneled_LiveSessionCapEvictsOldest(t *testing.T) {
+func TestServePublic_Tunneled_LiveSessionCapRejectsInitialize(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithTunnelPublicConfig(t, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
@@ -404,19 +401,18 @@ func TestServePublic_Tunneled_LiveSessionCapEvictsOldest(t *testing.T) {
 	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
-	firstSid := initializeTunneledPublicSession(t, ti, fixture)
-	secondSid := initializeTunneledPublicSession(t, ti, fixture)
-	require.NotEqual(t, firstSid, secondSid)
+	initializeTunneledPublicSession(t, ti, fixture)
+	forwardsAfterFirst := gateway.forwardCount()
 
-	w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), secondSid)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	_, err = serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), firstSid)
+	// Admission runs pre-proxy, so a capacity rejection is a real HTTP 429
+	// with Retry-After — not a JSON-RPC 200 envelope — and never reaches the
+	// backend.
+	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeInitializeBody(), "")
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code, "evicted session must 404 so the client re-initializes")
+	require.Equal(t, oops.CodeRateLimitExceeded, oopsErr.Code)
+	require.Equal(t, forwardsAfterFirst, gateway.forwardCount(), "capacity rejection must not reach the backend")
 }
 
 // The OAuth discovery and grant surface must not exist for anonymous public
