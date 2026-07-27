@@ -332,6 +332,7 @@ SELECT
     d.cert_secret_name,
     d.provisioner_kind,
     d.ip_allowlist,
+    d.deleted,
     COALESCE(root_endpoint.id, '00000000-0000-0000-0000-000000000000'::uuid) AS root_mcp_endpoint_id,
     COALESCE(root_endpoint.slug, '')::text AS root_slug
 FROM custom_domains AS d
@@ -348,7 +349,6 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) AS root_endpoint ON TRUE
 WHERE d.id = $1
-  AND d.deleted IS FALSE
 `
 
 type GetCustomDomainRouteConfigRow struct {
@@ -361,6 +361,7 @@ type GetCustomDomainRouteConfigRow struct {
 	CertSecretName    pgtype.Text
 	ProvisionerKind   string
 	IpAllowlist       []string
+	Deleted           bool
 	RootMcpEndpointID uuid.UUID
 	RootSlug          string
 }
@@ -380,6 +381,7 @@ func (q *Queries) GetCustomDomainRouteConfig(ctx context.Context, id uuid.UUID) 
 		&i.CertSecretName,
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
+		&i.Deleted,
 		&i.RootMcpEndpointID,
 		&i.RootSlug,
 	)
@@ -827,6 +829,59 @@ type UpdateCustomDomainIPAllowlistParams struct {
 
 func (q *Queries) UpdateCustomDomainIPAllowlist(ctx context.Context, arg UpdateCustomDomainIPAllowlistParams) (CustomDomain, error) {
 	row := q.db.QueryRow(ctx, updateCustomDomainIPAllowlist, arg.IpAllowlist, arg.OrganizationID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateCustomDomainResourceNames = `-- name: UpdateCustomDomainResourceNames :one
+UPDATE custom_domains
+SET
+    ingress_name = $1,
+    cert_secret_name = $2,
+    provisioner_kind = $3,
+    updated_at = clock_timestamp()
+WHERE id = $4
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateCustomDomainResourceNamesParams struct {
+	IngressName     pgtype.Text
+	CertSecretName  pgtype.Text
+	ProvisionerKind string
+	ID              uuid.UUID
+}
+
+// Resource identity must survive a concurrent soft delete so the reconciler
+// can remove an Apply that completed after deletion began.
+func (q *Queries) UpdateCustomDomainResourceNames(ctx context.Context, arg UpdateCustomDomainResourceNamesParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, updateCustomDomainResourceNames,
+		arg.IngressName,
+		arg.CertSecretName,
+		arg.ProvisionerKind,
+		arg.ID,
+	)
 	var i CustomDomain
 	err := row.Scan(
 		&i.ID,

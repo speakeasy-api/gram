@@ -126,3 +126,32 @@ func TestListActivatedCustomDomainResourcesReportsEligibleRootMapping(t *testing
 		})
 	}
 }
+
+func TestListActivatedCustomDomainResourcesIgnoresSoftDeletedDomains(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "deleted-resource-" + uuid.NewString() + ".example.com",
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	_, err = ti.repo.UpdateCustomDomain(ctx, cdrepo.UpdateCustomDomainParams{
+		Verified:        true,
+		Activated:       true,
+		IngressName:     pgtype.Text{String: "deleted-resource-" + uuid.NewString(), Valid: true},
+		ProvisionerKind: "ingress",
+		ID:              domain.ID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, ti.repo.DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID))
+
+	resources, err := ti.repo.ListActivatedCustomDomainResources(ctx)
+	require.NoError(t, err)
+	for _, resource := range resources {
+		require.NotEqual(t, domain.ID, resource.ID)
+	}
+}

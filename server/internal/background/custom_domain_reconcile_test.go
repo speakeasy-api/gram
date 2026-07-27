@@ -105,6 +105,35 @@ func TestCustomDomainReconcileWorkflowRunsAgainForSignalAfterApply(t *testing.T)
 	require.Equal(t, "CustomDomainReconcileWorkflow", continueAsNewErr.WorkflowType.Name)
 }
 
+func TestCustomDomainDeletionWorkflowRetainsLegacyActivityPath(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	var received activities.CustomDomainIngressArgs
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, args activities.CustomDomainIngressArgs) error {
+			received = args
+			return nil
+		},
+		activity.RegisterOptions{Name: "CustomDomainIngress"},
+	)
+
+	env.ExecuteWorkflow(CustomDomainDeletionWorkflow, CustomDomainDeletionParams{
+		OrgID:           "test-organization",
+		Domain:          "legacy-delete.example.com",
+		IngressName:     "legacy-resource",
+		CertSecretName:  "legacy-secret",
+		ProvisionerKind: k8s.ProvisionerKindIngress,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, activities.CustomDomainIngressActionDelete, received.Action)
+	require.Equal(t, "legacy-resource", received.IngressName)
+	require.Equal(t, "legacy-secret", received.CertSecretName)
+}
+
 func TestCustomDomainRegistrationWorkflowUsesReconcileBridgeBudget(t *testing.T) {
 	t.Parallel()
 

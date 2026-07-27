@@ -64,6 +64,7 @@ SELECT
     d.cert_secret_name,
     d.provisioner_kind,
     d.ip_allowlist,
+    d.deleted,
     COALESCE(root_endpoint.id, '00000000-0000-0000-0000-000000000000'::uuid) AS root_mcp_endpoint_id,
     COALESCE(root_endpoint.slug, '')::text AS root_slug
 FROM custom_domains AS d
@@ -79,8 +80,7 @@ LEFT JOIN LATERAL (
       AND e.deleted IS FALSE
     LIMIT 1
 ) AS root_endpoint ON TRUE
-WHERE d.id = @id
-  AND d.deleted IS FALSE;
+WHERE d.id = @id;
 
 -- name: LockRootMcpEndpointSelection :many
 -- The caller locks the parent custom-domain row first. Sort endpoint locks to
@@ -224,6 +224,18 @@ SET
     updated_at = clock_timestamp()
 WHERE id = @id
   AND deleted IS FALSE
+RETURNING *;
+
+-- name: UpdateCustomDomainResourceNames :one
+-- Resource identity must survive a concurrent soft delete so the reconciler
+-- can remove an Apply that completed after deletion began.
+UPDATE custom_domains
+SET
+    ingress_name = @ingress_name,
+    cert_secret_name = @cert_secret_name,
+    provisioner_kind = @provisioner_kind,
+    updated_at = clock_timestamp()
+WHERE id = @id
 RETURNING *;
 
 -- name: UpdateCustomDomainIPAllowlist :one

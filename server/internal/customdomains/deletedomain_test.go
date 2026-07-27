@@ -1,6 +1,7 @@
 package customdomains_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -39,7 +40,7 @@ func TestDeleteDomain_ZeroEndpoints_NoCascadeAudits(t *testing.T) {
 	ctx, ti := newTestCustomDomainsService(t)
 	authCtx := testAuthContext(t, ctx)
 
-	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		Domain:          "delete-zero.example.com",
 		IngressName:     pgTextValid("ingress-zero"),
@@ -68,6 +69,9 @@ func TestDeleteDomain_ZeroEndpoints_NoCascadeAudits(t *testing.T) {
 
 	require.Equal(t, beforeEndpointDeletes, afterEndpointDeletes, "no mcp-endpoint delete events expected when domain has no endpoints")
 	require.Equal(t, beforeDomainDeletes+1, afterDomainDeletes)
+	require.Equal(t, 1, ti.temporal.reconcileCalls)
+	require.Equal(t, domain.ID, ti.temporal.lastReconcileID)
+	require.Zero(t, ti.temporal.deletionCalls)
 }
 
 func TestDeleteDomain_CascadesSoftDeleteToMcpEndpointsAcrossProjects(t *testing.T) {
@@ -134,6 +138,9 @@ func TestDeleteDomain_CascadesSoftDeleteToMcpEndpointsAcrossProjects(t *testing.
 
 	require.Equal(t, beforeEndpointDeletes+4, afterEndpointDeletes, "one mcp-endpoint:delete per cascaded row")
 	require.Equal(t, beforeDomainDeletes+1, afterDomainDeletes)
+	require.Equal(t, 1, ti.temporal.reconcileCalls)
+	require.Equal(t, domainRow.ID, ti.temporal.lastReconcileID)
+	require.Zero(t, ti.temporal.deletionCalls)
 
 	// The active set must no longer surface any endpoint that pointed at the
 	// deleted domain in either project; the cascade hides them by setting
@@ -146,4 +153,32 @@ func TestDeleteDomain_CascadesSoftDeleteToMcpEndpointsAcrossProjects(t *testing.
 				"endpoint %s in project %s still references the deleted domain", endpoint.ID, projectID)
 		}
 	}
+}
+
+func TestDeleteDomain_AwaitsReconcileAfterCommit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "delete-await.example.com",
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	ti.temporal.reconcileErr = errors.New("reconcile failed")
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	err = ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{SessionToken: nil})
+	require.Error(t, err)
+	require.Equal(t, 1, ti.temporal.reconcileCalls)
+	require.Equal(t, domain.ID, ti.temporal.lastReconcileID)
+	require.Zero(t, ti.temporal.deletionCalls)
+
+	_, err = ti.repo.GetCustomDomainByID(ctx, domain.ID)
+	require.Error(t, err, "soft delete must commit before reconciliation starts")
 }

@@ -442,16 +442,6 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
 	}
 
-	if domain.Activated && domain.IngressName.Valid {
-		run, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.IngressName.String, domain.CertSecretName.String, k8s.ProvisionerKind(domain.ProvisionerKind))
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to start custom domain deletion workflow").LogError(ctx, s.logger)
-		}
-		if err := run.Get(ctx, nil); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "custom domain deletion workflow failed").LogError(ctx, s.logger)
-		}
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to access custom domains").LogError(ctx, s.logger)
@@ -500,6 +490,10 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to commit custom domain deletion").LogError(ctx, s.logger)
+	}
+
+	if err := s.reconcileCustomDomain(ctx, domain.ID); err != nil {
+		return err
 	}
 
 	s.logger.InfoContext(ctx, "custom domain deleted",

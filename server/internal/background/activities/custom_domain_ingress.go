@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -120,6 +121,9 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 // calls and schedules another pass when desired state changes during Apply.
 func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args ReconcileCustomDomainArgs) error {
 	desired, err := c.domains.GetCustomDomainRouteConfig(ctx, args.CustomDomainID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load custom domain route config").LogError(ctx, c.logger)
 	}
@@ -145,9 +149,38 @@ func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args Re
 	)
 
 	provisioner := c.provisionerFactory.Provisioner(kind)
+	if desired.Deleted {
+		if !desired.IngressName.Valid || desired.IngressName.String == "" {
+			return nil
+		}
+		if err := provisioner.Delete(ctx, desired.IngressName.String, desired.CertSecretName.String); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "delete custom domain resource").LogError(ctx, c.logger)
+		}
+		return nil
+	}
+
 	result, err := provisioner.Apply(ctx, config)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "apply custom domain route").LogError(ctx, c.logger)
+	}
+	persisted, err := c.domains.UpdateCustomDomainResourceNames(ctx, customdomainsRepo.UpdateCustomDomainResourceNamesParams{
+		IngressName:     conv.ToPGText(result.ResourceName),
+		CertSecretName:  conv.PtrToPGText(conv.PtrEmpty(result.SecretName)),
+		ProvisionerKind: string(kind),
+		ID:              desired.ID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "persist custom domain resource names").LogError(ctx, c.logger)
+	}
+	if persisted.Deleted {
+		c.logger.InfoContext(ctx, "custom domain deletion won during apply; removing applied resource",
+			attr.SlogCustomDomainProvisionerKind(string(kind)),
+			attr.SlogURLDomain(desired.Domain),
+		)
+		if err := provisioner.Delete(ctx, result.ResourceName, result.SecretName); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "delete custom domain resource applied after deletion").LogError(ctx, c.logger)
+		}
+		return nil
 	}
 	if desired.Activated {
 		return nil
@@ -172,6 +205,13 @@ func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args Re
 		CertSecretName:  conv.PtrToPGText(conv.PtrEmpty(result.SecretName)),
 		ProvisionerKind: string(kind),
 	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.logger.InfoContext(ctx, "custom domain deletion won during resource convergence; skipping activation",
+				attr.SlogCustomDomainProvisionerKind(string(kind)),
+				attr.SlogURLDomain(desired.Domain),
+			)
+			return nil
+		}
 		return oops.E(oops.CodeUnexpected, err, "reconcile custom domain").LogError(ctx, c.logger)
 	}
 	return nil
