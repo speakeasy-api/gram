@@ -87,7 +87,7 @@ func TestParseOpencodeHookEvent(t *testing.T) {
 		ok       bool
 	}{
 		{raw: "session.created", expected: HookEventSessionStart, ok: true},
-		{raw: "session.idle", expected: HookEventSessionEnd, ok: true},
+		{raw: "session.idle", expected: HookEventAfterAgentResponse, ok: true},
 		{raw: "server.instance.disposed", expected: HookEventSessionEnd, ok: true},
 		{raw: "tool.execute.before", expected: HookEventPreToolUse, ok: true},
 		{raw: "tool.execute.after", expected: HookEventPostToolUse, ok: true},

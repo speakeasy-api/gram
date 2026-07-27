@@ -2,4 +2,4 @@
 "dashboard": minor
 ---
 
-opencode observability: install experience and hook source in the dashboard, plus native opencode event-name fidelity in the hook ingest pipeline.
+opencode observability: surface opencode as a hook source in the dashboard (icon, platform filters). The install experience is covered separately; see the speakeasy-hooks setup changeset.

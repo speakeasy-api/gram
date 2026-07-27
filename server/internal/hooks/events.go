@@ -102,7 +102,10 @@ func parseOpencodeHookEvent(raw string) (HookEvent, bool) {
 	case "session.created":
 		return HookEventSessionStart, true
 	case "session.idle":
-		return HookEventSessionEnd, true
+		// A finished turn, not a session lifecycle end: agenthooks decodes
+		// session.idle as KindStop and the relay's canonical type is
+		// assistant.responded. server.instance.disposed is the real end.
+		return HookEventAfterAgentResponse, true
 	case "server.instance.disposed":
 		return HookEventSessionEnd, true
 	case "tool.execute.before":

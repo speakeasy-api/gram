@@ -17,8 +17,11 @@ var (
 	// only matches as a bounded segment or the full `authorization` name; the
 	// other keywords stay substring matches so concatenated forms like `apikey`
 	// still redact. Kept in lockstep with the opencode hook's SECRET_PARAM.
-	secretParamRE    = regexp.MustCompile(`(?i)(key|token|secret|password|passwd|credential)|(^|[^a-z])auth([^a-z]|$)|authorization`)
-	signatureParamRE = regexp.MustCompile(`(?i)^(sig|signature|x-amz-signature|x-goog-signature)$`)
+	secretParamRE = regexp.MustCompile(`(?i)(key|token|secret|password|passwd|credential)|(^|[^a-z])auth([^a-z]|$)|authorization`)
+	// A leading separator keeps prefixed OAuth/vendor signature params redacted
+	// (oauth_signature, x-amz-signature) — the bounded `auth` branch above skips
+	// `oauth_` — while benign names like `author` stay clear.
+	signatureParamRE = regexp.MustCompile(`(?i)(^|[_-])(sig|signature|x-amz-signature|x-goog-signature)$`)
 )
 
 // redactURL strips basic-auth userinfo and fragments and masks secret-named

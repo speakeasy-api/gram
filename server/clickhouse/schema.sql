@@ -651,12 +651,13 @@ WITH
     -- assistant.responded rows, under the canonical gen_ai.usage.* keys that
     -- every fallback branch below already reads. It has no OTEL stream and the
     -- unified ingest path stamps no gram_urn, so provenance anchors on
-    -- hook_source instead. The token guard mirrors is_codex_api_request: only
+    -- hook_source instead. The usage guard mirrors is_codex_api_request: only
     -- the turn-closing row carries usage, so a session's other opencode rows
-    -- (prompts, tool calls, session lifecycle) contribute nothing.
+    -- (prompts, tool calls, session lifecycle) contribute nothing. Cost is part
+    -- of the guard so a cost-only turn (no token fields) still counts.
     (
         toString(attributes.gram.hook.source) = 'opencode'
-        AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '')
+        AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_opencode_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
     (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_opencode_usage_row) AS is_usage_row,
@@ -1027,7 +1028,7 @@ WITH
     -- attribute_metrics_summaries_mv above.
     (
         hook_source = 'opencode'
-        AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '')
+        AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_opencode_usage_row,
     (
         hook_source IN ('codex', 'cursor', 'opencode')
