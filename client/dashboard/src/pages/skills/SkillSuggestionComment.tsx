@@ -66,19 +66,7 @@ export function SkillSuggestionComment({
   return (
     // The card sits inside the diff's <pre>, so the prose font is reset here.
     <div className="border-border bg-card my-2 overflow-hidden rounded-lg border font-sans shadow-sm">
-      <div className="flex items-center gap-2 px-4 py-2.5">
-        <span className="bg-foreground text-background flex h-5 w-5 items-center justify-center rounded text-[11px] font-semibold">
-          S
-        </span>
-        <Type as="span" className="text-sm font-medium">
-          Speakeasy
-        </Type>
-        <Type as="span" small muted mono className="text-xs">
-          bot · suggested this change
-        </Type>
-      </div>
-
-      <div className="space-y-3 px-4 pb-3">
+      <div className="space-y-3 px-4 py-3">
         <Type small>
           {suggestion.feedbackSessionCount > 0 && (
             <span className="font-medium">
