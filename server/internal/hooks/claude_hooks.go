@@ -850,7 +850,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
 		}
-		if blockID, err := uuid.NewV7(); err == nil {
+		if blockID, err := uuid.NewV7(); err == nil && !s.isHookDuplicate(ctx) && s.repo != nil && strings.TrimSpace(ev.Context.OrganizationID) != "" && ev.Context.ProjectID != uuid.Nil {
 			userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
 			userID := ev.Context.User.ID
 			userEmail := ev.Context.User.Email
