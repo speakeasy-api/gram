@@ -103,6 +103,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -113,9 +114,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skillefficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
+	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/templates"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -168,12 +172,6 @@ func newStartCommand() *cli.Command {
 			Usage:    "The current server environment", // local, dev, prod
 			Required: true,
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
-		},
-		&cli.BoolFlag{
-			Name:    "enable-gateway-ip-allowlist",
-			Usage:   "Enable Envoy Gateway SecurityPolicy reconcile for custom domain IP allow listing. Requires the SecurityPolicy CRD to be installed.",
-			EnvVars: []string{"GRAM_ENABLE_GATEWAY_IP_ALLOWLIST"},
-			Value:   false,
 		},
 		&cli.StringFlag{
 			Name:     "ssl-key-file",
@@ -398,12 +396,6 @@ func newStartCommand() *cli.Command {
 			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
 			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
 		},
-		&cli.StringFlag{
-			Name:    "custom-domain-provisioner",
-			Usage:   "Kubernetes provisioner kind for custom domains: ingress or gateway (default: ingress)",
-			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_PROVISIONER"},
-			Value:   "ingress",
-		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -599,7 +591,7 @@ func newStartCommand() *cli.Command {
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
-			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), c.Bool("enable-gateway-ip-allowlist"))
+			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
 			if err != nil {
 				return fmt.Errorf("failed to create kubernetes client: %w", err)
 			}
@@ -707,7 +699,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create publishers: %w", err)
 			}
 
-			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs, featureFlags)
+			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
 
 			telemLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
@@ -1053,6 +1045,15 @@ func newStartCommand() *cli.Command {
 			}
 			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
 
+			spendCelEngine, err := spendcelenv.New()
+			if err != nil {
+				return fmt.Errorf("create spend rules cel engine: %w", err)
+			}
+			spendGate, err := spendrules.NewGate(logger, cache.NewRedisCacheAdapter(redisClient), spendCelEngine)
+			if err != nil {
+				return fmt.Errorf("create spend gate: %w", err)
+			}
+
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
@@ -1082,6 +1083,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				riskScanner,
 				policyBypass,
+				spendGate,
 				shadowMCPClient,
 				chatWriter,
 				efficacySignaler,
@@ -1151,7 +1153,7 @@ func newStartCommand() *cli.Command {
 			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, mcpRegistryClient, authzEngine, auditLogger)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
-			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, gcpauth.NewResolver()))
 			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
@@ -1225,9 +1227,39 @@ func newStartCommand() *cli.Command {
 					}
 					return urls, nil
 				},
+				riskchrepo.New(chDB),
 			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
+
+			spendEvaluator := &background.TemporalSpendRuleEvaluator{TemporalEnv: temporalEnv}
+			spendrules.Attach(mux, spendrules.NewService(
+				logger,
+				tracerProvider,
+				db,
+				chDB,
+				sessionManager,
+				authzEngine,
+				auditLogger,
+				spendCelEngine,
+				cache.NewRedisCacheAdapter(redisClient),
+				featureFlags,
+				spendEvaluator,
+			))
+
+			// Fresh spend-relevant telemetry (Claude Code OTEL logs,
+			// Codex/Cursor usage rows) triggers a throttled per-org
+			// evaluation so breached budgets block within seconds instead of
+			// waiting for the scheduled sweep. Flushed in the drain goroutine
+			// below, not via shutdownFuncs, for the same gRPC-close race
+			// reason as riskSignaler.
+			spendUsageTrigger := spendrules.NewUsageTrigger(
+				logger,
+				cache.NewRedisCacheAdapter(redisClient),
+				spendEvaluator,
+				spendrules.UsageSignalCooldown,
+			)
+			telemLogger.AddObserver(spendUsageTrigger)
 
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChatsTools(chatService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
@@ -1288,45 +1320,45 @@ func newStartCommand() *cli.Command {
 					piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-						GuardianPolicy:                 guardianPolicy,
-						DB:                             db,
-						EncryptionClient:               encryptionClient,
-						FeatureProvider:                featureFlags,
-						AssetStorage:                   assetStorage,
-						SlackClient:                    slackClient,
-						ChatMessageWriter:              chatWriter,
-						ChatClient:                     chatClient,
-						OpenRouter:                     openRouter,
-						K8sClient:                      k8sClient,
-						DefaultCustomDomainProvisioner: k8s.ProvisionerKind(c.String("custom-domain-provisioner")),
-						ExpectedTargetCNAME:            c.String("custom-domain-cname"),
-						BillingTracker:                 billingTracker,
-						BillingRepository:              billingRepo,
-						RedisClient:                    redisClient,
-						PosthogClient:                  posthogClient,
-						FunctionsDeployer:              functionsOrchestrator,
-						FunctionsVersion:               runnerVersion,
-						RagService:                     ragService,
-						MCPRegistryClient:              mcpRegistryClient,
-						TelemetryLogger:                telemLogger,
-						ClickhouseConn:                 chDB,
-						TelemetryRepo:                  telemetryrepo.New(chDB),
-						TriggersApp:                    triggerApp,
-						CacheAdapter:                   cache.NewRedisCacheAdapter(redisClient),
-						EmailService:                   emailService,
-						AssistantsCore:                 assistantsCore,
-						TemporalEnv:                    temporalEnv,
-						PIIScanner:                     piiScanner,
-						PIScanner:                      piScanner,
-						CustomRuleScanner:              customRulesScanner,
-						BuiltinPresets:                 builtinPresets,
-						ShadowMCPClient:                shadowMCPClient,
-						AuditLogger:                    auditLogger,
-						WorkOSClient:                   backgroundWorkOSClient,
-						SvixClient:                     svixClient,
-						ProductFeatures:                productFeatures,
-						PluginPublisher:                pluginPublisher,
-						Publishers:                     publishers,
+						GuardianPolicy:      guardianPolicy,
+						DB:                  db,
+						EncryptionClient:    encryptionClient,
+						FeatureProvider:     featureFlags,
+						AssetStorage:        assetStorage,
+						SlackClient:         slackClient,
+						ChatMessageWriter:   chatWriter,
+						ChatClient:          chatClient,
+						OpenRouter:          openRouter,
+						K8sClient:           k8sClient,
+						ExpectedTargetCNAME: c.String("custom-domain-cname"),
+						SiteURL:             siteURL,
+						BillingTracker:      billingTracker,
+						BillingRepository:   billingRepo,
+						RedisClient:         redisClient,
+						PosthogClient:       posthogClient,
+						FunctionsDeployer:   functionsOrchestrator,
+						FunctionsVersion:    runnerVersion,
+						RagService:          ragService,
+						MCPRegistryClient:   mcpRegistryClient,
+						TelemetryLogger:     telemLogger,
+						ClickhouseConn:      chDB,
+						TelemetryRepo:       telemetryrepo.New(chDB),
+						TriggersApp:         triggerApp,
+						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
+						EmailService:        emailService,
+						AssistantsCore:      assistantsCore,
+						TemporalEnv:         temporalEnv,
+						PIIScanner:          piiScanner,
+						PIScanner:           piScanner,
+						CustomRuleScanner:   customRulesScanner,
+						BuiltinPresets:      builtinPresets,
+						ShadowMCPClient:     shadowMCPClient,
+						AuditLogger:         auditLogger,
+						WorkOSClient:        backgroundWorkOSClient,
+						SvixClient:          svixClient,
+						ProductFeatures:     productFeatures,
+						PluginPublisher:     pluginPublisher,
+						Publishers:          publishers,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
@@ -1364,6 +1396,9 @@ func newStartCommand() *cli.Command {
 				}
 				if err := chatAnalysisSignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending chat analysis signals", attr.SlogError(err))
+				}
+				if err := spendUsageTrigger.Shutdown(graceCtx); err != nil {
+					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(err))
 				}
 			})
 

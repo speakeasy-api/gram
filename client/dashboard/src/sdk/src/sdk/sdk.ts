@@ -5,6 +5,7 @@
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
 import { AdminChatAnalysis } from "./adminchatanalysis.js";
+import { AdminExternalCredentials } from "./adminexternalcredentials.js";
 import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
 import { AiIntegrations } from "./aiintegrations.js";
@@ -50,6 +51,7 @@ import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
 import { SkillEfficacy } from "./skillefficacy.js";
 import { Skills } from "./skills.js";
+import { SpendRules } from "./spendrules.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
 import { TokenExchange } from "./tokenexchange.js";
@@ -73,6 +75,13 @@ export class Gram extends ClientSDK {
   private _adminChatAnalysis?: AdminChatAnalysis;
   get adminChatAnalysis(): AdminChatAnalysis {
     return (this._adminChatAnalysis ??= new AdminChatAnalysis(this._options));
+  }
+
+  private _adminExternalCredentials?: AdminExternalCredentials;
+  get adminExternalCredentials(): AdminExternalCredentials {
+    return (this._adminExternalCredentials ??= new AdminExternalCredentials(
+      this._options,
+    ));
   }
 
   private _adminRemoteSessions?: AdminRemoteSessions;
@@ -310,6 +319,11 @@ export class Gram extends ClientSDK {
   private _skills?: Skills;
   get skills(): Skills {
     return (this._skills ??= new Skills(this._options));
+  }
+
+  private _spendRules?: SpendRules;
+  get spendRules(): SpendRules {
+    return (this._spendRules ??= new SpendRules(this._options));
   }
 
   private _telemetry?: Telemetry;

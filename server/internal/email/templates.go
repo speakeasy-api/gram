@@ -31,6 +31,7 @@ const (
 	// Loops template ids like every other constant in this block, not secrets.
 	transactionalIDOpenRouterChatCreditsThreshold     TransactionalID = "cmrpjavhw06x10j1dsxivfted" //nolint:gosec // template id, not a credential
 	transactionalIDOpenRouterInternalCreditsThreshold TransactionalID = "cmrpkq1r6014d0jze28webret" //nolint:gosec // template id, not a credential
+	transactionalIDCustomDomainUnhealthy              TransactionalID = "cmrvye9w306z30j1pnuldvunv"
 )
 
 // Template is implemented by every concrete email template. Concrete types
@@ -96,5 +97,11 @@ var RegisteredTemplates = []Template{
 		OrganizationName: "",
 		ThresholdPercent: "",
 		Exhausted:        false,
+	},
+	CustomDomainUnhealthy{
+		Email:        "",
+		Domain:       "",
+		IssueMessage: "",
+		DomainLink:   "",
 	},
 }

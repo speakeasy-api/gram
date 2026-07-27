@@ -61,6 +61,22 @@ function TabsContent({
   );
 }
 
+/** Underline-style tab list for page-level detail views; hosts PageTabsTrigger. */
+function PageTabsList({
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.List>): React.JSX.Element {
+  return (
+    <TabsList
+      className={cn(
+        "h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 /** Underline-style tab trigger for page-level detail views. */
 function PageTabsTrigger({
   className,
@@ -78,4 +94,11 @@ function PageTabsTrigger({
   );
 }
 
-export { Tabs, TabsContent, TabsList, TabsTrigger, PageTabsTrigger };
+export {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  PageTabsList,
+  PageTabsTrigger,
+};

@@ -13,20 +13,22 @@ export type ListExternalKeysSecurity = {
 /**
  * Only return keys for this provider.
  */
-export const QueryParamProvider = {
+export const ListExternalKeysQueryParamProvider = {
   AwsKms: "aws_kms",
   GcpKms: "gcp_kms",
 } as const;
 /**
  * Only return keys for this provider.
  */
-export type QueryParamProvider = ClosedEnum<typeof QueryParamProvider>;
+export type ListExternalKeysQueryParamProvider = ClosedEnum<
+  typeof ListExternalKeysQueryParamProvider
+>;
 
 export type ListExternalKeysRequest = {
   /**
    * Only return keys for this provider.
    */
-  provider?: QueryParamProvider | undefined;
+  provider?: ListExternalKeysQueryParamProvider | undefined;
   /**
    * Session header
    */
@@ -62,9 +64,9 @@ export function listExternalKeysSecurityToJSON(
 }
 
 /** @internal */
-export const QueryParamProvider$outboundSchema: z.ZodMiniEnum<
-  typeof QueryParamProvider
-> = z.enum(QueryParamProvider);
+export const ListExternalKeysQueryParamProvider$outboundSchema: z.ZodMiniEnum<
+  typeof ListExternalKeysQueryParamProvider
+> = z.enum(ListExternalKeysQueryParamProvider);
 
 /** @internal */
 export type ListExternalKeysRequest$Outbound = {
@@ -78,7 +80,7 @@ export const ListExternalKeysRequest$outboundSchema: z.ZodMiniType<
   ListExternalKeysRequest
 > = z.pipe(
   z.object({
-    provider: z.optional(QueryParamProvider$outboundSchema),
+    provider: z.optional(ListExternalKeysQueryParamProvider$outboundSchema),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {

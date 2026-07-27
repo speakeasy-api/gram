@@ -176,8 +176,14 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	}
 
 	// The legacy /mcp OAuth machinery is keyed on the toolset's mcp_slug,
-	// which equals the requested slug on this fallback path.
-	return s.serveLegacyToolsetAuthorizationServer(ctx, w, r, logger, toolset, mcpSlug)
+	// which equals the requested slug on this fallback path. The resource URL
+	// mirrors HandleGetProtectedResource so the served issuer matches the
+	// protected-resource metadata's authorization_servers entry.
+	resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), "mcp", mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build legacy resource URL").LogError(ctx, s.logger)
+	}
+	return s.serveLegacyToolsetAuthorizationServer(ctx, w, r, logger, toolset, mcpSlug, resourceURL)
 }
 
 // ServeWellKnownProtectedResourceForServer serves RFC 9728 protected-resource
@@ -268,7 +274,14 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 		if oauthSlug == "" {
 			return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 		}
-		return s.serveLegacyToolsetAuthorizationServer(ctx, w, r, logger, toolset, oauthSlug)
+		// The resource URL mirrors ServeWellKnownProtectedResourceForServer
+		// (routeBase + mcp_endpoints.slug) so the served issuer matches the
+		// protected-resource metadata's authorization_servers entry.
+		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
+		}
+		return s.serveLegacyToolsetAuthorizationServer(ctx, w, r, logger, toolset, oauthSlug, resourceURL)
 	default:
 		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").LogError(ctx, logger)
 	}
@@ -313,8 +326,8 @@ func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w htt
 // result means the toolset carries no OAuth configuration — 404. oauthSlug
 // keys the emitted issuer / endpoint URLs onto the legacy /oauth/{slug}
 // surface.
-func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, oauthSlug string) error {
-	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(ctx, logger, s.db, s.oauthRepo, &s.toolsetCache, toolset, s.BaseURLForRequest(r), oauthSlug)
+func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, oauthSlug, resourceURL string) error {
+	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(ctx, logger, s.db, s.oauthRepo, &s.toolsetCache, toolset, s.BaseURLForRequest(r), oauthSlug, resourceURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth server metadata").LogError(ctx, logger)
 	}

@@ -9,6 +9,7 @@ import type { ChatOverview } from "@gram/client/models/components/chatoverview.j
 import {
   AccountType,
   HasRisk,
+  Pinned,
   SortBy,
   SortOrder as ApiSortOrder,
 } from "@gram/client/models/operations/listchats";
@@ -62,6 +63,12 @@ function toApiAccountType(value: string): AccountType | undefined {
   return undefined;
 }
 
+function toApiPinned(value: string): Pinned | undefined {
+  if (value === "true") return Pinned.True;
+  if (value === "false") return Pinned.False;
+  return undefined;
+}
+
 // Read the min-risk-score URL param. Empty, non-integer, or < 1 is treated as
 // "no threshold" — a minimum of 0 means "≥ 0", i.e. everything, so it's
 // indistinguishable from no filter (and the API rejects it).
@@ -112,6 +119,12 @@ const SESSION_FILTERS = defineFilters([
     min: 1,
     placeholder: "e.g. 3 (≥ 3 findings)",
   },
+  {
+    id: "pinned",
+    label: "Pinned",
+    kind: "select",
+    allLabel: "All",
+  },
 ]);
 
 // Static filter options. The "source" (agent type) options are NOT hardcoded
@@ -126,6 +139,10 @@ const HAS_RISK_OPTIONS: OptionsById = {
   account_type: [
     { value: "team", label: "Team" },
     { value: "personal", label: "Personal" },
+  ],
+  pinned: [
+    { value: "true", label: "Pinned" },
+    { value: "false", label: "Unpinned" },
   ],
 };
 
@@ -209,6 +226,7 @@ export function LogsAgentsContent(): JSX.Element {
   const urlChatId = searchParams.get("chatId");
   const urlHasRisk = searchParams.get("has_risk");
   const urlAccountType = searchParams.get("account_type");
+  const urlPinned = searchParams.get("pinned");
   const urlSource = searchParams.get("source");
   const urlMinRiskScore = searchParams.get("min_risk_score");
   const urlAssistantId = searchParams.get("assistantId");
@@ -225,6 +243,8 @@ export function LogsAgentsContent(): JSX.Element {
     urlAccountType === "team" || urlAccountType === "personal"
       ? urlAccountType
       : "";
+  const pinned: string =
+    urlPinned === "true" || urlPinned === "false" ? urlPinned : "";
   const minRiskScore = useMemo(
     () => parseMinRiskScore(urlMinRiskScore),
     [urlMinRiskScore],
@@ -339,6 +359,13 @@ export function LogsAgentsContent(): JSX.Element {
     [updateSearchParams],
   );
 
+  const setPinned = useCallback(
+    (value: string) => {
+      updateSearchParams({ pinned: value || null });
+    },
+    [updateSearchParams],
+  );
+
   const setSources = useCallback(
     (values: string[]) => {
       updateSearchParams({
@@ -374,6 +401,7 @@ export function LogsAgentsContent(): JSX.Element {
       to: null,
       has_risk: null,
       account_type: null,
+      pinned: null,
       source: null,
       min_risk_score: null,
     });
@@ -409,6 +437,7 @@ export function LogsAgentsContent(): JSX.Element {
             minRiskScore !== undefined ? undefined : toApiHasRisk(hasRisk),
           minRiskScore,
           accountType: toApiAccountType(accountType),
+          pinned: toApiPinned(pinned),
           assistantId: assistantId || undefined,
           source: sources.length ? sources.join(",") : undefined,
           from: timeRange.from,
@@ -525,6 +554,8 @@ export function LogsAgentsContent(): JSX.Element {
         setHasRisk={setHasRisk}
         accountType={accountType}
         setAccountType={setAccountType}
+        pinned={pinned}
+        setPinned={setPinned}
         sources={sources}
         setSources={setSources}
         filterOptions={filterOptions}
@@ -571,6 +602,8 @@ function AgentSessionsPageContent({
   setHasRisk,
   accountType,
   setAccountType,
+  pinned,
+  setPinned,
   sources,
   setSources,
   filterOptions,
@@ -612,6 +645,8 @@ function AgentSessionsPageContent({
   setHasRisk: (value: string) => void;
   accountType: string;
   setAccountType: (value: string) => void;
+  pinned: string;
+  setPinned: (value: string) => void;
   sources: string[];
   setSources: (values: string[]) => void;
   filterOptions: OptionsById;
@@ -709,6 +744,7 @@ function AgentSessionsPageContent({
                 },
                 has_risk: hasRisk || null,
                 account_type: accountType || null,
+                pinned: pinned || null,
                 source: sources,
                 min_risk_score: minRiskScore ?? null,
               }}
@@ -733,6 +769,8 @@ function AgentSessionsPageContent({
                   setHasRisk((value as string | null) ?? "");
                 } else if (id === "account_type") {
                   setAccountType((value as string | null) ?? "");
+                } else if (id === "pinned") {
+                  setPinned((value as string | null) ?? "");
                 } else if (id === "source") {
                   setSources((value as string[]) ?? []);
                 } else if (id === "min_risk_score") {
@@ -746,6 +784,8 @@ function AgentSessionsPageContent({
                   setHasRisk("");
                 } else if (id === "account_type") {
                   setAccountType("");
+                } else if (id === "pinned") {
+                  setPinned("");
                 } else if (id === "source") {
                   setSources([]);
                 } else if (id === "min_risk_score") {
