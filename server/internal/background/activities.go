@@ -347,18 +347,33 @@ func (a *Activities) ListCustomDomainsForHealthCheck(ctx context.Context, input 
 	return targets, nil
 }
 
-func (a *Activities) CheckCustomDomainHealth(ctx context.Context, input activities.CheckCustomDomainHealthArgs) (activities.NotifyCustomDomainUnhealthyArgs, error) {
-	notification, err := a.customDomainHealth.Check(ctx, input)
+func (a *Activities) CheckCustomDomainHealth(ctx context.Context, input activities.CheckCustomDomainHealthArgs) (activities.CustomDomainHealthCheckResult, error) {
+	result, err := a.customDomainHealth.Check(ctx, input)
 	if err != nil {
-		var noNotification activities.NotifyCustomDomainUnhealthyArgs
-		return noNotification, fmt.Errorf("check custom domain health: %w", err)
+		var noResult activities.CustomDomainHealthCheckResult
+		return noResult, fmt.Errorf("check custom domain health: %w", err)
 	}
-	return notification, nil
+	return result, nil
 }
 
 func (a *Activities) NotifyCustomDomainUnhealthy(ctx context.Context, input activities.NotifyCustomDomainUnhealthyArgs) error {
 	if err := a.customDomainHealth.NotifyOrgAdmins(ctx, input); err != nil {
 		return fmt.Errorf("notify custom domain unhealthy: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) DeactivateUnhealthyCustomDomain(ctx context.Context, input activities.AutoDisableCustomDomainArgs) (bool, error) {
+	deactivated, err := a.customDomainHealth.Deactivate(ctx, input)
+	if err != nil {
+		return false, fmt.Errorf("deactivate unhealthy custom domain: %w", err)
+	}
+	return deactivated, nil
+}
+
+func (a *Activities) NotifyCustomDomainDisabled(ctx context.Context, input activities.AutoDisableCustomDomainArgs) error {
+	if err := a.customDomainHealth.NotifyDisabledOrgAdmins(ctx, input); err != nil {
+		return fmt.Errorf("notify custom domain disabled: %w", err)
 	}
 	return nil
 }

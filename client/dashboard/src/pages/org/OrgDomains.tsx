@@ -128,6 +128,20 @@ function showCustomDomainUnhealthy(domain: {
   );
 }
 
+function isCustomDomainAutoDisabled(domain: {
+  verified?: boolean;
+  activated?: boolean;
+  healthStatus?: string;
+  healthIssue?: string;
+}): boolean {
+  return (
+    domain.verified === true &&
+    domain.activated === false &&
+    domain.healthStatus === "unhealthy" &&
+    domain.healthIssue !== "check_failed"
+  );
+}
+
 // Inline editor: each allowlist entry is its own editable field. Entries are
 // validated on blur (and on save, by the parent via `onValidityChange`) rather
 // than gated behind explicit add/remove actions.
@@ -267,6 +281,9 @@ function OrgDomainsInner() {
     isLoading: domainIsLoading,
     refetch: domainRefetch,
   } = useCustomDomain();
+  const customDomainAutoDisabled = domain
+    ? isCustomDomainAutoDisabled(domain)
+    : false;
 
   useEffect(() => {
     if (domain?.domain && !domainInput) {
@@ -411,11 +428,15 @@ function OrgDomainsInner() {
                   <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
                     <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                   </SimpleTooltip>
+                ) : customDomainAutoDisabled ? (
+                  <SimpleTooltip tooltip="Domain disabled after prolonged health failures">
+                    <AlertTriangle className="text-destructive h-4 w-4" />
+                  </SimpleTooltip>
                 ) : showCustomDomainUnhealthy(domain) ? (
                   <SimpleTooltip tooltip="The latest health check found a problem">
                     <AlertTriangle className="h-4 w-4 text-amber-500" />
                   </SimpleTooltip>
-                ) : domain.verified ? (
+                ) : domain.verified && domain.activated ? (
                   <SimpleTooltip tooltip="Domain verified and active">
                     <Check className="h-4 w-4 stroke-3 text-green-500" />
                   </SimpleTooltip>
@@ -490,7 +511,39 @@ function OrgDomainsInner() {
               </Stack>
             </RequireScope>
           </Stack>
-          {showCustomDomainUnhealthy(domain) && (
+          {customDomainAutoDisabled && (
+            <Alert variant="error" dismissible={false} className="mt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <Type variant="body" className="font-medium">
+                    This custom domain was disabled
+                  </Type>
+                  <Type variant="body" className="text-sm">
+                    Gram disabled routing after repeated health checks found a
+                    persistent problem. Fix the DNS or certificate
+                    configuration, then reverify the domain to reactivate it.
+                  </Type>
+                  {domain.unhealthySince && (
+                    <Type variant="body" className="text-sm opacity-80">
+                      Unhealthy since{" "}
+                      <HumanizeDateTime date={domain.unhealthySince} />
+                    </Type>
+                  )}
+                </div>
+                <RequireScope scope="org:admin" level="component">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={domain.isUpdating}
+                    onClick={() => setIsAddDomainDialogOpen(true)}
+                  >
+                    Reverify
+                  </Button>
+                </RequireScope>
+              </div>
+            </Alert>
+          )}
+          {!customDomainAutoDisabled && showCustomDomainUnhealthy(domain) && (
             <Alert variant="warning" dismissible={false} className="mt-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1">

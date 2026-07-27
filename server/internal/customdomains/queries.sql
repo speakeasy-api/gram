@@ -105,6 +105,35 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: ActivateCustomDomain :one
+UPDATE custom_domains
+SET
+    verified = TRUE,
+    activated = TRUE,
+    ingress_name = @ingress_name,
+    cert_secret_name = @cert_secret_name,
+    provisioner_kind = @provisioner_kind,
+    health_status = 'unknown',
+    health_issue = NULL,
+    health_checked_at = NULL,
+    unhealthy_since = NULL,
+    certificate_expires_at = NULL,
+    consecutive_failures = 0,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeactivateCustomDomainAfterHealthFailures :one
+UPDATE custom_domains
+SET
+    activated = FALSE,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND activated IS TRUE
+  AND deleted IS FALSE
+RETURNING *;
 
 -- name: UpdateCustomDomain :one
 UPDATE custom_domains

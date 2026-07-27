@@ -24,11 +24,13 @@ const (
 	customDomainHealthInterval              = 24 * time.Hour
 	customDomainHealthRunTimeout            = 30 * time.Minute
 	customDomainNotifyRunTimeout            = 15 * time.Minute
+	customDomainAutoDisableRunTimeout       = 15 * time.Minute
 )
 
 type CustomDomainHealthCheckParams struct {
 	CustomDomainID uuid.UUID
 	OrganizationID string
+	AutoDisable    bool
 }
 
 type CustomDomainHealthSweepParams struct {
@@ -48,12 +50,20 @@ func customDomainNotifyWorkflowID(customDomainID uuid.UUID, checkedAt time.Time)
 	return fmt.Sprintf("v1:custom-domain-unhealthy-notify:%s:%d", customDomainID.String(), checkedAt.UnixMicro())
 }
 
+func customDomainAutoDisableWorkflowID(customDomainID uuid.UUID, checkedAt time.Time) string {
+	return fmt.Sprintf("v1:custom-domain-auto-disable:%s:%d", customDomainID.String(), checkedAt.UnixMicro())
+}
+
 func (c *CustomDomainRegistrationClient) ExecuteCustomDomainHealthCheck(ctx context.Context, organizationID string, customDomainID uuid.UUID) (client.WorkflowRun, error) {
 	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                 manualCustomDomainHealthCheckWorkflowID(customDomainID),
 		TaskQueue:          string(c.TemporalEnv.Queue()),
 		WorkflowRunTimeout: 5 * time.Minute,
-	}, CustomDomainHealthCheckWorkflow, CustomDomainHealthCheckParams{CustomDomainID: customDomainID, OrganizationID: organizationID})
+	}, CustomDomainHealthCheckWorkflow, CustomDomainHealthCheckParams{
+		CustomDomainID: customDomainID,
+		OrganizationID: organizationID,
+		AutoDisable:    false,
+	})
 }
 
 func CustomDomainHealthCheckWorkflow(ctx workflow.Context, params CustomDomainHealthCheckParams) error {
@@ -69,30 +79,38 @@ func CustomDomainHealthCheckWorkflow(ctx workflow.Context, params CustomDomainHe
 
 	var a *Activities
 	checkedAt := workflow.Now(ctx).UTC().Truncate(time.Microsecond)
-	var notification activities.NotifyCustomDomainUnhealthyArgs
+	var result activities.CustomDomainHealthCheckResult
 	if err := workflow.ExecuteActivity(healthCheckCtx, a.CheckCustomDomainHealth, activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: params.CustomDomainID,
 		OrganizationID: params.OrganizationID,
 		// Match PostgreSQL's microsecond timestamptz precision across activity retries.
 		CheckedAt: checkedAt,
-	}).Get(healthCheckCtx, &notification); err != nil {
+	}).Get(healthCheckCtx, &result); err != nil {
 		return fmt.Errorf("check custom domain health: %w", err)
 	}
-	if notification.Issue == "" {
-		return nil
+
+	if result.UnhealthyNotification.Issue != "" {
+		// Deliver the email in a detached child workflow so a slow or failing
+		// provider cannot block callers waiting on a manual dashboard recheck.
+		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			WorkflowID:         customDomainNotifyWorkflowID(params.CustomDomainID, result.UnhealthyNotification.CheckedAt),
+			WorkflowRunTimeout: customDomainNotifyRunTimeout,
+			ParentClosePolicy:  enums.PARENT_CLOSE_POLICY_ABANDON,
+		})
+		if err := workflow.ExecuteChildWorkflow(childCtx, CustomDomainUnhealthyNotifyWorkflow, result.UnhealthyNotification).GetChildWorkflowExecution().Get(childCtx, nil); err != nil {
+			return fmt.Errorf("start custom domain unhealthy notification: %w", err)
+		}
 	}
 
-	// Deliver the email in a detached child workflow so a slow or failing email
-	// provider can neither block callers waiting on this workflow (the manual
-	// dashboard recheck) nor burn this workflow's run timeout. Only the start is
-	// awaited; delivery retries run under the child's own timeout.
-	childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-		WorkflowID:         customDomainNotifyWorkflowID(params.CustomDomainID, notification.CheckedAt),
-		WorkflowRunTimeout: customDomainNotifyRunTimeout,
-		ParentClosePolicy:  enums.PARENT_CLOSE_POLICY_ABANDON,
-	})
-	if err := workflow.ExecuteChildWorkflow(childCtx, CustomDomainUnhealthyNotifyWorkflow, notification).GetChildWorkflowExecution().Get(childCtx, nil); err != nil {
-		return fmt.Errorf("start custom domain unhealthy notification: %w", err)
+	if params.AutoDisable && result.AutoDisable.Domain != "" {
+		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			WorkflowID:         customDomainAutoDisableWorkflowID(params.CustomDomainID, result.AutoDisable.CheckedAt),
+			WorkflowRunTimeout: customDomainAutoDisableRunTimeout,
+			ParentClosePolicy:  enums.PARENT_CLOSE_POLICY_ABANDON,
+		})
+		if err := workflow.ExecuteChildWorkflow(childCtx, CustomDomainAutoDisableWorkflow, result.AutoDisable).GetChildWorkflowExecution().Get(childCtx, nil); err != nil {
+			return fmt.Errorf("start custom domain automatic disable: %w", err)
+		}
 	}
 	return nil
 }
@@ -111,6 +129,54 @@ func CustomDomainUnhealthyNotifyWorkflow(ctx workflow.Context, args activities.N
 	var a *Activities
 	if err := workflow.ExecuteActivity(ctx, a.NotifyCustomDomainUnhealthy, args).Get(ctx, nil); err != nil {
 		return fmt.Errorf("notify custom domain unhealthy: %w", err)
+	}
+	return nil
+}
+
+func CustomDomainAutoDisableWorkflow(ctx workflow.Context, args activities.AutoDisableCustomDomainArgs) error {
+	deletionCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts:    3,
+			InitialInterval:    5 * time.Second,
+			BackoffCoefficient: 2,
+			MaximumInterval:    30 * time.Second,
+		},
+	})
+
+	var a *Activities
+	if err := workflow.ExecuteActivity(deletionCtx, a.CustomDomainIngress, activities.CustomDomainIngressArgs{
+		OrgID:           args.OrganizationID,
+		Domain:          args.Domain,
+		Action:          activities.CustomDomainIngressActionDelete,
+		IngressName:     args.IngressName,
+		ResourceName:    args.IngressName,
+		CertSecretName:  args.CertSecretName,
+		ProvisionerKind: args.ProvisionerKind,
+		IPAllowlist:     nil,
+	}).Get(deletionCtx, nil); err != nil {
+		return fmt.Errorf("delete unhealthy custom domain resources: %w", err)
+	}
+
+	var deactivated bool
+	if err := workflow.ExecuteActivity(deletionCtx, a.DeactivateUnhealthyCustomDomain, args).Get(deletionCtx, &deactivated); err != nil {
+		return fmt.Errorf("deactivate unhealthy custom domain: %w", err)
+	}
+	if !deactivated {
+		return nil
+	}
+
+	notifyCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts:    10,
+			InitialInterval:    5 * time.Second,
+			BackoffCoefficient: 2,
+			MaximumInterval:    30 * time.Second,
+		},
+	})
+	if err := workflow.ExecuteActivity(notifyCtx, a.NotifyCustomDomainDisabled, args).Get(notifyCtx, nil); err != nil {
+		return fmt.Errorf("notify custom domain disabled: %w", err)
 	}
 	return nil
 }
@@ -152,6 +218,7 @@ func CustomDomainHealthSweepWorkflow(ctx workflow.Context, params CustomDomainHe
 			if err := workflow.ExecuteChildWorkflow(childCtx, CustomDomainHealthCheckWorkflow, CustomDomainHealthCheckParams{
 				CustomDomainID: target.ID,
 				OrganizationID: target.OrganizationID,
+				AutoDisable:    true,
 			}).GetChildWorkflowExecution().Get(childCtx, nil); err != nil {
 				logger.Info("custom domain health check already in flight or failed to start", "custom_domain_id", target.ID.String(), "error", err.Error())
 			}

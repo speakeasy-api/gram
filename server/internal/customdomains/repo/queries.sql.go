@@ -12,6 +12,65 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activateCustomDomain = `-- name: ActivateCustomDomain :one
+UPDATE custom_domains
+SET
+    verified = TRUE,
+    activated = TRUE,
+    ingress_name = $1,
+    cert_secret_name = $2,
+    provisioner_kind = $3,
+    health_status = 'unknown',
+    health_issue = NULL,
+    health_checked_at = NULL,
+    unhealthy_since = NULL,
+    certificate_expires_at = NULL,
+    consecutive_failures = 0,
+    updated_at = clock_timestamp()
+WHERE id = $4
+  AND deleted IS FALSE
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+`
+
+type ActivateCustomDomainParams struct {
+	IngressName     pgtype.Text
+	CertSecretName  pgtype.Text
+	ProvisionerKind string
+	ID              uuid.UUID
+}
+
+func (q *Queries) ActivateCustomDomain(ctx context.Context, arg ActivateCustomDomainParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, activateCustomDomain,
+		arg.IngressName,
+		arg.CertSecretName,
+		arg.ProvisionerKind,
+		arg.ID,
+	)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createCustomDomain = `-- name: CreateCustomDomain :one
 INSERT INTO custom_domains (
     organization_id,
@@ -49,6 +108,50 @@ func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomain
 		arg.ProvisionerKind,
 		arg.IpAllowlist,
 	)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deactivateCustomDomainAfterHealthFailures = `-- name: DeactivateCustomDomainAfterHealthFailures :one
+UPDATE custom_domains
+SET
+    activated = FALSE,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND activated IS TRUE
+  AND deleted IS FALSE
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+`
+
+type DeactivateCustomDomainAfterHealthFailuresParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeactivateCustomDomainAfterHealthFailures(ctx context.Context, arg DeactivateCustomDomainAfterHealthFailuresParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, deactivateCustomDomainAfterHealthFailures, arg.ID, arg.OrganizationID)
 	var i CustomDomain
 	err := row.Scan(
 		&i.ID,
