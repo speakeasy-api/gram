@@ -1427,8 +1427,7 @@ function ChatDetailPanel({
   const error = logsError as Error | null;
   const pinned = Boolean(chat.pinned);
   const summary = localSummary ?? chat.summary;
-  const summaryGeneratedAt =
-    localSummaryGeneratedAt ?? chat.summaryGeneratedAt;
+  const summaryGeneratedAt = localSummaryGeneratedAt ?? chat.summaryGeneratedAt;
 
   return (
     <div className="bg-background flex h-full flex-col">
