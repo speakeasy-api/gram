@@ -1,30 +1,43 @@
 import { HighlightProvider } from "@/components/diffs/provider";
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { FileDiffOptions, ThemeTypes } from "@pierre/diffs";
+import type {
+  DiffLineAnnotation,
+  FileDiffOptions,
+  ThemeTypes,
+} from "@pierre/diffs";
 import { MultiFileDiff } from "@pierre/diffs/react";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import type { ReactNode } from "react";
 
-export default function SkillTextDiff({
-  oldContent,
-  newContent,
-  oldLabel,
-  newLabel,
-}: {
+export type SkillTextDiffProps<Annotation> = {
   oldContent: string;
   newContent: string;
   oldLabel: string;
   newLabel: string;
-}): JSX.Element {
+  lineAnnotations?: DiffLineAnnotation<Annotation>[];
+  renderAnnotation?: (annotation: DiffLineAnnotation<Annotation>) => ReactNode;
+};
+
+export default function SkillTextDiff<Annotation = undefined>({
+  oldContent,
+  newContent,
+  oldLabel,
+  newLabel,
+  lineAnnotations,
+  renderAnnotation,
+}: SkillTextDiffProps<Annotation>): JSX.Element {
   const isMobile = useIsMobile();
   const { theme } = useMoonshineConfig();
   let themeType: ThemeTypes = "system";
   if (theme === "light") themeType = "light";
   if (theme === "dark") themeType = "dark";
 
-  const options: FileDiffOptions<undefined> = {
+  const options: FileDiffOptions<Annotation> = {
     theme: { dark: "pierre-dark", light: "pierre-light" },
     themeType,
-    diffStyle: isMobile ? "unified" : "split",
+    // Review comments need the full width of a line, so annotated diffs stay
+    // unified rather than splitting into two narrow columns.
+    diffStyle: isMobile || lineAnnotations != null ? "unified" : "split",
     disableFileHeader: false,
     disableLineNumbers: false,
   };
@@ -36,6 +49,8 @@ export default function SkillTextDiff({
           oldFile={{ name: oldLabel, contents: oldContent, lang: "markdown" }}
           newFile={{ name: newLabel, contents: newContent, lang: "markdown" }}
           options={options}
+          lineAnnotations={lineAnnotations}
+          renderAnnotation={renderAnnotation}
         />
       </div>
     </HighlightProvider>

@@ -23,7 +23,7 @@ Because a suggestion stores a diff rather than a whole manifest, it survives lat
 
 ## Review a suggested edit
 
-The skill detail page renders `SKILL.md` as agents load it, with a review marker in the margin beside each line the suggestion changes. A marker shows a count when more than one proposed change lands on the same line. Expanding a marker shows the proposed change, the summary, how many sessions asked for it, and an expander for the agent reports it was built from. Project members with skill write access can:
+The skill detail page shows a suggested edit as a diff between the current and proposed manifests, with a review marker beside each changed line. A marker shows a count when more than one proposed change lands on the same line. Expanding a marker shows the summary, how many sessions asked for the change, and an expander for the agent reports it was built from. Project members with skill write access can:
 
 - **Apply to draft** to apply the diff to the current version as a new immutable version.
 - **Apply with edits** to adjust the complete proposed manifest before applying it. The normal manifest validation and 65,536-byte UTF-8 limit still apply.

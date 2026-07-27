@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
+import { Markdown } from "@/elements/components/Markdown";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { isNotFoundError } from "@/lib/route-errors";
 import {
@@ -39,11 +40,12 @@ import {
   SKILL_TIMELINE_SECTION_ID,
   SkillActivitySections,
 } from "./SkillActivitySections";
+import { stripSkillFrontmatter } from "./skill-manifest";
 import { SkillManifestDialog } from "./SkillManifestDialog";
-import { SkillManifestReview } from "./SkillManifestReview";
 import { SkillPluginBanner } from "./SkillPluginBanner";
 import { SkillValidationErrors } from "./SkillValidationErrors";
 import { RestoreSkillVersionDialog } from "./RestoreSkillVersionDialog";
+import { SuggestedSkillEditSection } from "./SuggestedSkillEditSection";
 import { selectDiffVersions } from "./version-selection";
 
 const SkillTextDiff = lazy(() => import("./SkillTextDiff"));
@@ -177,6 +179,9 @@ function SkillDetailSections({
   useScrollToSectionHash();
 
   const { skill, latestVersion } = skillQueryData;
+  const body = latestVersion
+    ? stripSkillFrontmatter(latestVersion.content)
+    : "";
   const frontmatterEntries = Object.entries(
     latestVersion?.frontmatter ?? {},
   ).filter(([key]) => key !== "name" && key !== "description");
@@ -232,6 +237,13 @@ function SkillDetailSections({
 
       <SkillActivitySections data={skillQueryData} />
 
+      {latestVersion && (
+        <SuggestedSkillEditSection
+          skillId={skillId}
+          latestVersion={latestVersion}
+        />
+      )}
+
       <SkillInsightsSection data={skillQueryData} />
 
       <SettingsSection id={SKILL_MANIFEST_SECTION_ID}>
@@ -239,8 +251,7 @@ function SkillDetailSections({
           <SettingsSection.Title>SKILL.md</SettingsSection.Title>
           <SettingsSection.Description>
             The latest version of this skill's manifest, exactly as agents load
-            it. Suggested edits appear as review comments beside the lines they
-            change.
+            it.
           </SettingsSection.Description>
         </SettingsSection.Header>
         <SettingsSection.Panel>
@@ -248,16 +259,16 @@ function SkillDetailSections({
             {latestVersion && !latestVersion.specValid && (
               <ValidationErrors errors={latestVersion.validationErrors} />
             )}
-            {latestVersion ? (
-              <SkillManifestReview
-                skillId={skillId}
-                latestVersion={latestVersion}
-              />
-            ) : (
-              <Type small muted>
-                Manifest content has not been captured for this observed skill.
-              </Type>
-            )}
+            <div className="overflow-x-auto">
+              {latestVersion ? (
+                <ManifestBody body={body} />
+              ) : (
+                <Type small muted>
+                  Manifest content has not been captured for this observed
+                  skill.
+                </Type>
+              )}
+            </div>
           </SettingsSection.Body>
           {latestVersion && (
             <SettingsSection.Footer>
@@ -529,6 +540,17 @@ function VersionHistory({
       />
     </SettingsSection.Panel>
   );
+}
+
+function ManifestBody({ body }: { body: string }): JSX.Element {
+  if (body.trim().length === 0) {
+    return (
+      <Type small muted>
+        This manifest has no Markdown body.
+      </Type>
+    );
+  }
+  return <Markdown className="text-sm">{body}</Markdown>;
 }
 
 function SkillDetailLoading(): JSX.Element {

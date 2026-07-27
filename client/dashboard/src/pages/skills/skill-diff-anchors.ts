@@ -1,50 +1,60 @@
 const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 
+/** Which side of a rendered diff an anchor belongs to. */
+export type SkillDiffSide = "additions" | "deletions";
+
 export type SkillDiffHunk = {
-  /** 1-based line in the current manifest the hunk is anchored to. */
-  anchorLine: number;
+  side: SkillDiffSide;
+  /** 1-based line number on that side of the diff. */
+  line: number;
   removed: string[];
   added: string[];
 };
 
 /**
- * Splits a unified diff into hunks anchored to lines of the manifest it was
- * generated against, which is what the review gutter hangs its markers on.
- * Lines before the first hunk header are the file header and are ignored.
+ * Splits a unified diff into hunks addressed by the line numbers a rendered
+ * diff uses, so a review comment can hang off the line it talks about. A hunk
+ * anchors to its first added line, falling back to its first removed line when
+ * the hunk only deletes.
  */
 export function parseSkillDiffHunks(diff: string): SkillDiffHunk[] {
   const hunks: SkillDiffHunk[] = [];
   let current: SkillDiffHunk | null = null;
-  let currentLine = 0;
+  let oldLine = 0;
+  let newLine = 0;
   let anchored = false;
 
   for (const line of diff.split("\n")) {
     const header = HUNK_HEADER.exec(line);
     if (header) {
-      currentLine = Number(header[1]);
+      oldLine = Number(header[1]);
+      newLine = Number(header[2]);
       anchored = false;
-      current = { anchorLine: currentLine, removed: [], added: [] };
+      current = { side: "additions", line: newLine, removed: [], added: [] };
       hunks.push(current);
       continue;
     }
     if (!current) continue;
 
-    if (line.startsWith("-")) {
+    if (line.startsWith("+")) {
+      current.added.push(line.slice(1));
+      if (!anchored || current.side === "deletions") {
+        current.side = "additions";
+        current.line = newLine;
+        anchored = true;
+      }
+      newLine += 1;
+    } else if (line.startsWith("-")) {
       current.removed.push(line.slice(1));
       if (!anchored) {
-        current.anchorLine = currentLine;
+        current.side = "deletions";
+        current.line = oldLine;
         anchored = true;
       }
-      currentLine += 1;
-    } else if (line.startsWith("+")) {
-      current.added.push(line.slice(1));
-      if (!anchored) {
-        // A pure insertion hangs off the line it follows.
-        current.anchorLine = Math.max(1, currentLine - 1);
-        anchored = true;
-      }
+      oldLine += 1;
     } else if (line.startsWith(" ")) {
-      currentLine += 1;
+      oldLine += 1;
+      newLine += 1;
     }
   }
 
@@ -54,23 +64,24 @@ export function parseSkillDiffHunks(diff: string): SkillDiffHunk[] {
 }
 
 export type SkillDiffAnchor = {
+  side: SkillDiffSide;
   line: number;
   hunks: SkillDiffHunk[];
 };
 
-/** Groups hunks that resolve to the same manifest line into one marker. */
+/** Groups hunks that resolve to the same diff line into one marker. */
 export function groupHunksByAnchor(hunks: SkillDiffHunk[]): SkillDiffAnchor[] {
-  const byLine = new Map<number, SkillDiffHunk[]>();
+  const byPosition = new Map<string, SkillDiffAnchor>();
+
   for (const hunk of hunks) {
-    const existing = byLine.get(hunk.anchorLine);
+    const key = `${hunk.side}:${hunk.line}`;
+    const existing = byPosition.get(key);
     if (existing) {
-      existing.push(hunk);
+      existing.hunks.push(hunk);
     } else {
-      byLine.set(hunk.anchorLine, [hunk]);
+      byPosition.set(key, { side: hunk.side, line: hunk.line, hunks: [hunk] });
     }
   }
 
-  return [...byLine.entries()]
-    .map(([line, grouped]) => ({ line, hunks: grouped }))
-    .sort((a, b) => a.line - b.line);
+  return [...byPosition.values()].sort((a, b) => a.line - b.line);
 }

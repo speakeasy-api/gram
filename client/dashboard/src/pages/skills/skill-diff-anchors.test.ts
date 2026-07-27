@@ -20,20 +20,41 @@ const insertion = `--- a/SKILL.md
  List action items.
 `;
 
+const deletion = `--- a/SKILL.md
++++ b/SKILL.md
+@@ -3,4 +3,3 @@
+ Write a blameless narrative.
+-Attach the raw timeline.
+ Produce a five-whys section.
+ List action items.
+`;
+
 describe("parseSkillDiffHunks", () => {
-  it("anchors a replacement to the line it replaces", () => {
+  it("anchors a replacement to the added line", () => {
     expect(parseSkillDiffHunks(replacement)).toEqual([
       {
-        anchorLine: 15,
+        side: "additions",
+        line: 15,
         removed: ["Line ten."],
         added: ["Line ten, with detail."],
       },
     ]);
   });
 
-  it("anchors an insertion to the line it follows", () => {
+  it("anchors an insertion to the line it introduces", () => {
     expect(parseSkillDiffHunks(insertion)).toEqual([
-      { anchorLine: 3, removed: [], added: ["Quantify impact."] },
+      { side: "additions", line: 4, removed: [], added: ["Quantify impact."] },
+    ]);
+  });
+
+  it("anchors a pure deletion to the removed line", () => {
+    expect(parseSkillDiffHunks(deletion)).toEqual([
+      {
+        side: "deletions",
+        line: 4,
+        removed: ["Attach the raw timeline."],
+        added: [],
+      },
     ]);
   });
 
@@ -44,11 +65,11 @@ describe("parseSkillDiffHunks", () => {
 });
 
 describe("groupHunksByAnchor", () => {
-  it("collapses hunks sharing a line into one marker", () => {
+  it("collapses hunks sharing a diff line into one marker", () => {
     const anchors = groupHunksByAnchor([
-      { anchorLine: 15, removed: ["a"], added: ["b"] },
-      { anchorLine: 3, removed: [], added: ["c"] },
-      { anchorLine: 15, removed: [], added: ["d"] },
+      { side: "additions", line: 15, removed: ["a"], added: ["b"] },
+      { side: "additions", line: 3, removed: [], added: ["c"] },
+      { side: "additions", line: 15, removed: [], added: ["d"] },
     ]);
 
     expect(anchors.map((anchor) => [anchor.line, anchor.hunks.length])).toEqual(
@@ -57,5 +78,14 @@ describe("groupHunksByAnchor", () => {
         [15, 2],
       ],
     );
+  });
+
+  it("keeps the same line on opposite sides apart", () => {
+    const anchors = groupHunksByAnchor([
+      { side: "additions", line: 4, removed: [], added: ["a"] },
+      { side: "deletions", line: 4, removed: ["b"], added: [] },
+    ]);
+
+    expect(anchors).toHaveLength(2);
   });
 });
