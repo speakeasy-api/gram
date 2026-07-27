@@ -285,6 +285,33 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, desc providers
 		settings = merged
 	}
 
+	// Credentials merge the same way: a secret the client omits (or sends
+	// blank) keeps its stored value, so rotating one secret never requires
+	// retyping the rest — matching the dashboard's "•••••• (saved)"
+	// placeholders. Merged values are rebuilt from the descriptor's secret
+	// fields, so keys a provider no longer declares fall away on rotation.
+	// Secrets cannot be cleared individually; deleting the config is the way
+	// to revoke credentials.
+	if exists && credentialsSupplied {
+		merged := providers.Credentials{}
+		if stored, decErr := s.decryptCredentials(existingRow.CredentialsEncrypted); decErr == nil {
+			for _, f := range desc.SecretFields() {
+				if v, ok := stored[f.Key]; ok {
+					merged[f.Key] = v
+				}
+			}
+		}
+		// On decrypt failure the stored side contributes nothing: a freshly
+		// supplied full set of secrets can still repair a corrupt blob, and a
+		// partial set fails required-field validation below.
+		for key, value := range creds {
+			if strings.TrimSpace(value) != "" {
+				merged[key] = value
+			}
+		}
+		creds = merged
+	}
+
 	if err := validateFields(desc, creds, settings, !exists || credentialsSupplied); err != nil {
 		return UpsertResult{}, err
 	}
