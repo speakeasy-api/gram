@@ -1062,7 +1062,7 @@ func dcrErrorDetail(body []byte, statusCode int) string {
 func proxyRegistrationRedirectURIs(serverURL string, requested *string) ([]string, error) {
 	if requested != nil {
 		if err := remotesessions.ValidateLoopbackRedirectURI(*requested); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("validate loopback redirect URI: %w", err)
 		}
 		return []string{*requested}, nil
 	}
