@@ -20,18 +20,23 @@ type SkillEditSuggestion struct {
 	SkillDisplayName string
 	// The version the suggestion was generated from.
 	BaseVersionID string
-	// The complete proposed SKILL.md content.
+	// The proposed edit as a unified diff against the base version.
+	ProposedDiff string
+	// The complete proposed SKILL.md content, empty when the diff no longer
+	// applies.
 	ProposedContent string
+	// Whether the diff still applies to the base version.
+	AppliesCleanly bool
 	// Why the edit was proposed.
 	Rationale string
 	// The suggestion state.
 	Status string
-	// Feedback records considered by the suggestion.
+	// Feedback records the suggestion was generated from.
 	FeedbackCount int64
+	// Distinct sessions that reported the feedback behind the suggestion.
+	FeedbackSessionCount int64
 	// Scored sessions considered by the suggestion.
 	ScoredSessionCount int64
-	// The version created by approval, when present.
-	ResultingVersionID *string
 	// The user that approved the suggestion, when present.
 	ApprovedByUserID *string
 	// When the suggestion was approved, when present.

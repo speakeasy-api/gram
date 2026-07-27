@@ -23,9 +23,8 @@ import (
 func createSuggestion(t *testing.T, ti *testInstance, skill *gen.RecordSkillResult, content, rationale string) repo.SkillEditSuggestion {
 	t.Helper()
 	suggestion, err := ti.repo.CreateSkillEditSuggestion(t.Context(), repo.CreateSkillEditSuggestionParams{
-		ProposedContent:    content,
+		ProposedDiff:       diffTo(t, skill.Version.Content, content),
 		Rationale:          rationale,
-		FeedbackCount:      2,
 		ScoredSessionCount: 3,
 		BaseVersionID:      uuid.MustParse(skill.Version.ID),
 		ProjectID:          ti.projectID,
@@ -50,7 +49,7 @@ func TestSkillsListSuggestionsOpenOnlyPaginationCountAndFilter(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = ti.repo.CreateSkillEditSuggestionWatermark(ctx, repo.CreateSkillEditSuggestionWatermarkParams{
-		Rationale: "watermark", FeedbackCount: 5, ScoredSessionCount: 6,
+		Rationale: "watermark", ScoredSessionCount: 6,
 		BaseVersionID: uuid.MustParse(watermarkSkill.Version.ID), ProjectID: ti.projectID, SkillID: uuid.MustParse(watermarkSkill.Skill.ID),
 	})
 	require.NoError(t, err)
@@ -65,7 +64,9 @@ func TestSkillsListSuggestionsOpenOnlyPaginationCountAndFilter(t *testing.T) {
 	require.NotNil(t, first.NextCursor)
 	require.Equal(t, beta.Skill.Name, first.Suggestions[0].SkillName)
 	require.Equal(t, beta.Skill.DisplayName, first.Suggestions[0].SkillDisplayName)
-	require.Equal(t, betaSuggestion.ProposedContent, first.Suggestions[0].ProposedContent)
+	require.Equal(t, betaSuggestion.ProposedDiff, first.Suggestions[0].ProposedDiff)
+	require.Equal(t, skillManifest(beta.Skill.Name, "Beta proposed.", "beta proposal"), first.Suggestions[0].ProposedContent)
+	require.True(t, first.Suggestions[0].AppliesCleanly)
 	require.Equal(t, betaSuggestion.Rationale, first.Suggestions[0].Rationale)
 
 	second, err := ti.service.ListSuggestions(ctx, &gen.ListSuggestionsPayload{
@@ -137,8 +138,6 @@ func TestSkillsApproveSuggestionHappyEditedAndAuditPrivacy(t *testing.T) {
 	require.NotNil(t, result.Version.DerivedFromVersionID)
 	require.Equal(t, created.Version.ID, *result.Version.DerivedFromVersionID)
 	require.Equal(t, string(skills.EditSuggestionStatusApproved), result.Suggestion.Status)
-	require.NotNil(t, result.Suggestion.ResultingVersionID)
-	require.Equal(t, result.Version.ID, *result.Suggestion.ResultingVersionID)
 	require.NotNil(t, result.Suggestion.ApprovedByUserID)
 	require.NotNil(t, result.Suggestion.ApprovedAt)
 
@@ -174,8 +173,8 @@ func TestSkillsApproveSuggestionStaleAndHistoricalDuplicate(t *testing.T) {
 	})
 	require.NoError(t, err)
 	stale, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent: skillManifest(staleSkill.Skill.Name, "Stale proposed.", "stale"), Rationale: "stale rationale",
-		FeedbackCount: 1, ScoredSessionCount: 1, BaseVersionID: uuid.MustParse(staleSkill.Version.ID),
+		ProposedDiff: diffTo(t, staleSkill.Version.Content, skillManifest(staleSkill.Skill.Name, "Stale proposed.", "stale")), Rationale: "stale rationale",
+		ScoredSessionCount: 1, BaseVersionID: uuid.MustParse(staleSkill.Version.ID),
 		ProjectID: ti.projectID, SkillID: uuid.MustParse(staleSkill.Skill.ID),
 	})
 	require.NoError(t, err)
@@ -186,7 +185,6 @@ func TestSkillsApproveSuggestionStaleAndHistoricalDuplicate(t *testing.T) {
 	require.Equal(t, "superseded", staleResult.Outcome)
 	require.Nil(t, staleResult.Version)
 	require.Equal(t, string(skills.EditSuggestionStatusSuperseded), staleResult.Suggestion.Status)
-	require.Nil(t, staleResult.Suggestion.ResultingVersionID)
 
 	duplicateSkill := createSkill(t, ctx, ti, "suggestion-approve-duplicate", "First.")
 	firstContent := duplicateSkill.Version.Content
@@ -205,7 +203,6 @@ func TestSkillsApproveSuggestionStaleAndHistoricalDuplicate(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, string(skills.EditSuggestionStatusOpen), preserved.Status)
-	require.False(t, preserved.ResultingVersionID.Valid)
 	got, err := ti.service.Get(ctx, &gen.GetPayload{
 		ID: duplicateSkill.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
@@ -244,9 +241,8 @@ func TestSkillsApproveSuggestionRejectsConcurrentSuggestionUpdate(t *testing.T) 
 		}
 	}, 100*time.Millisecond, 10*time.Millisecond)
 	_, err = repo.New(lockTx).UpdateOpenSkillEditSuggestion(ctx, repo.UpdateOpenSkillEditSuggestionParams{
-		ProposedContent:    skillManifest(created.Skill.Name, "Updated while approval waited.", "updated"),
+		ProposedDiff:       diffTo(t, created.Version.Content, skillManifest(created.Skill.Name, "Updated while approval waited.", "updated")),
 		Rationale:          "updated rationale",
-		FeedbackCount:      4,
 		ScoredSessionCount: 5,
 		ProjectID:          ti.projectID,
 		SkillID:            suggestion.SkillID,
@@ -291,7 +287,7 @@ func TestSkillsDismissSuggestionIdempotentAndConflicts(t *testing.T) {
 	require.Equal(t, dismissBefore+1, dismissAfter)
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionSkillSuggestionDismiss)
 	require.NoError(t, err)
-	require.NotContains(t, string(record.Metadata), dismissSuggestion.ProposedContent)
+	require.NotContains(t, string(record.Metadata), dismissSuggestion.ProposedDiff)
 	require.NotContains(t, string(record.Metadata), dismissSuggestion.Rationale)
 
 	approvedSkill := createSkill(t, ctx, ti, "suggestion-dismiss-approved", "Base.")
@@ -331,8 +327,8 @@ func TestSkillsApproveAllSuggestionsContinuesThroughMixedOutcomes(t *testing.T) 
 	})
 	require.NoError(t, err)
 	stale, err := ti.repo.CreateSkillEditSuggestion(ctx, repo.CreateSkillEditSuggestionParams{
-		ProposedContent: skillManifest(staleSkill.Skill.Name, "Proposed.", "proposal"), Rationale: "rationale",
-		FeedbackCount: 1, ScoredSessionCount: 1, BaseVersionID: uuid.MustParse(staleSkill.Version.ID),
+		ProposedDiff: diffTo(t, staleSkill.Version.Content, skillManifest(staleSkill.Skill.Name, "Proposed.", "proposal")), Rationale: "rationale",
+		ScoredSessionCount: 1, BaseVersionID: uuid.MustParse(staleSkill.Version.ID),
 		ProjectID: ti.projectID, SkillID: uuid.MustParse(staleSkill.Skill.ID),
 	})
 	require.NoError(t, err)

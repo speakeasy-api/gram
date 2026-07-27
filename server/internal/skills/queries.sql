@@ -128,11 +128,31 @@ WHERE suggestion.project_id = @project_id
 SELECT
   sqlc.embed(suggestion),
   s.name AS skill_name,
-  s.display_name AS skill_display_name
+  s.display_name AS skill_display_name,
+  base.content AS base_content,
+  (
+    SELECT COUNT(*)
+    FROM skill_edit_suggestion_feedback link
+    WHERE link.project_id = suggestion.project_id
+      AND link.suggestion_id = suggestion.id
+  ) AS feedback_count,
+  (
+    SELECT COUNT(DISTINCT feedback.session_id)
+    FROM skill_edit_suggestion_feedback link
+    JOIN skill_feedback feedback
+      ON feedback.project_id = link.project_id
+      AND feedback.id = link.feedback_id
+    WHERE link.project_id = suggestion.project_id
+      AND link.suggestion_id = suggestion.id
+      AND feedback.session_id IS NOT NULL
+  ) AS feedback_session_count
 FROM skill_edit_suggestions suggestion
 JOIN skills s
   ON s.project_id = suggestion.project_id
   AND s.id = suggestion.skill_id
+JOIN skill_versions base
+  ON base.skill_id = suggestion.skill_id
+  AND base.id = suggestion.base_version_id
 WHERE suggestion.project_id = @project_id
   AND suggestion.status = 'open'
   AND s.archived_at IS NULL
@@ -177,11 +197,31 @@ ORDER BY suggestion.created_at DESC, suggestion.id DESC;
 SELECT
   sqlc.embed(suggestion),
   s.name AS skill_name,
-  s.display_name AS skill_display_name
+  s.display_name AS skill_display_name,
+  base.content AS base_content,
+  (
+    SELECT COUNT(*)
+    FROM skill_edit_suggestion_feedback link
+    WHERE link.project_id = suggestion.project_id
+      AND link.suggestion_id = suggestion.id
+  ) AS feedback_count,
+  (
+    SELECT COUNT(DISTINCT feedback.session_id)
+    FROM skill_edit_suggestion_feedback link
+    JOIN skill_feedback feedback
+      ON feedback.project_id = link.project_id
+      AND feedback.id = link.feedback_id
+    WHERE link.project_id = suggestion.project_id
+      AND link.suggestion_id = suggestion.id
+      AND feedback.session_id IS NOT NULL
+  ) AS feedback_session_count
 FROM skill_edit_suggestions suggestion
 JOIN skills s
   ON s.project_id = suggestion.project_id
   AND s.id = suggestion.skill_id
+JOIN skill_versions base
+  ON base.skill_id = suggestion.skill_id
+  AND base.id = suggestion.base_version_id
 WHERE suggestion.project_id = @project_id
   AND suggestion.id = @id
   AND s.archived_at IS NULL;
@@ -212,17 +252,6 @@ WHERE suggestion.project_id = @project_id
   AND s.id = suggestion.skill_id
   AND s.archived_at IS NULL
 RETURNING suggestion.*;
-
--- name: LinkApprovedSkillEditSuggestionVersion :one
-UPDATE skill_edit_suggestions
-SET resulting_version_id = @resulting_version_id,
-    updated_at = clock_timestamp()
-WHERE project_id = @project_id
-  AND skill_id = @skill_id
-  AND id = @id
-  AND status = 'approved'
-  AND resulting_version_id IS NULL
-RETURNING *;
 
 -- name: SupersedeOpenSkillEditSuggestionByID :one
 UPDATE skill_edit_suggestions suggestion
@@ -2346,3 +2375,14 @@ JOIN LATERAL (
 ) latest ON TRUE
 WHERE l.token = @token
   AND l.revoked_at IS NULL;
+
+-- name: ListSkillEditSuggestionFeedback :many
+SELECT feedback.*
+FROM skill_edit_suggestion_feedback link
+JOIN skill_feedback feedback
+  ON feedback.project_id = link.project_id
+  AND feedback.id = link.feedback_id
+WHERE link.project_id = @project_id
+  AND link.suggestion_id = @suggestion_id
+ORDER BY feedback.created_at DESC, feedback.id DESC
+LIMIT GREATEST(@page_limit::int, 0);

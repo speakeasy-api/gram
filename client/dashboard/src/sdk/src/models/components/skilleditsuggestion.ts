@@ -30,6 +30,10 @@ export type SkillEditSuggestionStatus = ClosedEnum<
  */
 export type SkillEditSuggestion = {
   /**
+   * Whether the diff still applies to the base version.
+   */
+  appliesCleanly: boolean;
+  /**
    * When the suggestion was approved, when present.
    */
   approvedAt?: Date | undefined;
@@ -46,25 +50,29 @@ export type SkillEditSuggestion = {
    */
   createdAt: Date;
   /**
-   * Feedback records considered by the suggestion.
+   * Feedback records the suggestion was generated from.
    */
   feedbackCount: number;
+  /**
+   * Distinct sessions that reported the feedback behind the suggestion.
+   */
+  feedbackSessionCount: number;
   /**
    * The suggestion ID.
    */
   id: string;
   /**
-   * The complete proposed SKILL.md content.
+   * The complete proposed SKILL.md content, empty when the diff no longer applies.
    */
   proposedContent: string;
+  /**
+   * The proposed edit as a unified diff against the base version.
+   */
+  proposedDiff: string;
   /**
    * Why the edit was proposed.
    */
   rationale: string;
-  /**
-   * The version created by approval, when present.
-   */
-  resultingVersionId?: string | undefined;
   /**
    * Scored sessions considered by the suggestion.
    */
@@ -102,6 +110,7 @@ export const SkillEditSuggestion$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    applies_cleanly: z.boolean(),
     approved_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -112,10 +121,11 @@ export const SkillEditSuggestion$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     feedback_count: z.int(),
+    feedback_session_count: z.int(),
     id: z.string(),
     proposed_content: z.string(),
+    proposed_diff: z.string(),
     rationale: z.string(),
-    resulting_version_id: z.optional(z.string()),
     scored_session_count: z.int(),
     skill_display_name: z.string(),
     skill_id: z.string(),
@@ -128,13 +138,15 @@ export const SkillEditSuggestion$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "applies_cleanly": "appliesCleanly",
       "approved_at": "approvedAt",
       "approved_by_user_id": "approvedByUserId",
       "base_version_id": "baseVersionId",
       "created_at": "createdAt",
       "feedback_count": "feedbackCount",
+      "feedback_session_count": "feedbackSessionCount",
       "proposed_content": "proposedContent",
-      "resulting_version_id": "resultingVersionId",
+      "proposed_diff": "proposedDiff",
       "scored_session_count": "scoredSessionCount",
       "skill_display_name": "skillDisplayName",
       "skill_id": "skillId",

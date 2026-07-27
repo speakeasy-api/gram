@@ -46,6 +46,23 @@ type UpdateRequestBody struct {
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 }
 
+// ApproveSuggestionRequestBody is the type of the "skills" service
+// "approveSuggestion" endpoint HTTP request body.
+type ApproveSuggestionRequestBody struct {
+	// The suggestion ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Optional edited complete SKILL.md content. Handlers enforce a maximum size
+	// of 65,536 UTF-8 bytes.
+	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+}
+
+// DismissSuggestionRequestBody is the type of the "skills" service
+// "dismissSuggestion" endpoint HTTP request body.
+type DismissSuggestionRequestBody struct {
+	// The suggestion ID.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
 // ArchiveRequestBody is the type of the "skills" service "archive" endpoint
 // HTTP request body.
 type ArchiveRequestBody struct {
@@ -165,6 +182,75 @@ type ListResponseBody struct {
 	Skills []*SkillResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// ListSuggestionsResponseBody is the type of the "skills" service
+// "listSuggestions" endpoint HTTP response body.
+type ListSuggestionsResponseBody struct {
+	// The open suggestions in this page.
+	Suggestions []*SkillEditSuggestionResponseBody `form:"suggestions,omitempty" json:"suggestions,omitempty" xml:"suggestions,omitempty"`
+	// The total number of matching open suggestions, independent of pagination.
+	TotalOpenCount *int64 `form:"total_open_count,omitempty" json:"total_open_count,omitempty" xml:"total_open_count,omitempty"`
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// ApproveSuggestionResponseBody is the type of the "skills" service
+// "approveSuggestion" endpoint HTTP response body.
+type ApproveSuggestionResponseBody struct {
+	// The resulting suggestion state.
+	Suggestion *SkillEditSuggestionResponseBody `form:"suggestion,omitempty" json:"suggestion,omitempty" xml:"suggestion,omitempty"`
+	// Whether the suggestion created a version or was stale.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// The created version for an applied approval.
+	Version *SkillVersionResponseBody `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+}
+
+// DismissSuggestionResponseBody is the type of the "skills" service
+// "dismissSuggestion" endpoint HTTP response body.
+type DismissSuggestionResponseBody struct {
+	// The suggestion ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The skill targeted by the suggestion.
+	SkillID *string `form:"skill_id,omitempty" json:"skill_id,omitempty" xml:"skill_id,omitempty"`
+	// The canonical skill name.
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+	// The user-facing skill name.
+	SkillDisplayName *string `form:"skill_display_name,omitempty" json:"skill_display_name,omitempty" xml:"skill_display_name,omitempty"`
+	// The version the suggestion was generated from.
+	BaseVersionID *string `form:"base_version_id,omitempty" json:"base_version_id,omitempty" xml:"base_version_id,omitempty"`
+	// The proposed edit as a unified diff against the base version.
+	ProposedDiff *string `form:"proposed_diff,omitempty" json:"proposed_diff,omitempty" xml:"proposed_diff,omitempty"`
+	// The complete proposed SKILL.md content, empty when the diff no longer
+	// applies.
+	ProposedContent *string `form:"proposed_content,omitempty" json:"proposed_content,omitempty" xml:"proposed_content,omitempty"`
+	// Whether the diff still applies to the base version.
+	AppliesCleanly *bool `form:"applies_cleanly,omitempty" json:"applies_cleanly,omitempty" xml:"applies_cleanly,omitempty"`
+	// Why the edit was proposed.
+	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
+	// The suggestion state.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Feedback records the suggestion was generated from.
+	FeedbackCount *int64 `form:"feedback_count,omitempty" json:"feedback_count,omitempty" xml:"feedback_count,omitempty"`
+	// Distinct sessions that reported the feedback behind the suggestion.
+	FeedbackSessionCount *int64 `form:"feedback_session_count,omitempty" json:"feedback_session_count,omitempty" xml:"feedback_session_count,omitempty"`
+	// Scored sessions considered by the suggestion.
+	ScoredSessionCount *int64 `form:"scored_session_count,omitempty" json:"scored_session_count,omitempty" xml:"scored_session_count,omitempty"`
+	// The user that approved the suggestion, when present.
+	ApprovedByUserID *string `form:"approved_by_user_id,omitempty" json:"approved_by_user_id,omitempty" xml:"approved_by_user_id,omitempty"`
+	// When the suggestion was approved, when present.
+	ApprovedAt *string `form:"approved_at,omitempty" json:"approved_at,omitempty" xml:"approved_at,omitempty"`
+	// When the suggestion was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the suggestion was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ApproveAllSuggestionsResponseBody is the type of the "skills" service
+// "approveAllSuggestions" endpoint HTTP response body.
+type ApproveAllSuggestionsResponseBody struct {
+	// The outcomes in snapshot order.
+	Items []*SkillSuggestionApprovalItemResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
 }
 
 // GetResponseBody is the type of the "skills" service "get" endpoint HTTP
@@ -975,6 +1061,745 @@ type ListUnexpectedResponseBody struct {
 // ListGatewayErrorResponseBody is the type of the "skills" service "list"
 // endpoint HTTP response body for the "gateway_error" error.
 type ListGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSuggestionsUnauthorizedResponseBody is the type of the "skills" service
+// "listSuggestions" endpoint HTTP response body for the "unauthorized" error.
+type ListSuggestionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSuggestionsForbiddenResponseBody is the type of the "skills" service
+// "listSuggestions" endpoint HTTP response body for the "forbidden" error.
+type ListSuggestionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSuggestionsBadRequestResponseBody is the type of the "skills" service
+// "listSuggestions" endpoint HTTP response body for the "bad_request" error.
+type ListSuggestionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSuggestionsNotFoundResponseBody is the type of the "skills" service
+// "listSuggestions" endpoint HTTP response body for the "not_found" error.
+type ListSuggestionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSuggestionsConflictResponseBody is the type of the "skills" service
+// "listSuggestions" endpoint HTTP response body for the "conflict" error.
+type ListSuggestionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSuggestionsUnsupportedMediaResponseBody is the type of the "skills"
+// service "listSuggestions" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSuggestionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSuggestionsInvalidResponseBody is the type of the "skills" service
+// "listSuggestions" endpoint HTTP response body for the "invalid" error.
+type ListSuggestionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSuggestionsInvariantViolationResponseBody is the type of the "skills"
+// service "listSuggestions" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSuggestionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSuggestionsUnexpectedResponseBody is the type of the "skills" service
+// "listSuggestions" endpoint HTTP response body for the "unexpected" error.
+type ListSuggestionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSuggestionsGatewayErrorResponseBody is the type of the "skills" service
+// "listSuggestions" endpoint HTTP response body for the "gateway_error" error.
+type ListSuggestionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveSuggestionUnauthorizedResponseBody is the type of the "skills"
+// service "approveSuggestion" endpoint HTTP response body for the
+// "unauthorized" error.
+type ApproveSuggestionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveSuggestionForbiddenResponseBody is the type of the "skills" service
+// "approveSuggestion" endpoint HTTP response body for the "forbidden" error.
+type ApproveSuggestionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveSuggestionBadRequestResponseBody is the type of the "skills" service
+// "approveSuggestion" endpoint HTTP response body for the "bad_request" error.
+type ApproveSuggestionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveSuggestionNotFoundResponseBody is the type of the "skills" service
+// "approveSuggestion" endpoint HTTP response body for the "not_found" error.
+type ApproveSuggestionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveSuggestionConflictResponseBody is the type of the "skills" service
+// "approveSuggestion" endpoint HTTP response body for the "conflict" error.
+type ApproveSuggestionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveSuggestionUnsupportedMediaResponseBody is the type of the "skills"
+// service "approveSuggestion" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ApproveSuggestionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveSuggestionInvalidResponseBody is the type of the "skills" service
+// "approveSuggestion" endpoint HTTP response body for the "invalid" error.
+type ApproveSuggestionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveSuggestionInvariantViolationResponseBody is the type of the "skills"
+// service "approveSuggestion" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ApproveSuggestionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveSuggestionUnexpectedResponseBody is the type of the "skills" service
+// "approveSuggestion" endpoint HTTP response body for the "unexpected" error.
+type ApproveSuggestionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveSuggestionGatewayErrorResponseBody is the type of the "skills"
+// service "approveSuggestion" endpoint HTTP response body for the
+// "gateway_error" error.
+type ApproveSuggestionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissSuggestionUnauthorizedResponseBody is the type of the "skills"
+// service "dismissSuggestion" endpoint HTTP response body for the
+// "unauthorized" error.
+type DismissSuggestionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissSuggestionForbiddenResponseBody is the type of the "skills" service
+// "dismissSuggestion" endpoint HTTP response body for the "forbidden" error.
+type DismissSuggestionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissSuggestionBadRequestResponseBody is the type of the "skills" service
+// "dismissSuggestion" endpoint HTTP response body for the "bad_request" error.
+type DismissSuggestionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissSuggestionNotFoundResponseBody is the type of the "skills" service
+// "dismissSuggestion" endpoint HTTP response body for the "not_found" error.
+type DismissSuggestionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissSuggestionConflictResponseBody is the type of the "skills" service
+// "dismissSuggestion" endpoint HTTP response body for the "conflict" error.
+type DismissSuggestionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissSuggestionUnsupportedMediaResponseBody is the type of the "skills"
+// service "dismissSuggestion" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DismissSuggestionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissSuggestionInvalidResponseBody is the type of the "skills" service
+// "dismissSuggestion" endpoint HTTP response body for the "invalid" error.
+type DismissSuggestionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissSuggestionInvariantViolationResponseBody is the type of the "skills"
+// service "dismissSuggestion" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DismissSuggestionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissSuggestionUnexpectedResponseBody is the type of the "skills" service
+// "dismissSuggestion" endpoint HTTP response body for the "unexpected" error.
+type DismissSuggestionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissSuggestionGatewayErrorResponseBody is the type of the "skills"
+// service "dismissSuggestion" endpoint HTTP response body for the
+// "gateway_error" error.
+type DismissSuggestionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveAllSuggestionsUnauthorizedResponseBody is the type of the "skills"
+// service "approveAllSuggestions" endpoint HTTP response body for the
+// "unauthorized" error.
+type ApproveAllSuggestionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveAllSuggestionsForbiddenResponseBody is the type of the "skills"
+// service "approveAllSuggestions" endpoint HTTP response body for the
+// "forbidden" error.
+type ApproveAllSuggestionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveAllSuggestionsBadRequestResponseBody is the type of the "skills"
+// service "approveAllSuggestions" endpoint HTTP response body for the
+// "bad_request" error.
+type ApproveAllSuggestionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveAllSuggestionsNotFoundResponseBody is the type of the "skills"
+// service "approveAllSuggestions" endpoint HTTP response body for the
+// "not_found" error.
+type ApproveAllSuggestionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveAllSuggestionsConflictResponseBody is the type of the "skills"
+// service "approveAllSuggestions" endpoint HTTP response body for the
+// "conflict" error.
+type ApproveAllSuggestionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveAllSuggestionsUnsupportedMediaResponseBody is the type of the
+// "skills" service "approveAllSuggestions" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ApproveAllSuggestionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveAllSuggestionsInvalidResponseBody is the type of the "skills" service
+// "approveAllSuggestions" endpoint HTTP response body for the "invalid" error.
+type ApproveAllSuggestionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveAllSuggestionsInvariantViolationResponseBody is the type of the
+// "skills" service "approveAllSuggestions" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ApproveAllSuggestionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveAllSuggestionsUnexpectedResponseBody is the type of the "skills"
+// service "approveAllSuggestions" endpoint HTTP response body for the
+// "unexpected" error.
+type ApproveAllSuggestionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveAllSuggestionsGatewayErrorResponseBody is the type of the "skills"
+// service "approveAllSuggestions" endpoint HTTP response body for the
+// "gateway_error" error.
+type ApproveAllSuggestionsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2890,6 +3715,65 @@ type SkillValidationErrorResponseBody struct {
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 }
 
+// SkillEditSuggestionResponseBody is used to define fields on response body
+// types.
+type SkillEditSuggestionResponseBody struct {
+	// The suggestion ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The skill targeted by the suggestion.
+	SkillID *string `form:"skill_id,omitempty" json:"skill_id,omitempty" xml:"skill_id,omitempty"`
+	// The canonical skill name.
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+	// The user-facing skill name.
+	SkillDisplayName *string `form:"skill_display_name,omitempty" json:"skill_display_name,omitempty" xml:"skill_display_name,omitempty"`
+	// The version the suggestion was generated from.
+	BaseVersionID *string `form:"base_version_id,omitempty" json:"base_version_id,omitempty" xml:"base_version_id,omitempty"`
+	// The proposed edit as a unified diff against the base version.
+	ProposedDiff *string `form:"proposed_diff,omitempty" json:"proposed_diff,omitempty" xml:"proposed_diff,omitempty"`
+	// The complete proposed SKILL.md content, empty when the diff no longer
+	// applies.
+	ProposedContent *string `form:"proposed_content,omitempty" json:"proposed_content,omitempty" xml:"proposed_content,omitempty"`
+	// Whether the diff still applies to the base version.
+	AppliesCleanly *bool `form:"applies_cleanly,omitempty" json:"applies_cleanly,omitempty" xml:"applies_cleanly,omitempty"`
+	// Why the edit was proposed.
+	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
+	// The suggestion state.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Feedback records the suggestion was generated from.
+	FeedbackCount *int64 `form:"feedback_count,omitempty" json:"feedback_count,omitempty" xml:"feedback_count,omitempty"`
+	// Distinct sessions that reported the feedback behind the suggestion.
+	FeedbackSessionCount *int64 `form:"feedback_session_count,omitempty" json:"feedback_session_count,omitempty" xml:"feedback_session_count,omitempty"`
+	// Scored sessions considered by the suggestion.
+	ScoredSessionCount *int64 `form:"scored_session_count,omitempty" json:"scored_session_count,omitempty" xml:"scored_session_count,omitempty"`
+	// The user that approved the suggestion, when present.
+	ApprovedByUserID *string `form:"approved_by_user_id,omitempty" json:"approved_by_user_id,omitempty" xml:"approved_by_user_id,omitempty"`
+	// When the suggestion was approved, when present.
+	ApprovedAt *string `form:"approved_at,omitempty" json:"approved_at,omitempty" xml:"approved_at,omitempty"`
+	// When the suggestion was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the suggestion was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// SkillSuggestionApprovalItemResponseBody is used to define fields on response
+// body types.
+type SkillSuggestionApprovalItemResponseBody struct {
+	// The suggestion ID.
+	SuggestionID *string `form:"suggestion_id,omitempty" json:"suggestion_id,omitempty" xml:"suggestion_id,omitempty"`
+	// The targeted skill ID.
+	SkillID *string `form:"skill_id,omitempty" json:"skill_id,omitempty" xml:"skill_id,omitempty"`
+	// The canonical skill name.
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+	// The user-facing skill name.
+	SkillDisplayName *string `form:"skill_display_name,omitempty" json:"skill_display_name,omitempty" xml:"skill_display_name,omitempty"`
+	// The item's processing outcome.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// The created version for an applied item.
+	ResultingVersionID *string `form:"resulting_version_id,omitempty" json:"resulting_version_id,omitempty" xml:"resulting_version_id,omitempty"`
+	// A safe explanation for a conflict or failure.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
 // SkillAdoptionResponseBody is used to define fields on response body types.
 type SkillAdoptionResponseBody struct {
 	// Start of the rolling adoption window.
@@ -3011,6 +3895,25 @@ func NewUpdateRequestBody(p *skills.UpdatePayload) *UpdateRequestBody {
 		Name:        p.Name,
 		DisplayName: p.DisplayName,
 		Summary:     p.Summary,
+	}
+	return body
+}
+
+// NewApproveSuggestionRequestBody builds the HTTP request body from the
+// payload of the "approveSuggestion" endpoint of the "skills" service.
+func NewApproveSuggestionRequestBody(p *skills.ApproveSuggestionPayload) *ApproveSuggestionRequestBody {
+	body := &ApproveSuggestionRequestBody{
+		ID:      p.ID,
+		Content: p.Content,
+	}
+	return body
+}
+
+// NewDismissSuggestionRequestBody builds the HTTP request body from the
+// payload of the "dismissSuggestion" endpoint of the "skills" service.
+func NewDismissSuggestionRequestBody(p *skills.DismissSuggestionPayload) *DismissSuggestionRequestBody {
+	body := &DismissSuggestionRequestBody{
+		ID: p.ID,
 	}
 	return body
 }
@@ -3705,6 +4608,681 @@ func NewListUnexpected(body *ListUnexpectedResponseBody) *goa.ServiceError {
 // NewListGatewayError builds a skills service list endpoint gateway_error
 // error.
 func NewListGatewayError(body *ListGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSuggestionsListSkillSuggestionsResultOK builds a "skills" service
+// "listSuggestions" endpoint result from a HTTP "OK" response.
+func NewListSuggestionsListSkillSuggestionsResultOK(body *ListSuggestionsResponseBody) *skills.ListSkillSuggestionsResult {
+	v := &skills.ListSkillSuggestionsResult{
+		TotalOpenCount: *body.TotalOpenCount,
+		NextCursor:     body.NextCursor,
+	}
+	v.Suggestions = make([]*types.SkillEditSuggestion, len(body.Suggestions))
+	for i, val := range body.Suggestions {
+		if val == nil {
+			v.Suggestions[i] = nil
+			continue
+		}
+		v.Suggestions[i] = unmarshalSkillEditSuggestionResponseBodyToTypesSkillEditSuggestion(val)
+	}
+
+	return v
+}
+
+// NewListSuggestionsUnauthorized builds a skills service listSuggestions
+// endpoint unauthorized error.
+func NewListSuggestionsUnauthorized(body *ListSuggestionsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSuggestionsForbidden builds a skills service listSuggestions endpoint
+// forbidden error.
+func NewListSuggestionsForbidden(body *ListSuggestionsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSuggestionsBadRequest builds a skills service listSuggestions
+// endpoint bad_request error.
+func NewListSuggestionsBadRequest(body *ListSuggestionsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSuggestionsNotFound builds a skills service listSuggestions endpoint
+// not_found error.
+func NewListSuggestionsNotFound(body *ListSuggestionsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSuggestionsConflict builds a skills service listSuggestions endpoint
+// conflict error.
+func NewListSuggestionsConflict(body *ListSuggestionsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSuggestionsUnsupportedMedia builds a skills service listSuggestions
+// endpoint unsupported_media error.
+func NewListSuggestionsUnsupportedMedia(body *ListSuggestionsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSuggestionsInvalid builds a skills service listSuggestions endpoint
+// invalid error.
+func NewListSuggestionsInvalid(body *ListSuggestionsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSuggestionsInvariantViolation builds a skills service listSuggestions
+// endpoint invariant_violation error.
+func NewListSuggestionsInvariantViolation(body *ListSuggestionsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSuggestionsUnexpected builds a skills service listSuggestions
+// endpoint unexpected error.
+func NewListSuggestionsUnexpected(body *ListSuggestionsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSuggestionsGatewayError builds a skills service listSuggestions
+// endpoint gateway_error error.
+func NewListSuggestionsGatewayError(body *ListSuggestionsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveSuggestionApproveSkillSuggestionResultOK builds a "skills" service
+// "approveSuggestion" endpoint result from a HTTP "OK" response.
+func NewApproveSuggestionApproveSkillSuggestionResultOK(body *ApproveSuggestionResponseBody) *skills.ApproveSkillSuggestionResult {
+	v := &skills.ApproveSkillSuggestionResult{
+		Outcome: *body.Outcome,
+	}
+	v.Suggestion = unmarshalSkillEditSuggestionResponseBodyToTypesSkillEditSuggestion(body.Suggestion)
+	if body.Version != nil {
+		v.Version = unmarshalSkillVersionResponseBodyToTypesSkillVersion(body.Version)
+	}
+
+	return v
+}
+
+// NewApproveSuggestionUnauthorized builds a skills service approveSuggestion
+// endpoint unauthorized error.
+func NewApproveSuggestionUnauthorized(body *ApproveSuggestionUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveSuggestionForbidden builds a skills service approveSuggestion
+// endpoint forbidden error.
+func NewApproveSuggestionForbidden(body *ApproveSuggestionForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveSuggestionBadRequest builds a skills service approveSuggestion
+// endpoint bad_request error.
+func NewApproveSuggestionBadRequest(body *ApproveSuggestionBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveSuggestionNotFound builds a skills service approveSuggestion
+// endpoint not_found error.
+func NewApproveSuggestionNotFound(body *ApproveSuggestionNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveSuggestionConflict builds a skills service approveSuggestion
+// endpoint conflict error.
+func NewApproveSuggestionConflict(body *ApproveSuggestionConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveSuggestionUnsupportedMedia builds a skills service
+// approveSuggestion endpoint unsupported_media error.
+func NewApproveSuggestionUnsupportedMedia(body *ApproveSuggestionUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveSuggestionInvalid builds a skills service approveSuggestion
+// endpoint invalid error.
+func NewApproveSuggestionInvalid(body *ApproveSuggestionInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveSuggestionInvariantViolation builds a skills service
+// approveSuggestion endpoint invariant_violation error.
+func NewApproveSuggestionInvariantViolation(body *ApproveSuggestionInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveSuggestionUnexpected builds a skills service approveSuggestion
+// endpoint unexpected error.
+func NewApproveSuggestionUnexpected(body *ApproveSuggestionUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveSuggestionGatewayError builds a skills service approveSuggestion
+// endpoint gateway_error error.
+func NewApproveSuggestionGatewayError(body *ApproveSuggestionGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissSuggestionSkillEditSuggestionOK builds a "skills" service
+// "dismissSuggestion" endpoint result from a HTTP "OK" response.
+func NewDismissSuggestionSkillEditSuggestionOK(body *DismissSuggestionResponseBody) *types.SkillEditSuggestion {
+	v := &types.SkillEditSuggestion{
+		ID:                   *body.ID,
+		SkillID:              *body.SkillID,
+		SkillName:            *body.SkillName,
+		SkillDisplayName:     *body.SkillDisplayName,
+		BaseVersionID:        *body.BaseVersionID,
+		ProposedDiff:         *body.ProposedDiff,
+		ProposedContent:      *body.ProposedContent,
+		AppliesCleanly:       *body.AppliesCleanly,
+		Rationale:            *body.Rationale,
+		Status:               *body.Status,
+		FeedbackCount:        *body.FeedbackCount,
+		FeedbackSessionCount: *body.FeedbackSessionCount,
+		ScoredSessionCount:   *body.ScoredSessionCount,
+		ApprovedByUserID:     body.ApprovedByUserID,
+		ApprovedAt:           body.ApprovedAt,
+		CreatedAt:            *body.CreatedAt,
+		UpdatedAt:            *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewDismissSuggestionUnauthorized builds a skills service dismissSuggestion
+// endpoint unauthorized error.
+func NewDismissSuggestionUnauthorized(body *DismissSuggestionUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissSuggestionForbidden builds a skills service dismissSuggestion
+// endpoint forbidden error.
+func NewDismissSuggestionForbidden(body *DismissSuggestionForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissSuggestionBadRequest builds a skills service dismissSuggestion
+// endpoint bad_request error.
+func NewDismissSuggestionBadRequest(body *DismissSuggestionBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissSuggestionNotFound builds a skills service dismissSuggestion
+// endpoint not_found error.
+func NewDismissSuggestionNotFound(body *DismissSuggestionNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissSuggestionConflict builds a skills service dismissSuggestion
+// endpoint conflict error.
+func NewDismissSuggestionConflict(body *DismissSuggestionConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissSuggestionUnsupportedMedia builds a skills service
+// dismissSuggestion endpoint unsupported_media error.
+func NewDismissSuggestionUnsupportedMedia(body *DismissSuggestionUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissSuggestionInvalid builds a skills service dismissSuggestion
+// endpoint invalid error.
+func NewDismissSuggestionInvalid(body *DismissSuggestionInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissSuggestionInvariantViolation builds a skills service
+// dismissSuggestion endpoint invariant_violation error.
+func NewDismissSuggestionInvariantViolation(body *DismissSuggestionInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissSuggestionUnexpected builds a skills service dismissSuggestion
+// endpoint unexpected error.
+func NewDismissSuggestionUnexpected(body *DismissSuggestionUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissSuggestionGatewayError builds a skills service dismissSuggestion
+// endpoint gateway_error error.
+func NewDismissSuggestionGatewayError(body *DismissSuggestionGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveAllSuggestionsApproveAllSkillSuggestionsResultOK builds a "skills"
+// service "approveAllSuggestions" endpoint result from a HTTP "OK" response.
+func NewApproveAllSuggestionsApproveAllSkillSuggestionsResultOK(body *ApproveAllSuggestionsResponseBody) *skills.ApproveAllSkillSuggestionsResult {
+	v := &skills.ApproveAllSkillSuggestionsResult{}
+	v.Items = make([]*skills.SkillSuggestionApprovalItem, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalSkillSuggestionApprovalItemResponseBodyToSkillsSkillSuggestionApprovalItem(val)
+	}
+
+	return v
+}
+
+// NewApproveAllSuggestionsUnauthorized builds a skills service
+// approveAllSuggestions endpoint unauthorized error.
+func NewApproveAllSuggestionsUnauthorized(body *ApproveAllSuggestionsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveAllSuggestionsForbidden builds a skills service
+// approveAllSuggestions endpoint forbidden error.
+func NewApproveAllSuggestionsForbidden(body *ApproveAllSuggestionsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveAllSuggestionsBadRequest builds a skills service
+// approveAllSuggestions endpoint bad_request error.
+func NewApproveAllSuggestionsBadRequest(body *ApproveAllSuggestionsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveAllSuggestionsNotFound builds a skills service
+// approveAllSuggestions endpoint not_found error.
+func NewApproveAllSuggestionsNotFound(body *ApproveAllSuggestionsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveAllSuggestionsConflict builds a skills service
+// approveAllSuggestions endpoint conflict error.
+func NewApproveAllSuggestionsConflict(body *ApproveAllSuggestionsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveAllSuggestionsUnsupportedMedia builds a skills service
+// approveAllSuggestions endpoint unsupported_media error.
+func NewApproveAllSuggestionsUnsupportedMedia(body *ApproveAllSuggestionsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveAllSuggestionsInvalid builds a skills service
+// approveAllSuggestions endpoint invalid error.
+func NewApproveAllSuggestionsInvalid(body *ApproveAllSuggestionsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveAllSuggestionsInvariantViolation builds a skills service
+// approveAllSuggestions endpoint invariant_violation error.
+func NewApproveAllSuggestionsInvariantViolation(body *ApproveAllSuggestionsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveAllSuggestionsUnexpected builds a skills service
+// approveAllSuggestions endpoint unexpected error.
+func NewApproveAllSuggestionsUnexpected(body *ApproveAllSuggestionsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveAllSuggestionsGatewayError builds a skills service
+// approveAllSuggestions endpoint gateway_error error.
+func NewApproveAllSuggestionsGatewayError(body *ApproveAllSuggestionsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5454,6 +7032,142 @@ func ValidateListResponseBody(body *ListResponseBody) (err error) {
 	return
 }
 
+// ValidateListSuggestionsResponseBody runs the validations defined on
+// ListSuggestionsResponseBody
+func ValidateListSuggestionsResponseBody(body *ListSuggestionsResponseBody) (err error) {
+	if body.Suggestions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggestions", "body"))
+	}
+	if body.TotalOpenCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_open_count", "body"))
+	}
+	for _, e := range body.Suggestions {
+		if e != nil {
+			if err2 := ValidateSkillEditSuggestionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateApproveSuggestionResponseBody runs the validations defined on
+// ApproveSuggestionResponseBody
+func ValidateApproveSuggestionResponseBody(body *ApproveSuggestionResponseBody) (err error) {
+	if body.Suggestion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggestion", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.Suggestion != nil {
+		if err2 := ValidateSkillEditSuggestionResponseBody(body.Suggestion); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "applied" || *body.Outcome == "superseded") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"applied", "superseded"}))
+		}
+	}
+	if body.Version != nil {
+		if err2 := ValidateSkillVersionResponseBody(body.Version); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateDismissSuggestionResponseBody runs the validations defined on
+// DismissSuggestionResponseBody
+func ValidateDismissSuggestionResponseBody(body *DismissSuggestionResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.SkillID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_id", "body"))
+	}
+	if body.SkillName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_name", "body"))
+	}
+	if body.SkillDisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_display_name", "body"))
+	}
+	if body.BaseVersionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("base_version_id", "body"))
+	}
+	if body.ProposedDiff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("proposed_diff", "body"))
+	}
+	if body.ProposedContent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("proposed_content", "body"))
+	}
+	if body.AppliesCleanly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applies_cleanly", "body"))
+	}
+	if body.Rationale == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rationale", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.FeedbackCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("feedback_count", "body"))
+	}
+	if body.FeedbackSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("feedback_session_count", "body"))
+	}
+	if body.ScoredSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scored_session_count", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SkillID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_id", *body.SkillID, goa.FormatUUID))
+	}
+	if body.BaseVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.base_version_id", *body.BaseVersionID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "open" || *body.Status == "approved" || *body.Status == "dismissed" || *body.Status == "superseded") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"open", "approved", "dismissed", "superseded"}))
+		}
+	}
+	if body.ApprovedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.approved_at", *body.ApprovedAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsResponseBody runs the validations defined on
+// ApproveAllSuggestionsResponseBody
+func ValidateApproveAllSuggestionsResponseBody(body *ApproveAllSuggestionsResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateSkillSuggestionApprovalItemResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateGetResponseBody runs the validations defined on GetResponseBody
 func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 	if body.Skill == nil {
@@ -6591,6 +8305,967 @@ func ValidateListUnexpectedResponseBody(body *ListUnexpectedResponseBody) (err e
 // ValidateListGatewayErrorResponseBody runs the validations defined on
 // list_gateway_error_response_body
 func ValidateListGatewayErrorResponseBody(body *ListGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSuggestionsUnauthorizedResponseBody runs the validations defined
+// on listSuggestions_unauthorized_response_body
+func ValidateListSuggestionsUnauthorizedResponseBody(body *ListSuggestionsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSuggestionsForbiddenResponseBody runs the validations defined on
+// listSuggestions_forbidden_response_body
+func ValidateListSuggestionsForbiddenResponseBody(body *ListSuggestionsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSuggestionsBadRequestResponseBody runs the validations defined
+// on listSuggestions_bad_request_response_body
+func ValidateListSuggestionsBadRequestResponseBody(body *ListSuggestionsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSuggestionsNotFoundResponseBody runs the validations defined on
+// listSuggestions_not_found_response_body
+func ValidateListSuggestionsNotFoundResponseBody(body *ListSuggestionsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSuggestionsConflictResponseBody runs the validations defined on
+// listSuggestions_conflict_response_body
+func ValidateListSuggestionsConflictResponseBody(body *ListSuggestionsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSuggestionsUnsupportedMediaResponseBody runs the validations
+// defined on listSuggestions_unsupported_media_response_body
+func ValidateListSuggestionsUnsupportedMediaResponseBody(body *ListSuggestionsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSuggestionsInvalidResponseBody runs the validations defined on
+// listSuggestions_invalid_response_body
+func ValidateListSuggestionsInvalidResponseBody(body *ListSuggestionsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSuggestionsInvariantViolationResponseBody runs the validations
+// defined on listSuggestions_invariant_violation_response_body
+func ValidateListSuggestionsInvariantViolationResponseBody(body *ListSuggestionsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSuggestionsUnexpectedResponseBody runs the validations defined
+// on listSuggestions_unexpected_response_body
+func ValidateListSuggestionsUnexpectedResponseBody(body *ListSuggestionsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSuggestionsGatewayErrorResponseBody runs the validations defined
+// on listSuggestions_gateway_error_response_body
+func ValidateListSuggestionsGatewayErrorResponseBody(body *ListSuggestionsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveSuggestionUnauthorizedResponseBody runs the validations
+// defined on approveSuggestion_unauthorized_response_body
+func ValidateApproveSuggestionUnauthorizedResponseBody(body *ApproveSuggestionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveSuggestionForbiddenResponseBody runs the validations defined
+// on approveSuggestion_forbidden_response_body
+func ValidateApproveSuggestionForbiddenResponseBody(body *ApproveSuggestionForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveSuggestionBadRequestResponseBody runs the validations defined
+// on approveSuggestion_bad_request_response_body
+func ValidateApproveSuggestionBadRequestResponseBody(body *ApproveSuggestionBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveSuggestionNotFoundResponseBody runs the validations defined
+// on approveSuggestion_not_found_response_body
+func ValidateApproveSuggestionNotFoundResponseBody(body *ApproveSuggestionNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveSuggestionConflictResponseBody runs the validations defined
+// on approveSuggestion_conflict_response_body
+func ValidateApproveSuggestionConflictResponseBody(body *ApproveSuggestionConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveSuggestionUnsupportedMediaResponseBody runs the validations
+// defined on approveSuggestion_unsupported_media_response_body
+func ValidateApproveSuggestionUnsupportedMediaResponseBody(body *ApproveSuggestionUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveSuggestionInvalidResponseBody runs the validations defined on
+// approveSuggestion_invalid_response_body
+func ValidateApproveSuggestionInvalidResponseBody(body *ApproveSuggestionInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveSuggestionInvariantViolationResponseBody runs the validations
+// defined on approveSuggestion_invariant_violation_response_body
+func ValidateApproveSuggestionInvariantViolationResponseBody(body *ApproveSuggestionInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveSuggestionUnexpectedResponseBody runs the validations defined
+// on approveSuggestion_unexpected_response_body
+func ValidateApproveSuggestionUnexpectedResponseBody(body *ApproveSuggestionUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveSuggestionGatewayErrorResponseBody runs the validations
+// defined on approveSuggestion_gateway_error_response_body
+func ValidateApproveSuggestionGatewayErrorResponseBody(body *ApproveSuggestionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissSuggestionUnauthorizedResponseBody runs the validations
+// defined on dismissSuggestion_unauthorized_response_body
+func ValidateDismissSuggestionUnauthorizedResponseBody(body *DismissSuggestionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissSuggestionForbiddenResponseBody runs the validations defined
+// on dismissSuggestion_forbidden_response_body
+func ValidateDismissSuggestionForbiddenResponseBody(body *DismissSuggestionForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissSuggestionBadRequestResponseBody runs the validations defined
+// on dismissSuggestion_bad_request_response_body
+func ValidateDismissSuggestionBadRequestResponseBody(body *DismissSuggestionBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissSuggestionNotFoundResponseBody runs the validations defined
+// on dismissSuggestion_not_found_response_body
+func ValidateDismissSuggestionNotFoundResponseBody(body *DismissSuggestionNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissSuggestionConflictResponseBody runs the validations defined
+// on dismissSuggestion_conflict_response_body
+func ValidateDismissSuggestionConflictResponseBody(body *DismissSuggestionConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissSuggestionUnsupportedMediaResponseBody runs the validations
+// defined on dismissSuggestion_unsupported_media_response_body
+func ValidateDismissSuggestionUnsupportedMediaResponseBody(body *DismissSuggestionUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissSuggestionInvalidResponseBody runs the validations defined on
+// dismissSuggestion_invalid_response_body
+func ValidateDismissSuggestionInvalidResponseBody(body *DismissSuggestionInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissSuggestionInvariantViolationResponseBody runs the validations
+// defined on dismissSuggestion_invariant_violation_response_body
+func ValidateDismissSuggestionInvariantViolationResponseBody(body *DismissSuggestionInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissSuggestionUnexpectedResponseBody runs the validations defined
+// on dismissSuggestion_unexpected_response_body
+func ValidateDismissSuggestionUnexpectedResponseBody(body *DismissSuggestionUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissSuggestionGatewayErrorResponseBody runs the validations
+// defined on dismissSuggestion_gateway_error_response_body
+func ValidateDismissSuggestionGatewayErrorResponseBody(body *DismissSuggestionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsUnauthorizedResponseBody runs the validations
+// defined on approveAllSuggestions_unauthorized_response_body
+func ValidateApproveAllSuggestionsUnauthorizedResponseBody(body *ApproveAllSuggestionsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsForbiddenResponseBody runs the validations
+// defined on approveAllSuggestions_forbidden_response_body
+func ValidateApproveAllSuggestionsForbiddenResponseBody(body *ApproveAllSuggestionsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsBadRequestResponseBody runs the validations
+// defined on approveAllSuggestions_bad_request_response_body
+func ValidateApproveAllSuggestionsBadRequestResponseBody(body *ApproveAllSuggestionsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsNotFoundResponseBody runs the validations
+// defined on approveAllSuggestions_not_found_response_body
+func ValidateApproveAllSuggestionsNotFoundResponseBody(body *ApproveAllSuggestionsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsConflictResponseBody runs the validations
+// defined on approveAllSuggestions_conflict_response_body
+func ValidateApproveAllSuggestionsConflictResponseBody(body *ApproveAllSuggestionsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsUnsupportedMediaResponseBody runs the
+// validations defined on approveAllSuggestions_unsupported_media_response_body
+func ValidateApproveAllSuggestionsUnsupportedMediaResponseBody(body *ApproveAllSuggestionsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsInvalidResponseBody runs the validations
+// defined on approveAllSuggestions_invalid_response_body
+func ValidateApproveAllSuggestionsInvalidResponseBody(body *ApproveAllSuggestionsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsInvariantViolationResponseBody runs the
+// validations defined on
+// approveAllSuggestions_invariant_violation_response_body
+func ValidateApproveAllSuggestionsInvariantViolationResponseBody(body *ApproveAllSuggestionsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsUnexpectedResponseBody runs the validations
+// defined on approveAllSuggestions_unexpected_response_body
+func ValidateApproveAllSuggestionsUnexpectedResponseBody(body *ApproveAllSuggestionsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveAllSuggestionsGatewayErrorResponseBody runs the validations
+// defined on approveAllSuggestions_gateway_error_response_body
+func ValidateApproveAllSuggestionsGatewayErrorResponseBody(body *ApproveAllSuggestionsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9150,6 +11825,115 @@ func ValidateSkillValidationErrorResponseBody(body *SkillValidationErrorResponse
 	}
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	return
+}
+
+// ValidateSkillEditSuggestionResponseBody runs the validations defined on
+// SkillEditSuggestionResponseBody
+func ValidateSkillEditSuggestionResponseBody(body *SkillEditSuggestionResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.SkillID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_id", "body"))
+	}
+	if body.SkillName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_name", "body"))
+	}
+	if body.SkillDisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_display_name", "body"))
+	}
+	if body.BaseVersionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("base_version_id", "body"))
+	}
+	if body.ProposedDiff == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("proposed_diff", "body"))
+	}
+	if body.ProposedContent == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("proposed_content", "body"))
+	}
+	if body.AppliesCleanly == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applies_cleanly", "body"))
+	}
+	if body.Rationale == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rationale", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.FeedbackCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("feedback_count", "body"))
+	}
+	if body.FeedbackSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("feedback_session_count", "body"))
+	}
+	if body.ScoredSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scored_session_count", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.SkillID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_id", *body.SkillID, goa.FormatUUID))
+	}
+	if body.BaseVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.base_version_id", *body.BaseVersionID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "open" || *body.Status == "approved" || *body.Status == "dismissed" || *body.Status == "superseded") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"open", "approved", "dismissed", "superseded"}))
+		}
+	}
+	if body.ApprovedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.approved_at", *body.ApprovedAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSkillSuggestionApprovalItemResponseBody runs the validations defined
+// on SkillSuggestionApprovalItemResponseBody
+func ValidateSkillSuggestionApprovalItemResponseBody(body *SkillSuggestionApprovalItemResponseBody) (err error) {
+	if body.SuggestionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("suggestion_id", "body"))
+	}
+	if body.SkillID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_id", "body"))
+	}
+	if body.SkillName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_name", "body"))
+	}
+	if body.SkillDisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_display_name", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.SuggestionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.suggestion_id", *body.SuggestionID, goa.FormatUUID))
+	}
+	if body.SkillID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_id", *body.SkillID, goa.FormatUUID))
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "applied" || *body.Outcome == "superseded" || *body.Outcome == "conflict" || *body.Outcome == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"applied", "superseded", "conflict", "failed"}))
+		}
+	}
+	if body.ResultingVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resulting_version_id", *body.ResultingVersionID, goa.FormatUUID))
 	}
 	return
 }

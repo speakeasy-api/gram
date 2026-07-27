@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -85,11 +86,10 @@ func (s *Service) ListSuggestions(ctx context.Context, payload *gen.ListSuggesti
 }
 
 type suggestionApproval struct {
-	suggestion       repo.SkillEditSuggestion
-	skillName        string
-	skillDisplayName string
-	version          *types.SkillVersion
-	outcome          string
+	suggestion repo.SkillEditSuggestion
+	evidence   mv.SkillEditSuggestionEvidence
+	version    *types.SkillVersion
+	outcome    string
 }
 
 func (s *Service) approveSuggestion(
@@ -117,19 +117,29 @@ func (s *Service) approveSuggestion(
 		return approval, oops.E(oops.CodeUnexpected, err, "load skill suggestion for approval").LogError(ctx, logger)
 	}
 	approval = suggestionApproval{
-		suggestion:       details.SkillEditSuggestion,
-		skillName:        details.SkillName,
-		skillDisplayName: details.SkillDisplayName,
-		version:          nil,
-		outcome:          "",
+		suggestion: details.SkillEditSuggestion,
+		evidence: mv.SkillEditSuggestionEvidence{
+			SkillName:            details.SkillName,
+			SkillDisplayName:     details.SkillDisplayName,
+			BaseContent:          details.BaseContent,
+			FeedbackCount:        details.FeedbackCount,
+			FeedbackSessionCount: details.FeedbackSessionCount,
+		},
+		version: nil,
+		outcome: "",
 	}
 	if details.SkillEditSuggestion.Status != string(EditSuggestionStatusOpen) {
 		return approval, oops.E(oops.CodeConflict, nil, "skill suggestion is not open")
 	}
 
-	content := details.SkillEditSuggestion.ProposedContent
+	content := ""
 	if editedContent != nil {
 		content = *editedContent
+	} else {
+		content, err = skilldiff.Apply(details.BaseContent, details.SkillEditSuggestion.ProposedDiff)
+		if err != nil {
+			return approval, oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
+		}
 	}
 	initialParsed, err := parseSkillManifest(content)
 	if err != nil {
@@ -155,8 +165,8 @@ func (s *Service) approveSuggestion(
 		}
 		return approval, oops.E(oops.CodeUnexpected, err, "lock skill for suggestion approval").LogError(ctx, logger)
 	}
-	approval.skillName = skill.Name
-	approval.skillDisplayName = skill.DisplayName
+	approval.evidence.SkillName = skill.Name
+	approval.evidence.SkillDisplayName = skill.DisplayName
 	suggestion, err := queries.GetSkillEditSuggestionForUpdate(ctx, repo.GetSkillEditSuggestionForUpdateParams{
 		ProjectID: *authCtx.ProjectID,
 		ID:        suggestionID,
@@ -174,10 +184,6 @@ func (s *Service) approveSuggestion(
 	if !suggestion.UpdatedAt.Time.Equal(details.SkillEditSuggestion.UpdatedAt.Time) {
 		return approval, oops.E(oops.CodeConflict, nil, "skill suggestion changed during approval")
 	}
-	if editedContent == nil {
-		content = suggestion.ProposedContent
-	}
-
 	base, err := queries.ResolveSkillSuggestionBase(ctx, repo.ResolveSkillSuggestionBaseParams{
 		ProjectID: *authCtx.ProjectID,
 		SkillID:   suggestion.SkillID,
@@ -188,6 +194,7 @@ func (s *Service) approveSuggestion(
 		}
 		return approval, oops.E(oops.CodeUnexpected, err, "resolve skill suggestion base for approval").LogError(ctx, logger)
 	}
+	approval.evidence.BaseContent = base.BaseContent
 	if suggestion.BaseVersionID != base.BaseVersionID {
 		superseded, supersedeErr := queries.SupersedeOpenSkillEditSuggestionByID(ctx, repo.SupersedeOpenSkillEditSuggestionByIDParams{
 			ProjectID: *authCtx.ProjectID,
@@ -205,6 +212,13 @@ func (s *Service) approveSuggestion(
 		return approval, nil
 	}
 
+	if editedContent == nil {
+		content, err = skilldiff.Apply(base.BaseContent, suggestion.ProposedDiff)
+		if err != nil {
+			return approval, oops.E(oops.CodeConflict, nil, "skill suggestion no longer applies to its base version")
+		}
+	}
+
 	validated, err := ValidateSkillSuggestion(content, skill.Name, base.BaseCanonicalSha256)
 	if err != nil {
 		code := oops.CodeConflict
@@ -218,12 +232,13 @@ func (s *Service) approveSuggestion(
 		return approval, oops.E(oops.CodeUnexpected, err, "parse validated skill suggestion").LogError(ctx, logger)
 	}
 
-	if _, err := queries.ApproveOpenSkillEditSuggestion(ctx, repo.ApproveOpenSkillEditSuggestionParams{
+	approved, err := queries.ApproveOpenSkillEditSuggestion(ctx, repo.ApproveOpenSkillEditSuggestionParams{
 		ApprovedByUserID: conv.ToPGText(authCtx.UserID),
 		ProjectID:        *authCtx.ProjectID,
 		SkillID:          suggestion.SkillID,
 		ID:               suggestion.ID,
-	}); err != nil {
+	})
+	if err != nil {
 		return approval, oops.E(oops.CodeUnexpected, err, "mark skill suggestion approved").LogError(ctx, logger)
 	}
 	recorded, err := s.recordVersion(
@@ -245,15 +260,6 @@ func (s *Service) approveSuggestion(
 		return approval, oops.E(oops.CodeConflict, nil, "suggested content already exists as a skill version")
 	}
 	resultingVersionID := uuid.MustParse(recorded.Version.ID)
-	approved, err := queries.LinkApprovedSkillEditSuggestionVersion(ctx, repo.LinkApprovedSkillEditSuggestionVersionParams{
-		ResultingVersionID: uuid.NullUUID{UUID: resultingVersionID, Valid: true},
-		ProjectID:          *authCtx.ProjectID,
-		SkillID:            suggestion.SkillID,
-		ID:                 suggestion.ID,
-	})
-	if err != nil {
-		return approval, oops.E(oops.CodeUnexpected, err, "link approved skill suggestion version").LogError(ctx, logger)
-	}
 	if err := s.audit.LogSkillSuggestionApprove(ctx, dbtx, audit.LogSkillSuggestionEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
@@ -297,7 +303,7 @@ func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSug
 		return nil, err
 	}
 	return &gen.ApproveSkillSuggestionResult{
-		Suggestion: mv.BuildSkillEditSuggestionView(approval.suggestion, approval.skillName, approval.skillDisplayName),
+		Suggestion: mv.BuildSkillEditSuggestionView(approval.suggestion, approval.evidence),
 		Outcome:    approval.outcome,
 		Version:    approval.version,
 	}, nil
@@ -349,8 +355,15 @@ func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSug
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock skill suggestion for dismissal").LogError(ctx, logger)
 	}
+	evidence := mv.SkillEditSuggestionEvidence{
+		SkillName:            skill.Name,
+		SkillDisplayName:     skill.DisplayName,
+		BaseContent:          details.BaseContent,
+		FeedbackCount:        details.FeedbackCount,
+		FeedbackSessionCount: details.FeedbackSessionCount,
+	}
 	if suggestion.Status == string(EditSuggestionStatusDismissed) {
-		return mv.BuildSkillEditSuggestionView(suggestion, skill.Name, skill.DisplayName), nil
+		return mv.BuildSkillEditSuggestionView(suggestion, evidence), nil
 	}
 	if suggestion.Status != string(EditSuggestionStatusOpen) {
 		return nil, oops.E(oops.CodeConflict, nil, "skill suggestion cannot be dismissed")
@@ -387,7 +400,7 @@ func (s *Service) DismissSuggestion(ctx context.Context, payload *gen.DismissSug
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit skill suggestion dismissal").LogError(ctx, logger)
 	}
-	return mv.BuildSkillEditSuggestionView(dismissed, skill.Name, skill.DisplayName), nil
+	return mv.BuildSkillEditSuggestionView(dismissed, evidence), nil
 }
 
 func (s *Service) ApproveAllSuggestions(ctx context.Context, _ *gen.ApproveAllSuggestionsPayload) (*gen.ApproveAllSkillSuggestionsResult, error) {
@@ -412,10 +425,10 @@ func (s *Service) ApproveAllSuggestions(ctx context.Context, _ *gen.ApproveAllSu
 			ResultingVersionID: nil,
 			Message:            nil,
 		}
-		if approval.skillName != "" {
+		if approval.evidence.SkillName != "" {
 			item.SkillID = approval.suggestion.SkillID.String()
-			item.SkillName = approval.skillName
-			item.SkillDisplayName = approval.skillDisplayName
+			item.SkillName = approval.evidence.SkillName
+			item.SkillDisplayName = approval.evidence.SkillDisplayName
 		}
 		if approveErr != nil {
 			var shareable *oops.ShareableError
@@ -426,8 +439,8 @@ func (s *Service) ApproveAllSuggestions(ctx context.Context, _ *gen.ApproveAllSu
 				item.Outcome = "failed"
 				item.Message = conv.PtrEmpty("suggestion approval failed")
 			}
-		} else if approval.suggestion.ResultingVersionID.Valid {
-			item.ResultingVersionID = conv.PtrEmpty(approval.suggestion.ResultingVersionID.UUID.String())
+		} else if approval.version != nil {
+			item.ResultingVersionID = conv.PtrEmpty(approval.version.ID)
 		}
 		items = append(items, item)
 	}
