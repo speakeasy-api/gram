@@ -219,7 +219,7 @@ exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/
           "Merge this into opencode.json to load the Gram observability plugin, which maps opencode's events to Speakeasy's dashboard.",
         code: `{
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gram/opencode-observability"]
+  "plugin": ["@gram-ai/opencode-observability"]
 }`,
         language: "json",
       },

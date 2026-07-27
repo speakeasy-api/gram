@@ -1,4 +1,4 @@
-# @gram/opencode-observability
+# @gram-ai/opencode-observability
 
 Gram observability plugin for [opencode](https://opencode.ai). Maps opencode
 plugin events to Gram's canonical hook vocabulary and ships them to
@@ -13,7 +13,7 @@ plugin location and reference it from `opencode.json`:
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gram/opencode-observability"],
+  "plugin": ["@gram-ai/opencode-observability"],
 }
 ```
 
@@ -95,8 +95,8 @@ transitions instead.
 ## Development
 
 ```sh
-pnpm -F @gram/opencode-observability type-check
-pnpm -F @gram/opencode-observability test
+pnpm -F @gram-ai/opencode-observability type-check
+pnpm -F @gram-ai/opencode-observability test
 ```
 
 `src/mapping.ts` is pure (no network) and carries the real test coverage.

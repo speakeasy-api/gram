@@ -667,7 +667,7 @@ function CodexInstallContent({
 function OpencodeInstallContent(): JSX.Element {
   const pluginConfig = `{
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gram/opencode-observability"]
+  "plugin": ["@gram-ai/opencode-observability"]
 }`;
 
   const envConfig = `export GRAM_KEY="your-hooks-scoped-api-key"
